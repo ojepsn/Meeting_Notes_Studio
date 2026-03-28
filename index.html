@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NoteSmith</title>
+  <meta name="theme-color" content="#6c7f4f">
+  <meta name="description" content="Capture rough meeting notes and polish them into professional summaries with AI.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
@@ -232,6 +237,26 @@
             <p>Write rough notes on the left, add a few highlights, then click <strong>Polish with AI</strong>.</p>
           </div>
         </div>
+
+        <section class="output-feedback-card" aria-label="Improve polished output">
+          <label class="field">
+            <span class="field-label">Comments to improve the output</span>
+            <textarea
+              id="output-feedback"
+              rows="4"
+              placeholder="Example: Make the summary shorter, emphasize risks more, and make the action items more specific."
+            ></textarea>
+          </label>
+
+          <div class="capture-toolbar output-feedback-actions">
+            <button class="secondary-button" id="improve-output" type="button">Update Output</button>
+            <button class="ghost-button" id="revert-output" type="button">Revert Previous Version</button>
+          </div>
+
+          <p class="support-text" id="output-feedback-status">
+            Add comments here when you want the polished output adjusted. You can always revert the latest revision.
+          </p>
+        </section>
       </section>
     </section>
   </main>
@@ -293,6 +318,14 @@
           <input id="api-key" type="password" placeholder="sk-..." autocomplete="off">
         </label>
 
+        <p class="support-text">
+          Get an API key from
+          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">platform.openai.com/api-keys</a>.
+          It is a good idea to set a spending limit in
+          <a href="https://platform.openai.com/settings/organization/billing/overview" target="_blank" rel="noreferrer">OpenAI billing settings</a>
+          before using the app.
+        </p>
+
         <input id="model-select" type="hidden" value="gpt-5-mini">
 
         <section class="config-card settings-card" aria-label="OpenAI model selection">
@@ -329,7 +362,7 @@
       <div class="panel-heading modal-heading">
         <div>
           <p class="section-label">Settings</p>
-          <h2>Appearance</h2>
+          <h2>Appearance and Exports</h2>
         </div>
         <button class="ghost-button" id="close-settings-button" type="button">Close</button>
       </div>
@@ -366,6 +399,76 @@
           </p>
         </section>
 
+        <section class="config-card settings-card" aria-label="Export style settings">
+          <div class="config-card-copy">
+            <p class="section-label">Exports</p>
+            <h3>Word and PDF typography</h3>
+          </div>
+
+          <label class="field">
+            <span class="field-label">Export style preset</span>
+            <select id="export-style-preset">
+              <option value="modern-aptos">Modern Aptos</option>
+              <option value="enterprise-helvetica">Enterprise Helvetica</option>
+              <option value="editorial-georgia">Editorial Georgia</option>
+              <option value="refined-garamond">Refined Garamond</option>
+              <option value="digital-inter">Digital Inter</option>
+              <option value="custom">Personal style</option>
+            </select>
+          </label>
+
+          <p class="support-text" id="export-style-description">
+            A modern business document look with a clean sans serif hierarchy and restrained spacing.
+          </p>
+
+          <div class="settings-grid export-style-grid">
+            <label class="field">
+              <span class="field-label">Title font</span>
+              <input id="export-title-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
+            </label>
+
+            <label class="field">
+              <span class="field-label">Heading font</span>
+              <input id="export-heading-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
+            </label>
+
+            <label class="field">
+              <span class="field-label">Body font</span>
+              <input id="export-body-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
+            </label>
+
+            <label class="field">
+              <span class="field-label">Metadata font</span>
+              <input id="export-meta-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
+            </label>
+
+            <label class="field">
+              <span class="field-label">Title size (pt)</span>
+              <input id="export-title-size" type="number" min="16" max="36" step="0.5">
+            </label>
+
+            <label class="field">
+              <span class="field-label">Heading size (pt)</span>
+              <input id="export-heading-size" type="number" min="10" max="24" step="0.5">
+            </label>
+
+            <label class="field">
+              <span class="field-label">Body size (pt)</span>
+              <input id="export-body-size" type="number" min="9" max="18" step="0.5">
+            </label>
+
+            <label class="field">
+              <span class="field-label">Metadata size (pt)</span>
+              <input id="export-meta-size" type="number" min="8" max="16" step="0.5">
+            </label>
+
+            <label class="field">
+              <span class="field-label">Line spacing</span>
+              <input id="export-line-height" type="number" min="1.1" max="2" step="0.05">
+            </label>
+          </div>
+        </section>
+
         <div class="capture-toolbar">
           <button class="primary-button" type="submit">Save Settings</button>
         </div>
@@ -373,6 +476,7 @@
     </section>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
 </body>

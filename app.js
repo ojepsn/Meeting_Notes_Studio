@@ -47,6 +47,17 @@ const settingsForm = document.querySelector("#settings-form");
 const themeFamilySelect = document.querySelector("#theme-family");
 const themeModeSelect = document.querySelector("#theme-mode");
 const settingsThemeDescription = document.querySelector("#settings-theme-description");
+const exportStylePresetSelect = document.querySelector("#export-style-preset");
+const exportStyleDescription = document.querySelector("#export-style-description");
+const exportTitleFontInput = document.querySelector("#export-title-font");
+const exportHeadingFontInput = document.querySelector("#export-heading-font");
+const exportBodyFontInput = document.querySelector("#export-body-font");
+const exportMetaFontInput = document.querySelector("#export-meta-font");
+const exportTitleSizeInput = document.querySelector("#export-title-size");
+const exportHeadingSizeInput = document.querySelector("#export-heading-size");
+const exportBodySizeInput = document.querySelector("#export-body-size");
+const exportMetaSizeInput = document.querySelector("#export-meta-size");
+const exportLineHeightInput = document.querySelector("#export-line-height");
 const aiSettingsModal = document.querySelector("#ai-settings-modal");
 const closeAiSettingsBackdrop = document.querySelector("#close-ai-settings");
 const closeAiSettingsButton = document.querySelector("#close-ai-settings-button");
@@ -82,6 +93,10 @@ const copyOutputButton = document.querySelector("#copy-output");
 const exportWordButton = document.querySelector("#export-word");
 const exportPdfButton = document.querySelector("#export-pdf");
 const polishedOutput = document.querySelector("#polished-output");
+const outputFeedbackInput = document.querySelector("#output-feedback");
+const improveOutputButton = document.querySelector("#improve-output");
+const revertOutputButton = document.querySelector("#revert-output");
+const outputFeedbackStatus = document.querySelector("#output-feedback-status");
 const sessionItemTemplate = document.querySelector("#session-item-template");
 const highlightChipTemplate = document.querySelector("#highlight-chip-template");
 const customHeaderTemplate = document.querySelector("#custom-header-template");
@@ -103,6 +118,84 @@ const THEME_DESCRIPTIONS = {
   blue: "A classic blue enterprise theme with a familiar SaaS feel.",
   teal: "A crisp teal palette for a clean, modern product look.",
   forest: "A graphite-forward theme with restrained forest-green accents.",
+};
+const DEFAULT_EXPORT_PRESET = "modern-aptos";
+const EXPORT_STYLE_PRESETS = {
+  "modern-aptos": {
+    label: "Modern Aptos",
+    description: "A modern business document look with a clean sans serif hierarchy and restrained spacing.",
+    style: {
+      titleFont: "Aptos, Calibri, Arial, sans-serif",
+      headingFont: "Aptos, Calibri, Arial, sans-serif",
+      bodyFont: "Aptos, Calibri, Arial, sans-serif",
+      metaFont: "Aptos, Calibri, Arial, sans-serif",
+      titleSize: 22,
+      headingSize: 12.5,
+      bodySize: 11,
+      metaSize: 9.5,
+      lineHeight: 1.5,
+    },
+  },
+  "enterprise-helvetica": {
+    label: "Enterprise Helvetica",
+    description: "A very common enterprise report style: neutral sans serif, crisp headings, compact body text.",
+    style: {
+      titleFont: "\"Helvetica Neue\", Helvetica, Arial, sans-serif",
+      headingFont: "\"Helvetica Neue\", Helvetica, Arial, sans-serif",
+      bodyFont: "Arial, Helvetica, sans-serif",
+      metaFont: "Arial, Helvetica, sans-serif",
+      titleSize: 21,
+      headingSize: 12,
+      bodySize: 10.5,
+      metaSize: 9,
+      lineHeight: 1.45,
+    },
+  },
+  "editorial-georgia": {
+    label: "Editorial Georgia",
+    description: "A polished serif-forward style often used for executive summaries and formal client-ready notes.",
+    style: {
+      titleFont: "Georgia, Times New Roman, serif",
+      headingFont: "Georgia, Times New Roman, serif",
+      bodyFont: "Arial, Helvetica, sans-serif",
+      metaFont: "Arial, Helvetica, sans-serif",
+      titleSize: 24,
+      headingSize: 13,
+      bodySize: 11,
+      metaSize: 9.5,
+      lineHeight: 1.55,
+    },
+  },
+  "refined-garamond": {
+    label: "Refined Garamond",
+    description: "A classic report look with a more literary serif headline and highly readable business body text.",
+    style: {
+      titleFont: "Garamond, Georgia, serif",
+      headingFont: "Garamond, Georgia, serif",
+      bodyFont: "Aptos, Calibri, Arial, sans-serif",
+      metaFont: "Aptos, Calibri, Arial, sans-serif",
+      titleSize: 24,
+      headingSize: 13,
+      bodySize: 11,
+      metaSize: 9,
+      lineHeight: 1.55,
+    },
+  },
+  "digital-inter": {
+    label: "Digital Inter",
+    description: "A contemporary product-and-operations style with strong clarity and a slightly tighter digital rhythm.",
+    style: {
+      titleFont: "Inter, Segoe UI, Arial, sans-serif",
+      headingFont: "Inter, Segoe UI, Arial, sans-serif",
+      bodyFont: "\"Source Sans 3\", Inter, Arial, sans-serif",
+      metaFont: "\"Source Sans 3\", Inter, Arial, sans-serif",
+      titleSize: 21,
+      headingSize: 12,
+      bodySize: 10.5,
+      metaSize: 9,
+      lineHeight: 1.45,
+    },
+  },
 };
 const DEFAULT_AI_MODEL_CATALOG = [
   {
@@ -259,6 +352,7 @@ if (!activeSessionId) {
 setupSpeechRecognition();
 render();
 bindEvents();
+registerServiceWorker();
 
 function bindEvents() {
   newSessionButton.addEventListener("click", () => {
@@ -287,6 +381,8 @@ function bindEvents() {
     event.preventDefault();
     settings.themeFamily = themeFamilySelect.value;
     settings.themeMode = themeModeSelect.value;
+    settings.exportStylePreset = exportStylePresetSelect.value;
+    settings.exportStyle = readExportStyleInputs();
     persistSettings();
     applyTheme(settings.themeFamily, settings.themeMode);
     syncSettingsForm();
@@ -295,6 +391,25 @@ function bindEvents() {
   });
   themeFamilySelect.addEventListener("change", previewThemeSelection);
   themeModeSelect.addEventListener("change", previewThemeSelection);
+  exportStylePresetSelect.addEventListener("change", () => {
+    applyExportPresetToInputs(exportStylePresetSelect.value);
+  });
+  [
+    exportTitleFontInput,
+    exportHeadingFontInput,
+    exportBodyFontInput,
+    exportMetaFontInput,
+    exportTitleSizeInput,
+    exportHeadingSizeInput,
+    exportBodySizeInput,
+    exportMetaSizeInput,
+    exportLineHeightInput,
+  ].forEach((input) => {
+    input.addEventListener("input", () => {
+      exportStylePresetSelect.value = "custom";
+      updateExportStyleDescription();
+    });
+  });
   openAiSettingsButton.addEventListener("click", openAiSettings);
   closeAiSettingsBackdrop.addEventListener("click", closeAiSettings);
   closeAiSettingsButton.addEventListener("click", closeAiSettings);
@@ -512,6 +627,77 @@ function bindEvents() {
   exportPdfButton.addEventListener("click", () => {
     exportCurrentSessionAsPdf();
   });
+
+  outputFeedbackInput.addEventListener("input", () => {
+    updateActiveSession({ outputFeedback: outputFeedbackInput.value }, true);
+  });
+
+  improveOutputButton.addEventListener("click", async () => {
+    const session = getActiveSession();
+    const feedback = outputFeedbackInput.value.trim();
+
+    if (!session.polishedHtml) {
+      outputFeedbackStatus.textContent = "Create polished notes first, then request improvements.";
+      return;
+    }
+
+    if (!feedback) {
+      outputFeedbackStatus.textContent = "Add a short comment describing how the output should improve.";
+      return;
+    }
+
+    improveOutputButton.disabled = true;
+    improveOutputButton.textContent = "Updating...";
+    outputFeedbackStatus.textContent = "Updating the polished output based on your comments...";
+
+    try {
+      const revisedHtml = settings.apiKey
+        ? await revisePolishedNotesWithOpenAI(session, settings, feedback)
+        : buildRevisedLocalPolishedNotes(session, feedback);
+
+      updateActiveSession({
+        polishedHtml: revisedHtml,
+        previousPolishedHtml: session.polishedHtml,
+        outputFeedback: "",
+      }, false);
+      renderOutput();
+      outputFeedbackStatus.textContent = settings.apiKey
+        ? "Updated output is ready. You can revert to the previous version if needed."
+        : "A local revision was generated from your comments. You can revert to the previous version if needed.";
+    } catch (error) {
+      outputFeedbackStatus.textContent = `Could not update the output: ${error.message}`;
+    } finally {
+      improveOutputButton.disabled = false;
+      improveOutputButton.textContent = "Update Output";
+    }
+  });
+
+  revertOutputButton.addEventListener("click", () => {
+    const session = getActiveSession();
+    if (!session.previousPolishedHtml) {
+      outputFeedbackStatus.textContent = "There is no previous polished version to revert to.";
+      return;
+    }
+
+    updateActiveSession({
+      polishedHtml: session.previousPolishedHtml,
+      previousPolishedHtml: "",
+    }, false);
+    renderOutput();
+    outputFeedbackStatus.textContent = "Reverted to the previous polished version.";
+  });
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {
+      // Keep the app functional even if the service worker cannot be registered.
+    });
+  });
 }
 
 function render() {
@@ -589,6 +775,10 @@ function syncFieldsFromSession() {
   dictationLanguageSelect.value = settings.dictationLanguage ?? "auto";
   liveTranscriptInput.value = session.liveTranscript ?? "";
   rawNotesInput.value = session.rawNotes;
+  outputFeedbackInput.value = session.outputFeedback ?? "";
+  outputFeedbackStatus.textContent = session.polishedHtml
+    ? "Add comments here when you want the polished output adjusted. You can always revert the latest revision."
+    : "Generate polished notes first, then use comments here to request improvements.";
   saveStatus.textContent = "Saved locally";
 }
 
@@ -932,6 +1122,43 @@ function formatUsd(value) {
   return `$${value.toFixed(6)}`;
 }
 
+function normalizeExportStyle(style) {
+  const fallback = EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style;
+  return {
+    titleFont: typeof style?.titleFont === "string" && style.titleFont.trim() ? style.titleFont.trim() : fallback.titleFont,
+    headingFont: typeof style?.headingFont === "string" && style.headingFont.trim() ? style.headingFont.trim() : fallback.headingFont,
+    bodyFont: typeof style?.bodyFont === "string" && style.bodyFont.trim() ? style.bodyFont.trim() : fallback.bodyFont,
+    metaFont: typeof style?.metaFont === "string" && style.metaFont.trim() ? style.metaFont.trim() : fallback.metaFont,
+    titleSize: clampNumber(style?.titleSize, 16, 36, fallback.titleSize),
+    headingSize: clampNumber(style?.headingSize, 10, 24, fallback.headingSize),
+    bodySize: clampNumber(style?.bodySize, 9, 18, fallback.bodySize),
+    metaSize: clampNumber(style?.metaSize, 8, 16, fallback.metaSize),
+    lineHeight: clampNumber(style?.lineHeight, 1.1, 2, fallback.lineHeight),
+  };
+}
+
+function clampNumber(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function mapPdfFontFamily(fontValue) {
+  const normalized = String(fontValue || "").toLowerCase();
+  if (/(garamond|georgia|times|serif)/.test(normalized)) {
+    return "times";
+  }
+
+  if (/(courier|mono|consolas)/.test(normalized)) {
+    return "courier";
+  }
+
+  return "helvetica";
+}
+
 function renderHighlights() {
   const session = getActiveSession();
   highlightChips.innerHTML = "";
@@ -996,6 +1223,8 @@ function updateExportButtons() {
   const hasOutput = Boolean(getActiveSession()?.polishedHtml);
   exportWordButton.disabled = !hasOutput;
   exportPdfButton.disabled = !hasOutput;
+  improveOutputButton.disabled = !hasOutput;
+  revertOutputButton.disabled = !Boolean(getActiveSession()?.previousPolishedHtml);
 }
 
 function updateActiveSession(patch, shouldScheduleSave) {
@@ -1074,7 +1303,9 @@ function createSession() {
     highlights: [],
     liveTranscript: "",
     rawNotes: "",
+    outputFeedback: "",
     polishedHtml: "",
+    previousPolishedHtml: "",
     updatedAt: Date.now(),
   };
 }
@@ -1291,6 +1522,107 @@ async function polishWithOpenAI(session, activeSettings) {
   return buildAiOutputHtml(session, template, parsed, outputLanguage);
 }
 
+async function revisePolishedNotesWithOpenAI(session, activeSettings, feedback) {
+  const template = templateDescriptions[session.template];
+  const outputLanguage = detectOutputLanguage(session);
+  const prompt = buildAiRevisionPrompt(session, template, outputLanguage, feedback);
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${activeSettings.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: activeSettings.model || "gpt-5-mini",
+      input: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "You revise polished meeting notes based on user feedback. Keep the notes accurate, professional, business-focused, and grounded in the supplied notes. Apply the requested improvements without inventing facts. Preserve the language of the source notes. Exclude private matters, greetings, and small talk.",
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: prompt,
+            },
+          ],
+        },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "meeting_notes_revision",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              title: { type: "string" },
+              summary: { type: "string" },
+              highlights: { type: "array", items: { type: "string" } },
+              discussionPoints: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    heading: { type: "string" },
+                    items: { type: "array", items: { type: "string" } },
+                  },
+                  required: ["heading", "items"],
+                },
+              },
+              decisions: { type: "array", items: { type: "string" } },
+              actionItems: { type: "array", items: { type: "string" } },
+              customSections: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    heading: { type: "string" },
+                    content: { type: "string" },
+                  },
+                  required: ["heading", "content"],
+                },
+              },
+            },
+            required: ["title", "summary", "highlights", "discussionPoints", "decisions", "actionItems", "customSections"],
+          },
+        },
+      },
+    }),
+  });
+
+  const payload = await response.json();
+
+  if (!response.ok) {
+    const message = payload?.error?.message || "The OpenAI revision request did not complete successfully.";
+    throw new Error(message);
+  }
+
+  const responseText = extractResponseText(payload);
+  if (!responseText) {
+    throw new Error("The OpenAI revision response did not include any readable output text.");
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(responseText);
+  } catch {
+    throw new Error("The OpenAI revision response could not be parsed into structured notes.");
+  }
+
+  return buildAiOutputHtml(session, template, parsed, outputLanguage);
+}
+
 function buildAiPrompt(session, template, outputLanguage) {
   const sectionConfig = normalizeSectionConfig(session.sections);
   return [
@@ -1326,6 +1658,47 @@ function buildAiPrompt(session, template, outputLanguage) {
     "- Only include decisions that are actually supported by the notes.",
     "- Use discussion point headings that fit the meeting.",
     "- Exclude private matters, greetings, and small talk. Keep the output focused on business discussion only.",
+  ].join("\n");
+}
+
+function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
+  const sectionConfig = normalizeSectionConfig(session.sections);
+  const currentOutputText = htmlToPlainText(session.polishedHtml);
+
+  return [
+    `Template: ${template.label}`,
+    `Meeting title: ${session.title.trim() || "Untitled session"}`,
+    `Participants: ${session.participants.trim() || "Not provided"}`,
+    `Output language: ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}`,
+    `Detail level: ${getDetailLevelLabel(session.detailLevel ?? 3)}`,
+    `Include executive summary: ${sectionConfig.includeSummary ? "yes" : "no"}`,
+    `Include highlights: ${sectionConfig.includeHighlights ? "yes" : "no"}`,
+    `Include decisions: ${sectionConfig.includeDecisions ? "yes" : "no"}`,
+    `Include action items: ${sectionConfig.includeActions ? "yes" : "no"}`,
+    "User feedback for improving the current polished output:",
+    feedback,
+    "",
+    "Current polished output:",
+    currentOutputText || "No current polished output provided.",
+    "",
+    "Live transcript:",
+    session.liveTranscript?.trim() || "No transcript provided.",
+    "",
+    "Manual notes:",
+    session.rawNotes.trim() || "No manual notes provided.",
+    "",
+    "Custom headers and instructions:",
+    formatCustomHeadersForPrompt(session.customHeaders),
+    "",
+    "Additional user instructions:",
+    session.additionalInstructions?.trim() || "No additional instructions.",
+    "",
+    "Return a revised version in the requested schema.",
+    "Requirements:",
+    "- Apply the user's requested improvements when they are supported by the notes.",
+    "- Do not invent new facts or decisions.",
+    `- Write the output in ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}.`,
+    "- Keep the output focused on business discussion only.",
   ].join("\n");
 }
 
@@ -1399,6 +1772,17 @@ function buildAiOutputHtml(session, template, aiNotes, outputLanguage) {
   `;
 }
 
+function buildRevisedLocalPolishedNotes(session, feedback) {
+  const revisedSession = {
+    ...session,
+    additionalInstructions: [session.additionalInstructions?.trim(), `Revision request: ${feedback}`]
+      .filter(Boolean)
+      .join("\n"),
+  };
+
+  return buildLocalPolishedNotes(revisedSession);
+}
+
 function createDefaultSections() {
   return {
     includeSummary: true,
@@ -1419,6 +1803,12 @@ function buildCombinedNotes(session) {
   return [session.liveTranscript?.trim(), session.rawNotes?.trim()]
     .filter(Boolean)
     .join("\n\n");
+}
+
+function htmlToPlainText(html) {
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html || "";
+  return wrapper.textContent?.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim() || "";
 }
 
 function extractResponseText(payload) {
@@ -1734,11 +2124,14 @@ function loadSettings() {
         dictationLanguage: "auto",
         themeFamily: "olive",
         themeMode: "light",
+        exportStylePreset: DEFAULT_EXPORT_PRESET,
+        exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
       };
     }
 
     const parsed = JSON.parse(stored);
     const legacyThemeMode = parsed.theme === "dark" ? "dark" : "light";
+    const exportStylePreset = EXPORT_STYLE_PRESETS[parsed.exportStylePreset] ? parsed.exportStylePreset : DEFAULT_EXPORT_PRESET;
 
     return {
       apiKey: "",
@@ -1747,6 +2140,11 @@ function loadSettings() {
       themeFamily: "olive",
       themeMode: legacyThemeMode,
       ...parsed,
+      exportStylePreset,
+      exportStyle: normalizeExportStyle({
+        ...EXPORT_STYLE_PRESETS[exportStylePreset].style,
+        ...(parsed.exportStyle || {}),
+      }),
     };
   } catch {
     return {
@@ -1755,6 +2153,8 @@ function loadSettings() {
       dictationLanguage: "auto",
       themeFamily: "olive",
       themeMode: "light",
+      exportStylePreset: DEFAULT_EXPORT_PRESET,
+      exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
     };
   }
 }
@@ -1772,7 +2172,10 @@ function applyTheme(themeFamily, themeMode) {
 function syncSettingsForm() {
   themeFamilySelect.value = THEME_DESCRIPTIONS[settings.themeFamily] ? settings.themeFamily : "olive";
   themeModeSelect.value = settings.themeMode === "dark" ? "dark" : "light";
+  exportStylePresetSelect.value = EXPORT_STYLE_PRESETS[settings.exportStylePreset] ? settings.exportStylePreset : "custom";
+  writeExportStyleInputs(getCurrentExportStyle());
   updateThemeDescription();
+  updateExportStyleDescription();
 }
 
 function getThemeDisplayName(themeFamily) {
@@ -1793,6 +2196,59 @@ function updateThemeDescription() {
 function previewThemeSelection() {
   applyTheme(themeFamilySelect.value, themeModeSelect.value);
   updateThemeDescription();
+}
+
+function getCurrentExportStyle() {
+  const presetId = settings.exportStylePreset;
+  const presetStyle = EXPORT_STYLE_PRESETS[presetId]?.style || EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style;
+  return normalizeExportStyle({
+    ...presetStyle,
+    ...(settings.exportStyle || {}),
+  });
+}
+
+function applyExportPresetToInputs(presetId) {
+  const nextStyle = presetId === "custom"
+    ? readExportStyleInputs()
+    : normalizeExportStyle(EXPORT_STYLE_PRESETS[presetId]?.style || EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style);
+  writeExportStyleInputs(nextStyle);
+  updateExportStyleDescription();
+}
+
+function writeExportStyleInputs(style) {
+  exportTitleFontInput.value = style.titleFont;
+  exportHeadingFontInput.value = style.headingFont;
+  exportBodyFontInput.value = style.bodyFont;
+  exportMetaFontInput.value = style.metaFont;
+  exportTitleSizeInput.value = String(style.titleSize);
+  exportHeadingSizeInput.value = String(style.headingSize);
+  exportBodySizeInput.value = String(style.bodySize);
+  exportMetaSizeInput.value = String(style.metaSize);
+  exportLineHeightInput.value = String(style.lineHeight);
+}
+
+function readExportStyleInputs() {
+  return normalizeExportStyle({
+    titleFont: exportTitleFontInput.value,
+    headingFont: exportHeadingFontInput.value,
+    bodyFont: exportBodyFontInput.value,
+    metaFont: exportMetaFontInput.value,
+    titleSize: exportTitleSizeInput.value,
+    headingSize: exportHeadingSizeInput.value,
+    bodySize: exportBodySizeInput.value,
+    metaSize: exportMetaSizeInput.value,
+    lineHeight: exportLineHeightInput.value,
+  });
+}
+
+function updateExportStyleDescription() {
+  if (exportStylePresetSelect.value === "custom") {
+    exportStyleDescription.textContent = "Your personal export style. These font choices and sizes are saved locally and used for future Word and PDF exports.";
+    return;
+  }
+
+  exportStyleDescription.textContent = EXPORT_STYLE_PRESETS[exportStylePresetSelect.value]?.description
+    || EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].description;
 }
 
 function updateSessionStorageUi() {
@@ -1820,7 +2276,7 @@ function exportCurrentSessionAsWord() {
   }
 
   const title = session.title.trim() || "Meeting Notes";
-  const documentHtml = buildWordDocumentHtml(title, session.polishedHtml);
+  const documentHtml = buildWordDocumentHtml(title, session.polishedHtml, getCurrentExportStyle());
   const blob = new Blob([documentHtml], { type: "application/msword" });
   downloadBlob(blob, `${toFileSafeName(title)}.doc`);
   dictationStatus.textContent = "The current session was exported as a Word document.";
@@ -1839,7 +2295,65 @@ function exportCurrentSessionAsPdf() {
     return;
   }
 
+  if (window.html2canvas) {
+    exportCurrentSessionAsStyledPdf(session).catch(() => {
+      exportCurrentSessionAsBasicPdf(session);
+    });
+    return;
+  }
+
+  exportCurrentSessionAsBasicPdf(session);
+}
+
+async function exportCurrentSessionAsStyledPdf(session) {
   const exportData = getCurrentSessionExportData();
+  const exportStyle = getCurrentExportStyle();
+  const { jsPDF } = window.jspdf;
+  const previewElement = buildPdfPreviewElement(session, exportStyle);
+
+  try {
+    if (document.fonts?.ready) {
+      await document.fonts.ready;
+    }
+
+    const canvas = await window.html2canvas(previewElement, {
+      scale: 2,
+      backgroundColor: "#ffffff",
+      useCORS: true,
+    });
+
+    const pdf = new jsPDF({
+      unit: "pt",
+      format: "a4",
+    });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imageData = canvas.toDataURL("image/png");
+    const imageWidth = pageWidth;
+    const imageHeight = (canvas.height * imageWidth) / canvas.width;
+    let heightLeft = imageHeight;
+    let position = 0;
+
+    pdf.addImage(imageData, "PNG", 0, position, imageWidth, imageHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imageHeight;
+      pdf.addPage();
+      pdf.addImage(imageData, "PNG", 0, position, imageWidth, imageHeight);
+      heightLeft -= pageHeight;
+    }
+
+    pdf.save(`${toFileSafeName(exportData.title)}.pdf`);
+    dictationStatus.textContent = "The current session was exported as a PDF document.";
+  } finally {
+    previewElement.remove();
+  }
+}
+
+function exportCurrentSessionAsBasicPdf(session) {
+  const exportData = getCurrentSessionExportData();
+  const exportStyle = getCurrentExportStyle();
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({
     unit: "pt",
@@ -1861,8 +2375,8 @@ function exportCurrentSessionAsPdf() {
     cursorY = 56;
   };
 
-  const writeLines = (text, fontSize = 11, lineHeight = 18) => {
-    pdf.setFont("helvetica", "normal");
+  const writeLines = (text, fontName, fontStyle, fontSize = 11, lineHeight = 18) => {
+    pdf.setFont(fontName, fontStyle);
     pdf.setFontSize(fontSize);
     const lines = pdf.splitTextToSize(text, contentWidth);
     lines.forEach((line) => {
@@ -1872,36 +2386,46 @@ function exportCurrentSessionAsPdf() {
     });
   };
 
-  pdf.setFont("times", "bold");
-  pdf.setFontSize(22);
+  pdf.setFont(mapPdfFontFamily(exportStyle.titleFont), "bold");
+  pdf.setFontSize(exportStyle.titleSize);
   pdf.text(exportData.title, margin, cursorY);
-  cursorY += 28;
+  cursorY += exportStyle.titleSize + 6;
 
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(10);
-  writeLines(exportData.meta, 10, 15);
+  writeLines(
+    exportData.meta,
+    mapPdfFontFamily(exportStyle.metaFont),
+    "normal",
+    exportStyle.metaSize,
+    exportStyle.metaSize * exportStyle.lineHeight,
+  );
   cursorY += 10;
 
   exportData.sections.forEach((section) => {
     ensurePageSpace(26);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(12);
+    pdf.setFont(mapPdfFontFamily(exportStyle.headingFont), "bold");
+    pdf.setFontSize(exportStyle.headingSize);
     pdf.text(section.heading, margin, cursorY);
-    cursorY += 18;
+    cursorY += exportStyle.headingSize + 6;
 
     if (section.type === "list") {
       section.items.forEach((item) => {
         const bulletLines = pdf.splitTextToSize(`• ${item}`, contentWidth - 10);
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(11);
+        pdf.setFont(mapPdfFontFamily(exportStyle.bodyFont), "normal");
+        pdf.setFontSize(exportStyle.bodySize);
         bulletLines.forEach((line) => {
-          ensurePageSpace(16);
+          ensurePageSpace(exportStyle.bodySize * exportStyle.lineHeight);
           pdf.text(line, margin + 8, cursorY);
-          cursorY += 16;
+          cursorY += exportStyle.bodySize * exportStyle.lineHeight;
         });
       });
     } else {
-      writeLines(section.text, 11, 17);
+      writeLines(
+        section.text,
+        mapPdfFontFamily(exportStyle.bodyFont),
+        "normal",
+        exportStyle.bodySize,
+        exportStyle.bodySize * exportStyle.lineHeight,
+      );
     }
 
     cursorY += 8;
@@ -1909,6 +2433,40 @@ function exportCurrentSessionAsPdf() {
 
   pdf.save(`${toFileSafeName(exportData.title)}.pdf`);
   dictationStatus.textContent = "The current session was exported as a PDF document.";
+}
+
+function buildPdfPreviewElement(session, exportStyle) {
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.left = "-99999px";
+  container.style.top = "0";
+  container.style.width = "794px";
+  container.style.background = "#ffffff";
+  container.style.color = "#1f1f1f";
+  container.style.padding = "56px 64px";
+  container.style.fontFamily = exportStyle.bodyFont;
+  container.style.fontSize = `${exportStyle.bodySize}pt`;
+  container.style.lineHeight = String(exportStyle.lineHeight);
+  container.style.boxSizing = "border-box";
+
+  container.innerHTML = `
+    <style>
+      .pdf-export-doc { color: #1f1f1f; }
+      .pdf-export-doc .output-header { border-bottom: 1px solid #d8d1c6; padding-bottom: 12px; margin-bottom: 18px; }
+      .pdf-export-doc .output-header h3 { font-family: ${exportStyle.titleFont}; font-size: ${exportStyle.titleSize}pt; margin: 0 0 10px; line-height: 1.1; }
+      .pdf-export-doc .output-meta { font-family: ${exportStyle.metaFont}; font-size: ${exportStyle.metaSize}pt; color: #6d6258; margin: 0; }
+      .pdf-export-doc .output-section { margin-top: 18px; }
+      .pdf-export-doc .output-section h4 { font-family: ${exportStyle.headingFont}; font-size: ${exportStyle.headingSize}pt; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 10px; color: #405238; }
+      .pdf-export-doc .output-section p,
+      .pdf-export-doc .output-section li { font-family: ${exportStyle.bodyFont}; font-size: ${exportStyle.bodySize}pt; line-height: ${exportStyle.lineHeight}; }
+      .pdf-export-doc .output-section ul { margin: 0; padding-left: 20px; }
+      .pdf-export-doc .output-section li { margin: 0 0 8px; }
+    </style>
+    <div class="pdf-export-doc">${session.polishedHtml}</div>
+  `;
+
+  document.body.appendChild(container);
+  return container;
 }
 
 function getCurrentSessionExportData() {
@@ -1944,21 +2502,21 @@ function getCurrentSessionExportData() {
   return { title, meta, sections };
 }
 
-function buildWordDocumentHtml(title, bodyHtml) {
+function buildWordDocumentHtml(title, bodyHtml, exportStyle) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>${escapeHtml(title)}</title>
   <style>
-    body { font-family: Arial, sans-serif; color: #1f1f1f; margin: 40px; line-height: 1.55; }
-    h3 { font-family: Georgia, serif; font-size: 24pt; margin: 0 0 10px; }
-    h4 { font-size: 11pt; text-transform: uppercase; letter-spacing: 0.08em; margin: 24px 0 10px; color: #5b3f2a; }
+    body { font-family: ${exportStyle.bodyFont}; font-size: ${exportStyle.bodySize}pt; color: #1f1f1f; margin: 40px; line-height: ${exportStyle.lineHeight}; }
+    h3 { font-family: ${exportStyle.titleFont}; font-size: ${exportStyle.titleSize}pt; margin: 0 0 10px; }
+    h4 { font-family: ${exportStyle.headingFont}; font-size: ${exportStyle.headingSize}pt; text-transform: uppercase; letter-spacing: 0.08em; margin: 24px 0 10px; color: #405238; }
     p { margin: 0 0 10px; }
     ul { margin: 0; padding-left: 20px; }
-    li { margin: 0 0 8px; }
+    li { margin: 0 0 8px; font-family: ${exportStyle.bodyFont}; font-size: ${exportStyle.bodySize}pt; }
     .output-header { border-bottom: 1px solid #d8d1c6; padding-bottom: 12px; margin-bottom: 18px; }
-    .output-meta { color: #6d6258; }
+    .output-meta { font-family: ${exportStyle.metaFont}; font-size: ${exportStyle.metaSize}pt; color: #6d6258; }
     .output-doc { display: block; }
   </style>
 </head>
@@ -2074,7 +2632,9 @@ function normalizeImportedSessions(importedSessions) {
       highlights: Array.isArray(session.highlights) ? session.highlights.filter((item) => typeof item === "string") : [],
       liveTranscript: typeof session.liveTranscript === "string" ? session.liveTranscript : "",
       rawNotes: typeof session.rawNotes === "string" ? session.rawNotes : "",
+      outputFeedback: typeof session.outputFeedback === "string" ? session.outputFeedback : "",
       polishedHtml: typeof session.polishedHtml === "string" ? session.polishedHtml : "",
+      previousPolishedHtml: typeof session.previousPolishedHtml === "string" ? session.previousPolishedHtml : "",
       updatedAt: typeof session.updatedAt === "number" ? session.updatedAt : Date.now(),
     }))
     .sort((first, second) => second.updatedAt - first.updatedAt);
