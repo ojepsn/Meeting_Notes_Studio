@@ -43,13 +43,27 @@
             <p class="section-label">Recent Sessions</p>
             <h2>Your note shelf</h2>
           </div>
-          <button class="ghost-button" id="new-session" type="button">New Session</button>
         </div>
+
+        <button class="primary-button new-session-button" id="new-session" type="button">+ New Session</button>
 
         <ul class="session-list" id="session-list" aria-live="polite"></ul>
 
         <div class="empty-sessions" id="empty-sessions">
           <p>No saved sessions yet. Start with a fresh note and it will appear here automatically.</p>
+        </div>
+
+        <div class="session-storage">
+          <p class="section-label">Session Files</p>
+          <div class="session-storage-actions">
+            <button class="ghost-button" id="export-sessions" type="button">Export Sessions</button>
+            <button class="ghost-button" id="import-sessions" type="button">Import Sessions</button>
+            <button class="ghost-button" id="save-local-file" type="button">Save Local File</button>
+          </div>
+          <p class="support-text" id="session-storage-status">
+            Export sessions to a file, import them later, or save directly to a local file on supported desktop browsers.
+          </p>
+          <input id="import-sessions-input" type="file" accept="application/json,.json" hidden>
         </div>
       </aside>
 
@@ -60,111 +74,144 @@
             <h2 id="session-title">Untitled session</h2>
           </div>
           <div class="panel-actions">
+            <button class="ghost-button" id="open-settings" type="button">Settings</button>
             <button class="ghost-button" id="open-ai-settings" type="button">AI Settings</button>
             <div class="status-pill" id="save-status">Saved locally</div>
           </div>
         </div>
+        <div class="editor-layout">
+          <div class="editor-main">
+            <div class="field-grid">
+              <label class="field">
+                <span class="field-label">Meeting title</span>
+                <input id="meeting-title" type="text" maxlength="100" placeholder="Weekly product sync">
+              </label>
 
-        <div class="field-grid">
-          <label class="field">
-            <span class="field-label">Meeting title</span>
-            <input id="meeting-title" type="text" maxlength="100" placeholder="Weekly product sync">
-          </label>
+              <label class="field">
+                <span class="field-label">Template</span>
+                <select id="meeting-template">
+                  <option value="general">General meeting</option>
+                  <option value="standup">Standup</option>
+                  <option value="client">Client call</option>
+                  <option value="oneOnOne">1:1</option>
+                  <option value="interview">Interview</option>
+                </select>
+              </label>
+            </div>
 
-          <label class="field">
-            <span class="field-label">Template</span>
-            <select id="meeting-template">
-              <option value="general">General meeting</option>
-              <option value="standup">Standup</option>
-              <option value="client">Client call</option>
-              <option value="oneOnOne">1:1</option>
-              <option value="interview">Interview</option>
-            </select>
-          </label>
-        </div>
+            <label class="field">
+              <span class="field-label">Participants</span>
+              <input id="participants" type="text" maxlength="160" placeholder="Alex, Priya, Jonas">
+            </label>
 
-        <label class="field">
-          <span class="field-label">Participants</span>
-          <input id="participants" type="text" maxlength="160" placeholder="Alex, Priya, Jonas">
-        </label>
+            <label class="field">
+              <span class="field-label">Quick highlights</span>
+              <input id="highlights-input" type="text" maxlength="180" placeholder="Type a highlight and press Enter">
+            </label>
 
-        <label class="field">
-          <span class="field-label">Quick highlights</span>
-          <input id="highlights-input" type="text" maxlength="180" placeholder="Type a highlight and press Enter">
-        </label>
+            <div class="chip-row" id="highlight-chips" aria-live="polite"></div>
 
-        <div class="chip-row" id="highlight-chips" aria-live="polite"></div>
+            <label class="field">
+              <span class="field-label">Manual notes</span>
+              <textarea
+                id="raw-notes"
+                rows="12"
+                placeholder="Write your own notes here while dictation continues in the transcript field..."
+              ></textarea>
+            </label>
 
-        <label class="field">
-          <span class="field-label">Live transcript</span>
-          <textarea
-            id="live-transcript"
-            rows="7"
-            placeholder="Dictation appears here while recording..."
-            readonly
-          ></textarea>
-        </label>
-
-        <label class="field">
-          <span class="field-label">Manual notes</span>
-          <textarea
-            id="raw-notes"
-            rows="12"
-            placeholder="Write your own notes here while dictation continues in the transcript field..."
-          ></textarea>
-        </label>
-
-        <div class="field-inline">
-          <label class="field field-compact">
-            <span class="field-label">Dictation language</span>
-            <select id="dictation-language">
-              <option value="auto">Auto</option>
-              <option value="sv-SE">Swedish</option>
-              <option value="en-US">English</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="polish-section">
-          <div class="capture-toolbar">
-            <button class="primary-button" id="polish-notes" type="button">Polish with AI</button>
-            <button class="secondary-button" id="dictation-toggle" type="button">Start Dictation</button>
-            <button class="ghost-button" id="copy-output" type="button">Copy Output</button>
+            <label class="field">
+              <span class="field-label">Live transcript</span>
+              <textarea
+                id="live-transcript"
+                rows="7"
+                placeholder="Dictation appears here while recording..."
+                readonly
+              ></textarea>
+            </label>
           </div>
 
-          <section class="config-card config-card-inline" aria-label="Output configuration">
-            <div class="config-card-copy">
-              <p class="section-label">Configuration</p>
-              <h3>Polished output</h3>
+          <aside class="editor-sidebar">
+            <div class="field-inline field-inline-sidebar">
+              <label class="field field-compact">
+                <span class="field-label">Dictation language</span>
+                <select id="dictation-language">
+                  <option value="auto">Auto</option>
+                  <option value="sv-SE">Swedish</option>
+                  <option value="en-US">English</option>
+                </select>
+              </label>
             </div>
 
-            <div class="config-grid config-grid-inline">
-              <label class="config-option">
-                <input id="include-summary" type="checkbox">
-                <span>Executive Summary</span>
-              </label>
-              <label class="config-option">
-                <input id="include-highlights" type="checkbox">
-                <span>Highlights</span>
-              </label>
-              <label class="config-option">
-                <input id="include-decisions" type="checkbox">
-                <span>Decisions</span>
-              </label>
-              <label class="config-option">
-                <input id="include-actions" type="checkbox">
-                <span>Action Items</span>
-              </label>
+            <div class="polish-section">
+              <div class="capture-toolbar capture-toolbar-sidebar">
+                <button class="primary-button" id="polish-notes" type="button">Polish with AI</button>
+                <button class="secondary-button" id="dictation-toggle" type="button">Start Dictation</button>
+                <button class="ghost-button" id="copy-output" type="button">Copy Output</button>
+              </div>
+
+              <section class="config-card config-card-inline" aria-label="Output configuration">
+                <div class="config-card-copy">
+                  <p class="section-label">Configuration</p>
+                  <h3>Polished output</h3>
+                </div>
+
+                <div class="config-grid config-grid-inline">
+                  <label class="config-option">
+                    <input id="include-summary" type="checkbox">
+                    <span>Executive Summary</span>
+                  </label>
+                  <label class="config-option">
+                    <input id="include-highlights" type="checkbox">
+                    <span>Highlights</span>
+                  </label>
+                  <label class="config-option">
+                    <input id="include-decisions" type="checkbox">
+                    <span>Decisions</span>
+                  </label>
+                  <label class="config-option">
+                    <input id="include-actions" type="checkbox">
+                    <span>Action Items</span>
+                  </label>
+                </div>
+
+                <label class="field config-field">
+                  <span class="field-label">Detail level</span>
+                  <input id="detail-level" type="range" min="1" max="5" step="1" value="3">
+                  <span class="range-caption" id="detail-level-label">Balanced detail</span>
+                </label>
+
+                <label class="field config-field">
+                  <span class="field-label">Additional LLM instructions</span>
+                  <textarea
+                    id="additional-instructions"
+                    rows="4"
+                    placeholder="Example: Focus more on risks and decisions, and exclude implementation details."
+                  ></textarea>
+                </label>
+
+                <section class="custom-headers" aria-label="Custom headers">
+                  <div class="custom-headers-heading">
+                    <div>
+                      <p class="section-label">Custom Headers</p>
+                      <h4>Extra sections for the polished note</h4>
+                    </div>
+                    <button class="ghost-button custom-header-add" id="add-custom-header" type="button">Add Header</button>
+                  </div>
+
+                  <div class="custom-header-list" id="custom-header-list"></div>
+                </section>
+              </section>
             </div>
-          </section>
+
+            <p class="support-text" id="dictation-status">
+              Dictation uses the browser speech API when available. You can still type normally at any time.
+            </p>
+            <p class="support-text" id="ai-status-copy">
+              Open <strong>AI Settings</strong> to connect your OpenAI API key when you want AI polishing.
+            </p>
+          </aside>
         </div>
-
-        <p class="support-text" id="dictation-status">
-          Dictation uses the browser speech API when available. You can still type normally at any time.
-        </p>
-        <p class="support-text" id="ai-status-copy">
-          Open <strong>AI Settings</strong> to connect your OpenAI API key when you want AI polishing.
-        </p>
       </section>
 
       <section class="output-panel">
@@ -172,6 +219,10 @@
           <div>
             <p class="section-label">Polished Output</p>
             <h2>Professional notes</h2>
+          </div>
+          <div class="panel-actions">
+            <button class="ghost-button" id="export-word" type="button">Export Word</button>
+            <button class="ghost-button" id="export-pdf" type="button">Export PDF</button>
           </div>
         </div>
 
@@ -207,6 +258,24 @@
     </button>
   </template>
 
+  <template id="custom-header-template">
+    <article class="custom-header-item">
+      <label class="field">
+        <span class="field-label">Header</span>
+        <input class="custom-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
+      </label>
+      <label class="field">
+        <span class="field-label">Instructions to AI</span>
+        <textarea
+          class="custom-header-instructions"
+          rows="3"
+          placeholder="Explain what this section should focus on."
+        ></textarea>
+      </label>
+      <button class="ghost-button custom-header-remove" type="button">Remove</button>
+    </article>
+  </template>
+
   <div class="modal-shell is-hidden" id="ai-settings-modal" aria-hidden="true">
     <div class="modal-backdrop" id="close-ai-settings"></div>
     <section class="modal-card" aria-label="AI settings dialog" aria-modal="true" role="dialog">
@@ -224,14 +293,24 @@
           <input id="api-key" type="password" placeholder="sk-..." autocomplete="off">
         </label>
 
-        <label class="field">
-          <span class="field-label">Model</span>
-          <select id="model-select">
-            <option value="gpt-5-mini">gpt-5-mini</option>
-            <option value="gpt-5">gpt-5</option>
-            <option value="gpt-5-nano">gpt-5-nano</option>
-          </select>
-        </label>
+        <input id="model-select" type="hidden" value="gpt-5-mini">
+
+        <section class="config-card settings-card" aria-label="OpenAI model selection">
+          <div class="config-card-copy">
+            <p class="section-label">Model</p>
+            <h3>Choose an OpenAI model</h3>
+          </div>
+
+          <p class="support-text" id="model-pricing-status">
+            Loading model guidance and pricing...
+          </p>
+
+          <p class="support-text">
+            Pricing is shown per 1 million tokens. In plain language, tokens are small chunks of text, so this is a standardized way to compare cost across models. For normal meeting notes, a single polish pass usually uses only a tiny fraction of that amount. As a rough guide, one page of text is about 500 words, which is approximately 750 tokens.
+          </p>
+
+          <div class="model-option-list" id="model-options" aria-live="polite"></div>
+        </section>
 
         <p class="support-text">
           Your API key is stored only in this browser so the app can call OpenAI directly from the client.
@@ -244,6 +323,57 @@
     </section>
   </div>
 
+  <div class="modal-shell is-hidden" id="settings-modal" aria-hidden="true">
+    <div class="modal-backdrop" id="close-settings"></div>
+    <section class="modal-card" aria-label="Settings dialog" aria-modal="true" role="dialog">
+      <div class="panel-heading modal-heading">
+        <div>
+          <p class="section-label">Settings</p>
+          <h2>Appearance</h2>
+        </div>
+        <button class="ghost-button" id="close-settings-button" type="button">Close</button>
+      </div>
+
+      <form class="modal-form" id="settings-form">
+        <section class="config-card settings-card" aria-label="Appearance settings">
+          <div class="config-card-copy">
+            <p class="section-label">Theme</p>
+            <h3>Choose your workspace look</h3>
+          </div>
+
+          <div class="settings-grid">
+            <label class="field">
+              <span class="field-label">Theme family</span>
+              <select id="theme-family">
+                <option value="olive">Modern Olive</option>
+                <option value="blue">Classic Blue SaaS</option>
+                <option value="teal">Teal Enterprise</option>
+                <option value="forest">Graphite Forest</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="field-label">Appearance</span>
+              <select id="theme-mode">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
+          </div>
+
+          <p class="support-text" id="settings-theme-description">
+            A calm olive palette designed for focused writing and professional notes.
+          </p>
+        </section>
+
+        <div class="capture-toolbar">
+          <button class="primary-button" type="submit">Save Settings</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
