@@ -1,0 +1,12 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Office and temp files
+~$*
+*.tmp
+*.temp
+
+# Editor folders
+.vscode/
+.idea/

@@ -1,4 +1,4 @@
-const STORAGE_KEY = "notesmith-sessions";
+﻿const STORAGE_KEY = "notesmith-sessions";
 const SETTINGS_KEY = "notesmith-settings";
 
 const templateDescriptions = {
@@ -161,7 +161,7 @@ function bindEvents() {
 
   templateSelect.addEventListener("change", () => {
     const { label } = templateDescriptions[templateSelect.value];
-    dictationStatus.textContent = `Template selected: ${label}. Click "Polish Notes" whenever you want a professional summary.`;
+    dictationStatus.textContent = `Template selected: ${label}. Click "Polish with AI" whenever you want a professional summary.`;
   });
 
   [
@@ -268,7 +268,7 @@ function renderSessionList() {
     const meta = fragment.querySelector(".session-meta");
 
     name.textContent = session.title.trim() || "Untitled session";
-    meta.textContent = `${templateDescriptions[session.template].label} • ${formatDate(session.updatedAt)}`;
+    meta.textContent = `${templateDescriptions[session.template].label} - ${formatDate(session.updatedAt)}`;
     button.classList.toggle("is-active", session.id === activeSessionId);
 
     button.addEventListener("click", () => {
@@ -367,7 +367,7 @@ function renderOutput() {
       <div class="output-empty">
         <div>
           <h3>Your finished notes will appear here.</h3>
-          <p>Write rough notes on the left, add a few highlights, then click <strong>Polish Notes</strong>.</p>
+          <p>Write rough notes on the left, add a few highlights, then click <strong>Polish with AI</strong>.</p>
         </div>
       </div>
     `;
@@ -488,8 +488,8 @@ function buildLocalPolishedNotes(session) {
       <header class="output-header">
         <h3>${escapeHtml(session.title.trim() || "Untitled session")}</h3>
         <p class="output-meta">
-          ${escapeHtml(template.label)} • ${formatDate(session.updatedAt)}
-          ${participants.length ? ` • Participants: ${escapeHtml(participants.join(", "))}` : ""}
+          ${escapeHtml(template.label)} - ${formatDate(session.updatedAt)}
+          ${participants.length ? ` - Participants: ${escapeHtml(participants.join(", "))}` : ""}
         </p>
       </header>
 
@@ -687,8 +687,8 @@ function buildAiOutputHtml(session, template, aiNotes, outputLanguage) {
       <header class="output-header">
         <h3>${escapeHtml(aiNotes.title || session.title.trim() || "Untitled session")}</h3>
         <p class="output-meta">
-          ${escapeHtml(template.label)} • ${formatDate(session.updatedAt)}
-          ${participants.length ? ` • Participants: ${escapeHtml(participants.join(", "))}` : ""}
+          ${escapeHtml(template.label)} - ${formatDate(session.updatedAt)}
+          ${participants.length ? ` - Participants: ${escapeHtml(participants.join(", "))}` : ""}
         </p>
       </header>
 
@@ -768,7 +768,7 @@ function extractResponseText(payload) {
 function normalizeNotes(rawNotes) {
   return rawNotes
     .split(/\r?\n/)
-    .map((line) => line.replace(/^[\s\-*•]+/, "").trim())
+    .map((line) => line.replace(/^[\s*\-\u2022]+/, "").trim())
     .filter(Boolean);
 }
 
@@ -947,7 +947,7 @@ function setupSpeechRecognition() {
 
     liveTranscriptInput.value = nextValue;
     updateActiveSession({ liveTranscript: nextValue }, true);
-    dictationStatus.textContent = `Dictation is active in ${formatDictationLanguage(currentDictationLanguage)}. Keep talking and your notes will appear in the raw notes field.`;
+    dictationStatus.textContent = `Dictation is active in ${formatDictationLanguage(currentDictationLanguage)}. Keep talking and your notes will appear in the live transcript field.`;
 
     if (settings.dictationLanguage === "auto" && detectedLanguage !== currentDictationLanguage) {
       currentDictationLanguage = detectedLanguage;
@@ -1164,22 +1164,7 @@ function detectPreferredLanguage(text, fallbackLanguage) {
   return scoreDelta > 0 ? DICTATION_LANGUAGES.swedish : DICTATION_LANGUAGES.english;
 }
 
-function detectSpeechLanguage(text, fallbackLanguage) {
-  const sample = (text || "").toLowerCase();
-  const swedishScore = scoreLanguage(sample, [
-    /\b(och|det|att|som|inte|med|för|har|på|är|vi|ska|också|möte|beslut|åtgärd|uppföljning)\b/g,
-    /[åäö]/g,
-  ]);
-  const englishScore = scoreLanguage(sample, [
-    /\b(and|the|that|with|for|not|have|this|will|meeting|decision|action|follow-up|summary|next)\b/g,
-  ]);
 
-  if (swedishScore === englishScore) {
-    return fallbackLanguage || DICTATION_LANGUAGES.english;
-  }
-
-  return swedishScore > englishScore ? DICTATION_LANGUAGES.swedish : DICTATION_LANGUAGES.english;
-}
 
 function scoreLanguage(sample, patterns) {
   return patterns.reduce((score, pattern) => {
@@ -1203,3 +1188,6 @@ function localizeSummaryLead(summaryLead) {
 
   return translations[summaryLead] || summaryLead;
 }
+
+
+
