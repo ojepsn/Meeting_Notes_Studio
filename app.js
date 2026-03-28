@@ -3271,8 +3271,17 @@ function exportCurrentSessionAsWord() {
   const title = session.title.trim() || "Meeting Notes";
   const documentHtml = buildWordDocumentHtml(title, session.polishedHtml, getCurrentExportStyle());
   const blob = new Blob([documentHtml], { type: "application/msword" });
-  downloadBlob(blob, `${toFileSafeName(title)}.doc`);
-  dictationStatus.textContent = "The current session was exported as a Word document.";
+  saveBlobAsFile(blob, `${toFileSafeName(title)}.doc`, "application/msword")
+    .then((result) => {
+      dictationStatus.textContent = result === "saved"
+        ? "The current session was saved as a Word document."
+        : "The current session was exported as a Word document.";
+    })
+    .catch((error) => {
+      dictationStatus.textContent = error?.name === "AbortError"
+        ? "Word export was cancelled."
+        : `Word export failed: ${error.message}`;
+    });
 }
 
 function exportCurrentSessionAsPdf() {
@@ -3337,8 +3346,11 @@ async function exportCurrentSessionAsStyledPdf(session) {
       heightLeft -= pageHeight;
     }
 
-    pdf.save(`${toFileSafeName(exportData.title)}.pdf`);
-    dictationStatus.textContent = "The current session was exported as a PDF document.";
+    const pdfBlob = pdf.output("blob");
+    const result = await saveBlobAsFile(pdfBlob, `${toFileSafeName(exportData.title)}.pdf`, "application/pdf");
+    dictationStatus.textContent = result === "saved"
+      ? "The current session was saved as a PDF document."
+      : "The current session was exported as a PDF document.";
   } finally {
     previewElement.remove();
   }
@@ -3424,8 +3436,18 @@ function exportCurrentSessionAsBasicPdf(session) {
     cursorY += 8;
   });
 
-  pdf.save(`${toFileSafeName(exportData.title)}.pdf`);
-  dictationStatus.textContent = "The current session was exported as a PDF document.";
+  const pdfBlob = pdf.output("blob");
+  saveBlobAsFile(pdfBlob, `${toFileSafeName(exportData.title)}.pdf`, "application/pdf")
+    .then((result) => {
+      dictationStatus.textContent = result === "saved"
+        ? "The current session was saved as a PDF document."
+        : "The current session was exported as a PDF document.";
+    })
+    .catch((error) => {
+      dictationStatus.textContent = error?.name === "AbortError"
+        ? "PDF export was cancelled."
+        : `PDF export failed: ${error.message}`;
+    });
 }
 
 function buildPdfPreviewElement(session, exportStyle) {
@@ -3526,6 +3548,30 @@ function downloadBlob(blob, filename) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+async function saveBlobAsFile(blob, filename, mimeType) {
+  if (typeof window.showSaveFilePicker === "function") {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: filename,
+      types: [
+        {
+          description: mimeType === "application/pdf" ? "PDF document" : "Word document",
+          accept: {
+            [mimeType]: [filename.endsWith(".pdf") ? ".pdf" : ".doc"],
+          },
+        },
+      ],
+    });
+
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return "saved";
+  }
+
+  downloadBlob(blob, filename);
+  return "downloaded";
 }
 
 function toFileSafeName(value) {
