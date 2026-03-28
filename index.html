@@ -28,16 +28,16 @@
 
       <div class="hero-metrics" aria-label="Product highlights">
         <article class="metric-card">
+          <span class="metric-value">Capture</span>
+          <span class="metric-label">Capture both meetings and personal notes with manual writing, live recording, or both at the same time.</span>
+        </article>
+        <article class="metric-card">
           <span class="metric-value">Templates</span>
-          <span class="metric-label">Designed for 1:1s, client calls, standups, and interviews.</span>
+          <span class="metric-label">Use built-in templates such as Meeting and Personal Note, or create your own templates with custom fields, headers, and AI instructions.</span>
         </article>
         <article class="metric-card">
-          <span class="metric-value">Dictation</span>
-          <span class="metric-label">Browser speech capture when supported by your device.</span>
-        </article>
-        <article class="metric-card">
-          <span class="metric-value">Local</span>
-          <span class="metric-label">Your sessions stay saved in this browser for quick retrieval.</span>
+          <span class="metric-value">Export & Storage</span>
+          <span class="metric-label">Keep sessions in local storage, export and import them as files, and create Word or PDF documents with configurable layout and typography.</span>
         </article>
       </div>
     </section>
@@ -83,14 +83,14 @@
             <button class="ghost-button" id="open-settings" type="button">Settings</button>
             <button class="ghost-button" id="open-ai-settings" type="button">AI Settings</button>
             <button class="ghost-button is-hidden-field" id="update-app" type="button">Update App</button>
-            <div class="status-pill" id="save-status">Saved locally</div>
+            <div class="status-pill" id="save-status" data-state="idle">Saved locally</div>
           </div>
         </div>
         <div class="editor-layout">
           <div class="editor-main">
             <div class="field-grid">
               <label class="field" id="title-field">
-                <span class="field-label">Meeting title</span>
+                <span class="field-label" id="title-field-label">Meeting title</span>
                 <input id="meeting-title" type="text" maxlength="100" placeholder="Weekly product sync">
               </label>
 
@@ -102,8 +102,16 @@
 
             <label class="field" id="participants-field">
               <span class="field-label">Participants</span>
-              <input id="participants" type="text" maxlength="160" placeholder="Alex, Priya, Jonas">
+              <input id="participants" type="text" maxlength="160" placeholder="Alex, Priya, Jonas" list="participant-suggestions">
             </label>
+            <datalist id="participant-suggestions"></datalist>
+            <div class="participant-directory" id="participant-directory">
+              <div class="participant-directory-header">
+                <span class="participant-directory-label">Saved participants</span>
+                <button class="ghost-button participant-manage-button" id="open-participant-settings" type="button">Manage list</button>
+              </div>
+              <div class="chip-row participant-chip-row" id="participant-chips" aria-live="polite"></div>
+            </div>
 
             <div class="field-grid field-grid-three" id="meeting-schedule-field">
               <label class="field field-tight">
@@ -172,8 +180,8 @@
               </label>
 
               <div class="capture-toolbar capture-toolbar-sidebar">
-                <button class="primary-button" id="polish-notes" type="button">Polish with AI</button>
-                <button class="secondary-button" id="dictation-toggle" type="button">Start Dictation</button>
+                <button class="primary-button" id="polish-notes" type="button">Generate</button>
+                <button class="secondary-button" id="dictation-toggle" type="button">Start recording</button>
                 <button class="ghost-button" id="copy-output" type="button">Copy Output</button>
               </div>
 
@@ -203,15 +211,30 @@
                 </div>
 
                 <section class="custom-headers custom-headers-inline" aria-label="Custom headers">
+                  <div class="custom-header-list" id="custom-header-list"></div>
+
                   <div class="custom-headers-heading">
-                    <div>
-                      <p class="section-label">Custom Headers</p>
-                      <h4>Extra sections for the polished note</h4>
-                    </div>
-                    <button class="ghost-button custom-header-add" id="add-custom-header" type="button">Add Header</button>
+                    <button class="ghost-button custom-header-add" id="add-custom-header" type="button">Add section</button>
                   </div>
 
-                  <div class="custom-header-list" id="custom-header-list"></div>
+                  <div class="custom-header-add-form is-hidden-field" id="custom-header-add-form">
+                    <label class="field field-tight">
+                      <span class="field-label">Header</span>
+                      <input id="new-custom-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
+                    </label>
+                    <label class="field field-tight">
+                      <span class="field-label">Instructions to AI</span>
+                      <textarea
+                        id="new-custom-header-instructions"
+                        rows="3"
+                        placeholder="Explain what this section should focus on."
+                      ></textarea>
+                    </label>
+                    <div class="custom-header-add-actions">
+                      <button class="secondary-button" id="save-custom-header" type="button">Save</button>
+                      <button class="ghost-button" id="cancel-custom-header" type="button">Cancel</button>
+                    </div>
+                  </div>
                 </section>
 
                 <label class="field config-field">
@@ -235,6 +258,9 @@
             <p class="support-text" id="dictation-status">
               Dictation uses the browser speech API when available. You can still type normally at any time.
             </p>
+            <p class="support-text">
+              If your browser asks for microphone permission, choose <strong>Allow while visiting the site</strong> to avoid being asked again every time you start recording.
+            </p>
             <p class="support-text" id="ai-status-copy">
               Open <strong>AI Settings</strong> to connect your OpenAI API key when you want AI polishing.
             </p>
@@ -257,7 +283,7 @@
         <div class="output-card" id="polished-output">
           <div class="output-empty">
             <h3>Your finished notes will appear here.</h3>
-            <p>Write rough notes on the left, add a few highlights, then click <strong>Polish with AI</strong>.</p>
+            <p>Write rough notes on the left, add a few highlights, then click <strong>Generate</strong>.</p>
           </div>
         </div>
 
@@ -306,25 +332,39 @@
     </button>
   </template>
 
+  <template id="participant-directory-item-template">
+    <article class="participant-directory-item">
+      <input class="participant-directory-name" type="text" maxlength="80" placeholder="Participant name">
+      <button class="ghost-button participant-directory-remove" type="button">Remove</button>
+    </article>
+  </template>
+
   <template id="custom-header-template">
     <article class="custom-header-item">
-      <label class="config-option custom-header-toggle">
-        <input class="custom-header-include" type="checkbox">
-        <span class="custom-header-toggle-label">New custom section</span>
-      </label>
-      <label class="field">
-        <span class="field-label">Header</span>
-        <input class="custom-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
-      </label>
-      <label class="field">
-        <span class="field-label">Instructions to AI</span>
-        <textarea
-          class="custom-header-instructions"
-          rows="3"
-          placeholder="Explain what this section should focus on."
-        ></textarea>
-      </label>
-      <button class="ghost-button custom-header-remove" type="button">Remove</button>
+      <div class="config-option custom-header-toggle">
+        <label class="custom-header-toggle-main">
+          <input class="custom-header-include" type="checkbox">
+          <span class="custom-header-toggle-label">New custom section</span>
+        </label>
+        <span class="custom-header-toggle-actions">
+          <button class="ghost-button custom-header-edit" type="button">Edit</button>
+          <button class="ghost-button custom-header-remove" type="button">Remove</button>
+        </span>
+      </div>
+      <div class="custom-header-editor is-hidden-field">
+        <label class="field field-tight">
+          <span class="field-label">Header</span>
+          <input class="custom-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
+        </label>
+        <label class="field field-tight">
+          <span class="field-label">Instructions to AI</span>
+          <textarea
+            class="custom-header-instructions"
+            rows="3"
+            placeholder="Explain what this section should focus on."
+          ></textarea>
+        </label>
+      </div>
     </article>
   </template>
 
@@ -464,137 +504,170 @@
 
   <div class="modal-shell is-hidden" id="settings-modal" aria-hidden="true">
     <div class="modal-backdrop" id="close-settings"></div>
-    <section class="modal-card" aria-label="Settings dialog" aria-modal="true" role="dialog">
+    <section class="modal-card modal-card-settings" aria-label="Settings dialog" aria-modal="true" role="dialog">
       <div class="panel-heading modal-heading">
         <div>
           <p class="section-label">Settings</p>
-          <h2>Appearance and Exports</h2>
+          <h2>Workspace controls</h2>
         </div>
         <button class="ghost-button" id="close-settings-button" type="button">Close</button>
       </div>
 
       <form class="modal-form" id="settings-form">
-        <section class="config-card settings-card" aria-label="Appearance settings">
-          <div class="config-card-copy">
-            <p class="section-label">Theme</p>
-            <h3>Choose your workspace look</h3>
+        <div class="settings-shell">
+          <aside class="settings-nav" aria-label="Settings sections">
+            <p class="support-text settings-nav-copy">
+              Changes save automatically. Pick a section to tune the workspace, exports, templates, or saved people.
+            </p>
+            <div class="settings-nav-list">
+              <button class="settings-nav-button is-active" data-settings-tab="appearance" type="button">Appearance</button>
+              <button class="settings-nav-button" data-settings-tab="exports" type="button">Exports</button>
+              <button class="settings-nav-button" data-settings-tab="templates" type="button">Templates</button>
+              <button class="settings-nav-button" data-settings-tab="participants" type="button">Participants</button>
+            </div>
+          </aside>
+
+          <div class="settings-content">
+            <section class="config-card settings-card" data-settings-section="appearance" aria-label="Appearance settings">
+              <div class="config-card-copy">
+                <p class="section-label">Theme</p>
+                <h3>Choose your workspace look</h3>
+              </div>
+
+              <div class="settings-grid">
+                <label class="field">
+                  <span class="field-label">Theme family</span>
+                  <select id="theme-family">
+                    <option value="olive">Modern Olive</option>
+                    <option value="blue">Classic Blue SaaS</option>
+                    <option value="teal">Teal Enterprise</option>
+                    <option value="forest">Graphite Forest</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Appearance</span>
+                  <select id="theme-mode">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                  </select>
+                </label>
+              </div>
+
+              <p class="support-text" id="settings-theme-description">
+                A calm olive palette designed for focused writing and professional notes.
+              </p>
+            </section>
+
+            <section class="config-card settings-card is-hidden-field" data-settings-section="exports" aria-label="Export style settings">
+              <div class="config-card-copy">
+                <p class="section-label">Exports</p>
+                <h3>Word and PDF typography</h3>
+              </div>
+
+              <label class="field">
+                <span class="field-label">Export style preset</span>
+                <select id="export-style-preset">
+                  <option value="modern-aptos">Modern Aptos</option>
+                  <option value="enterprise-helvetica">Enterprise Helvetica</option>
+                  <option value="editorial-georgia">Editorial Georgia</option>
+                  <option value="refined-garamond">Refined Garamond</option>
+                  <option value="digital-inter">Digital Inter</option>
+                  <option value="custom">Personal style</option>
+                </select>
+              </label>
+
+              <p class="support-text" id="export-style-description">
+                A modern business document look with a clean sans serif hierarchy and restrained spacing.
+              </p>
+
+              <div class="settings-grid export-style-grid">
+                <label class="field">
+                  <span class="field-label">Title font</span>
+                  <input id="export-title-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Heading font</span>
+                  <input id="export-heading-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Body font</span>
+                  <input id="export-body-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Metadata font</span>
+                  <input id="export-meta-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Title size (pt)</span>
+                  <input id="export-title-size" type="number" min="16" max="36" step="0.5">
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Heading size (pt)</span>
+                  <input id="export-heading-size" type="number" min="10" max="24" step="0.5">
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Body size (pt)</span>
+                  <input id="export-body-size" type="number" min="9" max="18" step="0.5">
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Metadata size (pt)</span>
+                  <input id="export-meta-size" type="number" min="8" max="16" step="0.5">
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Line spacing</span>
+                  <input id="export-line-height" type="number" min="1.1" max="2" step="0.05">
+                </label>
+              </div>
+            </section>
+
+            <section class="config-card settings-card is-hidden-field" data-settings-section="templates" aria-label="Custom template settings">
+              <div class="config-card-copy">
+                <p class="section-label">Templates</p>
+                <h3>Create your own template</h3>
+              </div>
+
+              <p class="support-text">
+                Build your own note flow by choosing which input fields are visible and by adding template-specific headers and AI instructions.
+              </p>
+
+              <div class="template-builder-actions">
+                <button class="ghost-button" id="add-custom-template" type="button">Add Template</button>
+              </div>
+
+              <div class="custom-template-list" id="custom-template-list"></div>
+            </section>
+
+            <section class="config-card settings-card is-hidden-field" data-settings-section="participants" aria-label="Participant directory settings">
+              <div class="config-card-copy">
+                <p class="section-label">Participants</p>
+                <h3>Saved participant list</h3>
+              </div>
+
+              <p class="support-text">
+                Store commonly used participant names here so they can be selected quickly in meeting sessions.
+              </p>
+
+              <div class="participant-settings-add">
+                <label class="field field-tight">
+                  <span class="field-label">Add participant</span>
+                  <input id="participant-directory-input" type="text" maxlength="80" placeholder="Add a participant name">
+                </label>
+                <button class="secondary-button" id="add-directory-participant" type="button">Add</button>
+              </div>
+
+              <div class="participant-directory-list" id="participant-directory-list"></div>
+            </section>
           </div>
-
-          <div class="settings-grid">
-            <label class="field">
-              <span class="field-label">Theme family</span>
-              <select id="theme-family">
-                <option value="olive">Modern Olive</option>
-                <option value="blue">Classic Blue SaaS</option>
-                <option value="teal">Teal Enterprise</option>
-                <option value="forest">Graphite Forest</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span class="field-label">Appearance</span>
-              <select id="theme-mode">
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </label>
-          </div>
-
-          <p class="support-text" id="settings-theme-description">
-            A calm olive palette designed for focused writing and professional notes.
-          </p>
-        </section>
-
-        <section class="config-card settings-card" aria-label="Export style settings">
-          <div class="config-card-copy">
-            <p class="section-label">Exports</p>
-            <h3>Word and PDF typography</h3>
-          </div>
-
-          <label class="field">
-            <span class="field-label">Export style preset</span>
-            <select id="export-style-preset">
-              <option value="modern-aptos">Modern Aptos</option>
-              <option value="enterprise-helvetica">Enterprise Helvetica</option>
-              <option value="editorial-georgia">Editorial Georgia</option>
-              <option value="refined-garamond">Refined Garamond</option>
-              <option value="digital-inter">Digital Inter</option>
-              <option value="custom">Personal style</option>
-            </select>
-          </label>
-
-          <p class="support-text" id="export-style-description">
-            A modern business document look with a clean sans serif hierarchy and restrained spacing.
-          </p>
-
-          <div class="settings-grid export-style-grid">
-            <label class="field">
-              <span class="field-label">Title font</span>
-              <input id="export-title-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
-            </label>
-
-            <label class="field">
-              <span class="field-label">Heading font</span>
-              <input id="export-heading-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
-            </label>
-
-            <label class="field">
-              <span class="field-label">Body font</span>
-              <input id="export-body-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
-            </label>
-
-            <label class="field">
-              <span class="field-label">Metadata font</span>
-              <input id="export-meta-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
-            </label>
-
-            <label class="field">
-              <span class="field-label">Title size (pt)</span>
-              <input id="export-title-size" type="number" min="16" max="36" step="0.5">
-            </label>
-
-            <label class="field">
-              <span class="field-label">Heading size (pt)</span>
-              <input id="export-heading-size" type="number" min="10" max="24" step="0.5">
-            </label>
-
-            <label class="field">
-              <span class="field-label">Body size (pt)</span>
-              <input id="export-body-size" type="number" min="9" max="18" step="0.5">
-            </label>
-
-            <label class="field">
-              <span class="field-label">Metadata size (pt)</span>
-              <input id="export-meta-size" type="number" min="8" max="16" step="0.5">
-            </label>
-
-            <label class="field">
-              <span class="field-label">Line spacing</span>
-              <input id="export-line-height" type="number" min="1.1" max="2" step="0.05">
-            </label>
-          </div>
-        </section>
-
-        <section class="config-card settings-card" aria-label="Custom template settings">
-          <div class="config-card-copy">
-            <p class="section-label">Templates</p>
-            <h3>Create your own template</h3>
-          </div>
-
-          <p class="support-text">
-            Build your own note flow by choosing which input fields are visible and by adding template-specific headers and AI instructions.
-          </p>
-
-          <div class="template-builder-actions">
-            <button class="ghost-button" id="add-custom-template" type="button">Add Template</button>
-          </div>
-
-          <div class="custom-template-list" id="custom-template-list"></div>
-        </section>
-
-        <p class="support-text">
-          Changes in this window are saved automatically.
-        </p>
+        </div>
       </form>
     </section>
   </div>

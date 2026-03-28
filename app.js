@@ -48,6 +48,8 @@ const settingsModal = document.querySelector("#settings-modal");
 const closeSettingsBackdrop = document.querySelector("#close-settings");
 const closeSettingsButton = document.querySelector("#close-settings-button");
 const settingsForm = document.querySelector("#settings-form");
+const settingsNavButtons = [...document.querySelectorAll("[data-settings-tab]")];
+const settingsSections = [...document.querySelectorAll("[data-settings-section]")];
 const themeFamilySelect = document.querySelector("#theme-family");
 const themeModeSelect = document.querySelector("#theme-mode");
 const settingsThemeDescription = document.querySelector("#settings-theme-description");
@@ -72,6 +74,7 @@ const updateAppButton = document.querySelector("#update-app");
 const meetingTitleInput = document.querySelector("#meeting-title");
 const templateSelect = document.querySelector("#meeting-template");
 const titleField = document.querySelector("#title-field");
+const titleFieldLabel = document.querySelector("#title-field-label");
 const participantsField = document.querySelector("#participants-field");
 const meetingScheduleField = document.querySelector("#meeting-schedule-field");
 const highlightsField = document.querySelector("#highlights-field");
@@ -83,6 +86,13 @@ const modelOptions = document.querySelector("#model-options");
 const modelPricingStatus = document.querySelector("#model-pricing-status");
 const aiStatusCopy = document.querySelector("#ai-status-copy");
 const participantsInput = document.querySelector("#participants");
+const participantSuggestions = document.querySelector("#participant-suggestions");
+const participantDirectoryPanel = document.querySelector("#participant-directory");
+const participantChips = document.querySelector("#participant-chips");
+const openParticipantSettingsButton = document.querySelector("#open-participant-settings");
+const participantDirectoryInput = document.querySelector("#participant-directory-input");
+const addDirectoryParticipantButton = document.querySelector("#add-directory-participant");
+const participantDirectoryList = document.querySelector("#participant-directory-list");
 const meetingDateInput = document.querySelector("#meeting-date");
 const meetingStartTimeInput = document.querySelector("#meeting-start-time");
 const meetingEndTimeInput = document.querySelector("#meeting-end-time");
@@ -96,6 +106,11 @@ const detailLevelLabel = document.querySelector("#detail-level-label");
 const additionalInstructionsInput = document.querySelector("#additional-instructions");
 const addCustomHeaderButton = document.querySelector("#add-custom-header");
 const customHeaderList = document.querySelector("#custom-header-list");
+const customHeaderAddForm = document.querySelector("#custom-header-add-form");
+const newCustomHeaderTitleInput = document.querySelector("#new-custom-header-title");
+const newCustomHeaderInstructionsInput = document.querySelector("#new-custom-header-instructions");
+const saveCustomHeaderButton = document.querySelector("#save-custom-header");
+const cancelCustomHeaderButton = document.querySelector("#cancel-custom-header");
 const highlightsInput = document.querySelector("#highlights-input");
 const highlightChips = document.querySelector("#highlight-chips");
 const liveTranscriptInput = document.querySelector("#live-transcript");
@@ -115,6 +130,7 @@ const outputFeedbackStatus = document.querySelector("#output-feedback-status");
 const appVersionLabel = document.querySelector("#app-version");
 const sessionItemTemplate = document.querySelector("#session-item-template");
 const highlightChipTemplate = document.querySelector("#highlight-chip-template");
+const participantDirectoryItemTemplate = document.querySelector("#participant-directory-item-template");
 const customHeaderTemplate = document.querySelector("#custom-header-template");
 const addCustomTemplateButton = document.querySelector("#add-custom-template");
 const customTemplateList = document.querySelector("#custom-template-list");
@@ -129,6 +145,14 @@ const DICTATION_LANGUAGES = {
 const OUTPUT_LANGUAGES = {
   swedish: "swedish",
   english: "english",
+};
+const APP_STATUS_STATES = {
+  idle: "idle",
+  saving: "saving",
+  recording: "recording",
+  generating: "generating",
+  updating: "updating",
+  warning: "warning",
 };
 const SUPPORTS_FILE_SAVE = typeof window.showSaveFilePicker === "function";
 const MAX_MODEL_INPUT_PRICE_PER_MILLION = 2.5;
@@ -375,9 +399,11 @@ let aiCatalogRefreshCounter = 0;
 let serviceWorkerRegistration = null;
 let hasPendingAppUpdate = false;
 let isRefreshingForUpdate = false;
+let activeSettingsSection = "appearance";
 
 applyTheme(settings.themeFamily, settings.themeMode);
 settings.model = resolveSelectedModel(settings.model);
+syncParticipantDirectoryFromAllSessions();
 
 if (!activeSessionId) {
   const initialSession = createSession();
@@ -412,6 +438,13 @@ function bindEvents() {
     await saveSessionsToLocalFile();
   });
 
+  openParticipantSettingsButton.addEventListener("click", () => {
+    openSettings();
+    window.setTimeout(() => {
+      participantDirectoryInput.focus();
+    }, 0);
+  });
+
   updateAppButton.addEventListener("click", () => {
     applyLatestAppUpdate();
   });
@@ -419,6 +452,11 @@ function bindEvents() {
   openSettingsButton.addEventListener("click", openSettings);
   closeSettingsBackdrop.addEventListener("click", closeSettings);
   closeSettingsButton.addEventListener("click", closeSettings);
+  settingsNavButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setActiveSettingsSection(button.dataset.settingsTab);
+    });
+  });
   themeFamilySelect.addEventListener("change", previewThemeSelection);
   themeModeSelect.addEventListener("change", previewThemeSelection);
   exportStylePresetSelect.addEventListener("change", () => {
@@ -454,6 +492,64 @@ function bindEvents() {
     persistSettings();
     renderTemplateOptions();
     renderCustomTemplates(nextTemplate.id);
+  });
+
+  addDirectoryParticipantButton.addEventListener("click", () => {
+    addParticipantToDirectory(participantDirectoryInput.value);
+  });
+
+  participantDirectoryInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addParticipantToDirectory(participantDirectoryInput.value);
+    }
+  });
+
+  participantDirectoryList.addEventListener("input", (event) => {
+    const item = event.target.closest(".participant-directory-item");
+    if (!item) {
+      return;
+    }
+
+    const previousName = item.dataset.participantName || "";
+    const nextName = event.target.value;
+    settings.participantDirectory = normalizeParticipantDirectory(
+      settings.participantDirectory.map((name) => (name === previousName ? nextName : name))
+    );
+    persistSettings();
+    item.dataset.participantName = nextName.trim();
+    renderParticipantSuggestions();
+  });
+
+  participantDirectoryList.addEventListener("click", (event) => {
+    const removeButton = event.target.closest(".participant-directory-remove");
+    if (!removeButton) {
+      return;
+    }
+
+    const item = removeButton.closest(".participant-directory-item");
+    const name = item?.dataset.participantName || "";
+    settings.participantDirectory = normalizeParticipantDirectory(
+      settings.participantDirectory.filter((entry) => entry !== name)
+    );
+    persistSettings();
+    renderParticipantDirectoryManager();
+    renderParticipantSuggestions();
+  });
+
+  participantChips.addEventListener("click", (event) => {
+    const chip = event.target.closest(".chip");
+    if (!chip) {
+      return;
+    }
+
+    const participantName = chip.dataset.participantName;
+    const currentParticipants = parseParticipants(getActiveSession().participants);
+    const nextParticipants = normalizeParticipantDirectory([...currentParticipants, participantName]);
+    const nextValue = nextParticipants.join(", ");
+    participantsInput.value = nextValue;
+    updateActiveSession({ participants: nextValue }, true);
+    syncParticipantDirectoryWithSession(nextValue);
   });
 
   customTemplateList.addEventListener("input", (event) => {
@@ -617,6 +713,10 @@ function bindEvents() {
                     ? "meetingEndTime"
               : "rawNotes"]: field.value,
       }, true);
+
+      if (field.id === "participants") {
+        syncParticipantDirectoryWithSession(field.value);
+      }
     });
   });
 
@@ -632,7 +732,7 @@ function bindEvents() {
 
     updateActiveSession(patch, true);
     applyTemplateUi({ ...currentSession, ...patch });
-    dictationStatus.textContent = `Template selected: ${template.label}. Click "Polish with AI" whenever you want a professional summary.`;
+    dictationStatus.textContent = `Template selected: ${template.label}. Click "Generate" whenever you want a professional summary.`;
   });
 
   [
@@ -667,12 +767,30 @@ function bindEvents() {
   });
 
   addCustomHeaderButton.addEventListener("click", () => {
+    setElementVisibility(customHeaderAddForm, true);
+    newCustomHeaderTitleInput.focus();
+  });
+
+  saveCustomHeaderButton.addEventListener("click", () => {
+    const title = newCustomHeaderTitleInput.value.trim();
+    const instructions = newCustomHeaderInstructionsInput.value.trim();
+
+    if (!title) {
+      newCustomHeaderTitleInput.focus();
+      return;
+    }
+
     const session = getActiveSession();
     const nextHeaders = [
       ...session.customHeaders,
-      createCustomHeader(),
+      createCustomHeader(title, instructions),
     ];
     updateActiveSession({ customHeaders: nextHeaders }, true);
+    resetCustomHeaderAddForm();
+  });
+
+  cancelCustomHeaderButton.addEventListener("click", () => {
+    resetCustomHeaderAddForm();
   });
 
   customHeaderList.addEventListener("input", (event) => {
@@ -694,12 +812,40 @@ function bindEvents() {
         include: item.querySelector(".custom-header-include").checked,
         title: item.querySelector(".custom-header-title").value,
         instructions: item.querySelector(".custom-header-instructions").value,
+        isExpanded: !item.querySelector(".custom-header-editor").classList.contains("is-hidden-field"),
       };
     });
     updateActiveSessionSilently({ customHeaders: nextHeaders });
   });
 
   customHeaderList.addEventListener("click", (event) => {
+    const editButton = event.target.closest(".custom-header-edit");
+    if (editButton) {
+      const item = editButton.closest(".custom-header-item");
+      const editor = item?.querySelector(".custom-header-editor");
+      const isOpen = !editor.classList.contains("is-hidden-field");
+      const nextOpen = !isOpen;
+      setElementVisibility(editor, nextOpen);
+      editButton.textContent = nextOpen ? "Close" : "Edit";
+      const index = Number(item.dataset.index);
+      const session = getActiveSession();
+      const nextHeaders = session.customHeaders.map((header, currentIndex) => {
+        if (currentIndex !== index) {
+          return header;
+        }
+
+        return {
+          ...header,
+          isExpanded: nextOpen,
+        };
+      });
+      updateActiveSessionSilently({ customHeaders: nextHeaders });
+      if (nextOpen) {
+        item.querySelector(".custom-header-title")?.focus();
+      }
+      return;
+    }
+
     const removeButton = event.target.closest(".custom-header-remove");
     if (!removeButton) {
       return;
@@ -734,7 +880,7 @@ function bindEvents() {
     const session = getActiveSession();
     polishButton.disabled = true;
     polishButton.textContent = "Polishing...";
-    saveStatus.textContent = "Generating with AI...";
+    setAppStatus("Generating", APP_STATUS_STATES.generating);
 
     try {
       const polishedHtml = settings.apiKey
@@ -755,8 +901,8 @@ function bindEvents() {
       dictationStatus.textContent = `AI polishing failed: ${error.message}. A local polish pass was used instead.`;
     } finally {
       polishButton.disabled = false;
-      polishButton.textContent = "Polish with AI";
-      saveStatus.textContent = "Saved locally";
+      polishButton.textContent = "Generate";
+      setAppStatus("Saved locally", APP_STATUS_STATES.idle);
     }
   });
 
@@ -904,15 +1050,20 @@ function bindServiceWorkerRegistration(registration) {
 function markAppUpdateAvailable() {
   hasPendingAppUpdate = true;
   updateAppButton.classList.remove("is-hidden-field");
-  saveStatus.textContent = "Update available";
+  setAppStatus("Update available", APP_STATUS_STATES.warning);
 }
 
 function clearAppUpdateAvailable() {
   hasPendingAppUpdate = false;
   updateAppButton.classList.add("is-hidden-field");
   if (saveStatus.textContent === "Update available") {
-    saveStatus.textContent = "Saved locally";
+    setAppStatus("Saved locally", APP_STATUS_STATES.idle);
   }
+}
+
+function setAppStatus(label, state = APP_STATUS_STATES.idle) {
+  saveStatus.textContent = label;
+  saveStatus.dataset.state = state;
 }
 
 function applyLatestAppUpdate() {
@@ -922,31 +1073,31 @@ function applyLatestAppUpdate() {
   }
 
   if (serviceWorkerRegistration.waiting) {
-    saveStatus.textContent = "Updating app...";
+    setAppStatus("Updating app", APP_STATUS_STATES.updating);
     serviceWorkerRegistration.waiting.postMessage({ type: "SKIP_WAITING" });
     return;
   }
 
   if (hasPendingAppUpdate) {
-    saveStatus.textContent = "Reloading latest version...";
+    setAppStatus("Reloading latest version", APP_STATUS_STATES.updating);
     forceReloadLatestVersion();
     return;
   }
 
-  saveStatus.textContent = "Checking for updates...";
+  setAppStatus("Checking for updates", APP_STATUS_STATES.updating);
   serviceWorkerRegistration.update()
     .then(() => {
       if (serviceWorkerRegistration.waiting) {
-        saveStatus.textContent = "Updating app...";
+        setAppStatus("Updating app", APP_STATUS_STATES.updating);
         serviceWorkerRegistration.waiting.postMessage({ type: "SKIP_WAITING" });
         return;
       }
 
-      saveStatus.textContent = "Refreshing latest version...";
+      setAppStatus("Refreshing latest version", APP_STATUS_STATES.updating);
       forceReloadLatestVersion();
     })
     .catch(() => {
-      saveStatus.textContent = "Trying a full refresh...";
+      setAppStatus("Trying a full refresh", APP_STATUS_STATES.updating);
       forceReloadLatestVersion();
     });
 }
@@ -971,6 +1122,7 @@ function render() {
   renderSessionList();
   syncFieldsFromSession();
   renderHighlights();
+  renderParticipantSuggestions();
   renderCustomHeaders();
   renderOutput();
   updateAiStatusCopy();
@@ -1067,16 +1219,25 @@ function applyTemplateUi(session) {
   const template = getTemplateDefinition(session.template);
   const fields = template.fields || BUILT_IN_TEMPLATES.meeting.fields;
   const liveTranscriptEnabled = fields.liveTranscript !== false;
+  const isPersonalNote = template.id === "personalNote";
+  const showParticipants = !isPersonalNote && fields.participants !== false;
+  const showHighlights = !isPersonalNote && fields.highlights !== false;
+  const showMeetingSchedule = template.id === "meeting";
+  const showManualNotes = fields.manualNotes !== false;
+  const showLiveTranscript = liveTranscriptEnabled;
+  const showTitle = fields.title !== false;
 
-  titleField.classList.toggle("is-hidden-field", fields.title === false);
-  participantsField.classList.toggle("is-hidden-field", fields.participants === false);
-  meetingScheduleField.classList.toggle("is-hidden-field", template.id !== "meeting");
-  highlightsField.classList.toggle("is-hidden-field", fields.highlights === false);
-  highlightChips.classList.toggle("is-hidden-field", fields.highlights === false);
-  manualNotesField.classList.toggle("is-hidden-field", fields.manualNotes === false);
-  liveTranscriptField.classList.toggle("is-hidden-field", !liveTranscriptEnabled);
+  setElementVisibility(titleField, showTitle);
+  setElementVisibility(participantsField, showParticipants);
+  setElementVisibility(participantDirectoryPanel, showParticipants);
+  setElementVisibility(meetingScheduleField, showMeetingSchedule);
+  setElementVisibility(highlightsField, showHighlights);
+  setElementVisibility(highlightChips, showHighlights);
+  setElementVisibility(manualNotesField, showManualNotes);
+  setElementVisibility(liveTranscriptField, showLiveTranscript);
+  titleFieldLabel.textContent = isPersonalNote ? "Note title" : "Meeting title";
 
-  meetingTitleInput.placeholder = template.id === "personalNote"
+  meetingTitleInput.placeholder = isPersonalNote
     ? `${formatDateTimeForTitle(Date.now())} Personal note`
     : "Weekly product sync";
 
@@ -1091,12 +1252,28 @@ function applyTemplateUi(session) {
     }
     dictationToggle.disabled = true;
     dictationToggle.classList.remove("is-recording");
-    dictationToggle.textContent = "Dictation Hidden";
+    dictationToggle.textContent = "Recording Hidden";
     return;
   }
 
   dictationToggle.disabled = false;
-  dictationToggle.textContent = isRecording ? "Stop Dictation" : "Start Dictation";
+  dictationToggle.textContent = isRecording ? "Stop recording" : "Start recording";
+}
+
+function setElementVisibility(element, isVisible) {
+  if (!element) {
+    return;
+  }
+
+  element.classList.toggle("is-hidden-field", !isVisible);
+  element.hidden = !isVisible;
+  element.style.display = isVisible ? "" : "none";
+}
+
+function resetCustomHeaderAddForm() {
+  newCustomHeaderTitleInput.value = "";
+  newCustomHeaderInstructionsInput.value = "";
+  setElementVisibility(customHeaderAddForm, false);
 }
 
 function renderCustomTemplates(focusTemplateId = null) {
@@ -1166,7 +1343,7 @@ function syncFieldsFromSession() {
   outputFeedbackStatus.textContent = session.polishedHtml
     ? "Add comments here when you want the polished output adjusted. You can always revert the latest revision."
     : "Generate polished notes first, then use comments here to request improvements.";
-  saveStatus.textContent = "Saved locally";
+  setAppStatus("Saved locally", APP_STATUS_STATES.idle);
   applyTemplateUi(session);
 }
 
@@ -1194,7 +1371,9 @@ function openSettings() {
   settingsModal.classList.remove("is-hidden");
   settingsModal.setAttribute("aria-hidden", "false");
   syncModalScrollLock();
-  themeFamilySelect.focus();
+  setActiveSettingsSection(activeSettingsSection);
+  const targetControl = settingsModal.querySelector(`[data-settings-section="${activeSettingsSection}"] input, [data-settings-section="${activeSettingsSection}"] select, [data-settings-section="${activeSettingsSection}"] button`);
+  targetControl?.focus();
 }
 
 function closeSettings() {
@@ -1202,6 +1381,24 @@ function closeSettings() {
   settingsModal.setAttribute("aria-hidden", "true");
   syncModalScrollLock();
   openSettingsButton.focus();
+}
+
+function setActiveSettingsSection(sectionId) {
+  activeSettingsSection = settingsSections.some((section) => section.dataset.settingsSection === sectionId)
+    ? sectionId
+    : "appearance";
+
+  settingsNavButtons.forEach((button) => {
+    const isActive = button.dataset.settingsTab === activeSettingsSection;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+
+  settingsSections.forEach((section) => {
+    const isActive = section.dataset.settingsSection === activeSettingsSection;
+    section.classList.toggle("is-hidden-field", !isActive);
+    section.hidden = !isActive;
+  });
 }
 
 function updateAiStatusCopy() {
@@ -1566,6 +1763,47 @@ function renderHighlights() {
   });
 }
 
+function renderParticipantSuggestions() {
+  const session = getActiveSession();
+  const selectedParticipants = new Set(parseParticipants(session.participants));
+  const availableParticipants = (settings.participantDirectory || []).filter((name) => !selectedParticipants.has(name));
+
+  participantSuggestions.innerHTML = availableParticipants
+    .map((name) => `<option value="${escapeHtml(name)}"></option>`)
+    .join("");
+
+  participantChips.innerHTML = "";
+  availableParticipants.forEach((name) => {
+    const fragment = highlightChipTemplate.content.cloneNode(true);
+    const chip = fragment.querySelector(".chip");
+    const chipText = fragment.querySelector(".chip-text");
+    const chipRemove = fragment.querySelector(".chip-remove");
+
+    chip.dataset.participantName = name;
+    chipText.textContent = name;
+    chipRemove.textContent = "+";
+    chip.setAttribute("aria-label", `Add participant ${name}`);
+    participantChips.appendChild(fragment);
+  });
+
+  if (!participantsField.hidden) {
+    setElementVisibility(participantDirectoryPanel, true);
+  }
+}
+
+function renderParticipantDirectoryManager() {
+  participantDirectoryList.innerHTML = "";
+
+  (settings.participantDirectory || []).forEach((name) => {
+    const fragment = participantDirectoryItemTemplate.content.cloneNode(true);
+    const item = fragment.querySelector(".participant-directory-item");
+    const input = fragment.querySelector(".participant-directory-name");
+    item.dataset.participantName = name;
+    input.value = name;
+    participantDirectoryList.appendChild(fragment);
+  });
+}
+
 function renderCustomHeaders() {
   const session = getActiveSession();
   customHeaderList.innerHTML = "";
@@ -1577,12 +1815,16 @@ function renderCustomHeaders() {
     const toggleLabel = fragment.querySelector(".custom-header-toggle-label");
     const titleInput = fragment.querySelector(".custom-header-title");
     const instructionsInput = fragment.querySelector(".custom-header-instructions");
+    const editor = fragment.querySelector(".custom-header-editor");
+    const editButton = fragment.querySelector(".custom-header-edit");
 
     item.dataset.index = String(index);
     includeInput.checked = header.include !== false;
     toggleLabel.textContent = header.title.trim() || `Custom Header ${index + 1}`;
     titleInput.value = header.title;
     instructionsInput.value = header.instructions;
+    setElementVisibility(editor, header.isExpanded === true);
+    editButton.textContent = header.isExpanded === true ? "Close" : "Edit";
 
     customHeaderList.appendChild(fragment);
   });
@@ -1600,7 +1842,7 @@ function renderOutput() {
       <div class="output-empty">
         <div>
           <h3>Your finished notes will appear here.</h3>
-          <p>Write rough notes on the left, add a few highlights, then click <strong>Polish with AI</strong>.</p>
+          <p>Write rough notes on the left, add a few highlights, then click <strong>Generate</strong>.</p>
         </div>
       </div>
     `;
@@ -1632,7 +1874,10 @@ function updateActiveSession(patch, shouldScheduleSave) {
   });
 
   sessions.sort((first, second) => second.updatedAt - first.updatedAt);
-  saveStatus.textContent = shouldScheduleSave ? "Saving..." : "Saved locally";
+  setAppStatus(
+    shouldScheduleSave ? "Saving changes" : "Saved locally",
+    shouldScheduleSave ? APP_STATUS_STATES.saving : APP_STATUS_STATES.idle
+  );
   renderSessionList();
 
   if (patch.title !== undefined) {
@@ -1644,6 +1889,7 @@ function updateActiveSession(patch, shouldScheduleSave) {
   }
 
   if (patch.customHeaders !== undefined) {
+    syncDefaultCustomHeaders(patch.customHeaders);
     renderCustomHeaders();
   }
 
@@ -1668,16 +1914,27 @@ function updateActiveSessionSilently(patch) {
   });
 
   sessions.sort((first, second) => second.updatedAt - first.updatedAt);
-  saveStatus.textContent = "Saving...";
+  setAppStatus("Saving changes", APP_STATUS_STATES.saving);
+  if (patch.customHeaders !== undefined) {
+    syncDefaultCustomHeaders(patch.customHeaders);
+  }
   renderSessionList();
   schedulePersist();
+}
+
+function syncDefaultCustomHeaders(customHeaders) {
+  settings.defaultCustomHeaders = normalizeCustomHeaders(customHeaders).map((header) => ({
+    ...header,
+    isExpanded: false,
+  }));
+  persistSettings();
 }
 
 function schedulePersist() {
   window.clearTimeout(draftSaveTimeout);
   draftSaveTimeout = window.setTimeout(() => {
     persistSessions();
-    saveStatus.textContent = "Saved locally";
+    setAppStatus("Saved locally", APP_STATUS_STATES.idle);
   }, 220);
 }
 
@@ -1694,7 +1951,7 @@ function createSession() {
     outputLanguage: "auto",
     detailLevel: 3,
     additionalInstructions: "",
-    customHeaders: [],
+    customHeaders: cloneCustomHeadersForSession(settings.defaultCustomHeaders || []),
     highlights: [],
     liveTranscript: "",
     rawNotes: "",
@@ -1703,6 +1960,14 @@ function createSession() {
     previousPolishedHtml: "",
     updatedAt: Date.now(),
   };
+}
+
+function cloneCustomHeadersForSession(customHeaders) {
+  return normalizeCustomHeaders(customHeaders).map((header) => ({
+    ...header,
+    id: crypto.randomUUID(),
+    isExpanded: false,
+  }));
 }
 
 function createCustomTemplate() {
@@ -2508,8 +2773,7 @@ function getDefaultTitleForTemplate(template, timestamp = Date.now()) {
     return `${formatDateTimeForTitle(timestamp)} Personal note`;
   }
 
-  const label = template.label?.trim() || "Session";
-  return `${formatDateTimeForTitle(timestamp)} ${label}`;
+  return "";
 }
 
 function isAutoGeneratedTitle(title) {
@@ -2528,8 +2792,9 @@ function escapeHtml(text) {
 function setupSpeechRecognition() {
   if (!SpeechRecognition) {
     dictationToggle.disabled = true;
-    dictationToggle.textContent = "Dictation Unavailable";
+    dictationToggle.textContent = "Recording Unavailable";
     dictationStatus.textContent = "This browser does not expose speech recognition, but the rest of the app is ready to use.";
+    setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
     return;
   }
 
@@ -2581,9 +2846,10 @@ function setupSpeechRecognition() {
     finalTranscript = "";
     dictationSeedText = "";
     pendingLanguageRestart = false;
-    dictationToggle.textContent = "Start Dictation";
+    dictationToggle.textContent = "Start recording";
     dictationToggle.classList.remove("is-recording");
     dictationStatus.textContent = "Dictation stopped. You can continue typing or restart capture anytime.";
+    setAppStatus("Saved locally", APP_STATUS_STATES.idle);
   });
 
   recognition.addEventListener("error", (event) => {
@@ -2591,9 +2857,10 @@ function setupSpeechRecognition() {
     finalTranscript = "";
     dictationSeedText = "";
     pendingLanguageRestart = false;
-    dictationToggle.textContent = "Start Dictation";
+    dictationToggle.textContent = "Start recording";
     dictationToggle.classList.remove("is-recording");
     dictationStatus.textContent = `Dictation error: ${event.error}. You can still take notes manually.`;
+    setAppStatus("Recording error", APP_STATUS_STATES.warning);
   });
 }
 
@@ -2614,9 +2881,10 @@ function toggleDictation() {
   currentDictationLanguage = resolveDictationLanguage(dictationSeedText || navigator.language);
   recognition.lang = currentDictationLanguage;
   recognition.start();
-  dictationToggle.textContent = "Stop Dictation";
+  dictationToggle.textContent = "Stop recording";
   dictationToggle.classList.add("is-recording");
   dictationStatus.textContent = `Listening in ${formatDictationLanguage(currentDictationLanguage)}. The app will switch between Swedish and English when the speech pattern changes.`;
+  setAppStatus("Recording", APP_STATUS_STATES.recording);
 }
 
 function loadSessions() {
@@ -2635,6 +2903,14 @@ function loadSessions() {
 
 function persistSessions() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+}
+
+function syncParticipantDirectoryFromAllSessions() {
+  settings.participantDirectory = normalizeParticipantDirectory([
+    ...(settings.participantDirectory || []),
+    ...sessions.flatMap((session) => parseParticipants(session.participants)),
+  ]);
+  persistSettings();
 }
 
 function loadAiModelCatalog() {
@@ -2673,6 +2949,8 @@ function loadSettings() {
         dictationLanguage: "auto",
         themeFamily: "olive",
         themeMode: "light",
+        participantDirectory: [],
+        defaultCustomHeaders: [],
         customTemplates: [],
         exportStylePreset: DEFAULT_EXPORT_PRESET,
         exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
@@ -2690,6 +2968,8 @@ function loadSettings() {
       themeFamily: "olive",
       themeMode: legacyThemeMode,
       ...parsed,
+      participantDirectory: normalizeParticipantDirectory(parsed.participantDirectory),
+      defaultCustomHeaders: normalizeCustomHeaders(parsed.defaultCustomHeaders),
       customTemplates: normalizeCustomTemplates(parsed.customTemplates),
       exportStylePreset,
       exportStyle: normalizeExportStyle({
@@ -2704,6 +2984,8 @@ function loadSettings() {
       dictationLanguage: "auto",
       themeFamily: "olive",
       themeMode: "light",
+      participantDirectory: [],
+      defaultCustomHeaders: [],
       customTemplates: [],
       exportStylePreset: DEFAULT_EXPORT_PRESET,
       exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
@@ -2713,6 +2995,66 @@ function loadSettings() {
 
 function persistSettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function parseParticipants(value) {
+  return String(value || "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+function normalizeParticipantDirectory(participants) {
+  if (!Array.isArray(participants)) {
+    return [];
+  }
+
+  const uniqueByKey = new Map();
+  participants
+    .map((name) => String(name || "").trim())
+    .filter(Boolean)
+    .forEach((name) => {
+      const key = name.toLocaleLowerCase();
+      if (!uniqueByKey.has(key)) {
+        uniqueByKey.set(key, name);
+      }
+    });
+
+  return [...uniqueByKey.values()].sort((first, second) => first.localeCompare(second, undefined, { sensitivity: "base" }));
+}
+
+function syncParticipantDirectoryWithSession(value) {
+  const nextDirectory = normalizeParticipantDirectory([
+    ...(settings.participantDirectory || []),
+    ...parseParticipants(value),
+  ]);
+
+  if (JSON.stringify(nextDirectory) === JSON.stringify(settings.participantDirectory || [])) {
+    return;
+  }
+
+  settings.participantDirectory = nextDirectory;
+  persistSettings();
+  renderParticipantSuggestions();
+  renderParticipantDirectoryManager();
+}
+
+function addParticipantToDirectory(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    participantDirectoryInput.focus();
+    return;
+  }
+
+  settings.participantDirectory = normalizeParticipantDirectory([
+    ...(settings.participantDirectory || []),
+    trimmed,
+  ]);
+  persistSettings();
+  participantDirectoryInput.value = "";
+  renderParticipantDirectoryManager();
+  renderParticipantSuggestions();
+  participantDirectoryInput.focus();
 }
 
 function applyTheme(themeFamily, themeMode) {
@@ -2729,6 +3071,7 @@ function syncSettingsForm() {
   updateThemeDescription();
   updateExportStyleDescription();
   renderCustomTemplates();
+  renderParticipantDirectoryManager();
 }
 
 function getThemeDisplayName(themeFamily) {
@@ -3209,12 +3552,13 @@ function normalizeImportedSessions(importedSessions) {
     .sort((first, second) => second.updatedAt - first.updatedAt);
 }
 
-function createCustomHeader() {
+function createCustomHeader(title = "", instructions = "") {
   return {
     id: crypto.randomUUID(),
     include: true,
-    title: "",
-    instructions: "",
+    title,
+    instructions,
+    isExpanded: false,
   };
 }
 
@@ -3285,6 +3629,7 @@ function normalizeCustomHeaders(customHeaders) {
       include: header.include !== false,
       title: typeof header.title === "string" ? header.title : "",
       instructions: typeof header.instructions === "string" ? header.instructions : "",
+      isExpanded: header.isExpanded === true,
     }));
 }
 
