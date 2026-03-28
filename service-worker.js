@@ -1,4 +1,4 @@
-const CACHE_NAME = "notesmith-pwa-v1";
+const CACHE_NAME = "notesmith-pwa-v2";
 const APP_SHELL_FILES = [
   "./",
   "./index.html",
@@ -10,11 +10,19 @@ const APP_SHELL_FILES = [
   "./icons/icon-maskable-512.png",
 ];
 
+const APP_SHELL_PATHS = new Set(APP_SHELL_FILES.map((path) => new URL(path, self.location.origin).pathname));
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL_FILES))
   );
   self.skipWaiting();
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("activate", (event) => {
@@ -43,7 +51,10 @@ self.addEventListener("fetch", (event) => {
       fetch(event.request)
         .then((response) => {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy));
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put("./index.html", copy.clone());
+            cache.put(event.request, copy);
+          });
           return response;
         })
         .catch(() => caches.match("./index.html"))
@@ -52,6 +63,32 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (!isSameOrigin) {
+    return;
+  }
+
+  const isAppShellRequest = APP_SHELL_PATHS.has(requestUrl.pathname)
+    || ["script", "style", "document", "manifest"].includes(event.request.destination);
+
+  if (isAppShellRequest) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200 && response.type === "basic") {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+
+          return response;
+        })
+        .catch(async () => {
+          const cachedResponse = await caches.match(event.request);
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+
+          return caches.match("./index.html");
+        })
+    );
     return;
   }
 

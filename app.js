@@ -1,32 +1,36 @@
 ﻿const STORAGE_KEY = "notesmith-sessions";
 const SETTINGS_KEY = "notesmith-settings";
 const AI_MODEL_CATALOG_KEY = "notesmith-ai-model-catalog";
+const APP_VERSION = "v0.10.0";
 
-const templateDescriptions = {
-  general: {
-    label: "General meeting",
+const BUILT_IN_TEMPLATES = {
+  meeting: {
+    id: "meeting",
+    label: "Meeting",
     summaryLead: "This meeting focused on key updates, decisions, and next steps.",
     sections: ["Overview", "Key Discussion Points", "Decisions", "Action Items"],
+    templateInstructions: "Structure the output like professional meeting notes with clear business-focused summaries, decisions, and next actions.",
+    fields: {
+      title: true,
+      participants: true,
+      highlights: true,
+      manualNotes: true,
+      liveTranscript: true,
+    },
   },
-  standup: {
-    label: "Standup",
-    summaryLead: "The standup reviewed progress, current blockers, and immediate priorities.",
-    sections: ["Overview", "Progress Updates", "Blockers", "Next Actions"],
-  },
-  client: {
-    label: "Client call",
-    summaryLead: "The client conversation centered on needs, expectations, and agreed follow-ups.",
-    sections: ["Overview", "Client Priorities", "Commitments", "Follow-Up Actions"],
-  },
-  oneOnOne: {
-    label: "1:1",
-    summaryLead: "The 1:1 covered current priorities, support needed, and development opportunities.",
-    sections: ["Overview", "Topics Discussed", "Support Needed", "Next Steps"],
-  },
-  interview: {
-    label: "Interview",
-    summaryLead: "The interview explored background, strengths, and role alignment.",
-    sections: ["Overview", "Candidate Highlights", "Signals", "Follow-Up Actions"],
+  personalNote: {
+    id: "personalNote",
+    label: "Personal Note",
+    summaryLead: "This note captures the most important professional observations, ideas, and follow-ups.",
+    sections: ["Overview", "Key Notes", "Decisions", "Action Items"],
+    templateInstructions: "Structure the output like a professional personal working note. Keep the focus on useful business observations, decisions, and follow-up actions.",
+    fields: {
+      title: true,
+      participants: false,
+      highlights: false,
+      manualNotes: true,
+      liveTranscript: true,
+    },
   },
 };
 
@@ -64,18 +68,29 @@ const closeAiSettingsButton = document.querySelector("#close-ai-settings-button"
 const aiSettingsForm = document.querySelector("#ai-settings-form");
 const titleDisplay = document.querySelector("#session-title");
 const saveStatus = document.querySelector("#save-status");
+const updateAppButton = document.querySelector("#update-app");
 const meetingTitleInput = document.querySelector("#meeting-title");
 const templateSelect = document.querySelector("#meeting-template");
+const titleField = document.querySelector("#title-field");
+const participantsField = document.querySelector("#participants-field");
+const meetingScheduleField = document.querySelector("#meeting-schedule-field");
+const highlightsField = document.querySelector("#highlights-field");
+const manualNotesField = document.querySelector("#manual-notes-field");
+const liveTranscriptField = document.querySelector("#live-transcript-field");
 const apiKeyInput = document.querySelector("#api-key");
 const modelSelect = document.querySelector("#model-select");
 const modelOptions = document.querySelector("#model-options");
 const modelPricingStatus = document.querySelector("#model-pricing-status");
 const aiStatusCopy = document.querySelector("#ai-status-copy");
 const participantsInput = document.querySelector("#participants");
+const meetingDateInput = document.querySelector("#meeting-date");
+const meetingStartTimeInput = document.querySelector("#meeting-start-time");
+const meetingEndTimeInput = document.querySelector("#meeting-end-time");
 const includeSummaryInput = document.querySelector("#include-summary");
 const includeHighlightsInput = document.querySelector("#include-highlights");
 const includeDecisionsInput = document.querySelector("#include-decisions");
 const includeActionsInput = document.querySelector("#include-actions");
+const outputLanguageSelect = document.querySelector("#output-language");
 const detailLevelInput = document.querySelector("#detail-level");
 const detailLevelLabel = document.querySelector("#detail-level-label");
 const additionalInstructionsInput = document.querySelector("#additional-instructions");
@@ -97,9 +112,14 @@ const outputFeedbackInput = document.querySelector("#output-feedback");
 const improveOutputButton = document.querySelector("#improve-output");
 const revertOutputButton = document.querySelector("#revert-output");
 const outputFeedbackStatus = document.querySelector("#output-feedback-status");
+const appVersionLabel = document.querySelector("#app-version");
 const sessionItemTemplate = document.querySelector("#session-item-template");
 const highlightChipTemplate = document.querySelector("#highlight-chip-template");
 const customHeaderTemplate = document.querySelector("#custom-header-template");
+const addCustomTemplateButton = document.querySelector("#add-custom-template");
+const customTemplateList = document.querySelector("#custom-template-list");
+const customTemplateTemplate = document.querySelector("#custom-template-template");
+const templateHeaderTemplate = document.querySelector("#template-header-template");
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const DICTATION_LANGUAGES = {
@@ -326,8 +346,22 @@ const DEFAULT_AI_MODEL_CATALOG = [
   },
 ];
 
-let sessions = loadSessions();
+function getAllTemplates() {
+  const customTemplates = Array.isArray(settings?.customTemplates) ? settings.customTemplates : [];
+  const builtIns = Object.values(BUILT_IN_TEMPLATES);
+  return [...builtIns, ...customTemplates];
+}
+
+function getTemplateDefinition(templateId) {
+  if (BUILT_IN_TEMPLATES[templateId]) {
+    return BUILT_IN_TEMPLATES[templateId];
+  }
+
+  return (settings?.customTemplates || []).find((template) => template.id === templateId) || BUILT_IN_TEMPLATES.meeting;
+}
+
 let settings = loadSettings();
+let sessions = loadSessions();
 let aiModelCatalog = loadAiModelCatalog();
 let activeSessionId = sessions[0]?.id ?? null;
 let recognition = null;
@@ -338,6 +372,9 @@ let currentDictationLanguage = getInitialDictationLanguage();
 let pendingLanguageRestart = false;
 let draftSaveTimeout = null;
 let aiCatalogRefreshCounter = 0;
+let serviceWorkerRegistration = null;
+let hasPendingAppUpdate = false;
+let isRefreshingForUpdate = false;
 
 applyTheme(settings.themeFamily, settings.themeMode);
 settings.model = resolveSelectedModel(settings.model);
@@ -353,6 +390,7 @@ setupSpeechRecognition();
 render();
 bindEvents();
 registerServiceWorker();
+appVersionLabel.textContent = APP_VERSION;
 
 function bindEvents() {
   newSessionButton.addEventListener("click", () => {
@@ -374,25 +412,21 @@ function bindEvents() {
     await saveSessionsToLocalFile();
   });
 
+  updateAppButton.addEventListener("click", () => {
+    applyLatestAppUpdate();
+  });
+
   openSettingsButton.addEventListener("click", openSettings);
   closeSettingsBackdrop.addEventListener("click", closeSettings);
   closeSettingsButton.addEventListener("click", closeSettings);
-  settingsForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    settings.themeFamily = themeFamilySelect.value;
-    settings.themeMode = themeModeSelect.value;
-    settings.exportStylePreset = exportStylePresetSelect.value;
-    settings.exportStyle = readExportStyleInputs();
-    persistSettings();
-    applyTheme(settings.themeFamily, settings.themeMode);
-    syncSettingsForm();
-    dictationStatus.textContent = `${getThemeDisplayName(settings.themeFamily)} ${settings.themeMode} theme saved.`;
-    closeSettings();
-  });
   themeFamilySelect.addEventListener("change", previewThemeSelection);
   themeModeSelect.addEventListener("change", previewThemeSelection);
   exportStylePresetSelect.addEventListener("change", () => {
     applyExportPresetToInputs(exportStylePresetSelect.value);
+    settings.exportStylePreset = exportStylePresetSelect.value;
+    settings.exportStyle = readExportStyleInputs();
+    persistSettings();
+    dictationStatus.textContent = `${getExportStyleDisplayName(settings.exportStylePreset)} export style saved.`;
   });
   [
     exportTitleFontInput,
@@ -407,9 +441,108 @@ function bindEvents() {
   ].forEach((input) => {
     input.addEventListener("input", () => {
       exportStylePresetSelect.value = "custom";
+      settings.exportStylePreset = "custom";
+      settings.exportStyle = readExportStyleInputs();
+      persistSettings();
       updateExportStyleDescription();
     });
   });
+
+  addCustomTemplateButton.addEventListener("click", () => {
+    const nextTemplate = createCustomTemplate();
+    settings.customTemplates = [...settings.customTemplates, nextTemplate];
+    persistSettings();
+    renderTemplateOptions();
+    renderCustomTemplates(nextTemplate.id);
+  });
+
+  customTemplateList.addEventListener("input", (event) => {
+    const item = event.target.closest(".custom-template-item");
+    if (!item) {
+      return;
+    }
+
+    const templateId = item.dataset.templateId;
+    const nextTemplates = settings.customTemplates.map((template) => {
+      if (template.id !== templateId) {
+        return template;
+      }
+
+      return readCustomTemplateItem(item, template);
+    });
+
+    settings.customTemplates = nextTemplates;
+    persistSettings();
+    renderTemplateOptions();
+    const templateNameLabel = item.querySelector(".custom-template-name-label");
+    const templateNameInput = item.querySelector(".custom-template-name");
+    if (templateNameLabel && templateNameInput) {
+      templateNameLabel.textContent = templateNameInput.value.trim() || "New template";
+    }
+    renderSessionList();
+    const session = getActiveSession();
+    if (session.template === templateId) {
+      applyTemplateUi(session);
+    }
+  });
+
+  customTemplateList.addEventListener("click", (event) => {
+    const templateItem = event.target.closest(".custom-template-item");
+    if (!templateItem) {
+      return;
+    }
+
+    const templateId = templateItem.dataset.templateId;
+
+    if (event.target.closest(".custom-template-remove")) {
+      settings.customTemplates = settings.customTemplates.filter((template) => template.id !== templateId);
+      persistSettings();
+      sessions = sessions.map((session) => ({
+        ...session,
+        template: session.template === templateId ? "meeting" : session.template,
+      }));
+      persistSessions();
+      render();
+      return;
+    }
+
+    if (event.target.closest(".custom-template-header-add")) {
+      settings.customTemplates = settings.customTemplates.map((template) => {
+        if (template.id !== templateId) {
+          return template;
+        }
+
+        return {
+          ...template,
+          headers: [...template.headers, createTemplateHeader()],
+        };
+      });
+      persistSettings();
+      renderCustomTemplates(templateId);
+      renderTemplateOptions();
+      return;
+    }
+
+    const headerRemoveButton = event.target.closest(".template-header-remove");
+    if (headerRemoveButton) {
+      const headerItem = headerRemoveButton.closest(".template-header-item");
+      const headerId = headerItem?.dataset.headerId;
+      settings.customTemplates = settings.customTemplates.map((template) => {
+        if (template.id !== templateId) {
+          return template;
+        }
+
+        return {
+          ...template,
+          headers: template.headers.filter((header) => header.id !== headerId),
+        };
+      });
+      persistSettings();
+      renderCustomTemplates(templateId);
+      renderTemplateOptions();
+    }
+  });
+
   openAiSettingsButton.addEventListener("click", openAiSettings);
   closeAiSettingsBackdrop.addEventListener("click", closeAiSettings);
   closeAiSettingsButton.addEventListener("click", closeAiSettings);
@@ -463,6 +596,9 @@ function bindEvents() {
     meetingTitleInput,
     templateSelect,
     participantsInput,
+    meetingDateInput,
+    meetingStartTimeInput,
+    meetingEndTimeInput,
     rawNotesInput,
   ].forEach((field) => {
     field.addEventListener("input", () => {
@@ -473,14 +609,30 @@ function bindEvents() {
             ? "template"
             : field.id === "participants"
               ? "participants"
+              : field.id === "meeting-date"
+                ? "meetingDate"
+                : field.id === "meeting-start-time"
+                  ? "meetingStartTime"
+                  : field.id === "meeting-end-time"
+                    ? "meetingEndTime"
               : "rawNotes"]: field.value,
       }, true);
     });
   });
 
   templateSelect.addEventListener("change", () => {
-    const { label } = templateDescriptions[templateSelect.value];
-    dictationStatus.textContent = `Template selected: ${label}. Click "Polish with AI" whenever you want a professional summary.`;
+    const currentSession = getActiveSession();
+    const template = getTemplateDefinition(templateSelect.value);
+    const patch = { template: template.id };
+
+    if (!currentSession.title.trim() || isAutoGeneratedTitle(currentSession.title)) {
+      patch.title = getDefaultTitleForTemplate(template);
+      meetingTitleInput.value = patch.title;
+    }
+
+    updateActiveSession(patch, true);
+    applyTemplateUi({ ...currentSession, ...patch });
+    dictationStatus.textContent = `Template selected: ${template.label}. Click "Polish with AI" whenever you want a professional summary.`;
   });
 
   [
@@ -499,6 +651,10 @@ function bindEvents() {
         },
       }, true);
     });
+  });
+
+  outputLanguageSelect.addEventListener("change", () => {
+    updateActiveSession({ outputLanguage: outputLanguageSelect.value }, true);
   });
 
   detailLevelInput.addEventListener("input", () => {
@@ -535,6 +691,7 @@ function bindEvents() {
 
       return {
         ...header,
+        include: item.querySelector(".custom-header-include").checked,
         title: item.querySelector(".custom-header-title").value,
         instructions: item.querySelector(".custom-header-instructions").value,
       };
@@ -588,7 +745,9 @@ function bindEvents() {
       renderOutput();
       dictationStatus.textContent = settings.apiKey
         ? "AI polishing complete."
-        : "No API key found in AI Settings, so a local polish pass was used instead.";
+        : session.outputLanguage && session.outputLanguage !== "auto"
+          ? "No API key found in AI Settings, so a local polish pass was used. Language translation requires AI polishing."
+          : "No API key found in AI Settings, so a local polish pass was used instead.";
     } catch (error) {
       const polishedHtml = buildLocalPolishedNotes(session);
       updateActiveSession({ polishedHtml }, false);
@@ -694,13 +853,99 @@ function registerServiceWorker() {
   }
 
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js").catch(() => {
+    navigator.serviceWorker.register("./service-worker.js").then((registration) => {
+      serviceWorkerRegistration = registration;
+      bindServiceWorkerRegistration(registration);
+      registration.update().catch(() => {
+        // Keep the app functional even if update checks fail.
+      });
+    }).catch(() => {
       // Keep the app functional even if the service worker cannot be registered.
     });
   });
 }
 
+function bindServiceWorkerRegistration(registration) {
+  if (registration.waiting) {
+    markAppUpdateAvailable();
+  }
+
+  registration.addEventListener("updatefound", () => {
+    const installingWorker = registration.installing;
+    if (!installingWorker) {
+      return;
+    }
+
+    installingWorker.addEventListener("statechange", () => {
+      if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+        markAppUpdateAvailable();
+      }
+    });
+  });
+
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (isRefreshingForUpdate) {
+      return;
+    }
+
+    isRefreshingForUpdate = true;
+    window.location.reload();
+  });
+
+  window.setInterval(() => {
+    registration.update().catch(() => {
+      // Ignore background refresh failures.
+    });
+  }, 5 * 60 * 1000);
+}
+
+function markAppUpdateAvailable() {
+  hasPendingAppUpdate = true;
+  updateAppButton.classList.remove("is-hidden-field");
+  saveStatus.textContent = "Update available";
+}
+
+function applyLatestAppUpdate() {
+  if (!serviceWorkerRegistration) {
+    window.location.reload();
+    return;
+  }
+
+  if (serviceWorkerRegistration.waiting) {
+    saveStatus.textContent = "Updating app...";
+    serviceWorkerRegistration.waiting.postMessage({ type: "SKIP_WAITING" });
+    return;
+  }
+
+  if (hasPendingAppUpdate) {
+    saveStatus.textContent = "Refreshing app...";
+    window.location.reload();
+    return;
+  }
+
+  saveStatus.textContent = "Checking for updates...";
+  serviceWorkerRegistration.update()
+    .then(() => {
+      if (serviceWorkerRegistration.waiting) {
+        saveStatus.textContent = "Updating app...";
+        serviceWorkerRegistration.waiting.postMessage({ type: "SKIP_WAITING" });
+        return;
+      }
+
+      saveStatus.textContent = "Already on latest version";
+      window.setTimeout(() => {
+        if (saveStatus.textContent === "Already on latest version") {
+          saveStatus.textContent = "Saved locally";
+        }
+      }, 1800);
+    })
+    .catch(() => {
+      saveStatus.textContent = "Could not check for updates";
+    });
+}
+
 function render() {
+  renderTemplateOptions();
   renderSessionList();
   syncFieldsFromSession();
   renderHighlights();
@@ -710,6 +955,42 @@ function render() {
   updateSessionStorageUi();
   updateExportButtons();
   syncSettingsForm();
+}
+
+function renderTemplateOptions() {
+  const activeTemplateId = getActiveSession()?.template || "meeting";
+  const customTemplates = (settings.customTemplates || []).filter((template) => template?.id);
+  const currentValue = templateSelect.value;
+
+  templateSelect.innerHTML = "";
+
+  const standardGroup = document.createElement("optgroup");
+  standardGroup.label = "Standard";
+
+  Object.values(BUILT_IN_TEMPLATES).forEach((template) => {
+    const option = document.createElement("option");
+    option.value = template.id;
+    option.textContent = template.label;
+    standardGroup.appendChild(option);
+  });
+
+  templateSelect.appendChild(standardGroup);
+
+  if (customTemplates.length) {
+    const customGroup = document.createElement("optgroup");
+    customGroup.label = "My templates";
+
+    customTemplates.forEach((template) => {
+      const option = document.createElement("option");
+      option.value = template.id;
+      option.textContent = template.label || "Untitled template";
+      customGroup.appendChild(option);
+    });
+
+    templateSelect.appendChild(customGroup);
+  }
+
+  templateSelect.value = getTemplateDefinition(activeTemplateId).id || currentValue || "meeting";
 }
 
 function renderSessionList() {
@@ -724,7 +1005,7 @@ function renderSessionList() {
     const meta = fragment.querySelector(".session-meta");
 
     name.textContent = session.title.trim() || "Untitled session";
-    meta.textContent = `${templateDescriptions[session.template].label} - ${formatDate(session.updatedAt)}`;
+    meta.textContent = `${getTemplateDefinition(session.template).label} - ${formatDate(session.updatedAt)}`;
     button.classList.toggle("is-active", session.id === activeSessionId);
 
     button.addEventListener("click", () => {
@@ -735,8 +1016,12 @@ function renderSessionList() {
     editButton.addEventListener("click", () => {
       activeSessionId = session.id;
       render();
-      meetingTitleInput.focus();
-      meetingTitleInput.select();
+      if (!titleField.classList.contains("is-hidden-field")) {
+        meetingTitleInput.focus();
+        meetingTitleInput.select();
+      } else {
+        rawNotesInput.focus();
+      }
     });
 
     deleteButton.addEventListener("click", () => {
@@ -756,19 +1041,99 @@ function renderSessionList() {
   emptySessions.classList.toggle("is-visible", sessions.length === 0);
 }
 
+function applyTemplateUi(session) {
+  const template = getTemplateDefinition(session.template);
+  const fields = template.fields || BUILT_IN_TEMPLATES.meeting.fields;
+  const liveTranscriptEnabled = fields.liveTranscript !== false;
+
+  titleField.classList.toggle("is-hidden-field", fields.title === false);
+  participantsField.classList.toggle("is-hidden-field", fields.participants === false);
+  meetingScheduleField.classList.toggle("is-hidden-field", template.id !== "meeting");
+  highlightsField.classList.toggle("is-hidden-field", fields.highlights === false);
+  highlightChips.classList.toggle("is-hidden-field", fields.highlights === false);
+  manualNotesField.classList.toggle("is-hidden-field", fields.manualNotes === false);
+  liveTranscriptField.classList.toggle("is-hidden-field", !liveTranscriptEnabled);
+
+  meetingTitleInput.placeholder = template.id === "personalNote"
+    ? `${formatDateTimeForTitle(Date.now())} Personal note`
+    : "Weekly product sync";
+
+  if (!SpeechRecognition) {
+    return;
+  }
+
+  if (!liveTranscriptEnabled) {
+    if (isRecording && recognition) {
+      recognition.stop();
+      isRecording = false;
+    }
+    dictationToggle.disabled = true;
+    dictationToggle.classList.remove("is-recording");
+    dictationToggle.textContent = "Dictation Hidden";
+    return;
+  }
+
+  dictationToggle.disabled = false;
+  dictationToggle.textContent = isRecording ? "Stop Dictation" : "Start Dictation";
+}
+
+function renderCustomTemplates(focusTemplateId = null) {
+  customTemplateList.innerHTML = "";
+
+  settings.customTemplates.forEach((template) => {
+    const fragment = customTemplateTemplate.content.cloneNode(true);
+    const item = fragment.querySelector(".custom-template-item");
+    const nameLabel = fragment.querySelector(".custom-template-name-label");
+    const nameInput = fragment.querySelector(".custom-template-name");
+    const instructionsInput = fragment.querySelector(".custom-template-instructions");
+    const headerList = fragment.querySelector(".template-header-list");
+
+    item.dataset.templateId = template.id;
+    nameLabel.textContent = template.label || "New template";
+    nameInput.value = template.label;
+    instructionsInput.value = template.templateInstructions;
+    fragment.querySelector(".custom-template-show-title").checked = template.fields.title !== false;
+    fragment.querySelector(".custom-template-show-participants").checked = template.fields.participants !== false;
+    fragment.querySelector(".custom-template-show-highlights").checked = template.fields.highlights !== false;
+    fragment.querySelector(".custom-template-show-manual-notes").checked = template.fields.manualNotes !== false;
+    fragment.querySelector(".custom-template-show-live-transcript").checked = template.fields.liveTranscript !== false;
+
+    template.headers.forEach((header) => {
+      const headerFragment = templateHeaderTemplate.content.cloneNode(true);
+      const headerItem = headerFragment.querySelector(".template-header-item");
+      headerItem.dataset.headerId = header.id;
+      headerFragment.querySelector(".template-header-title").value = header.title;
+      headerFragment.querySelector(".template-header-instructions").value = header.instructions;
+      headerList.appendChild(headerFragment);
+    });
+
+    customTemplateList.appendChild(fragment);
+  });
+
+  if (focusTemplateId) {
+    const focusTarget = customTemplateList.querySelector(`[data-template-id="${focusTemplateId}"] .custom-template-name`);
+    focusTarget?.focus();
+  }
+}
+
 function syncFieldsFromSession() {
   const session = getActiveSession();
+  const template = getTemplateDefinition(session.template);
 
   titleDisplay.textContent = session.title.trim() || "Untitled session";
   meetingTitleInput.value = session.title;
-  templateSelect.value = session.template;
+  templateSelect.value = template.id;
   apiKeyInput.value = settings.apiKey ?? "";
   modelSelect.value = resolveSelectedModel(settings.model);
   participantsInput.value = session.participants;
+  meetingDateInput.value = session.meetingDate ?? "";
+  meetingStartTimeInput.value = session.meetingStartTime ?? "";
+  meetingEndTimeInput.value = session.meetingEndTime ?? "";
   includeSummaryInput.checked = session.sections.includeSummary;
   includeHighlightsInput.checked = session.sections.includeHighlights;
   includeDecisionsInput.checked = session.sections.includeDecisions;
   includeActionsInput.checked = session.sections.includeActions;
+  outputLanguageSelect.value = session.outputLanguage ?? "auto";
   detailLevelInput.value = String(session.detailLevel ?? 3);
   additionalInstructionsInput.value = session.additionalInstructions ?? "";
   updateDetailLevelLabel();
@@ -780,6 +1145,7 @@ function syncFieldsFromSession() {
     ? "Add comments here when you want the polished output adjusted. You can always revert the latest revision."
     : "Generate polished notes first, then use comments here to request improvements.";
   saveStatus.textContent = "Saved locally";
+  applyTemplateUi(session);
 }
 
 function openAiSettings() {
@@ -810,7 +1176,6 @@ function openSettings() {
 }
 
 function closeSettings() {
-  applyTheme(settings.themeFamily, settings.themeMode);
   settingsModal.classList.add("is-hidden");
   settingsModal.setAttribute("aria-hidden", "true");
   syncModalScrollLock();
@@ -1186,10 +1551,14 @@ function renderCustomHeaders() {
   session.customHeaders.forEach((header, index) => {
     const fragment = customHeaderTemplate.content.cloneNode(true);
     const item = fragment.querySelector(".custom-header-item");
+    const includeInput = fragment.querySelector(".custom-header-include");
+    const toggleLabel = fragment.querySelector(".custom-header-toggle-label");
     const titleInput = fragment.querySelector(".custom-header-title");
     const instructionsInput = fragment.querySelector(".custom-header-instructions");
 
     item.dataset.index = String(index);
+    includeInput.checked = header.include !== false;
+    toggleLabel.textContent = header.title.trim() || `Custom Header ${index + 1}`;
     titleInput.value = header.title;
     instructionsInput.value = header.instructions;
 
@@ -1294,9 +1663,13 @@ function createSession() {
   return {
     id: crypto.randomUUID(),
     title: "",
-    template: "general",
+    template: "meeting",
     participants: "",
+    meetingDate: "",
+    meetingStartTime: "",
+    meetingEndTime: "",
     sections: createDefaultSections(),
+    outputLanguage: "auto",
     detailLevel: 3,
     additionalInstructions: "",
     customHeaders: [],
@@ -1308,6 +1681,57 @@ function createSession() {
     previousPolishedHtml: "",
     updatedAt: Date.now(),
   };
+}
+
+function createCustomTemplate() {
+  return {
+    id: `custom-${crypto.randomUUID()}`,
+    label: "",
+    summaryLead: "This note focused on the most important business updates and follow-ups.",
+    sections: ["Overview", "Key Discussion Points", "Decisions", "Action Items"],
+    templateInstructions: "",
+    headers: [],
+    fields: {
+      title: true,
+      participants: true,
+      highlights: true,
+      manualNotes: true,
+      liveTranscript: true,
+    },
+  };
+}
+
+function createTemplateHeader() {
+  return {
+    id: crypto.randomUUID(),
+    title: "",
+    instructions: "",
+  };
+}
+
+function readCustomTemplateItem(item, fallbackTemplate) {
+  const name = item.querySelector(".custom-template-name").value.trim();
+  const nextTemplate = {
+    ...fallbackTemplate,
+    label: name,
+    templateInstructions: item.querySelector(".custom-template-instructions").value,
+    fields: {
+      title: item.querySelector(".custom-template-show-title").checked,
+      participants: item.querySelector(".custom-template-show-participants").checked,
+      highlights: item.querySelector(".custom-template-show-highlights").checked,
+      manualNotes: item.querySelector(".custom-template-show-manual-notes").checked,
+      liveTranscript: item.querySelector(".custom-template-show-live-transcript").checked,
+    },
+  };
+
+  const headerItems = [...item.querySelectorAll(".template-header-item")];
+  nextTemplate.headers = headerItems.map((headerItem) => ({
+    id: headerItem.dataset.headerId || crypto.randomUUID(),
+    title: headerItem.querySelector(".template-header-title").value,
+    instructions: headerItem.querySelector(".template-header-instructions").value,
+  }));
+
+  return normalizeCustomTemplate(nextTemplate);
 }
 
 function deleteSession(sessionId) {
@@ -1330,9 +1754,9 @@ function getActiveSession() {
 }
 
 function buildLocalPolishedNotes(session) {
-  const template = templateDescriptions[session.template];
+  const template = getTemplateDefinition(session.template);
   const sectionConfig = normalizeSectionConfig(session.sections);
-  const outputLanguage = detectOutputLanguage(session);
+  const outputLanguage = resolveOutputLanguage(session);
   const copy = getOutputCopy(outputLanguage);
   const normalizedLines = normalizeNotes(buildCombinedNotes(session));
   const grouped = splitIntoSections(normalizedLines, template.sections);
@@ -1340,11 +1764,13 @@ function buildLocalPolishedNotes(session) {
   const actions = deriveActionItems(normalizedLines);
   const decisions = deriveDecisions(normalizedLines);
   const summary = buildSummary(session, template, normalizedLines, highlights, actions, outputLanguage);
-  const customSectionsMarkup = buildLocalCustomSectionsMarkup(session, copy);
+  const customSectionsMarkup = buildLocalCustomSectionsMarkup(session, copy, template);
   const participants = session.participants
     .split(",")
     .map((name) => name.trim())
     .filter(Boolean);
+  const showParticipants = template.fields?.participants !== false;
+  const meetingScheduleMeta = buildMeetingScheduleMeta(session);
 
   const discussionMarkup = grouped.length
     ? grouped
@@ -1368,7 +1794,8 @@ function buildLocalPolishedNotes(session) {
         <h3>${escapeHtml(session.title.trim() || "Untitled session")}</h3>
         <p class="output-meta">
           ${escapeHtml(template.label)} - ${formatDate(session.updatedAt)}
-          ${participants.length ? ` - Participants: ${escapeHtml(participants.join(", "))}` : ""}
+          ${meetingScheduleMeta ? ` - ${escapeHtml(meetingScheduleMeta)}` : ""}
+          ${showParticipants && participants.length ? ` - Participants: ${escapeHtml(participants.join(", "))}` : ""}
         </p>
       </header>
 
@@ -1408,8 +1835,8 @@ function buildLocalPolishedNotes(session) {
 }
 
 async function polishWithOpenAI(session, activeSettings) {
-  const template = templateDescriptions[session.template];
-  const outputLanguage = detectOutputLanguage(session);
+  const template = getTemplateDefinition(session.template);
+  const outputLanguage = resolveOutputLanguage(session);
   const prompt = buildAiPrompt(session, template, outputLanguage);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -1426,7 +1853,7 @@ async function polishWithOpenAI(session, activeSettings) {
             {
               type: "input_text",
               text:
-                "You turn rough meeting notes into polished professional notes. Be concise, accurate, and businesslike. Do not invent facts. If details are missing, stay neutral. Preserve the language of the source notes. If the notes are Swedish, write Swedish. If the notes are English, write English. Always focus on business-related discussion. Exclude private matters, social chatter, greetings, and small talk from the final output.",
+                "You turn rough business notes into polished professional notes. Be concise, accurate, and businesslike. Do not invent facts. If details are missing, stay neutral. Preserve the language of the source notes. If the notes are Swedish, write Swedish. If the notes are English, write English. Always focus on business-related discussion. Exclude private matters, social chatter, greetings, and small talk from the final output.",
             },
           ],
         },
@@ -1523,8 +1950,8 @@ async function polishWithOpenAI(session, activeSettings) {
 }
 
 async function revisePolishedNotesWithOpenAI(session, activeSettings, feedback) {
-  const template = templateDescriptions[session.template];
-  const outputLanguage = detectOutputLanguage(session);
+  const template = getTemplateDefinition(session.template);
+  const outputLanguage = resolveOutputLanguage(session);
   const prompt = buildAiRevisionPrompt(session, template, outputLanguage, feedback);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -1541,7 +1968,7 @@ async function revisePolishedNotesWithOpenAI(session, activeSettings, feedback) 
             {
               type: "input_text",
               text:
-                "You revise polished meeting notes based on user feedback. Keep the notes accurate, professional, business-focused, and grounded in the supplied notes. Apply the requested improvements without inventing facts. Preserve the language of the source notes. Exclude private matters, greetings, and small talk.",
+                "You revise polished professional notes based on user feedback. Keep the notes accurate, professional, business-focused, and grounded in the supplied notes. Apply the requested improvements without inventing facts. Preserve the language of the source notes. Exclude private matters, greetings, and small talk.",
             },
           ],
         },
@@ -1625,10 +2052,13 @@ async function revisePolishedNotesWithOpenAI(session, activeSettings, feedback) 
 
 function buildAiPrompt(session, template, outputLanguage) {
   const sectionConfig = normalizeSectionConfig(session.sections);
+  const sourceLanguage = detectSourceLanguage(session);
+  const templateHeaders = formatTemplateHeadersForPrompt(template.headers || []);
   return [
     `Template: ${template.label}`,
     `Meeting title: ${session.title.trim() || "Untitled session"}`,
-    `Participants: ${session.participants.trim() || "Not provided"}`,
+    `Meeting schedule: ${buildMeetingSchedulePromptText(session)}`,
+    `Participants: ${template.fields?.participants === false ? "Not applicable for this template" : session.participants.trim() || "Not provided"}`,
     `User-added highlights: ${session.highlights.length ? session.highlights.join(" | ") : "None"}`,
     `Output language: ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}`,
     `Detail level: ${getDetailLevelLabel(session.detailLevel ?? 3)}`,
@@ -1642,16 +2072,25 @@ function buildAiPrompt(session, template, outputLanguage) {
     "Manual notes:",
     session.rawNotes.trim() || "No manual notes provided.",
     "",
+    "Template-specific instructions:",
+    template.templateInstructions?.trim() || "No template-specific instructions.",
+    "",
+    "Template-specific headers and instructions:",
+    templateHeaders,
+    "",
     "Custom headers and instructions:",
     formatCustomHeadersForPrompt(session.customHeaders),
     "",
     "Additional user instructions:",
     session.additionalInstructions?.trim() || "No additional instructions.",
     "",
-    "Return polished meeting notes in the requested schema.",
+    "Return polished professional notes in the requested schema.",
     "Requirements:",
     "- Use a professional tone.",
     `- Write the output in ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}.`,
+    sourceLanguage !== outputLanguage
+      ? `- Translate the notes from ${sourceLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"} into ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}.`
+      : "- Keep the wording in the same language as the source notes.",
     `- Match this detail level: ${getDetailLevelLabel(session.detailLevel ?? 3)}.`,
     "- Keep the summary to 3-5 sentences.",
     "- Keep action items specific.",
@@ -1664,11 +2103,14 @@ function buildAiPrompt(session, template, outputLanguage) {
 function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
   const sectionConfig = normalizeSectionConfig(session.sections);
   const currentOutputText = htmlToPlainText(session.polishedHtml);
+  const sourceLanguage = detectSourceLanguage(session);
+  const templateHeaders = formatTemplateHeadersForPrompt(template.headers || []);
 
   return [
     `Template: ${template.label}`,
     `Meeting title: ${session.title.trim() || "Untitled session"}`,
-    `Participants: ${session.participants.trim() || "Not provided"}`,
+    `Meeting schedule: ${buildMeetingSchedulePromptText(session)}`,
+    `Participants: ${template.fields?.participants === false ? "Not applicable for this template" : session.participants.trim() || "Not provided"}`,
     `Output language: ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}`,
     `Detail level: ${getDetailLevelLabel(session.detailLevel ?? 3)}`,
     `Include executive summary: ${sectionConfig.includeSummary ? "yes" : "no"}`,
@@ -1687,6 +2129,12 @@ function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
     "Manual notes:",
     session.rawNotes.trim() || "No manual notes provided.",
     "",
+    "Template-specific instructions:",
+    template.templateInstructions?.trim() || "No template-specific instructions.",
+    "",
+    "Template-specific headers and instructions:",
+    templateHeaders,
+    "",
     "Custom headers and instructions:",
     formatCustomHeadersForPrompt(session.customHeaders),
     "",
@@ -1698,6 +2146,9 @@ function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
     "- Apply the user's requested improvements when they are supported by the notes.",
     "- Do not invent new facts or decisions.",
     `- Write the output in ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}.`,
+    sourceLanguage !== outputLanguage
+      ? `- Translate the revised notes into ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"} while keeping the meaning faithful to the source notes.`
+      : "- Keep the revised notes in the same language as the source notes.",
     "- Keep the output focused on business discussion only.",
   ].join("\n");
 }
@@ -1710,6 +2161,8 @@ function buildAiOutputHtml(session, template, aiNotes, outputLanguage) {
     .split(",")
     .map((name) => name.trim())
     .filter(Boolean);
+  const showParticipants = template.fields?.participants !== false;
+  const meetingScheduleMeta = buildMeetingScheduleMeta(session);
 
   const discussionMarkup = aiNotes.discussionPoints.length
     ? aiNotes.discussionPoints
@@ -1733,7 +2186,8 @@ function buildAiOutputHtml(session, template, aiNotes, outputLanguage) {
         <h3>${escapeHtml(aiNotes.title || session.title.trim() || "Untitled session")}</h3>
         <p class="output-meta">
           ${escapeHtml(template.label)} - ${formatDate(session.updatedAt)}
-          ${participants.length ? ` - Participants: ${escapeHtml(participants.join(", "))}` : ""}
+          ${meetingScheduleMeta ? ` - ${escapeHtml(meetingScheduleMeta)}` : ""}
+          ${showParticipants && participants.length ? ` - Participants: ${escapeHtml(participants.join(", "))}` : ""}
         </p>
       </header>
 
@@ -1799,8 +2253,13 @@ function normalizeSectionConfig(sectionConfig) {
   };
 }
 
+function normalizeOutputLanguagePreference(value) {
+  return ["auto", "sv", "en"].includes(value) ? value : "auto";
+}
+
 function buildCombinedNotes(session) {
-  return [session.liveTranscript?.trim(), session.rawNotes?.trim()]
+  const scheduleLine = buildMeetingScheduleText(session);
+  return [scheduleLine, session.liveTranscript?.trim(), session.rawNotes?.trim()]
     .filter(Boolean)
     .join("\n\n");
 }
@@ -1967,6 +2426,74 @@ function formatDate(timestamp) {
   }).format(timestamp);
 }
 
+function formatMeetingDate(dateValue) {
+  if (!dateValue) {
+    return "";
+  }
+
+  const date = new Date(`${dateValue}T12:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return dateValue;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function formatMeetingTime(timeValue) {
+  if (!timeValue) {
+    return "";
+  }
+
+  return timeValue;
+}
+
+function buildMeetingScheduleMeta(session) {
+  const datePart = formatMeetingDate(session.meetingDate);
+  const startPart = formatMeetingTime(session.meetingStartTime);
+  const endPart = formatMeetingTime(session.meetingEndTime);
+  const timePart = startPart && endPart
+    ? `${startPart}-${endPart}`
+    : startPart || endPart;
+
+  return [datePart, timePart].filter(Boolean).join(", ");
+}
+
+function buildMeetingScheduleText(session) {
+  const scheduleMeta = buildMeetingScheduleMeta(session);
+  return scheduleMeta ? `Meeting schedule: ${scheduleMeta}` : "";
+}
+
+function buildMeetingSchedulePromptText(session) {
+  return buildMeetingScheduleMeta(session) || "Not provided";
+}
+
+function formatDateTimeForTitle(timestamp) {
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(timestamp);
+}
+
+function getDefaultTitleForTemplate(template, timestamp = Date.now()) {
+  if (template.id === "personalNote") {
+    return `${formatDateTimeForTitle(timestamp)} Personal note`;
+  }
+
+  const label = template.label?.trim() || "Session";
+  return `${formatDateTimeForTitle(timestamp)} ${label}`;
+}
+
+function isAutoGeneratedTitle(title) {
+  return /personal note$/i.test(title.trim()) || /^\w{3,9}\s+\d{1,2},\s+\d{4}/i.test(title.trim());
+}
+
 function escapeHtml(text) {
   return text
     .replaceAll("&", "&amp;")
@@ -2124,6 +2651,7 @@ function loadSettings() {
         dictationLanguage: "auto",
         themeFamily: "olive",
         themeMode: "light",
+        customTemplates: [],
         exportStylePreset: DEFAULT_EXPORT_PRESET,
         exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
       };
@@ -2140,6 +2668,7 @@ function loadSettings() {
       themeFamily: "olive",
       themeMode: legacyThemeMode,
       ...parsed,
+      customTemplates: normalizeCustomTemplates(parsed.customTemplates),
       exportStylePreset,
       exportStyle: normalizeExportStyle({
         ...EXPORT_STYLE_PRESETS[exportStylePreset].style,
@@ -2153,6 +2682,7 @@ function loadSettings() {
       dictationLanguage: "auto",
       themeFamily: "olive",
       themeMode: "light",
+      customTemplates: [],
       exportStylePreset: DEFAULT_EXPORT_PRESET,
       exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
     };
@@ -2176,6 +2706,7 @@ function syncSettingsForm() {
   writeExportStyleInputs(getCurrentExportStyle());
   updateThemeDescription();
   updateExportStyleDescription();
+  renderCustomTemplates();
 }
 
 function getThemeDisplayName(themeFamily) {
@@ -2194,7 +2725,10 @@ function updateThemeDescription() {
 }
 
 function previewThemeSelection() {
-  applyTheme(themeFamilySelect.value, themeModeSelect.value);
+  settings.themeFamily = themeFamilySelect.value;
+  settings.themeMode = themeModeSelect.value;
+  persistSettings();
+  applyTheme(settings.themeFamily, settings.themeMode);
   updateThemeDescription();
 }
 
@@ -2249,6 +2783,10 @@ function updateExportStyleDescription() {
 
   exportStyleDescription.textContent = EXPORT_STYLE_PRESETS[exportStylePresetSelect.value]?.description
     || EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].description;
+}
+
+function getExportStyleDisplayName(presetId) {
+  return EXPORT_STYLE_PRESETS[presetId]?.label || "Personal style";
 }
 
 function updateSessionStorageUi() {
@@ -2620,12 +3158,20 @@ async function saveSessionsToLocalFile() {
 function normalizeImportedSessions(importedSessions) {
   return importedSessions
     .filter((session) => session && typeof session === "object")
-    .map((session) => ({
+    .map((session) => {
+      const templateId = typeof session.template === "string" ? session.template : "meeting";
+      const template = getTemplateDefinition(templateId);
+
+      return {
       id: typeof session.id === "string" && session.id ? session.id : crypto.randomUUID(),
-      title: typeof session.title === "string" ? session.title : "",
-      template: typeof session.template === "string" && templateDescriptions[session.template] ? session.template : "general",
+      title: typeof session.title === "string" && session.title ? session.title : (template.id === "personalNote" ? getDefaultTitleForTemplate(template) : ""),
+      template: template.id,
       participants: typeof session.participants === "string" ? session.participants : "",
+      meetingDate: typeof session.meetingDate === "string" ? session.meetingDate : "",
+      meetingStartTime: typeof session.meetingStartTime === "string" ? session.meetingStartTime : "",
+      meetingEndTime: typeof session.meetingEndTime === "string" ? session.meetingEndTime : "",
       sections: normalizeSectionConfig(session.sections),
+      outputLanguage: normalizeOutputLanguagePreference(session.outputLanguage),
       detailLevel: normalizeDetailLevel(session.detailLevel),
       additionalInstructions: typeof session.additionalInstructions === "string" ? session.additionalInstructions : "",
       customHeaders: normalizeCustomHeaders(session.customHeaders),
@@ -2636,16 +3182,73 @@ function normalizeImportedSessions(importedSessions) {
       polishedHtml: typeof session.polishedHtml === "string" ? session.polishedHtml : "",
       previousPolishedHtml: typeof session.previousPolishedHtml === "string" ? session.previousPolishedHtml : "",
       updatedAt: typeof session.updatedAt === "number" ? session.updatedAt : Date.now(),
-    }))
+    };
+    })
     .sort((first, second) => second.updatedAt - first.updatedAt);
 }
 
 function createCustomHeader() {
   return {
     id: crypto.randomUUID(),
+    include: true,
     title: "",
     instructions: "",
   };
+}
+
+function normalizeCustomTemplates(customTemplates) {
+  if (!Array.isArray(customTemplates)) {
+    return [];
+  }
+
+  return customTemplates
+    .filter((template) => template && typeof template === "object")
+    .map((template) => normalizeCustomTemplate(template))
+    .filter((template) => template.id);
+}
+
+function normalizeCustomTemplate(template) {
+  const fallback = createCustomTemplate();
+  return {
+    ...fallback,
+    ...template,
+    id: typeof template.id === "string" && template.id ? template.id : fallback.id,
+    label: typeof template.label === "string" ? template.label : "",
+    summaryLead: typeof template.summaryLead === "string" && template.summaryLead.trim()
+      ? template.summaryLead
+      : fallback.summaryLead,
+    sections: Array.isArray(template.sections) && template.sections.length
+      ? template.sections.filter((section) => typeof section === "string" && section.trim()).slice(0, 4)
+      : fallback.sections,
+    templateInstructions: typeof template.templateInstructions === "string" ? template.templateInstructions : "",
+    headers: normalizeTemplateHeaders(template.headers),
+    fields: normalizeTemplateFields(template.fields),
+  };
+}
+
+function normalizeTemplateFields(fields) {
+  return {
+    title: fields?.title !== false,
+    participants: fields?.participants !== false,
+    highlights: fields?.highlights !== false,
+    manualNotes: fields?.manualNotes !== false,
+    liveTranscript: fields?.liveTranscript !== false,
+  };
+}
+
+function normalizeTemplateHeaders(headers) {
+  if (!Array.isArray(headers)) {
+    return [];
+  }
+
+  return headers
+    .filter((header) => header && typeof header === "object")
+    .map((header) => ({
+      id: typeof header.id === "string" && header.id ? header.id : crypto.randomUUID(),
+      title: typeof header.title === "string" ? header.title : "",
+      instructions: typeof header.instructions === "string" ? header.instructions : "",
+    }))
+    .filter((header) => header.title.trim());
 }
 
 function normalizeCustomHeaders(customHeaders) {
@@ -2657,6 +3260,7 @@ function normalizeCustomHeaders(customHeaders) {
     .filter((header) => header && typeof header === "object")
     .map((header) => ({
       id: typeof header.id === "string" && header.id ? header.id : crypto.randomUUID(),
+      include: header.include !== false,
       title: typeof header.title === "string" ? header.title : "",
       instructions: typeof header.instructions === "string" ? header.instructions : "",
     }));
@@ -2689,6 +3293,7 @@ function formatCustomHeadersForPrompt(customHeaders) {
   }
 
   return customHeaders
+    .filter((header) => header.include !== false)
     .map((header, index) => {
       const title = header.title.trim() || `Custom Header ${index + 1}`;
       const instructions = header.instructions.trim() || "No extra instructions.";
@@ -2697,8 +3302,11 @@ function formatCustomHeadersForPrompt(customHeaders) {
     .join("\n");
 }
 
-function buildLocalCustomSectionsMarkup(session, copy) {
-  const customHeaders = session.customHeaders.filter((header) => header.title.trim());
+function buildLocalCustomSectionsMarkup(session, copy, template) {
+  const customHeaders = [
+    ...normalizeTemplateHeaders(template?.headers),
+    ...session.customHeaders.filter((header) => header.include !== false && header.title.trim()),
+  ];
 
   return customHeaders
     .map((header) => `
@@ -2722,7 +3330,18 @@ function buildAiCustomSectionsMarkup(customSections = []) {
     .join("");
 }
 
-function detectOutputLanguage(session) {
+function formatTemplateHeadersForPrompt(headers) {
+  const normalizedHeaders = normalizeTemplateHeaders(headers);
+  if (!normalizedHeaders.length) {
+    return "No template-specific headers.";
+  }
+
+  return normalizedHeaders
+    .map((header, index) => `${index + 1}. ${header.title.trim()}: ${header.instructions.trim() || "No extra instructions."}`)
+    .join("\n");
+}
+
+function detectSourceLanguage(session) {
   const sample = [
     session.title,
     session.participants,
@@ -2735,6 +3354,19 @@ function detectOutputLanguage(session) {
   return detectPreferredLanguage(sample || navigator.language, DICTATION_LANGUAGES.english) === DICTATION_LANGUAGES.swedish
     ? OUTPUT_LANGUAGES.swedish
     : OUTPUT_LANGUAGES.english;
+}
+
+function resolveOutputLanguage(session) {
+  const preference = normalizeOutputLanguagePreference(session.outputLanguage);
+  if (preference === "sv") {
+    return OUTPUT_LANGUAGES.swedish;
+  }
+
+  if (preference === "en") {
+    return OUTPUT_LANGUAGES.english;
+  }
+
+  return detectSourceLanguage(session);
 }
 
 function getOutputCopy(outputLanguage) {

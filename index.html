@@ -23,6 +23,7 @@
         <p class="subtitle">
           Capture rough notes and turn them into professional meeting notes without leaving the page.
         </p>
+        <div class="version-pill" id="app-version">Version</div>
       </div>
 
       <div class="hero-metrics" aria-label="Product highlights">
@@ -81,42 +82,54 @@
           <div class="panel-actions">
             <button class="ghost-button" id="open-settings" type="button">Settings</button>
             <button class="ghost-button" id="open-ai-settings" type="button">AI Settings</button>
+            <button class="ghost-button is-hidden-field" id="update-app" type="button">Update App</button>
             <div class="status-pill" id="save-status">Saved locally</div>
           </div>
         </div>
         <div class="editor-layout">
           <div class="editor-main">
             <div class="field-grid">
-              <label class="field">
+              <label class="field" id="title-field">
                 <span class="field-label">Meeting title</span>
                 <input id="meeting-title" type="text" maxlength="100" placeholder="Weekly product sync">
               </label>
 
               <label class="field">
-                <span class="field-label">Template</span>
-                <select id="meeting-template">
-                  <option value="general">General meeting</option>
-                  <option value="standup">Standup</option>
-                  <option value="client">Client call</option>
-                  <option value="oneOnOne">1:1</option>
-                  <option value="interview">Interview</option>
-                </select>
+                <span class="field-label">Category</span>
+                <select id="meeting-template"></select>
               </label>
             </div>
 
-            <label class="field">
+            <label class="field" id="participants-field">
               <span class="field-label">Participants</span>
               <input id="participants" type="text" maxlength="160" placeholder="Alex, Priya, Jonas">
             </label>
 
-            <label class="field">
+            <div class="field-grid field-grid-three" id="meeting-schedule-field">
+              <label class="field field-tight">
+                <span class="field-label">Date</span>
+                <input id="meeting-date" type="date">
+              </label>
+
+              <label class="field field-tight">
+                <span class="field-label">Start time</span>
+                <input id="meeting-start-time" type="time">
+              </label>
+
+              <label class="field field-tight">
+                <span class="field-label">End time</span>
+                <input id="meeting-end-time" type="time">
+              </label>
+            </div>
+
+            <label class="field" id="highlights-field">
               <span class="field-label">Quick highlights</span>
               <input id="highlights-input" type="text" maxlength="180" placeholder="Type a highlight and press Enter">
             </label>
 
             <div class="chip-row" id="highlight-chips" aria-live="polite"></div>
 
-            <label class="field">
+            <label class="field" id="manual-notes-field">
               <span class="field-label">Manual notes</span>
               <textarea
                 id="raw-notes"
@@ -125,7 +138,7 @@
               ></textarea>
             </label>
 
-            <label class="field">
+            <label class="field" id="live-transcript-field">
               <span class="field-label">Live transcript</span>
               <textarea
                 id="live-transcript"
@@ -149,6 +162,15 @@
             </div>
 
             <div class="polish-section">
+              <label class="field field-compact field-polish-language">
+                <span class="field-label">Output language</span>
+                <select id="output-language">
+                  <option value="auto">Same as notes</option>
+                  <option value="sv">Swedish</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+
               <div class="capture-toolbar capture-toolbar-sidebar">
                 <button class="primary-button" id="polish-notes" type="button">Polish with AI</button>
                 <button class="secondary-button" id="dictation-toggle" type="button">Start Dictation</button>
@@ -180,6 +202,18 @@
                   </label>
                 </div>
 
+                <section class="custom-headers custom-headers-inline" aria-label="Custom headers">
+                  <div class="custom-headers-heading">
+                    <div>
+                      <p class="section-label">Custom Headers</p>
+                      <h4>Extra sections for the polished note</h4>
+                    </div>
+                    <button class="ghost-button custom-header-add" id="add-custom-header" type="button">Add Header</button>
+                  </div>
+
+                  <div class="custom-header-list" id="custom-header-list"></div>
+                </section>
+
                 <label class="field config-field">
                   <span class="field-label">Detail level</span>
                   <input id="detail-level" type="range" min="1" max="5" step="1" value="3">
@@ -195,17 +229,6 @@
                   ></textarea>
                 </label>
 
-                <section class="custom-headers" aria-label="Custom headers">
-                  <div class="custom-headers-heading">
-                    <div>
-                      <p class="section-label">Custom Headers</p>
-                      <h4>Extra sections for the polished note</h4>
-                    </div>
-                    <button class="ghost-button custom-header-add" id="add-custom-header" type="button">Add Header</button>
-                  </div>
-
-                  <div class="custom-header-list" id="custom-header-list"></div>
-                </section>
               </section>
             </div>
 
@@ -285,6 +308,10 @@
 
   <template id="custom-header-template">
     <article class="custom-header-item">
+      <label class="config-option custom-header-toggle">
+        <input class="custom-header-include" type="checkbox">
+        <span class="custom-header-toggle-label">New custom section</span>
+      </label>
       <label class="field">
         <span class="field-label">Header</span>
         <input class="custom-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
@@ -298,6 +325,85 @@
         ></textarea>
       </label>
       <button class="ghost-button custom-header-remove" type="button">Remove</button>
+    </article>
+  </template>
+
+  <template id="custom-template-template">
+    <article class="custom-template-item">
+      <div class="custom-template-head">
+        <div>
+          <p class="section-label">Custom Template</p>
+          <h4 class="custom-template-name-label">New template</h4>
+        </div>
+        <button class="ghost-button custom-template-remove" type="button">Remove</button>
+      </div>
+
+      <label class="field">
+        <span class="field-label">Template name</span>
+        <input class="custom-template-name" type="text" maxlength="60" placeholder="Board update">
+      </label>
+
+      <div class="settings-checkbox-grid">
+        <label class="config-option">
+          <input class="custom-template-show-title" type="checkbox">
+          <span>Meeting title</span>
+        </label>
+        <label class="config-option">
+          <input class="custom-template-show-participants" type="checkbox">
+          <span>Participants</span>
+        </label>
+        <label class="config-option">
+          <input class="custom-template-show-highlights" type="checkbox">
+          <span>Quick highlights</span>
+        </label>
+        <label class="config-option">
+          <input class="custom-template-show-manual-notes" type="checkbox">
+          <span>Manual notes</span>
+        </label>
+        <label class="config-option">
+          <input class="custom-template-show-live-transcript" type="checkbox">
+          <span>Live transcript</span>
+        </label>
+      </div>
+
+      <label class="field">
+        <span class="field-label">Instructions to AI</span>
+        <textarea
+          class="custom-template-instructions"
+          rows="4"
+          placeholder="Explain how notes for this template should be structured and what matters most."
+        ></textarea>
+      </label>
+
+      <section class="template-headers" aria-label="Template headers">
+        <div class="custom-headers-heading">
+          <div>
+            <p class="section-label">Template Headers</p>
+            <h4>Default extra sections</h4>
+          </div>
+          <button class="ghost-button custom-template-header-add" type="button">Add Header</button>
+        </div>
+
+        <div class="template-header-list"></div>
+      </section>
+    </article>
+  </template>
+
+  <template id="template-header-template">
+    <article class="template-header-item">
+      <label class="field">
+        <span class="field-label">Header</span>
+        <input class="template-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
+      </label>
+      <label class="field">
+        <span class="field-label">Instructions to AI</span>
+        <textarea
+          class="template-header-instructions"
+          rows="3"
+          placeholder="Explain what this section should focus on."
+        ></textarea>
+      </label>
+      <button class="ghost-button template-header-remove" type="button">Remove</button>
     </article>
   </template>
 
@@ -469,9 +575,26 @@
           </div>
         </section>
 
-        <div class="capture-toolbar">
-          <button class="primary-button" type="submit">Save Settings</button>
-        </div>
+        <section class="config-card settings-card" aria-label="Custom template settings">
+          <div class="config-card-copy">
+            <p class="section-label">Templates</p>
+            <h3>Create your own template</h3>
+          </div>
+
+          <p class="support-text">
+            Build your own note flow by choosing which input fields are visible and by adding template-specific headers and AI instructions.
+          </p>
+
+          <div class="template-builder-actions">
+            <button class="ghost-button" id="add-custom-template" type="button">Add Template</button>
+          </div>
+
+          <div class="custom-template-list" id="custom-template-list"></div>
+        </section>
+
+        <p class="support-text">
+          Changes in this window are saved automatically.
+        </p>
       </form>
     </section>
   </div>
