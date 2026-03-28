@@ -1,7 +1,7 @@
 ﻿const STORAGE_KEY = "notesmith-sessions";
 const SETTINGS_KEY = "notesmith-settings";
 const AI_MODEL_CATALOG_KEY = "notesmith-ai-model-catalog";
-const APP_VERSION = "v0.10.1";
+const APP_VERSION = "v0.10.2";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -154,6 +154,7 @@ const APP_STATUS_STATES = {
   updating: "updating",
   warning: "warning",
 };
+const REMOTE_VERSION_CHECK_INTERVAL_MS = 2 * 60 * 1000;
 const SUPPORTS_FILE_SAVE = typeof window.showSaveFilePicker === "function";
 const MAX_MODEL_INPUT_PRICE_PER_MILLION = 2.5;
 const APPROX_TOKENS_PER_PAGE = 750;
@@ -400,6 +401,7 @@ let serviceWorkerRegistration = null;
 let hasPendingAppUpdate = false;
 let isRefreshingForUpdate = false;
 let activeSettingsSection = "appearance";
+let latestRemoteVersion = APP_VERSION;
 
 applyTheme(settings.themeFamily, settings.themeMode);
 settings.model = resolveSelectedModel(settings.model);
@@ -995,6 +997,9 @@ function bindEvents() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
+    checkForRemoteAppUpdate().catch(() => {
+      // Ignore version check failures when service workers are unavailable.
+    });
     return;
   }
 
@@ -1005,8 +1010,14 @@ function registerServiceWorker() {
       registration.update().catch(() => {
         // Keep the app functional even if update checks fail.
       });
+      checkForRemoteAppUpdate().catch(() => {
+        // Ignore version check failures and keep the local app usable.
+      });
     }).catch(() => {
       // Keep the app functional even if the service worker cannot be registered.
+      checkForRemoteAppUpdate().catch(() => {
+        // Ignore version check failures and keep the local app usable.
+      });
     });
   });
 }
@@ -1044,18 +1055,27 @@ function bindServiceWorkerRegistration(registration) {
     registration.update().catch(() => {
       // Ignore background refresh failures.
     });
-  }, 5 * 60 * 1000);
+    checkForRemoteAppUpdate().catch(() => {
+      // Ignore background version check failures.
+    });
+  }, REMOTE_VERSION_CHECK_INTERVAL_MS);
 }
 
-function markAppUpdateAvailable() {
+function markAppUpdateAvailable(nextVersion = latestRemoteVersion) {
   hasPendingAppUpdate = true;
+  latestRemoteVersion = nextVersion || latestRemoteVersion;
   updateAppButton.classList.remove("is-hidden-field");
+  updateAppButton.textContent = latestRemoteVersion && latestRemoteVersion !== APP_VERSION
+    ? `Update App (${latestRemoteVersion})`
+    : "Update App";
   setAppStatus("Update available", APP_STATUS_STATES.warning);
 }
 
 function clearAppUpdateAvailable() {
   hasPendingAppUpdate = false;
+  latestRemoteVersion = APP_VERSION;
   updateAppButton.classList.add("is-hidden-field");
+  updateAppButton.textContent = "Update App";
   if (saveStatus.textContent === "Update available") {
     setAppStatus("Saved locally", APP_STATUS_STATES.idle);
   }
@@ -1115,6 +1135,76 @@ async function forceReloadLatestVersion() {
   const reloadUrl = new URL(window.location.href);
   reloadUrl.searchParams.set("refresh", String(Date.now()));
   window.location.replace(reloadUrl.toString());
+}
+
+async function checkForRemoteAppUpdate() {
+  const remoteVersion = await fetchRemoteAppVersion();
+  if (!remoteVersion) {
+    return;
+  }
+
+  latestRemoteVersion = remoteVersion;
+  if (compareAppVersions(remoteVersion, APP_VERSION) <= 0) {
+    return;
+  }
+
+  markAppUpdateAvailable(remoteVersion);
+  if (canAutoApplyUpdate()) {
+    setAppStatus("Updating app", APP_STATUS_STATES.updating);
+    window.setTimeout(() => {
+      if (hasPendingAppUpdate && !isRefreshingForUpdate) {
+        applyLatestAppUpdate();
+      }
+    }, 900);
+  }
+}
+
+async function fetchRemoteAppVersion() {
+  const requestUrl = new URL("./app.js", window.location.href);
+  requestUrl.searchParams.set("version-check", String(Date.now()));
+
+  const response = await fetch(requestUrl.toString(), {
+    cache: "no-store",
+    headers: {
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const source = await response.text();
+  const match = source.match(/const APP_VERSION = "([^"]+)";/);
+  return match?.[1] || "";
+}
+
+function compareAppVersions(left, right) {
+  const normalize = (value) => String(value || "")
+    .replace(/^[^\d]*/, "")
+    .split(".")
+    .map((part) => Number(part.replace(/[^\d]/g, "")) || 0);
+
+  const leftParts = normalize(left);
+  const rightParts = normalize(right);
+  const length = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] || 0;
+    const rightPart = rightParts[index] || 0;
+    if (leftPart !== rightPart) {
+      return leftPart - rightPart;
+    }
+  }
+
+  return 0;
+}
+
+function canAutoApplyUpdate() {
+  const currentState = saveStatus.dataset.state || APP_STATUS_STATES.idle;
+  return !isRecording
+    && ![APP_STATUS_STATES.generating, APP_STATUS_STATES.saving, APP_STATUS_STATES.updating].includes(currentState);
 }
 
 function render() {
