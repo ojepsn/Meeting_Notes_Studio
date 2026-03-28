@@ -1,7 +1,7 @@
 ﻿const STORAGE_KEY = "notesmith-sessions";
 const SETTINGS_KEY = "notesmith-settings";
 const AI_MODEL_CATALOG_KEY = "notesmith-ai-model-catalog";
-const APP_VERSION = "v0.10.2";
+const APP_VERSION = "v0.10.3";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -100,6 +100,7 @@ const includeSummaryInput = document.querySelector("#include-summary");
 const includeHighlightsInput = document.querySelector("#include-highlights");
 const includeDecisionsInput = document.querySelector("#include-decisions");
 const includeActionsInput = document.querySelector("#include-actions");
+const transcribeOnlyInput = document.querySelector("#transcribe-only");
 const outputLanguageSelect = document.querySelector("#output-language");
 const detailLevelInput = document.querySelector("#detail-level");
 const detailLevelLabel = document.querySelector("#detail-level-label");
@@ -136,6 +137,12 @@ const addCustomTemplateButton = document.querySelector("#add-custom-template");
 const customTemplateList = document.querySelector("#custom-template-list");
 const customTemplateTemplate = document.querySelector("#custom-template-template");
 const templateHeaderTemplate = document.querySelector("#template-header-template");
+const structuredSectionInputs = [
+  includeSummaryInput,
+  includeHighlightsInput,
+  includeDecisionsInput,
+  includeActionsInput,
+];
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const DICTATION_LANGUAGES = {
@@ -738,6 +745,7 @@ function bindEvents() {
   });
 
   [
+    transcribeOnlyInput,
     includeSummaryInput,
     includeHighlightsInput,
     includeDecisionsInput,
@@ -745,6 +753,7 @@ function bindEvents() {
   ].forEach((input) => {
     input.addEventListener("change", () => {
       updateActiveSession({
+        transcribeOnly: transcribeOnlyInput.checked,
         sections: {
           includeSummary: includeSummaryInput.checked,
           includeHighlights: includeHighlightsInput.checked,
@@ -892,15 +901,17 @@ function bindEvents() {
       updateActiveSession({ polishedHtml }, false);
       renderOutput();
       dictationStatus.textContent = settings.apiKey
-        ? "AI polishing complete."
+        ? (session.transcribeOnly ? "AI transcription complete." : "AI polishing complete.")
         : session.outputLanguage && session.outputLanguage !== "auto"
           ? "No API key found in AI Settings, so a local polish pass was used. Language translation requires AI polishing."
-          : "No API key found in AI Settings, so a local polish pass was used instead.";
+          : (session.transcribeOnly ? "No API key found in AI Settings, so a local transcription cleanup was used instead." : "No API key found in AI Settings, so a local polish pass was used instead.");
     } catch (error) {
       const polishedHtml = buildLocalPolishedNotes(session);
       updateActiveSession({ polishedHtml }, false);
       renderOutput();
-      dictationStatus.textContent = `AI polishing failed: ${error.message}. A local polish pass was used instead.`;
+      dictationStatus.textContent = session.transcribeOnly
+        ? `AI transcription failed: ${error.message}. A local transcription cleanup was used instead.`
+        : `AI polishing failed: ${error.message}. A local polish pass was used instead.`;
     } finally {
       polishButton.disabled = false;
       polishButton.textContent = "Generate";
@@ -1326,6 +1337,7 @@ function applyTemplateUi(session) {
   setElementVisibility(manualNotesField, showManualNotes);
   setElementVisibility(liveTranscriptField, showLiveTranscript);
   titleFieldLabel.textContent = isPersonalNote ? "Note title" : "Meeting title";
+  updateTranscribeOnlyUi(session);
 
   meetingTitleInput.placeholder = isPersonalNote
     ? `${formatDateTimeForTitle(Date.now())} Personal note`
@@ -1348,6 +1360,31 @@ function applyTemplateUi(session) {
 
   dictationToggle.disabled = false;
   dictationToggle.textContent = isRecording ? "Stop recording" : "Start recording";
+}
+
+function updateTranscribeOnlyUi(session = getActiveSession()) {
+  const isTranscriptOnly = session?.transcribeOnly === true;
+
+  structuredSectionInputs.forEach((input) => {
+    input.disabled = isTranscriptOnly;
+    input.closest(".config-option")?.classList.toggle("is-disabled", isTranscriptOnly);
+  });
+
+  customHeaderList.classList.toggle("is-disabled", isTranscriptOnly);
+  addCustomHeaderButton.disabled = isTranscriptOnly;
+  addCustomHeaderButton.classList.toggle("is-disabled", isTranscriptOnly);
+
+  if (isTranscriptOnly) {
+    resetCustomHeaderAddForm();
+  }
+
+  customHeaderList
+    .querySelectorAll("input, textarea, button")
+    .forEach((control) => {
+      control.disabled = isTranscriptOnly;
+    });
+
+  polishButton.textContent = isTranscriptOnly ? "Generate transcript" : "Generate";
 }
 
 function setElementVisibility(element, isVisible) {
@@ -1418,6 +1455,7 @@ function syncFieldsFromSession() {
   meetingDateInput.value = session.meetingDate ?? "";
   meetingStartTimeInput.value = session.meetingStartTime ?? "";
   meetingEndTimeInput.value = session.meetingEndTime ?? "";
+  transcribeOnlyInput.checked = session.transcribeOnly === true;
   includeSummaryInput.checked = session.sections.includeSummary;
   includeHighlightsInput.checked = session.sections.includeHighlights;
   includeDecisionsInput.checked = session.sections.includeDecisions;
@@ -1918,6 +1956,8 @@ function renderCustomHeaders() {
 
     customHeaderList.appendChild(fragment);
   });
+
+  updateTranscribeOnlyUi(session);
 }
 
 function updateDetailLevelLabel() {
@@ -1983,6 +2023,10 @@ function updateActiveSession(patch, shouldScheduleSave) {
     renderCustomHeaders();
   }
 
+  if (patch.transcribeOnly !== undefined) {
+    updateTranscribeOnlyUi(getActiveSession());
+  }
+
   if (shouldScheduleSave) {
     schedulePersist();
   } else {
@@ -2038,6 +2082,7 @@ function createSession() {
     meetingStartTime: "",
     meetingEndTime: "",
     sections: createDefaultSections(),
+    transcribeOnly: false,
     outputLanguage: "auto",
     detailLevel: 3,
     additionalInstructions: "",
@@ -2131,6 +2176,10 @@ function getActiveSession() {
 }
 
 function buildLocalPolishedNotes(session) {
+  if (session.transcribeOnly) {
+    return buildTranscriptOnlyHtml(session);
+  }
+
   const template = getTemplateDefinition(session.template);
   const sectionConfig = normalizeSectionConfig(session.sections);
   const outputLanguage = resolveOutputLanguage(session);
@@ -2211,7 +2260,43 @@ function buildLocalPolishedNotes(session) {
   `;
 }
 
+function buildTranscriptOnlyHtml(session, transcriptText = "") {
+  const template = getTemplateDefinition(session.template);
+  const outputLanguage = resolveOutputLanguage(session);
+  const sourceText = transcriptText.trim() || buildCombinedNotes(session).trim();
+  const normalizedParagraphs = sourceText
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const participants = parseParticipants(session.participants);
+  const meetingScheduleMeta = buildMeetingScheduleMeta(session);
+  const bodyMarkup = normalizedParagraphs.length
+    ? normalizedParagraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("")
+    : `<p>${escapeHtml(outputLanguage === OUTPUT_LANGUAGES.swedish ? "Ingen text att transkribera." : "No transcript available yet.")}</p>`;
+
+  return `
+    <article class="output-doc">
+      <header class="output-header">
+        <h3>${escapeHtml(session.title.trim() || (outputLanguage === OUTPUT_LANGUAGES.swedish ? "Transkribering" : "Transcript"))}</h3>
+        <p class="output-meta">
+          ${escapeHtml(template.label)} - ${formatDate(session.updatedAt)}
+          ${meetingScheduleMeta ? ` - ${escapeHtml(meetingScheduleMeta)}` : ""}
+          ${template.fields?.participants !== false && participants.length ? ` - Participants: ${escapeHtml(participants.join(", "))}` : ""}
+        </p>
+      </header>
+      <section class="output-section">
+        <h4>${escapeHtml(outputLanguage === OUTPUT_LANGUAGES.swedish ? "Transkribering" : "Transcript")}</h4>
+        ${bodyMarkup}
+      </section>
+    </article>
+  `;
+}
+
 async function polishWithOpenAI(session, activeSettings) {
+  if (session.transcribeOnly) {
+    return transcribeWithOpenAI(session, activeSettings);
+  }
+
   const template = getTemplateDefinition(session.template);
   const outputLanguage = resolveOutputLanguage(session);
   const prompt = buildAiPrompt(session, template, outputLanguage);
@@ -2326,7 +2411,66 @@ async function polishWithOpenAI(session, activeSettings) {
   return buildAiOutputHtml(session, template, parsed, outputLanguage);
 }
 
+async function transcribeWithOpenAI(session, activeSettings) {
+  const outputLanguage = resolveOutputLanguage(session);
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${activeSettings.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: activeSettings.model || "gpt-5-mini",
+      input: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text: "You clean up rough spoken or written notes into a faithful transcript. Do not summarize or polish into business-note sections. Preserve meaning, order, and language. Fix obvious transcription mistakes, punctuation, and paragraphing only.",
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: [
+                `Output language: ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}`,
+                "Mode: Transcribe only. Do not summarize, categorize, or convert into meeting-note sections.",
+                "Live transcript:",
+                session.liveTranscript?.trim() || "No transcript provided.",
+                "",
+                "Manual notes:",
+                session.rawNotes?.trim() || "No manual notes provided.",
+              ].join("\n"),
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  const payload = await response.json();
+  if (!response.ok) {
+    const message = payload?.error?.message || "The OpenAI transcription request did not complete successfully.";
+    throw new Error(message);
+  }
+
+  const responseText = extractResponseText(payload);
+  if (!responseText) {
+    throw new Error("The OpenAI transcription response did not include any readable text.");
+  }
+
+  return buildTranscriptOnlyHtml(session, responseText);
+}
+
 async function revisePolishedNotesWithOpenAI(session, activeSettings, feedback) {
+  if (session.transcribeOnly) {
+    return buildRevisedLocalPolishedNotes(session, feedback);
+  }
+
   const template = getTemplateDefinition(session.template);
   const outputLanguage = resolveOutputLanguage(session);
   const prompt = buildAiRevisionPrompt(session, template, outputLanguage, feedback);
@@ -3672,6 +3816,7 @@ function normalizeImportedSessions(importedSessions) {
       meetingStartTime: typeof session.meetingStartTime === "string" ? session.meetingStartTime : "",
       meetingEndTime: typeof session.meetingEndTime === "string" ? session.meetingEndTime : "",
       sections: normalizeSectionConfig(session.sections),
+      transcribeOnly: session.transcribeOnly === true,
       outputLanguage: normalizeOutputLanguagePreference(session.outputLanguage),
       detailLevel: normalizeDetailLevel(session.detailLevel),
       additionalInstructions: typeof session.additionalInstructions === "string" ? session.additionalInstructions : "",

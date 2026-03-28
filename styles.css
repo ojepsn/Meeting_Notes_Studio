@@ -746,6 +746,21 @@ button {
   box-shadow: none;
 }
 
+.config-option.is-disabled,
+.custom-header-list.is-disabled {
+  opacity: 0.54;
+}
+
+.config-option.is-disabled {
+  cursor: not-allowed;
+}
+
+.custom-header-add.is-disabled,
+.custom-header-add:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+}
+
 .range-caption {
   color: var(--muted);
   font-size: 0.9rem;
