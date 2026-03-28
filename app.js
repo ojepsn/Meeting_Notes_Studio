@@ -1,7 +1,7 @@
 ﻿const STORAGE_KEY = "notesmith-sessions";
 const SETTINGS_KEY = "notesmith-settings";
 const AI_MODEL_CATALOG_KEY = "notesmith-ai-model-catalog";
-const APP_VERSION = "v0.10.0";
+const APP_VERSION = "v0.10.1";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -866,6 +866,8 @@ function registerServiceWorker() {
 }
 
 function bindServiceWorkerRegistration(registration) {
+  clearAppUpdateAvailable();
+
   if (registration.waiting) {
     markAppUpdateAvailable();
   }
@@ -905,9 +907,17 @@ function markAppUpdateAvailable() {
   saveStatus.textContent = "Update available";
 }
 
+function clearAppUpdateAvailable() {
+  hasPendingAppUpdate = false;
+  updateAppButton.classList.add("is-hidden-field");
+  if (saveStatus.textContent === "Update available") {
+    saveStatus.textContent = "Saved locally";
+  }
+}
+
 function applyLatestAppUpdate() {
   if (!serviceWorkerRegistration) {
-    window.location.reload();
+    forceReloadLatestVersion();
     return;
   }
 
@@ -918,8 +928,8 @@ function applyLatestAppUpdate() {
   }
 
   if (hasPendingAppUpdate) {
-    saveStatus.textContent = "Refreshing app...";
-    window.location.reload();
+    saveStatus.textContent = "Reloading latest version...";
+    forceReloadLatestVersion();
     return;
   }
 
@@ -932,16 +942,28 @@ function applyLatestAppUpdate() {
         return;
       }
 
-      saveStatus.textContent = "Already on latest version";
-      window.setTimeout(() => {
-        if (saveStatus.textContent === "Already on latest version") {
-          saveStatus.textContent = "Saved locally";
-        }
-      }, 1800);
+      saveStatus.textContent = "Refreshing latest version...";
+      forceReloadLatestVersion();
     })
     .catch(() => {
-      saveStatus.textContent = "Could not check for updates";
+      saveStatus.textContent = "Trying a full refresh...";
+      forceReloadLatestVersion();
     });
+}
+
+async function forceReloadLatestVersion() {
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+    const cacheKeys = await caches.keys();
+    await Promise.all(cacheKeys.map((key) => caches.delete(key)));
+  } catch {
+    // If cleanup fails, still attempt a reload so the user is not blocked.
+  }
+
+  const reloadUrl = new URL(window.location.href);
+  reloadUrl.searchParams.set("refresh", String(Date.now()));
+  window.location.replace(reloadUrl.toString());
 }
 
 function render() {
