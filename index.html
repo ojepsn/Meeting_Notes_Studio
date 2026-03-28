@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NoteSmith</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="hero-panel">
+      <div class="hero-copy">
+        <p class="eyebrow">Meeting Notes Studio</p>
+        <h1>Capture quickly. Polish cleanly.</h1>
+        <p class="subtitle">
+          Capture rough notes and turn them into professional meeting notes without leaving the page.
+        </p>
+      </div>
+
+      <div class="hero-metrics" aria-label="Product highlights">
+        <article class="metric-card">
+          <span class="metric-value">Templates</span>
+          <span class="metric-label">Designed for 1:1s, client calls, standups, and interviews.</span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-value">Dictation</span>
+          <span class="metric-label">Browser speech capture when supported by your device.</span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-value">Local</span>
+          <span class="metric-label">Your sessions stay saved in this browser for quick retrieval.</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="workspace" aria-label="Notes application">
+      <aside class="sessions-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-label">Recent Sessions</p>
+            <h2>Your note shelf</h2>
+          </div>
+          <button class="ghost-button" id="new-session" type="button">New Session</button>
+        </div>
+
+        <ul class="session-list" id="session-list" aria-live="polite"></ul>
+
+        <div class="empty-sessions" id="empty-sessions">
+          <p>No saved sessions yet. Start with a fresh note and it will appear here automatically.</p>
+        </div>
+      </aside>
+
+      <section class="editor-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-label">Capture</p>
+            <h2 id="session-title">Untitled session</h2>
+          </div>
+          <div class="panel-actions">
+            <button class="ghost-button" id="open-ai-settings" type="button">AI Settings</button>
+            <div class="status-pill" id="save-status">Saved locally</div>
+          </div>
+        </div>
+
+        <div class="field-grid">
+          <label class="field">
+            <span class="field-label">Meeting title</span>
+            <input id="meeting-title" type="text" maxlength="100" placeholder="Weekly product sync">
+          </label>
+
+          <label class="field">
+            <span class="field-label">Template</span>
+            <select id="meeting-template">
+              <option value="general">General meeting</option>
+              <option value="standup">Standup</option>
+              <option value="client">Client call</option>
+              <option value="oneOnOne">1:1</option>
+              <option value="interview">Interview</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Participants</span>
+          <input id="participants" type="text" maxlength="160" placeholder="Alex, Priya, Jonas">
+        </label>
+
+        <label class="field">
+          <span class="field-label">Quick highlights</span>
+          <input id="highlights-input" type="text" maxlength="180" placeholder="Type a highlight and press Enter">
+        </label>
+
+        <div class="chip-row" id="highlight-chips" aria-live="polite"></div>
+
+        <label class="field">
+          <span class="field-label">Live transcript</span>
+          <textarea
+            id="live-transcript"
+            rows="7"
+            placeholder="Dictation appears here while recording..."
+            readonly
+          ></textarea>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Manual notes</span>
+          <textarea
+            id="raw-notes"
+            rows="12"
+            placeholder="Write your own notes here while dictation continues in the transcript field..."
+          ></textarea>
+        </label>
+
+        <div class="field-inline">
+          <label class="field field-compact">
+            <span class="field-label">Dictation language</span>
+            <select id="dictation-language">
+              <option value="auto">Auto</option>
+              <option value="sv-SE">Swedish</option>
+              <option value="en-US">English</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="polish-section">
+          <div class="capture-toolbar">
+            <button class="primary-button" id="polish-notes" type="button">Polish with AI</button>
+            <button class="secondary-button" id="dictation-toggle" type="button">Start Dictation</button>
+            <button class="ghost-button" id="copy-output" type="button">Copy Output</button>
+          </div>
+
+          <section class="config-card config-card-inline" aria-label="Output configuration">
+            <div class="config-card-copy">
+              <p class="section-label">Configuration</p>
+              <h3>Polished output</h3>
+            </div>
+
+            <div class="config-grid config-grid-inline">
+              <label class="config-option">
+                <input id="include-summary" type="checkbox">
+                <span>Executive Summary</span>
+              </label>
+              <label class="config-option">
+                <input id="include-highlights" type="checkbox">
+                <span>Highlights</span>
+              </label>
+              <label class="config-option">
+                <input id="include-decisions" type="checkbox">
+                <span>Decisions</span>
+              </label>
+              <label class="config-option">
+                <input id="include-actions" type="checkbox">
+                <span>Action Items</span>
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <p class="support-text" id="dictation-status">
+          Dictation uses the browser speech API when available. You can still type normally at any time.
+        </p>
+        <p class="support-text" id="ai-status-copy">
+          Open <strong>AI Settings</strong> to connect your OpenAI API key when you want AI polishing.
+        </p>
+      </section>
+
+      <section class="output-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-label">Polished Output</p>
+            <h2>Professional notes</h2>
+          </div>
+        </div>
+
+        <div class="output-card" id="polished-output">
+          <div class="output-empty">
+            <h3>Your finished notes will appear here.</h3>
+            <p>Write rough notes on the left, add a few highlights, then click <strong>Polish with AI</strong>.</p>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <template id="session-item-template">
+    <li class="session-item">
+      <div class="session-card">
+        <button class="session-button" type="button">
+          <span class="session-name"></span>
+          <span class="session-meta"></span>
+        </button>
+        <div class="session-actions">
+          <button class="session-action session-edit" type="button">Edit</button>
+          <button class="session-action session-delete" type="button">Delete</button>
+        </div>
+      </div>
+    </li>
+  </template>
+
+  <template id="highlight-chip-template">
+    <button class="chip" type="button">
+      <span class="chip-text"></span>
+      <span class="chip-remove" aria-hidden="true">×</span>
+    </button>
+  </template>
+
+  <div class="modal-shell is-hidden" id="ai-settings-modal" aria-hidden="true">
+    <div class="modal-backdrop" id="close-ai-settings"></div>
+    <section class="modal-card" aria-label="AI settings dialog" aria-modal="true" role="dialog">
+      <div class="panel-heading modal-heading">
+        <div>
+          <p class="section-label">AI Settings</p>
+          <h2>Connect OpenAI</h2>
+        </div>
+        <button class="ghost-button" id="close-ai-settings-button" type="button">Close</button>
+      </div>
+
+      <form class="modal-form" id="ai-settings-form">
+        <label class="field">
+          <span class="field-label">OpenAI API key</span>
+          <input id="api-key" type="password" placeholder="sk-..." autocomplete="off">
+        </label>
+
+        <label class="field">
+          <span class="field-label">Model</span>
+          <select id="model-select">
+            <option value="gpt-5-mini">gpt-5-mini</option>
+            <option value="gpt-5">gpt-5</option>
+            <option value="gpt-5-nano">gpt-5-nano</option>
+          </select>
+        </label>
+
+        <p class="support-text">
+          Your API key is stored only in this browser so the app can call OpenAI directly from the client.
+        </p>
+
+        <div class="capture-toolbar">
+          <button class="primary-button" type="submit">Save AI Settings</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
