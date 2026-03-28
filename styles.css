@@ -1424,9 +1424,21 @@ textarea:focus {
   padding-left: 20px;
 }
 
-.is-recording {
-  background: #7d1d16;
-  color: #fff6f3;
+.secondary-button.is-recording {
+  background: linear-gradient(180deg, #b2473f, #8f2f28);
+  color: #fff8f6;
+  box-shadow: 0 14px 28px rgba(143, 47, 40, 0.28);
+}
+
+.secondary-button.is-recording:hover,
+.secondary-button.is-recording:focus-visible {
+  box-shadow: 0 16px 32px rgba(143, 47, 40, 0.34);
+}
+
+:root[data-theme$="-dark"] .secondary-button.is-recording {
+  background: linear-gradient(180deg, #c85a52, #973831);
+  color: #fff7f5;
+  box-shadow: 0 16px 30px rgba(151, 56, 49, 0.34);
 }
 
 @media (max-width: 1180px) {
