@@ -622,12 +622,126 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
+  .sessions-panel,
+  .editor-panel,
+  .output-panel {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
   .hero-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .output-empty {
     min-height: 280px;
+  }
+}
+
+@media (max-width: 900px) {
+  .page-shell {
+    width: min(100% - 18px, 1440px);
+    padding: 12px 0 18px;
+  }
+
+  .workspace {
+    gap: 12px;
+  }
+
+  .editor-panel {
+    order: 1;
+  }
+
+  .output-panel {
+    order: 2;
+  }
+
+  .sessions-panel {
+    order: 3;
+  }
+
+  .editor-panel,
+  .output-panel,
+  .sessions-panel {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .panel-heading {
+    margin-bottom: 14px;
+  }
+
+  .panel-heading h2 {
+    font-size: 1.45rem;
+  }
+
+  .field-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .field-inline {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .field-compact {
+    width: 100%;
+  }
+
+  textarea {
+    min-height: 220px;
+  }
+
+  #live-transcript {
+    min-height: 130px;
+  }
+
+  .polish-section {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .capture-toolbar {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .config-card-inline {
+    min-width: 0;
+    padding: 12px;
+  }
+
+  .config-grid-inline {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .config-option {
+    padding: 12px 14px;
+  }
+
+  .output-card {
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .output-empty {
+    min-height: 180px;
+  }
+
+  .output-empty h3 {
+    font-size: 1.55rem;
+  }
+
+  .modal-shell {
+    padding: 10px;
+  }
+
+  .modal-card {
+    width: 100%;
+    padding: 18px;
+    border-radius: 20px;
   }
 }
 
@@ -650,6 +764,20 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
+  .hero-copy {
+    padding: 16px;
+  }
+
+  .hero-copy h1 {
+    font-size: 1.6rem;
+    max-width: none;
+  }
+
+  .subtitle {
+    font-size: 0.92rem;
+    line-height: 1.45;
+  }
+
   .session-card {
     grid-template-columns: 1fr;
   }
@@ -663,11 +791,6 @@ textarea:focus {
   }
 
   .config-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .config-grid-inline,
-  .polish-section {
     grid-template-columns: 1fr;
   }
 
@@ -686,5 +809,70 @@ textarea:focus {
   .secondary-button,
   .ghost-button {
     width: 100%;
+  }
+
+  .session-button {
+    padding: 12px;
+  }
+
+  .session-action {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-shell {
+    width: calc(100% - 12px);
+    padding: 8px 0 14px;
+  }
+
+  .hero-copy,
+  .hero-metrics,
+  .sessions-panel,
+  .editor-panel,
+  .output-panel {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .eyebrow,
+  .section-label {
+    font-size: 0.74rem;
+    letter-spacing: 0.12em;
+  }
+
+  .panel-heading h2 {
+    font-size: 1.25rem;
+  }
+
+  input,
+  select,
+  textarea,
+  .primary-button,
+  .secondary-button,
+  .ghost-button {
+    padding: 13px 14px;
+    border-radius: 14px;
+  }
+
+  textarea {
+    min-height: 180px;
+  }
+
+  #live-transcript {
+    min-height: 110px;
+  }
+
+  .chip {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .output-card {
+    padding: 14px;
+  }
+
+  .output-section ul {
+    padding-left: 18px;
   }
 }
