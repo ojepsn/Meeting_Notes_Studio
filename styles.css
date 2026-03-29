@@ -987,6 +987,23 @@ body.sessions-panel-open {
   margin-bottom: 12px;
 }
 
+.custom-template-summary {
+  margin: 8px 0 0;
+}
+
+.custom-template-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.custom-template-actions .secondary-button,
+.custom-template-actions .ghost-button {
+  width: auto;
+}
+
 .custom-template-head h4,
 .template-headers h4 {
   margin: 0;

@@ -636,6 +636,22 @@ function bindEvents() {
 
     const templateId = templateItem.dataset.templateId;
 
+    if (event.target.closest(".custom-template-edit")) {
+      settings.customTemplates = settings.customTemplates.map((template) => {
+        if (template.id !== templateId) {
+          return template;
+        }
+
+        return {
+          ...template,
+          isExpanded: !(template.isExpanded === true),
+        };
+      });
+      persistSettings();
+      renderCustomTemplates(templateId);
+      return;
+    }
+
     if (event.target.closest(".custom-template-remove")) {
       settings.customTemplates = settings.customTemplates.filter((template) => template.id !== templateId);
       persistSettings();
@@ -654,7 +670,10 @@ function bindEvents() {
           return template;
         }
 
-        return readCustomTemplateItem(templateItem, template);
+        return {
+          ...readCustomTemplateItem(templateItem, template),
+          isExpanded: false,
+        };
       });
       persistSettings();
       renderTemplateOptions();
@@ -1534,12 +1553,16 @@ function renderCustomTemplates(focusTemplateId = null) {
     const fragment = customTemplateTemplate.content.cloneNode(true);
     const item = fragment.querySelector(".custom-template-item");
     const nameLabel = fragment.querySelector(".custom-template-name-label");
+    const summary = fragment.querySelector(".custom-template-summary");
     const nameInput = fragment.querySelector(".custom-template-name");
     const instructionsInput = fragment.querySelector(".custom-template-instructions");
     const headerList = fragment.querySelector(".template-header-list");
+    const body = fragment.querySelector(".custom-template-body");
+    const editButton = fragment.querySelector(".custom-template-edit");
 
     item.dataset.templateId = template.id;
     nameLabel.textContent = template.label || "New template";
+    summary.textContent = buildTemplateSummary(template);
     nameInput.value = template.label;
     instructionsInput.value = template.templateInstructions;
     fragment.querySelector(".custom-template-show-title").checked = template.fields.title !== false;
@@ -1559,6 +1582,9 @@ function renderCustomTemplates(focusTemplateId = null) {
       headerFragment.querySelector(".template-header-instructions").value = header.instructions;
       headerList.appendChild(headerFragment);
     });
+
+    setElementVisibility(body, template.isExpanded === true);
+    editButton.textContent = template.isExpanded === true ? "Close" : "Edit";
 
     customTemplateList.appendChild(fragment);
   });
@@ -2257,6 +2283,7 @@ function createCustomTemplate() {
   return {
     id: `custom-${crypto.randomUUID()}`,
     label: "",
+    isExpanded: true,
     summaryLead: "This note focused on the most important business updates and follow-ups.",
     sections: ["Overview", "Key Discussion Points", "Decisions", "Action Items"],
     templateInstructions: "",
@@ -2272,6 +2299,21 @@ function createCustomTemplate() {
       meetingEndTime: false,
     },
   };
+}
+
+function buildTemplateSummary(template) {
+  const enabledFields = [
+    template.fields.title !== false ? "title" : null,
+    template.fields.participants !== false ? "participants" : null,
+    template.fields.highlights !== false ? "highlights" : null,
+    template.fields.manualNotes !== false ? "manual notes" : null,
+    template.fields.liveTranscript !== false ? "live transcript" : null,
+    template.fields.meetingDate === true ? "date" : null,
+    template.fields.meetingStartTime === true ? "start time" : null,
+    template.fields.meetingEndTime === true ? "end time" : null,
+  ].filter(Boolean);
+
+  return `${enabledFields.length} fields · ${normalizeTemplateHeaders(template.headers).length} sections`;
 }
 
 function createTemplateHeader() {
@@ -4065,6 +4107,7 @@ function normalizeCustomTemplate(template) {
     ...template,
     id: typeof template.id === "string" && template.id ? template.id : fallback.id,
     label: typeof template.label === "string" ? template.label : "",
+    isExpanded: template.isExpanded === true,
     summaryLead: typeof template.summaryLead === "string" && template.summaryLead.trim()
       ? template.summaryLead
       : fallback.summaryLead,

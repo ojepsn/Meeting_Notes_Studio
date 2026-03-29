@@ -391,73 +391,76 @@
         <div>
           <p class="section-label">Custom Template</p>
           <h4 class="custom-template-name-label">New template</h4>
+          <p class="support-text custom-template-summary">No fields selected yet.</p>
         </div>
-        <button class="ghost-button custom-template-remove" type="button">Remove</button>
+        <div class="custom-template-actions">
+          <button class="ghost-button custom-template-edit" type="button">Edit</button>
+          <button class="secondary-button custom-template-save" type="button">Save Template</button>
+          <button class="ghost-button custom-template-remove" type="button">Remove</button>
+        </div>
       </div>
 
-      <label class="field">
-        <span class="field-label">Template name</span>
-        <input class="custom-template-name" type="text" maxlength="60" placeholder="Board update">
-      </label>
+      <div class="custom-template-body">
+        <label class="field">
+          <span class="field-label">Template name</span>
+          <input class="custom-template-name" type="text" maxlength="60" placeholder="Board update">
+        </label>
 
-      <div class="settings-checkbox-grid">
-        <label class="config-option">
-          <input class="custom-template-show-title" type="checkbox">
-          <span>Meeting title</span>
-        </label>
-        <label class="config-option">
-          <input class="custom-template-show-participants" type="checkbox">
-          <span>Participants</span>
-        </label>
-        <label class="config-option">
-          <input class="custom-template-show-highlights" type="checkbox">
-          <span>Quick highlights</span>
-        </label>
-        <label class="config-option">
-          <input class="custom-template-show-manual-notes" type="checkbox">
-          <span>Manual notes</span>
-        </label>
-        <label class="config-option">
-          <input class="custom-template-show-live-transcript" type="checkbox">
-          <span>Live transcript</span>
-        </label>
-        <label class="config-option">
-          <input class="custom-template-show-meeting-date" type="checkbox">
-          <span>Date</span>
-        </label>
-        <label class="config-option">
-          <input class="custom-template-show-meeting-start-time" type="checkbox">
-          <span>Start time</span>
-        </label>
-        <label class="config-option">
-          <input class="custom-template-show-meeting-end-time" type="checkbox">
-          <span>End time</span>
-        </label>
-      </div>
+        <div class="settings-checkbox-grid">
+          <label class="config-option">
+            <input class="custom-template-show-title" type="checkbox">
+            <span>Meeting title</span>
+          </label>
+          <label class="config-option">
+            <input class="custom-template-show-participants" type="checkbox">
+            <span>Participants</span>
+          </label>
+          <label class="config-option">
+            <input class="custom-template-show-highlights" type="checkbox">
+            <span>Quick highlights</span>
+          </label>
+          <label class="config-option">
+            <input class="custom-template-show-manual-notes" type="checkbox">
+            <span>Manual notes</span>
+          </label>
+          <label class="config-option">
+            <input class="custom-template-show-live-transcript" type="checkbox">
+            <span>Live transcript</span>
+          </label>
+          <label class="config-option">
+            <input class="custom-template-show-meeting-date" type="checkbox">
+            <span>Date</span>
+          </label>
+          <label class="config-option">
+            <input class="custom-template-show-meeting-start-time" type="checkbox">
+            <span>Start time</span>
+          </label>
+          <label class="config-option">
+            <input class="custom-template-show-meeting-end-time" type="checkbox">
+            <span>End time</span>
+          </label>
+        </div>
 
-      <label class="field">
-        <span class="field-label">Instructions to AI</span>
-        <textarea
-          class="custom-template-instructions"
-          rows="4"
-          placeholder="Explain how notes for this template should be structured and what matters most."
-        ></textarea>
-      </label>
+        <label class="field">
+          <span class="field-label">Instructions to AI</span>
+          <textarea
+            class="custom-template-instructions"
+            rows="4"
+            placeholder="Explain how notes for this template should be structured and what matters most."
+          ></textarea>
+        </label>
 
-      <section class="template-headers" aria-label="Template sections">
-        <div class="custom-headers-heading">
-          <div>
-            <p class="section-label">Template Sections</p>
-            <h4>Default extra sections</h4>
+        <section class="template-headers" aria-label="Template sections">
+          <div class="custom-headers-heading">
+            <div>
+              <p class="section-label">Template Sections</p>
+              <h4>Default extra sections</h4>
+            </div>
+            <button class="ghost-button custom-template-header-add" type="button">Add Section</button>
           </div>
-          <button class="ghost-button custom-template-header-add" type="button">Add Section</button>
-        </div>
 
-        <div class="template-header-list"></div>
-      </section>
-
-      <div class="capture-toolbar template-builder-actions">
-        <button class="secondary-button custom-template-save" type="button">Save Template</button>
+          <div class="template-header-list"></div>
+        </section>
       </div>
     </article>
   </template>
