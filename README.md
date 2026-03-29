@@ -23,7 +23,7 @@ NoteSmith helps users capture rough business notes, combine manual writing with 
 | Capture | Manual notes, live transcript, quick highlights, participants, meeting date, start time, end time |
 | Categories | `Meeting`, `Personal Note`, plus user-created custom templates |
 | AI | OpenAI API key support, model selection, output language selection, custom instructions, detail slider |
-| Output structure | Executive summary, highlights, decisions, action items, custom headers |
+| Output structure | Summary, highlights, decisions, action items, custom sections |
 | Revision loop | Improve polished output from user comments and revert to previous version |
 | Local storage | Sessions, settings, themes, export styles, custom templates, AI catalog snapshot |
 | Session management | Create, edit, delete, import, export, save to local file |
@@ -50,7 +50,7 @@ NoteSmith helps users capture rough business notes, combine manual writing with 
 - Custom templates
   - define which input fields are visible
   - add template-specific AI instructions
-  - add template-specific extra headers
+  - add template-specific extra sections
 
 ### AI polishing
 
@@ -63,7 +63,7 @@ NoteSmith helps users capture rough business notes, combine manual writing with 
   - English
 - Control output detail level
 - Add extra per-session instructions
-- Add custom section headers with instructions for the AI
+- Add custom sections with instructions for the AI
 - Keep output focused on business discussion and exclude small talk or private matters
 
 If no API key is present, the app falls back to a local formatting pass.

@@ -33,7 +33,7 @@
         </article>
         <article class="metric-card">
           <span class="metric-value">Templates</span>
-          <span class="metric-label">Use built-in templates such as Meeting and Personal Note, or create your own templates with custom fields, headers, and AI instructions.</span>
+          <span class="metric-label">Use built-in templates such as Meeting and Personal Note, or create your own templates with custom fields, sections, and AI instructions.</span>
         </article>
         <article class="metric-card">
           <span class="metric-value">Export & Storage</span>
@@ -43,11 +43,6 @@
     </section>
 
     <section class="workspace" aria-label="Notes application">
-      <div class="sessions-launcher" id="sessions-launcher">
-        <button class="ghost-button sessions-panel-toggle" id="toggle-sessions-panel" type="button" aria-expanded="false" aria-controls="sessions-panel">Sessions</button>
-        <button class="primary-button sessions-mini-new" id="new-session-mini" type="button" aria-label="Create new session">+</button>
-      </div>
-
       <div class="sessions-panel-backdrop" id="sessions-panel-backdrop" hidden></div>
 
       <aside class="sessions-panel" id="sessions-panel">
@@ -60,6 +55,11 @@
         </div>
 
         <button class="primary-button new-session-button" id="new-session" type="button">+ New Session</button>
+
+        <label class="field field-tight session-filter-field">
+          <span class="field-label">Filter sessions</span>
+          <input id="session-filter" type="text" maxlength="80" placeholder="Type to filter sessions">
+        </label>
 
         <ul class="session-list" id="session-list" aria-live="polite"></ul>
 
@@ -88,6 +88,8 @@
             <h2 id="session-title">Untitled session</h2>
           </div>
           <div class="panel-actions">
+            <button class="primary-button header-new-session-button" id="new-session-main" type="button">+ New Session</button>
+            <button class="ghost-button" id="toggle-sessions-panel" type="button" aria-expanded="false" aria-controls="sessions-panel">All Sessions</button>
             <button class="ghost-button" id="open-settings" type="button">Settings</button>
             <button class="ghost-button" id="open-ai-settings" type="button">AI Settings</button>
             <button class="ghost-button is-hidden-field" id="update-app" type="button">Update App</button>
@@ -225,7 +227,7 @@
                   </label>
                 </div>
 
-                <section class="custom-headers custom-headers-inline" aria-label="Custom headers">
+                <section class="custom-headers custom-headers-inline" aria-label="Custom sections">
                   <div class="custom-header-list" id="custom-header-list"></div>
 
                   <div class="custom-headers-heading">
@@ -234,7 +236,7 @@
 
                   <div class="custom-header-add-form is-hidden-field" id="custom-header-add-form">
                     <label class="field field-tight">
-                      <span class="field-label">Header</span>
+                      <span class="field-label">Section</span>
                       <input id="new-custom-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
                     </label>
                     <label class="field field-tight">
@@ -368,7 +370,7 @@
       </div>
       <div class="custom-header-editor is-hidden-field">
         <label class="field field-tight">
-          <span class="field-label">Header</span>
+          <span class="field-label">Section</span>
           <input class="custom-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
         </label>
         <label class="field field-tight">
@@ -430,13 +432,13 @@
         ></textarea>
       </label>
 
-      <section class="template-headers" aria-label="Template headers">
+      <section class="template-headers" aria-label="Template sections">
         <div class="custom-headers-heading">
           <div>
-            <p class="section-label">Template Headers</p>
+            <p class="section-label">Template Sections</p>
             <h4>Default extra sections</h4>
           </div>
-          <button class="ghost-button custom-template-header-add" type="button">Add Header</button>
+          <button class="ghost-button custom-template-header-add" type="button">Add Section</button>
         </div>
 
         <div class="template-header-list"></div>
@@ -447,7 +449,7 @@
   <template id="template-header-template">
     <article class="template-header-item">
       <label class="field">
-        <span class="field-label">Header</span>
+        <span class="field-label">Section</span>
         <input class="template-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
       </label>
       <label class="field">
@@ -651,7 +653,7 @@
               </div>
 
               <p class="support-text">
-                Build your own note flow by choosing which input fields are visible and by adding template-specific headers and AI instructions.
+                Build your own note flow by choosing which input fields are visible and by adding template-specific sections and AI instructions.
               </p>
 
               <div class="template-builder-actions">

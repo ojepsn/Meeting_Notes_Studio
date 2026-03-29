@@ -41,7 +41,8 @@ const sessionsPanelBackdrop = document.querySelector("#sessions-panel-backdrop")
 const toggleSessionsPanelButton = document.querySelector("#toggle-sessions-panel");
 const collapseSessionsPanelButton = document.querySelector("#collapse-sessions-panel");
 const newSessionButton = document.querySelector("#new-session");
-const newSessionMiniButton = document.querySelector("#new-session-mini");
+const newSessionMainButton = document.querySelector("#new-session-main");
+const sessionFilterInput = document.querySelector("#session-filter");
 const exportSessionsButton = document.querySelector("#export-sessions");
 const importSessionsButton = document.querySelector("#import-sessions");
 const saveLocalFileButton = document.querySelector("#save-local-file");
@@ -414,17 +415,16 @@ let hasPendingAppUpdate = false;
 let isRefreshingForUpdate = false;
 let activeSettingsSection = "appearance";
 let latestRemoteVersion = APP_VERSION;
+let sessionFilterQuery = "";
 
 applyTheme(settings.themeFamily, settings.themeMode);
 settings.model = resolveSelectedModel(settings.model);
 syncParticipantDirectoryFromAllSessions();
 
-if (!activeSessionId) {
-  const initialSession = createSession();
-  sessions = [initialSession];
-  activeSessionId = initialSession.id;
-  persistSessions();
-}
+const startupSession = createSession();
+sessions = [startupSession, ...sessions];
+activeSessionId = startupSession.id;
+persistSessions();
 
 setupSpeechRecognition();
 render();
@@ -433,7 +433,7 @@ registerServiceWorker();
 appVersionLabel.textContent = APP_VERSION;
 
 function bindEvents() {
-  newSessionButton.addEventListener("click", () => {
+  const createAndOpenNewSession = () => {
     const nextSession = createSession();
     sessions.unshift(nextSession);
     activeSessionId = nextSession.id;
@@ -442,17 +442,14 @@ function bindEvents() {
     persistSessions();
     render();
     meetingTitleInput.focus();
-  });
+  };
 
-  newSessionMiniButton.addEventListener("click", () => {
-    const nextSession = createSession();
-    sessions.unshift(nextSession);
-    activeSessionId = nextSession.id;
-    settings.recentSessionsExpanded = false;
-    persistSettings();
-    persistSessions();
-    render();
-    meetingTitleInput.focus();
+  newSessionButton.addEventListener("click", createAndOpenNewSession);
+  newSessionMainButton.addEventListener("click", createAndOpenNewSession);
+
+  sessionFilterInput.addEventListener("input", () => {
+    sessionFilterQuery = sessionFilterInput.value.trim().toLowerCase();
+    renderSessionList();
   });
 
   toggleSessionsPanelButton?.addEventListener("click", () => {
@@ -1317,8 +1314,29 @@ function renderTemplateOptions() {
 
 function renderSessionList() {
   sessionList.innerHTML = "";
+  sessionFilterInput.value = sessionFilterQuery;
 
-  sessions.forEach((session) => {
+  const visibleSessions = sessions.filter((session) => {
+    if (!sessionFilterQuery) {
+      return true;
+    }
+
+    const searchableText = [
+      session.title,
+      getTemplateDefinition(session.template).label,
+      session.participants,
+      session.meetingDate,
+      session.rawNotes,
+      session.liveTranscript,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return searchableText.includes(sessionFilterQuery);
+  });
+
+  visibleSessions.forEach((session) => {
     const fragment = sessionItemTemplate.content.cloneNode(true);
     const button = fragment.querySelector(".session-button");
     const editButton = fragment.querySelector(".session-edit");
@@ -1364,7 +1382,10 @@ function renderSessionList() {
     sessionList.appendChild(fragment);
   });
 
-  emptySessions.classList.toggle("is-visible", sessions.length === 0);
+  emptySessions.classList.toggle("is-visible", visibleSessions.length === 0);
+  emptySessions.querySelector("p").textContent = sessionFilterQuery
+    ? "No sessions match your filter yet. Try a different search."
+    : "No saved sessions yet. Start with a fresh note and it will appear here automatically.";
 }
 
 function applyTemplateUi(session) {
@@ -1999,7 +2020,7 @@ function renderCustomHeaders() {
 
     item.dataset.index = String(index);
     includeInput.checked = header.include !== false;
-    toggleLabel.textContent = header.title.trim() || `Custom Header ${index + 1}`;
+    toggleLabel.textContent = header.title.trim() || `Custom Section ${index + 1}`;
     titleInput.value = header.title;
     instructionsInput.value = header.instructions;
     setElementVisibility(editor, header.isExpanded === true);
@@ -2648,10 +2669,10 @@ function buildAiPrompt(session, template, outputLanguage) {
     "Template-specific instructions:",
     template.templateInstructions?.trim() || "No template-specific instructions.",
     "",
-    "Template-specific headers and instructions:",
+    "Template-specific sections and instructions:",
     templateHeaders,
     "",
-    "Custom headers and instructions:",
+    "Custom sections and instructions:",
     formatCustomHeadersForPrompt(session.customHeaders),
     "",
     "Additional user instructions:",
@@ -2705,10 +2726,10 @@ function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
     "Template-specific instructions:",
     template.templateInstructions?.trim() || "No template-specific instructions.",
     "",
-    "Template-specific headers and instructions:",
+    "Template-specific sections and instructions:",
     templateHeaders,
     "",
-    "Custom headers and instructions:",
+    "Custom sections and instructions:",
     formatCustomHeadersForPrompt(session.customHeaders),
     "",
     "Additional user instructions:",
@@ -4020,13 +4041,13 @@ function getDetailLevelLabel(detailLevel) {
 
 function formatCustomHeadersForPrompt(customHeaders) {
   if (!customHeaders.length) {
-    return "No custom headers.";
+    return "No custom sections.";
   }
 
   return customHeaders
     .filter((header) => header.include !== false)
     .map((header, index) => {
-      const title = header.title.trim() || `Custom Header ${index + 1}`;
+      const title = header.title.trim() || `Custom Section ${index + 1}`;
       const instructions = header.instructions.trim() || "No extra instructions.";
       return `${index + 1}. ${title}: ${instructions}`;
     })
@@ -4064,7 +4085,7 @@ function buildAiCustomSectionsMarkup(customSections = []) {
 function formatTemplateHeadersForPrompt(headers) {
   const normalizedHeaders = normalizeTemplateHeaders(headers);
   if (!normalizedHeaders.length) {
-    return "No template-specific headers.";
+    return "No template-specific sections.";
   }
 
   return normalizedHeaders

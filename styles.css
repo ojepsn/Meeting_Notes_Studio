@@ -396,14 +396,14 @@ button {
 }
 
 .sessions-panel {
-  position: absolute;
-  top: 0;
-  left: 0;
+  position: fixed;
+  top: 50%;
+  left: 50%;
   z-index: 26;
-  width: min(320px, calc(100vw - 32px));
-  max-height: min(82vh, calc(100vh - 72px));
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(84vh, calc(100vh - 48px));
   overflow: auto;
-  transform: translateX(calc(-100% - 22px));
+  transform: translate(-50%, calc(-50% + 28px));
   opacity: 0;
   pointer-events: none;
   transition: transform 220ms ease, opacity 220ms ease;
@@ -414,16 +414,6 @@ button {
   justify-content: center;
   font-size: 0.78rem;
   font-weight: 800;
-}
-
-.sessions-launcher {
-  position: absolute;
-  top: 22px;
-  left: 0;
-  z-index: 24;
-  display: grid;
-  gap: 10px;
-  transform: translateX(calc(-100% - 12px));
 }
 
 .sessions-panel-backdrop {
@@ -438,21 +428,8 @@ body.sessions-panel-open {
   overflow: hidden;
 }
 
-body.sessions-panel-open .sessions-launcher {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.sessions-mini-new {
-  width: 100%;
-  min-height: 44px;
-  padding: 0;
-  justify-content: center;
-  font-size: 1.15rem;
-}
-
 .sessions-panel.is-open {
-  transform: translateX(0);
+  transform: translate(-50%, -50%);
   opacity: 1;
   pointer-events: auto;
 }
@@ -494,6 +471,12 @@ body.sessions-panel-open .sessions-launcher {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.header-new-session-button {
+  min-width: 138px;
+  box-shadow: 0 14px 28px rgba(108, 127, 79, 0.2);
 }
 
 .panel-heading h2 {
@@ -599,7 +582,7 @@ body.sessions-panel-open .sessions-launcher {
 }
 
 .sessions-panel .sessions-panel-toggle,
-.sessions-launcher .sessions-panel-toggle {
+.panel-actions #toggle-sessions-panel {
   width: auto;
   min-width: 68px;
   padding: 9px 12px;
@@ -613,12 +596,16 @@ body.sessions-panel-open .sessions-launcher {
   letter-spacing: 0.01em;
 }
 
+.session-filter-field {
+  margin-bottom: 12px;
+}
+
 .session-card {
   display: grid;
-  grid-template-columns: 1fr;
-  align-items: stretch;
-  gap: 6px;
-  padding: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.64);
   box-shadow: inset 0 0 0 1px rgba(62, 81, 48, 0.05);
@@ -658,9 +645,10 @@ body.sessions-panel-open .sessions-launcher {
 .session-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   gap: 4px;
-  padding: 0 2px 2px;
+  padding: 0;
+  align-self: stretch;
 }
 
 .session-action {
@@ -1570,23 +1558,27 @@ textarea:focus {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .sessions-launcher {
-    position: fixed;
-    top: 18px;
-    left: 18px;
-    transform: none;
-  }
-
   .sessions-panel {
-    position: fixed;
-    top: 18px;
-    left: 18px;
+    top: 50%;
+    left: 50%;
+    width: min(640px, calc(100vw - 36px));
     max-height: calc(100vh - 36px);
-    width: min(360px, calc(100vw - 36px));
   }
 
   .output-empty {
     min-height: 280px;
+  }
+}
+
+@media (max-width: 720px) {
+  .session-card {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .session-actions {
+    justify-content: flex-start;
+    padding-top: 2px;
   }
 }
 
