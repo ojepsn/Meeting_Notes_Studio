@@ -167,15 +167,6 @@
                 <h3>Work from notes, transcript, or both</h3>
               </div>
 
-              <label class="field" id="manual-notes-field">
-                <span class="field-label">Manual notes</span>
-                <textarea
-                  id="raw-notes"
-                  rows="12"
-                  placeholder="Write your own notes here while dictation continues in the transcript field..."
-                ></textarea>
-              </label>
-
               <label class="field" id="live-transcript-field">
                 <span class="field-label">Live transcript</span>
                 <textarea
@@ -185,6 +176,18 @@
                   readonly
                 ></textarea>
               </label>
+
+              <details class="manual-notes-disclosure" id="manual-notes-disclosure" open>
+                <summary>Manual notes</summary>
+                <label class="field" id="manual-notes-field">
+                  <span class="field-label">Manual notes</span>
+                  <textarea
+                    id="raw-notes"
+                    rows="12"
+                    placeholder="Write your own notes here while dictation continues in the transcript field..."
+                  ></textarea>
+                </label>
+              </details>
 
               <label class="field is-hidden-field" id="uploaded-transcript-field" hidden>
                 <span class="field-label">Uploaded transcript</span>
@@ -198,6 +201,22 @@
           </div>
 
           <aside class="editor-sidebar">
+            <div class="mobile-sheet-header mobile-only">
+              <div>
+                <p class="section-label">More</p>
+                <h3>Extra tools and options</h3>
+              </div>
+              <button class="ghost-button" id="close-mobile-more" type="button">Close</button>
+            </div>
+
+            <div class="mobile-sheet-shortcuts mobile-only">
+              <button class="ghost-button" id="mobile-new-session" type="button">New Session</button>
+              <button class="ghost-button" id="mobile-open-sessions" type="button">All Sessions</button>
+              <button class="ghost-button" id="mobile-open-settings" type="button">Settings</button>
+              <button class="ghost-button" id="mobile-open-backup" type="button">Data Backup</button>
+              <button class="ghost-button" id="mobile-open-output" type="button">View Output</button>
+            </div>
+
             <section class="config-card workflow-card" aria-label="Capture methods">
               <div class="config-card-copy">
                 <p class="section-label">Capture</p>
@@ -362,6 +381,7 @@
             <h2>Professional notes</h2>
           </div>
           <div class="panel-actions">
+            <button class="ghost-button mobile-only" id="close-mobile-output" type="button">Close</button>
             <button class="ghost-button" id="export-word" type="button">Export Word</button>
             <button class="ghost-button" id="export-pdf" type="button">Export PDF</button>
           </div>
@@ -394,6 +414,15 @@
           </p>
         </section>
       </section>
+
+      <div class="mobile-sheet-backdrop mobile-only" id="mobile-sheet-backdrop" hidden></div>
+
+      <div class="mobile-bottom-bar mobile-only" aria-label="Mobile actions">
+        <button class="primary-button mobile-bottom-primary" id="mobile-dictation-toggle" type="button">Start dictation</button>
+        <button class="secondary-button mobile-bottom-action is-hidden-field" id="mobile-generate" type="button" hidden>Generate</button>
+        <button class="ghost-button mobile-bottom-action is-hidden-field" id="mobile-view-output-bar" type="button" hidden>Output</button>
+        <button class="ghost-button mobile-bottom-action" id="mobile-open-more" type="button">More</button>
+      </div>
     </section>
   </main>
 
@@ -748,9 +777,9 @@
               </p>
             </section>
 
-            <div class="capture-toolbar">
-              <button class="primary-button" type="submit">Save AI Settings</button>
-            </div>
+            <p class="support-text">
+              Changes save automatically in this browser.
+            </p>
           </div>
         </div>
       </form>

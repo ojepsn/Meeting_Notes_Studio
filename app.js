@@ -120,6 +120,7 @@ const meetingEndTimeField = document.querySelector("#meeting-end-time-field");
 const templateCustomFieldsContainer = document.querySelector("#template-custom-fields");
 const highlightsField = document.querySelector("#highlights-field");
 const manualNotesField = document.querySelector("#manual-notes-field");
+const manualNotesDisclosure = document.querySelector("#manual-notes-disclosure");
 const liveTranscriptField = document.querySelector("#live-transcript-field");
 const uploadedTranscriptField = document.querySelector("#uploaded-transcript-field");
 const apiKeyInput = document.querySelector("#api-key");
@@ -173,7 +174,9 @@ const rawNotesInput = document.querySelector("#raw-notes");
 const highlightsSection = highlightsField?.closest(".form-section");
 const dictationLanguageSelect = document.querySelector("#dictation-language");
 const polishButton = document.querySelector("#polish-notes");
+const mobileGenerateButton = document.querySelector("#mobile-generate");
 const dictationToggle = document.querySelector("#dictation-toggle");
+const mobileDictationToggle = document.querySelector("#mobile-dictation-toggle");
 const audioRecordToggle = document.querySelector("#audio-record-toggle");
 const uploadAudioButton = document.querySelector("#upload-audio");
 const uploadTranscriptButton = document.querySelector("#upload-transcript");
@@ -191,6 +194,18 @@ const improveOutputButton = document.querySelector("#improve-output");
 const revertOutputButton = document.querySelector("#revert-output");
 const outputFeedbackStatus = document.querySelector("#output-feedback-status");
 const appVersionLabel = document.querySelector("#app-version");
+const editorSidebar = document.querySelector(".editor-sidebar");
+const outputPanel = document.querySelector(".output-panel");
+const mobileOpenMoreButton = document.querySelector("#mobile-open-more");
+const closeMobileMoreButton = document.querySelector("#close-mobile-more");
+const mobileOpenOutputButton = document.querySelector("#mobile-open-output");
+const mobileOpenOutputBarButton = document.querySelector("#mobile-view-output-bar");
+const closeMobileOutputButton = document.querySelector("#close-mobile-output");
+const mobileNewSessionButton = document.querySelector("#mobile-new-session");
+const mobileOpenSessionsButton = document.querySelector("#mobile-open-sessions");
+const mobileOpenSettingsButton = document.querySelector("#mobile-open-settings");
+const mobileOpenBackupButton = document.querySelector("#mobile-open-backup");
+const mobileSheetBackdrop = document.querySelector("#mobile-sheet-backdrop");
 const sessionItemTemplate = document.querySelector("#session-item-template");
 const highlightChipTemplate = document.querySelector("#highlight-chip-template");
 const participantDirectoryItemTemplate = document.querySelector("#participant-directory-item-template");
@@ -225,6 +240,7 @@ const APP_STATUS_STATES = {
   updating: "updating",
   warning: "warning",
 };
+const MOBILE_LAYOUT_QUERY = window.matchMedia("(max-width: 720px)");
 const REMOTE_VERSION_CHECK_INTERVAL_MS = 2 * 60 * 1000;
 const SUPPORTS_FILE_SAVE = typeof window.showSaveFilePicker === "function";
 const SUPPORTS_AUDIO_RECORDING = typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
@@ -269,6 +285,30 @@ let localDataFileHandle = null;
 let storageHandleDbPromise = null;
 let storagePersistTimeout = null;
 let isApplyingStoragePayload = false;
+let mobileMoreSheetOpen = false;
+let mobileOutputSheetOpen = false;
+let aiSettingsOpenedFromSettings = false;
+
+function isMobileLayout() {
+  return MOBILE_LAYOUT_QUERY.matches;
+}
+
+function hasSessionContent(session = getActiveSession()) {
+  if (!session) {
+    return false;
+  }
+
+  const customFieldValues = Object.values(session.customFieldValues || {}).some((value) => String(value || "").trim());
+  return Boolean(
+    session.rawNotes?.trim()
+    || session.liveTranscript?.trim()
+    || session.uploadedTranscript?.trim()
+    || session.participants?.trim()
+    || session.title?.trim()
+    || session.highlights?.length
+    || customFieldValues
+  );
+}
 const DEFAULT_EXPORT_PRESET = "modern-aptos";
 const EXPORT_STYLE_PRESETS = {
   "modern-aptos": {
@@ -576,6 +616,34 @@ function bindEvents() {
 
   newSessionButton.addEventListener("click", createAndOpenNewSession);
   newSessionMainButton.addEventListener("click", createAndOpenNewSession);
+  mobileNewSessionButton?.addEventListener("click", () => {
+    closeMobileSheets();
+    createAndOpenNewSession();
+  });
+  mobileDictationToggle?.addEventListener("click", toggleDictation);
+  mobileGenerateButton?.addEventListener("click", () => {
+    polishButton.click();
+  });
+  mobileOpenMoreButton?.addEventListener("click", openMobileMoreSheet);
+  closeMobileMoreButton?.addEventListener("click", closeMobileSheets);
+  mobileOpenOutputButton?.addEventListener("click", openMobileOutputSheet);
+  mobileOpenOutputBarButton?.addEventListener("click", openMobileOutputSheet);
+  closeMobileOutputButton?.addEventListener("click", closeMobileSheets);
+  mobileSheetBackdrop?.addEventListener("click", closeMobileSheets);
+  mobileOpenSessionsButton?.addEventListener("click", () => {
+    closeMobileSheets();
+    settings.recentSessionsExpanded = true;
+    persistSettings();
+    updateRecentSessionsPanelUi();
+  });
+  mobileOpenSettingsButton?.addEventListener("click", () => {
+    closeMobileSheets();
+    openSettings();
+  });
+  mobileOpenBackupButton?.addEventListener("click", () => {
+    closeMobileSheets();
+    openBackupPanel();
+  });
 
   sessionFilterInput.addEventListener("input", () => {
     sessionFilterQuery = sessionFilterInput.value.trim().toLowerCase();
@@ -1163,25 +1231,20 @@ function bindEvents() {
     }
 
     modelSelect.value = option.dataset.modelId;
-    renderAiModelOptions();
+    persistAiSettings();
   });
 
   transcriptionModelSelect.addEventListener("change", () => {
-    updateTranscriptionModelDescription();
+    persistAiSettings();
   });
 
   aiSettingsForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    settings.apiKey = apiKeyInput.value.trim();
-    settings.model = resolveSelectedModel(modelSelect.value);
-    settings.transcriptionModel = resolveSelectedTranscriptionModel(transcriptionModelSelect.value);
-    persistSettings();
-    updateAiStatusCopy();
-    syncAudioCaptureUi(getActiveSession());
-    dictationStatus.textContent = settings.apiKey
-      ? `AI settings saved. ${getAiModelLabel(settings.model)} is ready for polishing, and ${getTranscriptionModelLabel(settings.transcriptionModel)} is ready for audio transcription.`
-      : "AI settings saved without an API key. Local polishing will be used until you add one.";
-    closeAiSettings();
+    closeAiSettings({ returnToSettings: true });
+  });
+
+  apiKeyInput.addEventListener("input", () => {
+    persistAiSettings();
   });
 
   dictationLanguageSelect.addEventListener("change", () => {
@@ -1219,6 +1282,10 @@ function bindEvents() {
       closeWorkspacePanel();
     }
 
+    if (event.key === "Escape" && (mobileMoreSheetOpen || mobileOutputSheetOpen)) {
+      closeMobileSheets();
+    }
+
     if (event.key === "Escape" && getRecentSessionsExpanded()) {
       settings.recentSessionsExpanded = false;
       persistSettings();
@@ -1226,7 +1293,11 @@ function bindEvents() {
     }
   });
 
-  window.addEventListener("resize", updateRecentSessionsPanelUi);
+  window.addEventListener("resize", () => {
+    updateRecentSessionsPanelUi();
+    syncMobileUi();
+  });
+  MOBILE_LAYOUT_QUERY.addEventListener("change", syncMobileUi);
 
   [
     meetingTitleInput,
@@ -1476,6 +1547,9 @@ function bindEvents() {
 
       updateActiveSession({ polishedHtml }, false);
       renderOutput();
+      if (isMobileLayout()) {
+        openMobileOutputSheet();
+      }
       dictationStatus.textContent = settings.apiKey
         ? (session.transcribeOnly ? "AI transcription complete." : "AI polishing complete.")
         : session.outputLanguage && session.outputLanguage !== "auto"
@@ -1485,6 +1559,9 @@ function bindEvents() {
       const polishedHtml = buildLocalPolishedNotes(session);
       updateActiveSession({ polishedHtml }, false);
       renderOutput();
+      if (isMobileLayout()) {
+        openMobileOutputSheet();
+      }
       dictationStatus.textContent = session.transcribeOnly
         ? `AI transcription failed: ${error.message}. A local transcription cleanup was used instead.`
         : `AI polishing failed: ${error.message}. A local polish pass was used instead.`;
@@ -1656,6 +1733,9 @@ function bindEvents() {
         outputFeedback: "",
       }, false);
       renderOutput();
+      if (isMobileLayout()) {
+        openMobileOutputSheet();
+      }
       outputFeedbackStatus.textContent = settings.apiKey
         ? "Updated output is ready. You can revert to the previous version if needed."
         : "A local revision was generated from your comments. You can revert to the previous version if needed.";
@@ -1679,6 +1759,9 @@ function bindEvents() {
       previousPolishedHtml: "",
     }, false);
     renderOutput();
+    if (isMobileLayout()) {
+      openMobileOutputSheet();
+    }
     outputFeedbackStatus.textContent = "Reverted to the previous polished version.";
   });
 }
@@ -1772,6 +1855,7 @@ function clearAppUpdateAvailable() {
 function setAppStatus(label, state = APP_STATUS_STATES.idle) {
   saveStatus.textContent = label;
   saveStatus.dataset.state = state;
+  syncMobileUi();
 }
 
 function applyLatestAppUpdate() {
@@ -1910,6 +1994,7 @@ function render() {
   updateExportButtons();
   syncSettingsForm();
   updateRecentSessionsPanelUi();
+  syncMobileUi();
 }
 
 function renderTemplateOptions() {
@@ -2506,7 +2591,9 @@ function syncFieldsFromSession() {
   applyTemplateUi(session);
 }
 
-function openAiSettings() {
+function openAiSettings(options = {}) {
+  const { fromSettings = false } = options;
+  aiSettingsOpenedFromSettings = fromSettings;
   apiKeyInput.value = settings.apiKey ?? "";
   modelSelect.value = resolveSelectedModel(settings.model);
   transcriptionModelSelect.value = resolveSelectedTranscriptionModel(settings.transcriptionModel);
@@ -2525,14 +2612,24 @@ function openAiSettings() {
 function openAiSettingsFromSettings() {
   closeSettings();
   window.setTimeout(() => {
-    openAiSettings();
+    openAiSettings({ fromSettings: true });
   }, 0);
 }
 
-function closeAiSettings() {
+function closeAiSettings(options = {}) {
+  const { returnToSettings = false } = options;
   aiSettingsModal.classList.add("is-hidden");
   aiSettingsModal.setAttribute("aria-hidden", "true");
   syncModalScrollLock();
+
+  if (returnToSettings || aiSettingsOpenedFromSettings) {
+    aiSettingsOpenedFromSettings = false;
+    activeSettingsSection = "ai";
+    openSettings();
+    return;
+  }
+
+  aiSettingsOpenedFromSettings = false;
   const focusTarget = !settingsModal.classList.contains("is-hidden")
     ? openAiSettingsInlineButton
     : openSettingsButton;
@@ -2674,8 +2771,117 @@ function syncModalScrollLock() {
     || !settingsModal.classList.contains("is-hidden")
     || !backupReminderModal.classList.contains("is-hidden")
     || !backupPanelModal.classList.contains("is-hidden")
-    || !workspacePanelModal.classList.contains("is-hidden");
+    || !workspacePanelModal.classList.contains("is-hidden")
+    || (isMobileLayout() && (mobileMoreSheetOpen || mobileOutputSheetOpen));
   document.body.classList.toggle("modal-open", hasOpenModal);
+}
+
+function closeMobileSheets() {
+  mobileMoreSheetOpen = false;
+  mobileOutputSheetOpen = false;
+  editorSidebar.classList.remove("is-mobile-open");
+  outputPanel.classList.remove("is-mobile-open");
+  if (mobileSheetBackdrop) {
+    mobileSheetBackdrop.hidden = true;
+  }
+  syncModalScrollLock();
+}
+
+function openMobileMoreSheet() {
+  if (!isMobileLayout()) {
+    return;
+  }
+  mobileOutputSheetOpen = false;
+  mobileMoreSheetOpen = true;
+  editorSidebar.classList.add("is-mobile-open");
+  outputPanel.classList.remove("is-mobile-open");
+  if (mobileSheetBackdrop) {
+    mobileSheetBackdrop.hidden = false;
+  }
+  syncModalScrollLock();
+}
+
+function openMobileOutputSheet() {
+  if (!isMobileLayout()) {
+    return;
+  }
+  mobileMoreSheetOpen = false;
+  mobileOutputSheetOpen = true;
+  editorSidebar.classList.remove("is-mobile-open");
+  outputPanel.classList.add("is-mobile-open");
+  if (mobileSheetBackdrop) {
+    mobileSheetBackdrop.hidden = false;
+  }
+  syncModalScrollLock();
+}
+
+function syncMobileUi() {
+  const session = getActiveSession();
+  if (!session) {
+    return;
+  }
+
+  const canGenerate = hasSessionContent(session);
+  const hasOutput = Boolean(session.polishedHtml);
+  const template = getTemplateDefinition(session.template);
+  const canDictate = template.fields.liveTranscript !== false;
+
+  setElementVisibility(mobileGenerateButton, canGenerate);
+  setElementVisibility(mobileOpenOutputBarButton, hasOutput);
+  setElementVisibility(mobileOpenOutputButton, hasOutput);
+  setElementVisibility(mobileDictationToggle, canDictate);
+
+  if (mobileGenerateButton) {
+    mobileGenerateButton.textContent = polishButton.textContent;
+    mobileGenerateButton.disabled = polishButton.disabled;
+  }
+
+  if (mobileDictationToggle) {
+    mobileDictationToggle.textContent = dictationToggle.textContent;
+    mobileDictationToggle.classList.toggle("is-recording", dictationToggle.classList.contains("is-recording"));
+    mobileDictationToggle.disabled = dictationToggle.disabled;
+  }
+
+  if (manualNotesDisclosure) {
+    if (!isMobileLayout()) {
+      manualNotesDisclosure.open = true;
+      manualNotesDisclosure.dataset.mobileInitialized = "false";
+    } else if (manualNotesDisclosure.dataset.mobileInitialized !== "true") {
+      manualNotesDisclosure.open = false;
+      manualNotesDisclosure.dataset.mobileInitialized = "true";
+    }
+  }
+
+  if (contextDisclosure) {
+    if (!isMobileLayout()) {
+      contextDisclosure.open = true;
+      contextDisclosure.dataset.mobileInitialized = "false";
+    } else if (contextDisclosure.dataset.mobileInitialized !== "true") {
+      contextDisclosure.open = false;
+      contextDisclosure.dataset.mobileInitialized = "true";
+    }
+  }
+
+  if (!isMobileLayout()) {
+    closeMobileSheets();
+  }
+}
+
+function persistAiSettings({ announce = true } = {}) {
+  settings.apiKey = apiKeyInput.value.trim();
+  settings.model = resolveSelectedModel(modelSelect.value);
+  settings.transcriptionModel = resolveSelectedTranscriptionModel(transcriptionModelSelect.value);
+  persistSettings();
+  updateAiStatusCopy();
+  updateTranscriptionModelDescription();
+  renderAiModelOptions();
+  syncAudioCaptureUi(getActiveSession());
+
+  if (announce) {
+    dictationStatus.textContent = settings.apiKey
+      ? `AI settings updated. ${getAiModelLabel(settings.model)} is ready for polishing, and ${getTranscriptionModelLabel(settings.transcriptionModel)} is ready for audio transcription.`
+      : "AI settings updated without an API key. Local polishing will be used until you add one.";
+  }
 }
 
 function renderAiModelOptions() {
@@ -3161,6 +3367,7 @@ function renderOutput() {
   }
 
   polishedOutput.innerHTML = session.polishedHtml;
+  syncMobileUi();
 }
 
 function updateExportButtons() {
@@ -3169,6 +3376,7 @@ function updateExportButtons() {
   exportPdfButton.disabled = !hasOutput;
   improveOutputButton.disabled = !hasOutput;
   revertOutputButton.disabled = !Boolean(getActiveSession()?.previousPolishedHtml);
+  syncMobileUi();
 }
 
 function updateActiveSession(patch, shouldScheduleSave) {
@@ -3261,7 +3469,7 @@ function schedulePersist() {
 }
 
 function createSession() {
-  const defaultTemplate = getTemplateDefinition("meeting");
+  const defaultTemplate = getTemplateDefinition(isMobileLayout() ? "personalNote" : "meeting");
   return {
     id: crypto.randomUUID(),
     title: "",
@@ -4554,6 +4762,7 @@ function setupSpeechRecognition() {
     dictationToggle.textContent = "Recording Unavailable";
     dictationStatus.textContent = "This browser does not expose speech recognition, but the rest of the app is ready to use.";
     setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
+    syncMobileUi();
     return;
   }
 
@@ -4609,6 +4818,7 @@ function setupSpeechRecognition() {
     dictationToggle.classList.remove("is-recording");
     dictationStatus.textContent = "Dictation stopped. You can continue typing or restart capture anytime.";
     setAppStatus("Saved locally", APP_STATUS_STATES.idle);
+    syncMobileUi();
   });
 
   recognition.addEventListener("error", (event) => {
@@ -4620,6 +4830,7 @@ function setupSpeechRecognition() {
     dictationToggle.classList.remove("is-recording");
     dictationStatus.textContent = `Dictation error: ${event.error}. You can still take notes manually.`;
     setAppStatus("Recording error", APP_STATUS_STATES.warning);
+    syncMobileUi();
   });
 }
 
@@ -4644,6 +4855,7 @@ function toggleDictation() {
   dictationToggle.classList.add("is-recording");
   dictationStatus.textContent = `Listening in ${formatDictationLanguage(currentDictationLanguage)}. The app will switch between Swedish and English when the speech pattern changes.`;
   setAppStatus("Recording", APP_STATUS_STATES.recording);
+  syncMobileUi();
 }
 
 function getAudioRecordingMimeType() {
