@@ -36,7 +36,12 @@ const BUILT_IN_TEMPLATES = {
 
 const sessionList = document.querySelector("#session-list");
 const emptySessions = document.querySelector("#empty-sessions");
+const sessionsPanel = document.querySelector("#sessions-panel");
+const workspace = document.querySelector(".workspace");
+const toggleSessionsPanelButton = document.querySelector("#toggle-sessions-panel");
+const collapseSessionsPanelButton = document.querySelector("#collapse-sessions-panel");
 const newSessionButton = document.querySelector("#new-session");
+const newSessionMiniButton = document.querySelector("#new-session-mini");
 const exportSessionsButton = document.querySelector("#export-sessions");
 const importSessionsButton = document.querySelector("#import-sessions");
 const saveLocalFileButton = document.querySelector("#save-local-file");
@@ -437,6 +442,25 @@ function bindEvents() {
     meetingTitleInput.focus();
   });
 
+  newSessionMiniButton.addEventListener("click", () => {
+    const nextSession = createSession();
+    sessions.unshift(nextSession);
+    activeSessionId = nextSession.id;
+    settings.recentSessionsExpanded = true;
+    persistSettings();
+    persistSessions();
+    render();
+    meetingTitleInput.focus();
+  });
+
+  [toggleSessionsPanelButton, collapseSessionsPanelButton].forEach((button) => {
+    button?.addEventListener("click", () => {
+      settings.recentSessionsExpanded = !getRecentSessionsExpanded();
+      persistSettings();
+      updateRecentSessionsPanelUi();
+    });
+  });
+
   exportSessionsButton.addEventListener("click", exportSessions);
   importSessionsButton.addEventListener("click", () => {
     importSessionsInput.click();
@@ -696,6 +720,8 @@ function bindEvents() {
       closeAiSettings();
     }
   });
+
+  window.addEventListener("resize", updateRecentSessionsPanelUi);
 
   [
     meetingTitleInput,
@@ -1236,6 +1262,7 @@ function render() {
   updateSessionStorageUi();
   updateExportButtons();
   syncSettingsForm();
+  updateRecentSessionsPanelUi();
 }
 
 function renderTemplateOptions() {
@@ -1347,7 +1374,7 @@ function applyTemplateUi(session) {
 
   meetingTitleInput.placeholder = isPersonalNote
     ? `${formatDateTimeForTitle(Date.now())} Personal note`
-    : "Weekly product sync";
+    : "Weekly project meeting";
 
   if (!SpeechRecognition) {
     return;
@@ -1390,7 +1417,7 @@ function updateTranscribeOnlyUi(session = getActiveSession()) {
       control.disabled = isTranscriptOnly;
     });
 
-  polishButton.textContent = isTranscriptOnly ? "Generate transcript" : "Generate";
+  polishButton.textContent = "Generate";
 }
 
 function setElementVisibility(element, isVisible) {
@@ -3202,6 +3229,7 @@ function loadSettings() {
         dictationLanguage: "auto",
         themeFamily: "olive",
         themeMode: "light",
+        recentSessionsExpanded: false,
         participantDirectory: [],
         defaultCustomHeaders: [],
         customTemplates: [],
@@ -3221,6 +3249,7 @@ function loadSettings() {
       themeFamily: "olive",
       themeMode: legacyThemeMode,
       ...parsed,
+      recentSessionsExpanded: parsed.recentSessionsExpanded === true,
       participantDirectory: normalizeParticipantDirectory(parsed.participantDirectory),
       defaultCustomHeaders: normalizeCustomHeaders(parsed.defaultCustomHeaders),
       customTemplates: normalizeCustomTemplates(parsed.customTemplates),
@@ -3237,6 +3266,7 @@ function loadSettings() {
       dictationLanguage: "auto",
       themeFamily: "olive",
       themeMode: "light",
+      recentSessionsExpanded: false,
       participantDirectory: [],
       defaultCustomHeaders: [],
       customTemplates: [],
@@ -3325,6 +3355,18 @@ function syncSettingsForm() {
   updateExportStyleDescription();
   renderCustomTemplates();
   renderParticipantDirectoryManager();
+}
+
+function getRecentSessionsExpanded() {
+  return settings.recentSessionsExpanded === true;
+}
+
+function updateRecentSessionsPanelUi() {
+  const isExpanded = getRecentSessionsExpanded() || window.innerWidth <= 1180;
+  workspace.classList.toggle("sessions-collapsed", !isExpanded);
+  sessionsPanel.classList.toggle("is-collapsed", !isExpanded);
+  toggleSessionsPanelButton?.setAttribute("aria-expanded", String(isExpanded));
+  collapseSessionsPanelButton?.setAttribute("aria-expanded", String(isExpanded));
 }
 
 function getThemeDisplayName(themeFamily) {
@@ -4073,7 +4115,7 @@ function getOutputCopy(outputLanguage) {
   }
 
   return {
-    summaryHeading: "Executive Summary",
+    summaryHeading: "Summary",
     highlightsHeading: "Highlights",
     decisionsHeading: "Decisions",
     actionsHeading: "Action Items",

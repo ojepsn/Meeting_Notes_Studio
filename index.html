@@ -43,33 +43,41 @@
     </section>
 
     <section class="workspace" aria-label="Notes application">
-      <aside class="sessions-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="section-label">Recent Sessions</p>
-            <h2>Your note shelf</h2>
-          </div>
+      <aside class="sessions-panel" id="sessions-panel">
+        <div class="sessions-panel-collapsed" id="sessions-panel-collapsed">
+          <button class="ghost-button sessions-panel-toggle" id="toggle-sessions-panel" type="button" aria-expanded="false" aria-controls="sessions-panel-content">Sessions</button>
+          <button class="primary-button sessions-mini-new" id="new-session-mini" type="button" aria-label="Create new session">+</button>
         </div>
 
-        <button class="primary-button new-session-button" id="new-session" type="button">+ New Session</button>
-
-        <ul class="session-list" id="session-list" aria-live="polite"></ul>
-
-        <div class="empty-sessions" id="empty-sessions">
-          <p>No saved sessions yet. Start with a fresh note and it will appear here automatically.</p>
-        </div>
-
-        <div class="session-storage">
-          <p class="section-label">Session Files</p>
-          <div class="session-storage-actions">
-            <button class="ghost-button" id="export-sessions" type="button">Export Sessions</button>
-            <button class="ghost-button" id="import-sessions" type="button">Import Sessions</button>
-            <button class="ghost-button" id="save-local-file" type="button">Save Local File</button>
+        <div class="sessions-panel-content" id="sessions-panel-content">
+          <div class="panel-heading">
+            <div>
+              <p class="section-label">Recent Sessions</p>
+              <h2>Your note shelf</h2>
+            </div>
+            <button class="ghost-button sessions-panel-toggle" id="collapse-sessions-panel" type="button" aria-expanded="true" aria-controls="sessions-panel-content">Hide</button>
           </div>
-          <p class="support-text" id="session-storage-status">
-            Export sessions to a file, import them later, or save directly to a local file on supported desktop browsers.
-          </p>
-          <input id="import-sessions-input" type="file" accept="application/json,.json" hidden>
+
+          <button class="primary-button new-session-button" id="new-session" type="button">+ New Session</button>
+
+          <ul class="session-list" id="session-list" aria-live="polite"></ul>
+
+          <div class="empty-sessions" id="empty-sessions">
+            <p>No saved sessions yet. Start with a fresh note and it will appear here automatically.</p>
+          </div>
+
+          <div class="session-storage">
+            <p class="section-label">Session Files</p>
+            <div class="session-storage-actions">
+              <button class="ghost-button" id="export-sessions" type="button">Export Sessions</button>
+              <button class="ghost-button" id="import-sessions" type="button">Import Sessions</button>
+              <button class="ghost-button" id="save-local-file" type="button">Save Local File</button>
+            </div>
+            <p class="support-text" id="session-storage-status">
+              Export sessions to a file, import them later, or save directly to a local file on supported desktop browsers.
+            </p>
+            <input id="import-sessions-input" type="file" accept="application/json,.json" hidden>
+          </div>
         </div>
       </aside>
 
@@ -91,7 +99,7 @@
             <div class="field-grid">
               <label class="field" id="title-field">
                 <span class="field-label" id="title-field-label">Meeting title</span>
-                <input id="meeting-title" type="text" maxlength="100" placeholder="Weekly product sync">
+                <input id="meeting-title" type="text" maxlength="100" placeholder="Weekly project meeting">
               </label>
 
               <label class="field">
@@ -102,7 +110,7 @@
 
             <label class="field" id="participants-field">
               <span class="field-label">Participants</span>
-              <input id="participants" type="text" maxlength="160" placeholder="Alex, Priya, Jonas" list="participant-suggestions">
+              <input id="participants" type="text" maxlength="160" placeholder="Add participants" list="participant-suggestions">
             </label>
             <datalist id="participant-suggestions"></datalist>
             <div class="participant-directory" id="participant-directory">
@@ -201,7 +209,7 @@
                   </label>
                   <label class="config-option">
                     <input id="include-summary" type="checkbox">
-                    <span>Executive Summary</span>
+                    <span>Summary</span>
                   </label>
                   <label class="config-option">
                     <input id="include-highlights" type="checkbox">
