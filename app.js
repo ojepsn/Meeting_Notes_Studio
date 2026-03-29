@@ -4836,26 +4836,46 @@ function setupSpeechRecognition() {
 
 function toggleDictation() {
   if (!recognition) {
+    dictationStatus.textContent = "Live dictation is not available in this browser. You can still record audio or type notes manually.";
+    setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
+    syncMobileUi();
     return;
   }
 
   if (isRecording) {
     isRecording = false;
-    recognition.stop();
+    try {
+      recognition.stop();
+    } catch {
+      dictationToggle.textContent = "Start dictation";
+      dictationToggle.classList.remove("is-recording");
+      dictationStatus.textContent = "Dictation stopped.";
+      setAppStatus("Saved locally", APP_STATUS_STATES.idle);
+      syncMobileUi();
+    }
     return;
   }
 
-  isRecording = true;
-  finalTranscript = "";
-  dictationSeedText = liveTranscriptInput.value.trim();
-  currentDictationLanguage = resolveDictationLanguage(dictationSeedText || navigator.language);
-  recognition.lang = currentDictationLanguage;
-  recognition.start();
-  dictationToggle.textContent = "Stop dictation";
-  dictationToggle.classList.add("is-recording");
-  dictationStatus.textContent = `Listening in ${formatDictationLanguage(currentDictationLanguage)}. The app will switch between Swedish and English when the speech pattern changes.`;
-  setAppStatus("Recording", APP_STATUS_STATES.recording);
-  syncMobileUi();
+  try {
+    isRecording = true;
+    finalTranscript = "";
+    dictationSeedText = liveTranscriptInput.value.trim();
+    currentDictationLanguage = resolveDictationLanguage(dictationSeedText || navigator.language);
+    recognition.lang = currentDictationLanguage;
+    recognition.start();
+    dictationToggle.textContent = "Stop dictation";
+    dictationToggle.classList.add("is-recording");
+    dictationStatus.textContent = `Listening in ${formatDictationLanguage(currentDictationLanguage)}. The app will switch between Swedish and English when the speech pattern changes.`;
+    setAppStatus("Recording", APP_STATUS_STATES.recording);
+    syncMobileUi();
+  } catch (error) {
+    isRecording = false;
+    dictationToggle.textContent = "Start dictation";
+    dictationToggle.classList.remove("is-recording");
+    dictationStatus.textContent = `Could not start live dictation: ${error.message || "this browser blocked it"}. Try Record audio instead.`;
+    setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
+    syncMobileUi();
+  }
 }
 
 function getAudioRecordingMimeType() {
