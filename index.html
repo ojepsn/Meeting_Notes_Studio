@@ -124,17 +124,17 @@
             </div>
 
             <div class="field-grid field-grid-three" id="meeting-schedule-field">
-              <label class="field field-tight">
+              <label class="field field-tight" id="meeting-date-field">
                 <span class="field-label">Date</span>
                 <input id="meeting-date" type="date">
               </label>
 
-              <label class="field field-tight">
+              <label class="field field-tight" id="meeting-start-time-field">
                 <span class="field-label">Start time</span>
                 <input id="meeting-start-time" type="time">
               </label>
 
-              <label class="field field-tight">
+              <label class="field field-tight" id="meeting-end-time-field">
                 <span class="field-label">End time</span>
                 <input id="meeting-end-time" type="time">
               </label>
@@ -421,6 +421,18 @@
           <input class="custom-template-show-live-transcript" type="checkbox">
           <span>Live transcript</span>
         </label>
+        <label class="config-option">
+          <input class="custom-template-show-meeting-date" type="checkbox">
+          <span>Date</span>
+        </label>
+        <label class="config-option">
+          <input class="custom-template-show-meeting-start-time" type="checkbox">
+          <span>Start time</span>
+        </label>
+        <label class="config-option">
+          <input class="custom-template-show-meeting-end-time" type="checkbox">
+          <span>End time</span>
+        </label>
       </div>
 
       <label class="field">
@@ -443,6 +455,10 @@
 
         <div class="template-header-list"></div>
       </section>
+
+      <div class="capture-toolbar template-builder-actions">
+        <button class="secondary-button custom-template-save" type="button">Save Template</button>
+      </div>
     </article>
   </template>
 

@@ -915,6 +915,19 @@ body.sessions-panel-open {
   font-weight: 800;
 }
 
+.template-section-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(108, 127, 79, 0.14);
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
 .custom-header-editor,
 .custom-header-add-form {
   padding: 12px;
