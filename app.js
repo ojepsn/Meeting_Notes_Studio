@@ -109,6 +109,7 @@ const saveStatus = document.querySelector("#save-status");
 const updateAppButton = document.querySelector("#update-app");
 const meetingTitleInput = document.querySelector("#meeting-title");
 const templateSelect = document.querySelector("#meeting-template");
+const templateQuickSelectors = document.querySelector("#template-quick-selectors");
 const titleField = document.querySelector("#title-field");
 const titleFieldLabel = document.querySelector("#title-field-label");
 const participantsField = document.querySelector("#participants-field");
@@ -543,8 +544,10 @@ function createDefaultSettings() {
     recentSessionsExpanded: false,
     abbreviationDirectory: [],
     participantDirectory: [],
+    participantDirectoryInitialized: false,
     defaultCustomHeaders: [],
     customTemplates: [],
+    templateUsageCounts: {},
     exportStylePreset: DEFAULT_EXPORT_PRESET,
     exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
     storageMode: STORAGE_MODES.browser,
@@ -878,6 +881,7 @@ function bindEvents() {
     settings.participantDirectory = normalizeParticipantDirectory(
       settings.participantDirectory.map((name) => (name === previousName ? nextName : name))
     );
+    settings.participantDirectoryInitialized = true;
     persistSettings();
     item.dataset.participantName = nextName.trim();
     renderParticipantSuggestions();
@@ -894,6 +898,7 @@ function bindEvents() {
     settings.participantDirectory = normalizeParticipantDirectory(
       settings.participantDirectory.filter((entry) => entry !== name)
     );
+    settings.participantDirectoryInitialized = true;
     persistSettings();
     renderParticipantDirectoryManager();
     renderParticipantSuggestions();
@@ -1355,6 +1360,7 @@ function bindEvents() {
   templateSelect.addEventListener("change", () => {
     const currentSession = getActiveSession();
     const template = getTemplateDefinition(templateSelect.value);
+    recordTemplateUsage(template.id);
     const patch = {
       template: template.id,
       transcribeOnly: getDefaultTranscribeOnlyForTemplate(template),
@@ -1984,6 +1990,7 @@ function canAutoApplyUpdate() {
 
 function render() {
   renderTemplateOptions();
+  renderTemplateQuickSelectors();
   renderSessionList();
   syncFieldsFromSession();
   renderHighlights();
@@ -2034,6 +2041,91 @@ function renderTemplateOptions() {
   }
 
   templateSelect.value = getTemplateDefinition(activeTemplateId).id || currentValue || "meeting";
+}
+
+function normalizeTemplateUsageCounts(input) {
+  if (!input || typeof input !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(input)
+      .filter(([key, value]) => typeof key === "string" && key && Number.isFinite(value) && Number(value) > 0)
+      .map(([key, value]) => [key, Number(value)])
+  );
+}
+
+function getPreferredDesktopTemplateId() {
+  const usageCounts = normalizeTemplateUsageCounts(settings.templateUsageCounts);
+  const validTemplateIds = new Set(getAllTemplates().map((template) => template.id));
+  const ranked = Object.entries(usageCounts)
+    .filter(([templateId]) => validTemplateIds.has(templateId))
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+
+  return ranked[0]?.[0] || "meeting";
+}
+
+function recordTemplateUsage(templateId) {
+  if (!templateId) {
+    return;
+  }
+
+  settings.templateUsageCounts = normalizeTemplateUsageCounts(settings.templateUsageCounts);
+  settings.templateUsageCounts[templateId] = (settings.templateUsageCounts[templateId] || 0) + 1;
+  persistSettings();
+}
+
+function renderTemplateQuickSelectors() {
+  if (!templateQuickSelectors) {
+    return;
+  }
+
+  const activeTemplateId = getActiveSession()?.template || getPreferredDesktopTemplateId();
+  const usageCounts = normalizeTemplateUsageCounts(settings.templateUsageCounts);
+  const templatesById = new Map(getAllTemplates().map((template) => [template.id, template]));
+  const rankedTemplates = Object.entries(usageCounts)
+    .filter(([templateId]) => templatesById.has(templateId))
+    .sort((left, right) => right[1] - left[1] || templatesById.get(left[0]).label.localeCompare(templatesById.get(right[0]).label))
+    .slice(0, 3)
+    .map(([templateId]) => templatesById.get(templateId));
+
+  if (rankedTemplates.length === 0) {
+    rankedTemplates.push(BUILT_IN_TEMPLATES.meeting, BUILT_IN_TEMPLATES.personalNote);
+  }
+
+  templateQuickSelectors.innerHTML = "";
+  rankedTemplates.forEach((template) => {
+    if (!template) {
+      return;
+    }
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ghost-button template-quick-button";
+    button.textContent = template.label;
+    button.classList.toggle("is-active", template.id === activeTemplateId);
+    button.addEventListener("click", () => {
+      templateSelect.value = template.id;
+      recordTemplateUsage(template.id);
+      const selectedTemplate = getTemplateDefinition(template.id);
+      const patch = {
+        template: selectedTemplate.id,
+        transcribeOnly: getDefaultTranscribeOnlyForTemplate(selectedTemplate),
+        templateSectionStates: normalizeTemplateSectionStates({}, selectedTemplate.headers || []),
+        customFieldValues: normalizeCustomFieldValues({}, selectedTemplate.customFields || []),
+      };
+      const currentSession = getActiveSession();
+      if (!currentSession.title.trim() || isAutoGeneratedTitle(currentSession.title)) {
+        patch.title = getDefaultTitleForTemplate(selectedTemplate);
+        meetingTitleInput.value = patch.title;
+      }
+      applyTemplateDefaultsToSession(getActiveSession(), selectedTemplate, patch);
+      transcribeOnlyInput.checked = patch.transcribeOnly;
+      updateActiveSession(patch, true);
+      applyTemplateUi({ ...currentSession, ...patch });
+    });
+    templateQuickSelectors.appendChild(button);
+  });
 }
 
 function renderSessionList() {
@@ -3397,7 +3489,7 @@ function renderOutput() {
       <div class="output-empty">
         <div>
           <h3>Your finished notes will appear here.</h3>
-          <p>Write rough notes on the left, add a few highlights, then click <strong>Generate</strong>.</p>
+          <p>Add notes or transcript above, include highlights if useful, then click <strong>Generate</strong>.</p>
         </div>
       </div>
     `;
@@ -3507,7 +3599,7 @@ function schedulePersist() {
 }
 
 function createSession() {
-  const defaultTemplate = getTemplateDefinition(isMobileLayout() ? "personalNote" : "meeting");
+  const defaultTemplate = getTemplateDefinition(isMobileLayout() ? "personalNote" : getPreferredDesktopTemplateId());
   return {
     id: crypto.randomUUID(),
     title: "",
@@ -5353,10 +5445,15 @@ async function initializeStorageMode() {
 }
 
 function syncParticipantDirectoryFromAllSessions() {
+  if (settings.participantDirectoryInitialized === true) {
+    return;
+  }
+
   settings.participantDirectory = normalizeParticipantDirectory([
     ...(settings.participantDirectory || []),
     ...sessions.flatMap((session) => parseParticipants(session.participants)),
   ]);
+  settings.participantDirectoryInitialized = true;
   persistSettings();
 }
 
@@ -5407,8 +5504,11 @@ function loadSettings() {
       recentSessionsExpanded: parsed.recentSessionsExpanded === true,
       abbreviationDirectory: normalizeAbbreviationDirectory(parsed.abbreviationDirectory),
       participantDirectory: normalizeParticipantDirectory(parsed.participantDirectory),
+      participantDirectoryInitialized: parsed.participantDirectoryInitialized === true
+        || normalizeParticipantDirectory(parsed.participantDirectory).length > 0,
       defaultCustomHeaders: normalizeCustomHeaders(parsed.defaultCustomHeaders),
       customTemplates: normalizeCustomTemplates(parsed.customTemplates),
+      templateUsageCounts: normalizeTemplateUsageCounts(parsed.templateUsageCounts),
       exportStylePreset,
       exportStyle: normalizeExportStyle({
         ...EXPORT_STYLE_PRESETS[exportStylePreset].style,
@@ -5482,6 +5582,7 @@ function syncParticipantDirectoryWithSession(value) {
   }
 
   settings.participantDirectory = nextDirectory;
+  settings.participantDirectoryInitialized = true;
   persistSettings();
   renderParticipantSuggestions();
   renderParticipantDirectoryManager();
@@ -5498,6 +5599,7 @@ function addParticipantToDirectory(value) {
     ...(settings.participantDirectory || []),
     trimmed,
   ]);
+  settings.participantDirectoryInitialized = true;
   persistSettings();
   participantDirectoryInput.value = "";
   renderParticipantDirectoryManager();
