@@ -1,7 +1,7 @@
 ﻿const STORAGE_KEY = "notesmith-sessions";
 const SETTINGS_KEY = "notesmith-settings";
 const AI_MODEL_CATALOG_KEY = "notesmith-ai-model-catalog";
-const APP_VERSION = "v0.10.4";
+const APP_VERSION = "v0.10.5";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -74,6 +74,8 @@ const aiSettingsModal = document.querySelector("#ai-settings-modal");
 const closeAiSettingsBackdrop = document.querySelector("#close-ai-settings");
 const closeAiSettingsButton = document.querySelector("#close-ai-settings-button");
 const aiSettingsForm = document.querySelector("#ai-settings-form");
+const aiSettingsNavButtons = [...document.querySelectorAll("[data-ai-settings-tab]")];
+const aiSettingsSections = [...document.querySelectorAll("[data-ai-settings-section]")];
 const titleDisplay = document.querySelector("#session-title");
 const saveStatus = document.querySelector("#save-status");
 const updateAppButton = document.querySelector("#update-app");
@@ -86,18 +88,26 @@ const meetingScheduleField = document.querySelector("#meeting-schedule-field");
 const meetingDateField = document.querySelector("#meeting-date-field");
 const meetingStartTimeField = document.querySelector("#meeting-start-time-field");
 const meetingEndTimeField = document.querySelector("#meeting-end-time-field");
+const templateCustomFieldsContainer = document.querySelector("#template-custom-fields");
 const highlightsField = document.querySelector("#highlights-field");
 const manualNotesField = document.querySelector("#manual-notes-field");
 const liveTranscriptField = document.querySelector("#live-transcript-field");
+const uploadedTranscriptField = document.querySelector("#uploaded-transcript-field");
 const apiKeyInput = document.querySelector("#api-key");
 const modelSelect = document.querySelector("#model-select");
 const modelOptions = document.querySelector("#model-options");
 const modelPricingStatus = document.querySelector("#model-pricing-status");
+const transcriptionModelSelect = document.querySelector("#transcription-model-select");
+const transcriptionModelDescription = document.querySelector("#transcription-model-description");
+const transcriptionModelPricing = document.querySelector("#transcription-model-pricing");
+const audioModelNote = document.querySelector("#audio-model-note");
 const aiStatusCopy = document.querySelector("#ai-status-copy");
 const participantsInput = document.querySelector("#participants");
 const participantSuggestions = document.querySelector("#participant-suggestions");
 const participantDirectoryPanel = document.querySelector("#participant-directory");
 const participantChips = document.querySelector("#participant-chips");
+const toggleParticipantDirectoryButton = document.querySelector("#toggle-participant-directory");
+const toggleParticipantDirectoryLabel = document.querySelector(".participant-toggle-label");
 const openParticipantSettingsButton = document.querySelector("#open-participant-settings");
 const participantDirectoryInput = document.querySelector("#participant-directory-input");
 const addDirectoryParticipantButton = document.querySelector("#add-directory-participant");
@@ -124,10 +134,18 @@ const cancelCustomHeaderButton = document.querySelector("#cancel-custom-header")
 const highlightsInput = document.querySelector("#highlights-input");
 const highlightChips = document.querySelector("#highlight-chips");
 const liveTranscriptInput = document.querySelector("#live-transcript");
+const uploadedTranscriptInput = document.querySelector("#uploaded-transcript");
 const rawNotesInput = document.querySelector("#raw-notes");
 const dictationLanguageSelect = document.querySelector("#dictation-language");
 const polishButton = document.querySelector("#polish-notes");
 const dictationToggle = document.querySelector("#dictation-toggle");
+const audioRecordToggle = document.querySelector("#audio-record-toggle");
+const uploadAudioButton = document.querySelector("#upload-audio");
+const uploadTranscriptButton = document.querySelector("#upload-transcript");
+const transcribeAudioButton = document.querySelector("#transcribe-audio");
+const audioFileInput = document.querySelector("#audio-file-input");
+const transcriptFileInput = document.querySelector("#transcript-file-input");
+const audioCaptureStatus = document.querySelector("#audio-capture-status");
 const dictationStatus = document.querySelector("#dictation-status");
 const copyOutputButton = document.querySelector("#copy-output");
 const exportWordButton = document.querySelector("#export-word");
@@ -146,6 +164,7 @@ const addCustomTemplateButton = document.querySelector("#add-custom-template");
 const customTemplateList = document.querySelector("#custom-template-list");
 const customTemplateTemplate = document.querySelector("#custom-template-template");
 const templateHeaderTemplate = document.querySelector("#template-header-template");
+const templateFieldTemplate = document.querySelector("#template-field-template");
 const structuredSectionInputs = [
   includeSummaryInput,
   includeHighlightsInput,
@@ -172,8 +191,32 @@ const APP_STATUS_STATES = {
 };
 const REMOTE_VERSION_CHECK_INTERVAL_MS = 2 * 60 * 1000;
 const SUPPORTS_FILE_SAVE = typeof window.showSaveFilePicker === "function";
+const SUPPORTS_AUDIO_RECORDING = typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
 const MAX_MODEL_INPUT_PRICE_PER_MILLION = 2.5;
 const APPROX_TOKENS_PER_PAGE = 750;
+const MAX_AUDIO_UPLOAD_BYTES = 25 * 1024 * 1024;
+const AUDIO_CHUNK_TARGET_BYTES = 23 * 1024 * 1024;
+const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+const TRANSCRIPTION_MODELS = {
+  "gpt-4o-mini-transcribe": {
+    label: "GPT-4o mini transcribe",
+    description: "Best value for most recorded meeting audio and speaker playback.",
+    pricing: "$0.003 per minute",
+    pricingDate: "2026-03-29",
+  },
+  "gpt-4o-transcribe": {
+    label: "GPT-4o transcribe",
+    description: "Higher-quality transcription when accuracy matters more than speed or cost.",
+    pricing: "$0.006 per minute",
+    pricingDate: "2026-03-29",
+  },
+  "gpt-4o-transcribe-diarize": {
+    label: "GPT-4o transcribe diarize",
+    description: "Best when you want stronger speaker separation in addition to transcription.",
+    pricing: "$0.009 per minute",
+    pricingDate: "2026-03-29",
+  },
+};
 const THEME_DESCRIPTIONS = {
   olive: "A calm olive palette designed for focused writing and professional notes.",
   blue: "A classic blue enterprise theme with a familiar SaaS feel.",
@@ -417,8 +460,15 @@ let serviceWorkerRegistration = null;
 let hasPendingAppUpdate = false;
 let isRefreshingForUpdate = false;
 let activeSettingsSection = "appearance";
+let activeAiSettingsSection = "connection";
 let latestRemoteVersion = APP_VERSION;
 let sessionFilterQuery = "";
+let participantDirectoryExpanded = false;
+let mediaRecorder = null;
+let mediaRecorderStream = null;
+let mediaRecorderChunks = [];
+let audioRecordingSessionId = null;
+const audioDrafts = new Map();
 
 applyTheme(settings.themeFamily, settings.themeMode);
 settings.model = resolveSelectedModel(settings.model);
@@ -437,6 +487,9 @@ appVersionLabel.textContent = APP_VERSION;
 
 function bindEvents() {
   const createAndOpenNewSession = () => {
+    if (audioRecordingSessionId) {
+      void stopAudioCapture();
+    }
     const nextSession = createSession();
     sessions.unshift(nextSession);
     activeSessionId = nextSession.id;
@@ -484,6 +537,11 @@ function bindEvents() {
     window.setTimeout(() => {
       participantDirectoryInput.focus();
     }, 0);
+  });
+
+  toggleParticipantDirectoryButton.addEventListener("click", () => {
+    participantDirectoryExpanded = !participantDirectoryExpanded;
+    updateParticipantDirectoryVisibility();
   });
 
   updateAppButton.addEventListener("click", () => {
@@ -616,15 +674,37 @@ function bindEvents() {
     if (templateNameLabel && templateNameInput) {
       templateNameLabel.textContent = templateNameInput.value.trim() || "New template";
     }
+    if (event.target.closest(".template-header-item")) {
+      const sectionItem = event.target.closest(".template-header-item");
+      const sectionLabel = sectionItem?.querySelector(".template-header-label");
+      const titleInput = sectionItem?.querySelector(".template-header-title");
+      if (sectionLabel && titleInput) {
+        sectionLabel.textContent = titleInput.value.trim() || "New template section";
+      }
+    }
+    if (event.target.closest(".template-field-item")) {
+      const fieldItem = event.target.closest(".template-field-item");
+      const fieldLabel = fieldItem?.querySelector(".template-field-label");
+      const fieldNameInput = fieldItem?.querySelector(".template-field-name");
+      const fieldTypeBadge = fieldItem?.querySelector(".template-field-type-badge");
+      const fieldTypeInput = fieldItem?.querySelector(".template-field-type");
+      if (fieldLabel && fieldNameInput) {
+        fieldLabel.textContent = fieldNameInput.value.trim() || "New field";
+      }
+      if (fieldTypeBadge && fieldTypeInput) {
+        fieldTypeBadge.textContent = fieldTypeInput.value;
+      }
+    }
     renderSessionList();
     const session = getActiveSession();
     if (session.template === templateId) {
-      const updatedTemplate = nextTemplates.find((template) => template.id === templateId);
-      updateActiveSessionSilently({
-        templateSectionStates: normalizeTemplateSectionStates(session.templateSectionStates, updatedTemplate?.headers || []),
-      });
-      applyTemplateUi(session);
-      renderCustomHeaders();
+        const updatedTemplate = nextTemplates.find((template) => template.id === templateId);
+        updateActiveSessionSilently({
+          templateSectionStates: normalizeTemplateSectionStates(session.templateSectionStates, updatedTemplate?.headers || []),
+          customFieldValues: normalizeCustomFieldValues(session.customFieldValues, updatedTemplate?.customFields || []),
+        });
+        applyTemplateUi(session);
+        renderCustomHeaders();
     }
   });
 
@@ -684,6 +764,7 @@ function bindEvents() {
         const updatedTemplate = settings.customTemplates.find((template) => template.id === templateId);
         updateActiveSessionSilently({
           templateSectionStates: normalizeTemplateSectionStates(session.templateSectionStates, updatedTemplate?.headers || []),
+          customFieldValues: normalizeCustomFieldValues(session.customFieldValues, updatedTemplate?.customFields || []),
         });
         applyTemplateUi(session);
         renderCustomHeaders();
@@ -692,6 +773,30 @@ function bindEvents() {
     }
 
     if (event.target.closest(".custom-template-header-add")) {
+      const addForm = templateItem.querySelector(".custom-template-header-add-form");
+      setElementVisibility(addForm, true);
+      addForm?.querySelector(".custom-template-new-header-title")?.focus();
+      return;
+    }
+
+    if (event.target.closest(".custom-template-header-cancel")) {
+      const addForm = templateItem.querySelector(".custom-template-header-add-form");
+      addForm.querySelector(".custom-template-new-header-title").value = "";
+      addForm.querySelector(".custom-template-new-header-instructions").value = "";
+      setElementVisibility(addForm, false);
+      return;
+    }
+
+    if (event.target.closest(".custom-template-header-save")) {
+      const addForm = templateItem.querySelector(".custom-template-header-add-form");
+      const title = addForm.querySelector(".custom-template-new-header-title").value.trim();
+      const instructions = addForm.querySelector(".custom-template-new-header-instructions").value.trim();
+
+      if (!title) {
+        addForm.querySelector(".custom-template-new-header-title").focus();
+        return;
+      }
+
       settings.customTemplates = settings.customTemplates.map((template) => {
         if (template.id !== templateId) {
           return template;
@@ -699,12 +804,101 @@ function bindEvents() {
 
         return {
           ...template,
-          headers: [...template.headers, createTemplateHeader()],
+          headers: [...template.headers, createTemplateHeader(title, instructions)],
+        };
+      });
+      persistSettings();
+      addForm.querySelector(".custom-template-new-header-title").value = "";
+      addForm.querySelector(".custom-template-new-header-instructions").value = "";
+      renderCustomTemplates(templateId);
+      renderTemplateOptions();
+      return;
+    }
+
+    if (event.target.closest(".custom-template-field-add")) {
+      const addForm = templateItem.querySelector(".custom-template-field-add-form");
+      setElementVisibility(addForm, true);
+      addForm?.querySelector(".custom-template-new-field-label")?.focus();
+      return;
+    }
+
+    if (event.target.closest(".custom-template-field-cancel")) {
+      const addForm = templateItem.querySelector(".custom-template-field-add-form");
+      addForm.querySelector(".custom-template-new-field-label").value = "";
+      addForm.querySelector(".custom-template-new-field-type").value = "text";
+      setElementVisibility(addForm, false);
+      return;
+    }
+
+    if (event.target.closest(".custom-template-field-save")) {
+      const addForm = templateItem.querySelector(".custom-template-field-add-form");
+      const label = addForm.querySelector(".custom-template-new-field-label").value.trim();
+      const type = addForm.querySelector(".custom-template-new-field-type").value;
+
+      if (!label) {
+        addForm.querySelector(".custom-template-new-field-label").focus();
+        return;
+      }
+
+      settings.customTemplates = settings.customTemplates.map((template) => {
+        if (template.id !== templateId) {
+          return template;
+        }
+
+        return {
+          ...template,
+          customFields: [...normalizeTemplateCustomFields(template.customFields), { id: crypto.randomUUID(), label, type, isExpanded: false }],
+        };
+      });
+      persistSettings();
+      addForm.querySelector(".custom-template-new-field-label").value = "";
+      addForm.querySelector(".custom-template-new-field-type").value = "text";
+      renderCustomTemplates(templateId);
+      renderTemplateOptions();
+      return;
+    }
+
+    const headerEditButton = event.target.closest(".template-header-edit");
+    if (headerEditButton) {
+      const headerItem = headerEditButton.closest(".template-header-item");
+      const headerId = headerItem?.dataset.headerId;
+      settings.customTemplates = settings.customTemplates.map((template) => {
+        if (template.id !== templateId) {
+          return template;
+        }
+
+        return {
+          ...template,
+          headers: template.headers.map((header) => (
+            header.id === headerId
+              ? { ...header, isExpanded: !(header.isExpanded === true) }
+              : header
+          )),
         };
       });
       persistSettings();
       renderCustomTemplates(templateId);
-      renderTemplateOptions();
+      return;
+    }
+
+    const fieldEditButton = event.target.closest(".template-field-edit");
+    if (fieldEditButton) {
+      const fieldItem = fieldEditButton.closest(".template-field-item");
+      const fieldId = fieldItem?.dataset.fieldId;
+      settings.customTemplates = settings.customTemplates.map((template) => {
+        if (template.id !== templateId) {
+          return template;
+        }
+
+        return {
+          ...template,
+          customFields: normalizeTemplateCustomFields(template.customFields).map((field) => (
+            field.id === fieldId ? { ...field, isExpanded: !(field.isExpanded === true) } : field
+          )),
+        };
+      });
+      persistSettings();
+      renderCustomTemplates(templateId);
       return;
     }
 
@@ -726,11 +920,35 @@ function bindEvents() {
       renderCustomTemplates(templateId);
       renderTemplateOptions();
     }
+
+    const fieldRemoveButton = event.target.closest(".template-field-remove");
+    if (fieldRemoveButton) {
+      const fieldItem = fieldRemoveButton.closest(".template-field-item");
+      const fieldId = fieldItem?.dataset.fieldId;
+      settings.customTemplates = settings.customTemplates.map((template) => {
+        if (template.id !== templateId) {
+          return template;
+        }
+
+        return {
+          ...template,
+          customFields: normalizeTemplateCustomFields(template.customFields).filter((field) => field.id !== fieldId),
+        };
+      });
+      persistSettings();
+      renderCustomTemplates(templateId);
+      renderTemplateOptions();
+    }
   });
 
   openAiSettingsButton.addEventListener("click", openAiSettings);
   closeAiSettingsBackdrop.addEventListener("click", closeAiSettings);
   closeAiSettingsButton.addEventListener("click", closeAiSettings);
+  aiSettingsNavButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setActiveAiSettingsSection(button.dataset.aiSettingsTab);
+    });
+  });
   modelOptions.addEventListener("click", (event) => {
     const option = event.target.closest(".model-option");
     if (!option) {
@@ -741,14 +959,20 @@ function bindEvents() {
     renderAiModelOptions();
   });
 
+  transcriptionModelSelect.addEventListener("change", () => {
+    updateTranscriptionModelDescription();
+  });
+
   aiSettingsForm.addEventListener("submit", (event) => {
     event.preventDefault();
     settings.apiKey = apiKeyInput.value.trim();
     settings.model = resolveSelectedModel(modelSelect.value);
+    settings.transcriptionModel = resolveSelectedTranscriptionModel(transcriptionModelSelect.value);
     persistSettings();
     updateAiStatusCopy();
+    syncAudioCaptureUi(getActiveSession());
     dictationStatus.textContent = settings.apiKey
-      ? `AI settings saved. ${getAiModelLabel(settings.model)} is ready for polishing.`
+      ? `AI settings saved. ${getAiModelLabel(settings.model)} is ready for polishing, and ${getTranscriptionModelLabel(settings.transcriptionModel)} is ready for audio transcription.`
       : "AI settings saved without an API key. Local polishing will be used until you add one.";
     closeAiSettings();
   });
@@ -817,6 +1041,26 @@ function bindEvents() {
     });
   });
 
+  uploadedTranscriptInput.addEventListener("input", () => {
+    updateActiveSession({ uploadedTranscript: uploadedTranscriptInput.value }, true);
+    applyTemplateUi(getActiveSession());
+  });
+
+  templateCustomFieldsContainer.addEventListener("input", (event) => {
+    const input = event.target.closest(".template-custom-field-input");
+    if (!input) {
+      return;
+    }
+
+    const session = getActiveSession();
+    updateActiveSession({
+      customFieldValues: {
+        ...(session.customFieldValues || {}),
+        [input.dataset.customFieldId]: input.value,
+      },
+    }, true);
+  });
+
   templateSelect.addEventListener("change", () => {
     const currentSession = getActiveSession();
     const template = getTemplateDefinition(templateSelect.value);
@@ -824,6 +1068,7 @@ function bindEvents() {
       template: template.id,
       transcribeOnly: getDefaultTranscribeOnlyForTemplate(template),
       templateSectionStates: normalizeTemplateSectionStates({}, template.headers || []),
+      customFieldValues: normalizeCustomFieldValues({}, template.customFields || []),
     };
 
     if (!currentSession.title.trim() || isAutoGeneratedTitle(currentSession.title)) {
@@ -1028,6 +1273,100 @@ function bindEvents() {
   });
 
   dictationToggle.addEventListener("click", toggleDictation);
+
+  audioRecordToggle.addEventListener("click", () => {
+    toggleAudioCapture();
+  });
+
+  uploadAudioButton.addEventListener("click", () => {
+    audioFileInput.click();
+  });
+
+  uploadTranscriptButton.addEventListener("click", () => {
+    transcriptFileInput.click();
+  });
+
+  audioFileInput.addEventListener("change", () => {
+    const [file] = [...audioFileInput.files];
+    if (!file) {
+      return;
+    }
+
+    setAudioDraft({
+      blob: file,
+      fileName: file.name || `audio-upload-${Date.now()}.webm`,
+      mimeType: file.type || "audio/webm",
+      size: file.size,
+      source: "upload",
+    });
+    audioFileInput.value = "";
+  });
+
+  transcriptFileInput.addEventListener("change", async () => {
+    const [file] = [...transcriptFileInput.files];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const transcriptText = await readTranscriptFile(file);
+      updateActiveSession({ uploadedTranscript: transcriptText }, true);
+      uploadedTranscriptInput.value = transcriptText;
+      applyTemplateUi(getActiveSession());
+      audioCaptureStatus.textContent = `Transcript uploaded from ${file.name} and added to the Uploaded transcript field.`;
+    } catch (error) {
+      audioCaptureStatus.textContent = error.message || "That transcript file could not be read in this browser.";
+    } finally {
+      transcriptFileInput.value = "";
+    }
+  });
+
+  transcribeAudioButton.addEventListener("click", async () => {
+    const session = getActiveSession();
+    const audioDraft = getAudioDraft(session.id);
+    let wasSuccessful = false;
+
+    if (!audioDraft) {
+      audioCaptureStatus.textContent = "Record or upload audio first, then transcribe it.";
+      return;
+    }
+
+    if (!settings.apiKey) {
+      audioCaptureStatus.textContent = "Add an OpenAI API key in AI Settings before transcribing recorded or uploaded audio.";
+      return;
+    }
+
+    transcribeAudioButton.disabled = true;
+    transcribeAudioButton.textContent = "Transcribing...";
+    setAppStatus("Generating", APP_STATUS_STATES.generating);
+    audioCaptureStatus.textContent = "Transcribing the selected audio and adding it to the Live transcript field...";
+
+    try {
+      const transcriptText = await transcribeAudioDraftWithOpenAI(audioDraft, settings, {
+        onProgress: (message) => {
+          audioCaptureStatus.textContent = message;
+        },
+      });
+      const nextTranscript = [session.liveTranscript?.trim(), transcriptText.trim()]
+        .filter(Boolean)
+        .join("\n\n");
+
+      updateActiveSession({ liveTranscript: nextTranscript }, true);
+      liveTranscriptInput.value = nextTranscript;
+      dictationStatus.textContent = `Audio transcription complete with ${getTranscriptionModelLabel(settings.transcriptionModel)}.`;
+      clearAudioDraft(session.id);
+      audioCaptureStatus.textContent = "Audio transcription complete. The transcript has been added to the Live transcript field.";
+      wasSuccessful = true;
+    } catch (error) {
+      audioCaptureStatus.textContent = `Audio transcription failed: ${error.message}`;
+    } finally {
+      transcribeAudioButton.textContent = "Transcribe audio";
+      if (!wasSuccessful) {
+        syncAudioCaptureUi(getActiveSession());
+      }
+      setAppStatus("Saved locally", APP_STATUS_STATES.idle);
+    }
+  });
 
   copyOutputButton.addEventListener("click", async () => {
     const session = getActiveSession();
@@ -1334,6 +1673,7 @@ function render() {
   renderParticipantSuggestions();
   renderCustomHeaders();
   renderOutput();
+  syncAudioCaptureUi();
   updateAiStatusCopy();
   updateSessionStorageUi();
   updateExportButtons();
@@ -1393,6 +1733,7 @@ function renderSessionList() {
       session.meetingDate,
       session.rawNotes,
       session.liveTranscript,
+      session.uploadedTranscript,
     ]
       .filter(Boolean)
       .join(" ")
@@ -1414,6 +1755,9 @@ function renderSessionList() {
     button.classList.toggle("is-active", session.id === activeSessionId);
 
     button.addEventListener("click", () => {
+      if (audioRecordingSessionId) {
+        void stopAudioCapture();
+      }
       activeSessionId = session.id;
       settings.recentSessionsExpanded = false;
       persistSettings();
@@ -1421,6 +1765,9 @@ function renderSessionList() {
     });
 
     editButton.addEventListener("click", () => {
+      if (audioRecordingSessionId) {
+        void stopAudioCapture();
+      }
       activeSessionId = session.id;
       settings.recentSessionsExpanded = false;
       persistSettings();
@@ -1466,6 +1813,7 @@ function applyTemplateUi(session) {
   const showMeetingSchedule = showMeetingDate || showMeetingStartTime || showMeetingEndTime;
   const showManualNotes = fields.manualNotes !== false;
   const showLiveTranscript = liveTranscriptEnabled;
+  const showUploadedTranscript = liveTranscriptEnabled && Boolean(session.uploadedTranscript?.trim());
   const showTitle = fields.title !== false;
 
   setElementVisibility(titleField, showTitle);
@@ -1479,6 +1827,8 @@ function applyTemplateUi(session) {
   setElementVisibility(highlightChips, showHighlights);
   setElementVisibility(manualNotesField, showManualNotes);
   setElementVisibility(liveTranscriptField, showLiveTranscript);
+  setElementVisibility(uploadedTranscriptField, showUploadedTranscript);
+  renderTemplateCustomFields(session, template);
   titleFieldLabel.textContent = isPersonalNote ? "Note title" : "Meeting title";
   updateTranscribeOnlyUi(session);
 
@@ -1487,6 +1837,7 @@ function applyTemplateUi(session) {
     : "Weekly project meeting";
 
   if (!SpeechRecognition) {
+    syncAudioCaptureUi(session);
     return;
   }
 
@@ -1502,7 +1853,34 @@ function applyTemplateUi(session) {
   }
 
   dictationToggle.disabled = false;
-  dictationToggle.textContent = isRecording ? "Stop recording" : "Start recording";
+  dictationToggle.textContent = isRecording ? "Stop dictation" : "Start dictation";
+  syncAudioCaptureUi(session);
+}
+
+function renderTemplateCustomFields(session, template = getTemplateDefinition(session.template)) {
+  templateCustomFieldsContainer.innerHTML = "";
+  const customFields = normalizeTemplateCustomFields(template.customFields);
+  setElementVisibility(templateCustomFieldsContainer, customFields.length > 0);
+
+  customFields.forEach((field) => {
+    const label = document.createElement("label");
+    label.className = "field";
+    label.dataset.customFieldId = field.id;
+
+    const title = document.createElement("span");
+    title.className = "field-label";
+    title.textContent = field.label.trim();
+
+    const input = document.createElement("input");
+    input.className = "template-custom-field-input";
+    input.type = field.type;
+    input.value = session.customFieldValues?.[field.id] ?? "";
+    input.dataset.customFieldId = field.id;
+
+    label.appendChild(title);
+    label.appendChild(input);
+    templateCustomFieldsContainer.appendChild(label);
+  });
 }
 
 function updateTranscribeOnlyUi(session = getActiveSession()) {
@@ -1528,6 +1906,97 @@ function updateTranscribeOnlyUi(session = getActiveSession()) {
     });
 
   polishButton.textContent = "Generate";
+}
+
+function getAudioDraft(sessionId = activeSessionId) {
+  return sessionId ? audioDrafts.get(sessionId) || null : null;
+}
+
+function clearAudioDraft(sessionId = activeSessionId) {
+  if (sessionId) {
+    audioDrafts.delete(sessionId);
+  }
+
+  if (sessionId === activeSessionId) {
+    syncAudioCaptureUi(getActiveSession());
+  }
+}
+
+function setAudioDraft(draft, sessionId = activeSessionId) {
+  if (!sessionId) {
+    return;
+  }
+
+  if (!draft) {
+    clearAudioDraft(sessionId);
+    return;
+  }
+
+  audioDrafts.set(sessionId, {
+    blob: draft.blob,
+    fileName: draft.fileName,
+    mimeType: draft.mimeType || draft.blob?.type || "audio/webm",
+    source: draft.source || "upload",
+    size: draft.size ?? draft.blob?.size ?? 0,
+    createdAt: draft.createdAt || Date.now(),
+  });
+
+  if (sessionId === activeSessionId) {
+    syncAudioCaptureUi(getActiveSession());
+  }
+}
+
+function formatAudioFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 KB";
+  }
+
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function syncAudioCaptureUi(session = getActiveSession()) {
+  const template = session ? getTemplateDefinition(session.template) : BUILT_IN_TEMPLATES.meeting;
+  const supportsTranscriptField = template.fields?.liveTranscript !== false;
+  const audioDraft = getAudioDraft(session?.id);
+  const isAudioRecording = audioRecordingSessionId === session?.id;
+  const canTranscribe = Boolean(audioDraft) && !isAudioRecording;
+
+  setElementVisibility(audioRecordToggle?.closest(".audio-capture-card"), supportsTranscriptField);
+
+  if (!supportsTranscriptField || !audioCaptureStatus || !audioRecordToggle || !transcribeAudioButton || !uploadAudioButton) {
+    return;
+  }
+
+  if (audioModelNote) {
+    audioModelNote.innerHTML = `Audio transcription uses <strong>${escapeHtml(getTranscriptionModelLabel(settings.transcriptionModel))}</strong>.`;
+  }
+
+  audioRecordToggle.disabled = !SUPPORTS_AUDIO_RECORDING;
+  audioRecordToggle.textContent = isAudioRecording ? "Stop audio capture" : "Record audio";
+  audioRecordToggle.classList.toggle("is-recording", isAudioRecording);
+  uploadAudioButton.disabled = isAudioRecording;
+  transcribeAudioButton.disabled = !canTranscribe;
+
+  if (isAudioRecording) {
+    audioCaptureStatus.textContent = "Recording raw audio now. Stop recording when you are ready to transcribe it.";
+    return;
+  }
+
+  if (!SUPPORTS_AUDIO_RECORDING) {
+    audioCaptureStatus.textContent = "This browser cannot record raw audio here, but you can still upload an audio file to transcribe.";
+  } else if (audioDraft) {
+    const sourceLabel = audioDraft.source === "recording" ? "Recorded audio ready" : "Uploaded audio ready";
+    const sizeHint = audioDraft.size > MAX_AUDIO_UPLOAD_BYTES
+      ? " It will be split into smaller parts automatically before transcription."
+      : "";
+    audioCaptureStatus.textContent = `${sourceLabel}: ${audioDraft.fileName} (${formatAudioFileSize(audioDraft.size)}). Click "Transcribe audio" to add it to the Live transcript field.${sizeHint}`;
+  } else {
+    audioCaptureStatus.textContent = "No audio file selected yet. You can record here or upload mp3, m4a, wav, mp4, or webm. Larger files will be split automatically before transcription.";
+  }
 }
 
 function setElementVisibility(element, isVisible) {
@@ -1557,6 +2026,7 @@ function renderCustomTemplates(focusTemplateId = null) {
     const nameInput = fragment.querySelector(".custom-template-name");
     const instructionsInput = fragment.querySelector(".custom-template-instructions");
     const headerList = fragment.querySelector(".template-header-list");
+    const fieldList = fragment.querySelector(".template-field-list");
     const body = fragment.querySelector(".custom-template-body");
     const editButton = fragment.querySelector(".custom-template-edit");
 
@@ -1577,10 +2047,33 @@ function renderCustomTemplates(focusTemplateId = null) {
     template.headers.forEach((header) => {
       const headerFragment = templateHeaderTemplate.content.cloneNode(true);
       const headerItem = headerFragment.querySelector(".template-header-item");
+      const headerLabel = headerFragment.querySelector(".template-header-label");
+      const headerEditor = headerFragment.querySelector(".template-header-editor");
+      const headerEditButton = headerFragment.querySelector(".template-header-edit");
       headerItem.dataset.headerId = header.id;
+      headerLabel.textContent = header.title || "New template section";
       headerFragment.querySelector(".template-header-title").value = header.title;
       headerFragment.querySelector(".template-header-instructions").value = header.instructions;
+      setElementVisibility(headerEditor, header.isExpanded === true);
+      headerEditButton.textContent = header.isExpanded === true ? "Close" : "Edit";
       headerList.appendChild(headerFragment);
+    });
+
+    normalizeTemplateCustomFields(template.customFields).forEach((field) => {
+      const fieldFragment = templateFieldTemplate.content.cloneNode(true);
+      const fieldItem = fieldFragment.querySelector(".template-field-item");
+      const fieldLabel = fieldFragment.querySelector(".template-field-label");
+      const fieldEditor = fieldFragment.querySelector(".template-field-editor");
+      const fieldEditButton = fieldFragment.querySelector(".template-field-edit");
+      const fieldTypeBadge = fieldFragment.querySelector(".template-field-type-badge");
+      fieldItem.dataset.fieldId = field.id;
+      fieldLabel.textContent = field.label || "New field";
+      fieldFragment.querySelector(".template-field-name").value = field.label;
+      fieldFragment.querySelector(".template-field-type").value = field.type;
+      fieldTypeBadge.textContent = field.type;
+      setElementVisibility(fieldEditor, field.isExpanded === true);
+      fieldEditButton.textContent = field.isExpanded === true ? "Close" : "Edit";
+      fieldList.appendChild(fieldFragment);
     });
 
     setElementVisibility(body, template.isExpanded === true);
@@ -1619,25 +2112,32 @@ function syncFieldsFromSession() {
   updateDetailLevelLabel();
   dictationLanguageSelect.value = settings.dictationLanguage ?? "auto";
   liveTranscriptInput.value = session.liveTranscript ?? "";
+  uploadedTranscriptInput.value = session.uploadedTranscript ?? "";
   rawNotesInput.value = session.rawNotes;
+  renderTemplateCustomFields(session, template);
   outputFeedbackInput.value = session.outputFeedback ?? "";
   outputFeedbackStatus.textContent = session.polishedHtml
     ? "Add comments here when you want the polished output adjusted. You can always revert the latest revision."
     : "Generate polished notes first, then use comments here to request improvements.";
   setAppStatus("Saved locally", APP_STATUS_STATES.idle);
+  syncAudioCaptureUi(session);
   applyTemplateUi(session);
 }
 
 function openAiSettings() {
   apiKeyInput.value = settings.apiKey ?? "";
   modelSelect.value = resolveSelectedModel(settings.model);
+  transcriptionModelSelect.value = resolveSelectedTranscriptionModel(settings.transcriptionModel);
   renderAiModelOptions();
+  updateTranscriptionModelDescription();
   updateModelPricingStatus();
   aiSettingsModal.classList.remove("is-hidden");
   aiSettingsModal.setAttribute("aria-hidden", "false");
   syncModalScrollLock();
+  setActiveAiSettingsSection(activeAiSettingsSection);
   refreshAiModelCatalog();
-  apiKeyInput.focus();
+  const targetControl = aiSettingsModal.querySelector(`[data-ai-settings-section="${activeAiSettingsSection}"] input, [data-ai-settings-section="${activeAiSettingsSection}"] select, [data-ai-settings-section="${activeAiSettingsSection}"] button`);
+  targetControl?.focus();
 }
 
 function closeAiSettings() {
@@ -1645,6 +2145,24 @@ function closeAiSettings() {
   aiSettingsModal.setAttribute("aria-hidden", "true");
   syncModalScrollLock();
   openAiSettingsButton.focus();
+}
+
+function setActiveAiSettingsSection(sectionId) {
+  activeAiSettingsSection = aiSettingsSections.some((section) => section.dataset.aiSettingsSection === sectionId)
+    ? sectionId
+    : "connection";
+
+  aiSettingsNavButtons.forEach((button) => {
+    const isActive = button.dataset.aiSettingsTab === activeAiSettingsSection;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+
+  aiSettingsSections.forEach((section) => {
+    const isActive = section.dataset.aiSettingsSection === activeAiSettingsSection;
+    section.classList.toggle("is-hidden-field", !isActive);
+    section.hidden = !isActive;
+  });
 }
 
 function openSettings() {
@@ -1686,6 +2204,29 @@ function updateAiStatusCopy() {
   aiStatusCopy.innerHTML = settings.apiKey
     ? `AI polishing is connected with <strong>${escapeHtml(getAiModelLabel(settings.model))}</strong>. Open <strong>AI Settings</strong> to update or remove the key. If no OpenAI API key is provided, generation will not work well, although transcription is still possible.`
     : `Open <strong>AI Settings</strong> to connect your OpenAI API key. If no OpenAI API key is provided, generation will not work well, although transcription is still possible.`;
+}
+
+function resolveSelectedTranscriptionModel(modelId) {
+  return TRANSCRIPTION_MODELS[modelId] ? modelId : DEFAULT_TRANSCRIPTION_MODEL;
+}
+
+function getTranscriptionModelLabel(modelId) {
+  return TRANSCRIPTION_MODELS[resolveSelectedTranscriptionModel(modelId)]?.label || TRANSCRIPTION_MODELS[DEFAULT_TRANSCRIPTION_MODEL].label;
+}
+
+function updateTranscriptionModelDescription() {
+  if (!transcriptionModelDescription || !transcriptionModelSelect) {
+    return;
+  }
+
+  const modelId = resolveSelectedTranscriptionModel(transcriptionModelSelect.value || settings.transcriptionModel);
+  transcriptionModelSelect.value = modelId;
+  const model = TRANSCRIPTION_MODELS[modelId] || TRANSCRIPTION_MODELS[DEFAULT_TRANSCRIPTION_MODEL];
+  transcriptionModelDescription.textContent = model.description;
+
+  if (transcriptionModelPricing) {
+    transcriptionModelPricing.textContent = `Estimated transcription cost: about ${model.pricing}. Pricing info date: ${model.pricingDate}.`;
+  }
 }
 
 function syncModalScrollLock() {
@@ -2070,6 +2611,16 @@ function renderParticipantSuggestions() {
   if (!participantsField.hidden) {
     setElementVisibility(participantDirectoryPanel, true);
   }
+
+  updateParticipantDirectoryVisibility();
+}
+
+function updateParticipantDirectoryVisibility() {
+  setElementVisibility(participantChips, participantDirectoryExpanded);
+  if (toggleParticipantDirectoryLabel) {
+    toggleParticipantDirectoryLabel.textContent = participantDirectoryExpanded ? "Hide list" : "Show list";
+  }
+  toggleParticipantDirectoryButton.setAttribute("aria-expanded", String(participantDirectoryExpanded));
 }
 
 function renderParticipantDirectoryManager() {
@@ -2260,9 +2811,11 @@ function createSession() {
     detailLevel: 3,
     additionalInstructions: "",
     templateSectionStates: createTemplateSectionStates(defaultTemplate.headers || []),
+    customFieldValues: normalizeCustomFieldValues({}, defaultTemplate.customFields || []),
     customHeaders: cloneCustomHeadersForSession(settings.defaultCustomHeaders || []),
     highlights: [],
     liveTranscript: "",
+    uploadedTranscript: "",
     rawNotes: "",
     outputFeedback: "",
     polishedHtml: "",
@@ -2288,6 +2841,7 @@ function createCustomTemplate() {
     sections: ["Overview", "Key Discussion Points", "Decisions", "Action Items"],
     templateInstructions: "",
     headers: [],
+    customFields: [],
     fields: {
       title: true,
       participants: true,
@@ -2313,14 +2867,14 @@ function buildTemplateSummary(template) {
     template.fields.meetingEndTime === true ? "end time" : null,
   ].filter(Boolean);
 
-  return `${enabledFields.length} fields · ${normalizeTemplateHeaders(template.headers).length} sections`;
+  return `${enabledFields.length + normalizeTemplateCustomFields(template.customFields).length} fields · ${normalizeTemplateHeaders(template.headers).length} sections`;
 }
 
-function createTemplateHeader() {
+function createTemplateHeader(title = "", instructions = "") {
   return {
     id: crypto.randomUUID(),
-    title: "",
-    instructions: "",
+    title,
+    instructions,
   };
 }
 
@@ -2365,6 +2919,15 @@ function readCustomTemplateItem(item, fallbackTemplate) {
     id: headerItem.dataset.headerId || crypto.randomUUID(),
     title: headerItem.querySelector(".template-header-title").value,
     instructions: headerItem.querySelector(".template-header-instructions").value,
+    isExpanded: !headerItem.querySelector(".template-header-editor").classList.contains("is-hidden-field"),
+  }));
+
+  const fieldItems = [...item.querySelectorAll(".template-field-item")];
+  nextTemplate.customFields = fieldItems.map((fieldItem) => ({
+    id: fieldItem.dataset.fieldId || crypto.randomUUID(),
+    label: fieldItem.querySelector(".template-field-name").value,
+    type: fieldItem.querySelector(".template-field-type").value,
+    isExpanded: !fieldItem.querySelector(".template-field-editor").classList.contains("is-hidden-field"),
   }));
 
   return normalizeCustomTemplate(nextTemplate);
@@ -2656,6 +3219,9 @@ async function transcribeWithOpenAI(session, activeSettings) {
                 "Live transcript:",
                 session.liveTranscript?.trim() || "No transcript provided.",
                 "",
+                "Uploaded transcript:",
+                session.uploadedTranscript?.trim() || "No uploaded transcript provided.",
+                "",
                 "Manual notes:",
                 session.rawNotes?.trim() || "No manual notes provided.",
               ].join("\n"),
@@ -2678,6 +3244,224 @@ async function transcribeWithOpenAI(session, activeSettings) {
   }
 
   return buildTranscriptOnlyHtml(session, responseText);
+}
+
+async function transcribeAudioDraftWithOpenAI(audioDraft, activeSettings, options = {}) {
+  if (!audioDraft?.blob) {
+    throw new Error("No audio file is available to transcribe.");
+  }
+  const file = audioDraft.blob instanceof File
+    ? audioDraft.blob
+    : new File([audioDraft.blob], audioDraft.fileName || buildAudioRecordingFileName(), {
+      type: audioDraft.mimeType || audioDraft.blob.type || "audio/webm",
+    });
+
+  const reportProgress = typeof options.onProgress === "function"
+    ? options.onProgress
+    : () => {};
+
+  if (file.size <= MAX_AUDIO_UPLOAD_BYTES) {
+    reportProgress("Transcribing audio...");
+    return transcribeSingleAudioFileWithOpenAI(file, activeSettings);
+  }
+
+  reportProgress("Preparing large audio file for chunked transcription...");
+  const chunks = await splitAudioFileForTranscription(file);
+  const transcripts = [];
+
+  for (let index = 0; index < chunks.length; index += 1) {
+    reportProgress(`Transcribing audio part ${index + 1} of ${chunks.length}...`);
+    const transcript = await transcribeSingleAudioFileWithOpenAI(chunks[index], activeSettings);
+    if (transcript.trim()) {
+      transcripts.push(transcript.trim());
+    }
+  }
+
+  const combinedTranscript = transcripts.join("\n\n").trim();
+  if (!combinedTranscript) {
+    throw new Error("The audio chunks were processed, but no transcript text was returned.");
+  }
+
+  return combinedTranscript;
+}
+
+async function transcribeSingleAudioFileWithOpenAI(file, activeSettings) {
+  const formData = new FormData();
+
+  formData.append("file", file);
+  formData.append("model", resolveSelectedTranscriptionModel(activeSettings.transcriptionModel));
+  formData.append(
+    "prompt",
+    "Transcribe the audio faithfully. Preserve the original language, keep both nearby and speaker voices when they are audible, and return only the transcript text with clean punctuation."
+  );
+
+  const forcedLanguage = settings.dictationLanguage === "sv-SE"
+    ? "sv"
+    : settings.dictationLanguage === "en-US"
+      ? "en"
+      : "";
+
+  if (forcedLanguage) {
+    formData.append("language", forcedLanguage);
+  }
+
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${activeSettings.apiKey}`,
+    },
+    body: formData,
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
+
+  if (!response.ok) {
+    const message = typeof payload === "string"
+      ? payload
+      : payload?.error?.message || "The OpenAI audio transcription request did not complete successfully.";
+    throw new Error(message);
+  }
+
+  const transcriptText = typeof payload === "string"
+    ? payload
+    : payload?.text || payload?.transcript || "";
+
+  if (!transcriptText.trim()) {
+    throw new Error("The OpenAI audio transcription response did not include any readable transcript text.");
+  }
+
+  return transcriptText.trim();
+}
+
+async function splitAudioFileForTranscription(file) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    throw new Error("This browser cannot split large audio files automatically. Please try a smaller file.");
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  const audioContext = new AudioContextClass();
+
+  try {
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+    const monoSamples = mixAudioBufferToMono(audioBuffer);
+    const samplesPerChunk = Math.max(
+      audioBuffer.sampleRate,
+      Math.floor((AUDIO_CHUNK_TARGET_BYTES - 44) / 2)
+    );
+    const totalChunks = Math.ceil(monoSamples.length / samplesPerChunk);
+    const baseName = (file.name || "audio")
+      .replace(/\.[a-z0-9]+$/i, "")
+      .replace(/[^\w.-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "audio";
+    const chunks = [];
+
+    for (let index = 0; index < totalChunks; index += 1) {
+      const start = index * samplesPerChunk;
+      const end = Math.min(monoSamples.length, start + samplesPerChunk);
+      const chunkSamples = monoSamples.slice(start, end);
+      const wavBlob = createMonoWavBlob(chunkSamples, audioBuffer.sampleRate);
+      chunks.push(new File([wavBlob], `${baseName}-part-${index + 1}.wav`, { type: "audio/wav" }));
+    }
+
+    return chunks;
+  } catch {
+    throw new Error("This large audio file could not be decoded for automatic splitting in this browser. Try wav, m4a, mp3, or a smaller file.");
+  } finally {
+    if (typeof audioContext.close === "function") {
+      await audioContext.close().catch(() => {});
+    }
+  }
+}
+
+function mixAudioBufferToMono(audioBuffer) {
+  const channelCount = audioBuffer.numberOfChannels;
+  const length = audioBuffer.length;
+
+  if (channelCount <= 1) {
+    return audioBuffer.getChannelData(0).slice();
+  }
+
+  const mixed = new Float32Array(length);
+  for (let channel = 0; channel < channelCount; channel += 1) {
+    const channelData = audioBuffer.getChannelData(channel);
+    for (let index = 0; index < length; index += 1) {
+      mixed[index] += channelData[index] / channelCount;
+    }
+  }
+
+  return mixed;
+}
+
+function createMonoWavBlob(samples, sampleRate) {
+  const bytesPerSample = 2;
+  const dataSize = samples.length * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  writeWavString(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeWavString(view, 8, "WAVE");
+  writeWavString(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeWavString(view, 36, "data");
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, samples[index]));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+    offset += 2;
+  }
+
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+function writeWavString(view, offset, value) {
+  for (let index = 0; index < value.length; index += 1) {
+    view.setUint8(offset + index, value.charCodeAt(index));
+  }
+}
+
+async function readTranscriptFile(file) {
+  const extension = (file.name.split(".").pop() || "").toLowerCase();
+
+  if (extension === "doc") {
+    throw new Error("Legacy .doc files are not supported in the browser yet. Please save the file as .docx or .txt and upload it again.");
+  }
+
+  if (extension === "docx" || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    if (!window.mammoth?.extractRawText) {
+      throw new Error("Word document support did not load in this browser. Please try again or upload the transcript as .txt.");
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await window.mammoth.extractRawText({ arrayBuffer });
+    const text = String(result?.value || "").replace(/\r\n/g, "\n").trim();
+
+    if (!text) {
+      throw new Error("The uploaded Word document did not contain any readable transcript text.");
+    }
+
+    return text;
+  }
+
+  const text = (await file.text()).replace(/\r\n/g, "\n").trim();
+  if (!text) {
+    throw new Error("The uploaded transcript file did not contain any readable text.");
+  }
+
+  return text;
 }
 
 async function revisePolishedNotesWithOpenAI(session, activeSettings, feedback) {
@@ -2789,6 +3573,7 @@ function buildAiPrompt(session, template, outputLanguage) {
   const sectionConfig = normalizeSectionConfig(session.sections);
   const sourceLanguage = detectSourceLanguage(session);
   const templateHeaders = formatTemplateHeadersForPrompt(template.headers || [], session);
+  const templateCustomFields = formatTemplateCustomFieldsForPrompt(template, session);
   return [
     `Template: ${template.label}`,
     `Meeting title: ${session.title.trim() || "Untitled session"}`,
@@ -2804,11 +3589,17 @@ function buildAiPrompt(session, template, outputLanguage) {
     "Live transcript:",
     session.liveTranscript?.trim() || "No transcript provided.",
     "",
+    "Uploaded transcript:",
+    session.uploadedTranscript?.trim() || "No uploaded transcript provided.",
+    "",
     "Manual notes:",
     session.rawNotes.trim() || "No manual notes provided.",
     "",
     "Template-specific instructions:",
     template.templateInstructions?.trim() || "No template-specific instructions.",
+    "",
+    "Template-specific input fields and values:",
+    templateCustomFields,
     "",
     "Template-specific sections and instructions:",
     templateHeaders,
@@ -2840,6 +3631,7 @@ function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
   const currentOutputText = htmlToPlainText(session.polishedHtml);
   const sourceLanguage = detectSourceLanguage(session);
   const templateHeaders = formatTemplateHeadersForPrompt(template.headers || [], session);
+  const templateCustomFields = formatTemplateCustomFieldsForPrompt(template, session);
 
   return [
     `Template: ${template.label}`,
@@ -2861,11 +3653,17 @@ function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
     "Live transcript:",
     session.liveTranscript?.trim() || "No transcript provided.",
     "",
+    "Uploaded transcript:",
+    session.uploadedTranscript?.trim() || "No uploaded transcript provided.",
+    "",
     "Manual notes:",
     session.rawNotes.trim() || "No manual notes provided.",
     "",
     "Template-specific instructions:",
     template.templateInstructions?.trim() || "No template-specific instructions.",
+    "",
+    "Template-specific input fields and values:",
+    templateCustomFields,
     "",
     "Template-specific sections and instructions:",
     templateHeaders,
@@ -2994,7 +3792,7 @@ function normalizeOutputLanguagePreference(value) {
 
 function buildCombinedNotes(session) {
   const scheduleLine = buildMeetingScheduleText(session);
-  return [scheduleLine, session.liveTranscript?.trim(), session.rawNotes?.trim()]
+  return [scheduleLine, session.liveTranscript?.trim(), session.uploadedTranscript?.trim(), session.rawNotes?.trim()]
     .filter(Boolean)
     .join("\n\n");
 }
@@ -3306,7 +4104,7 @@ function setupSpeechRecognition() {
     finalTranscript = "";
     dictationSeedText = "";
     pendingLanguageRestart = false;
-    dictationToggle.textContent = "Start recording";
+    dictationToggle.textContent = "Start dictation";
     dictationToggle.classList.remove("is-recording");
     dictationStatus.textContent = "Dictation stopped. You can continue typing or restart capture anytime.";
     setAppStatus("Saved locally", APP_STATUS_STATES.idle);
@@ -3317,7 +4115,7 @@ function setupSpeechRecognition() {
     finalTranscript = "";
     dictationSeedText = "";
     pendingLanguageRestart = false;
-    dictationToggle.textContent = "Start recording";
+    dictationToggle.textContent = "Start dictation";
     dictationToggle.classList.remove("is-recording");
     dictationStatus.textContent = `Dictation error: ${event.error}. You can still take notes manually.`;
     setAppStatus("Recording error", APP_STATUS_STATES.warning);
@@ -3341,10 +4139,131 @@ function toggleDictation() {
   currentDictationLanguage = resolveDictationLanguage(dictationSeedText || navigator.language);
   recognition.lang = currentDictationLanguage;
   recognition.start();
-  dictationToggle.textContent = "Stop recording";
+  dictationToggle.textContent = "Stop dictation";
   dictationToggle.classList.add("is-recording");
   dictationStatus.textContent = `Listening in ${formatDictationLanguage(currentDictationLanguage)}. The app will switch between Swedish and English when the speech pattern changes.`;
   setAppStatus("Recording", APP_STATUS_STATES.recording);
+}
+
+function getAudioRecordingMimeType() {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return "";
+  }
+
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/mpeg",
+  ];
+
+  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || "";
+}
+
+function buildAudioRecordingFileName() {
+  return `meeting-notes-audio-${formatDateTimeForTitle(Date.now()).replace(/[ :]/g, "-")}.webm`;
+}
+
+async function stopAudioCapture() {
+  if (!mediaRecorder) {
+    return;
+  }
+
+  const recorder = mediaRecorder;
+  const activeSessionForRecording = audioRecordingSessionId;
+
+  await new Promise((resolve) => {
+    const finalize = () => {
+      recorder.removeEventListener("stop", finalize);
+      resolve();
+    };
+
+    recorder.addEventListener("stop", finalize);
+    recorder.stop();
+  });
+
+  if (mediaRecorderStream) {
+    mediaRecorderStream.getTracks().forEach((track) => track.stop());
+  }
+
+  const mimeType = recorder.mimeType || "audio/webm";
+  const audioBlob = new Blob(mediaRecorderChunks, { type: mimeType });
+  mediaRecorder = null;
+  mediaRecorderStream = null;
+  mediaRecorderChunks = [];
+  audioRecordingSessionId = null;
+
+  if (audioBlob.size > 0) {
+    setAudioDraft({
+      blob: audioBlob,
+      fileName: buildAudioRecordingFileName(),
+      mimeType,
+      size: audioBlob.size,
+      source: "recording",
+    }, activeSessionForRecording);
+    audioCaptureStatus.textContent = "Audio capture stopped. Your recording is ready to transcribe.";
+  } else {
+    syncAudioCaptureUi(getActiveSession());
+  }
+
+  setAppStatus("Saved locally", APP_STATUS_STATES.idle);
+}
+
+async function toggleAudioCapture() {
+  if (audioRecordingSessionId) {
+    await stopAudioCapture();
+    return;
+  }
+
+  if (!SUPPORTS_AUDIO_RECORDING) {
+    audioCaptureStatus.textContent = "This browser cannot record raw audio here, but you can still upload an audio file.";
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+    });
+
+    mediaRecorderStream = stream;
+    mediaRecorderChunks = [];
+    audioRecordingSessionId = activeSessionId;
+    const mimeType = getAudioRecordingMimeType();
+    mediaRecorder = mimeType
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream);
+
+    mediaRecorder.addEventListener("dataavailable", (event) => {
+      if (event.data && event.data.size > 0) {
+        mediaRecorderChunks.push(event.data);
+      }
+    });
+
+    mediaRecorder.addEventListener("error", () => {
+      if (mediaRecorderStream) {
+        mediaRecorderStream.getTracks().forEach((track) => track.stop());
+      }
+      mediaRecorder = null;
+      mediaRecorderStream = null;
+      mediaRecorderChunks = [];
+      audioRecordingSessionId = null;
+      audioCaptureStatus.textContent = "Audio capture failed. You can still upload an audio file instead.";
+      setAppStatus("Recording error", APP_STATUS_STATES.warning);
+      syncAudioCaptureUi(getActiveSession());
+    });
+
+    mediaRecorder.start();
+    audioCaptureStatus.textContent = "Recording raw audio now. Stop recording when you are ready to transcribe it.";
+    setAppStatus("Recording", APP_STATUS_STATES.recording);
+    syncAudioCaptureUi(getActiveSession());
+  } catch {
+    audioCaptureStatus.textContent = "Microphone access was blocked for raw audio capture. You can still upload an audio file instead.";
+    setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
+  }
 }
 
 function loadSessions() {
@@ -3406,6 +4325,7 @@ function loadSettings() {
       return {
         apiKey: "",
         model: "gpt-5-mini",
+        transcriptionModel: DEFAULT_TRANSCRIPTION_MODEL,
         dictationLanguage: "auto",
         themeFamily: "olive",
         themeMode: "light",
@@ -3425,10 +4345,12 @@ function loadSettings() {
     return {
       apiKey: "",
       model: "gpt-5-mini",
+      transcriptionModel: DEFAULT_TRANSCRIPTION_MODEL,
       dictationLanguage: "auto",
       themeFamily: "olive",
       themeMode: legacyThemeMode,
       ...parsed,
+      transcriptionModel: resolveSelectedTranscriptionModel(parsed.transcriptionModel),
       recentSessionsExpanded: parsed.recentSessionsExpanded === true,
       participantDirectory: normalizeParticipantDirectory(parsed.participantDirectory),
       defaultCustomHeaders: normalizeCustomHeaders(parsed.defaultCustomHeaders),
@@ -3443,6 +4365,7 @@ function loadSettings() {
     return {
       apiKey: "",
       model: "gpt-5-mini",
+      transcriptionModel: DEFAULT_TRANSCRIPTION_MODEL,
       dictationLanguage: "auto",
       themeFamily: "olive",
       themeMode: "light",
@@ -4066,9 +4989,11 @@ function normalizeImportedSessions(importedSessions) {
       detailLevel: normalizeDetailLevel(session.detailLevel),
       additionalInstructions: typeof session.additionalInstructions === "string" ? session.additionalInstructions : "",
       templateSectionStates: normalizeTemplateSectionStates(session.templateSectionStates, template.headers || []),
+      customFieldValues: normalizeCustomFieldValues(session.customFieldValues, template.customFields || []),
       customHeaders: normalizeCustomHeaders(session.customHeaders),
       highlights: Array.isArray(session.highlights) ? session.highlights.filter((item) => typeof item === "string") : [],
       liveTranscript: typeof session.liveTranscript === "string" ? session.liveTranscript : "",
+      uploadedTranscript: typeof session.uploadedTranscript === "string" ? session.uploadedTranscript : "",
       rawNotes: typeof session.rawNotes === "string" ? session.rawNotes : "",
       outputFeedback: typeof session.outputFeedback === "string" ? session.outputFeedback : "",
       polishedHtml: typeof session.polishedHtml === "string" ? session.polishedHtml : "",
@@ -4116,6 +5041,7 @@ function normalizeCustomTemplate(template) {
       : fallback.sections,
     templateInstructions: typeof template.templateInstructions === "string" ? template.templateInstructions : "",
     headers: normalizeTemplateHeaders(template.headers),
+    customFields: normalizeTemplateCustomFields(template.customFields),
     fields: normalizeTemplateFields(template.fields),
   };
 }
@@ -4144,8 +5070,37 @@ function normalizeTemplateHeaders(headers) {
       id: typeof header.id === "string" && header.id ? header.id : crypto.randomUUID(),
       title: typeof header.title === "string" ? header.title : "",
       instructions: typeof header.instructions === "string" ? header.instructions : "",
+      isExpanded: header.isExpanded === true,
     }))
     .filter((header) => header.title.trim());
+}
+
+function normalizeTemplateCustomFields(customFields) {
+  if (!Array.isArray(customFields)) {
+    return [];
+  }
+
+  return customFields
+    .filter((field) => field && typeof field === "object")
+    .map((field) => ({
+      id: typeof field.id === "string" && field.id ? field.id : crypto.randomUUID(),
+      label: typeof field.label === "string" ? field.label : "",
+      type: ["text", "number", "date", "time"].includes(field.type) ? field.type : "text",
+      isExpanded: field.isExpanded === true,
+    }))
+    .filter((field) => field.label.trim());
+}
+
+function normalizeCustomFieldValues(values, customFields = []) {
+  const normalizedFields = normalizeTemplateCustomFields(customFields);
+  const nextValues = {};
+
+  normalizedFields.forEach((field) => {
+    const rawValue = values?.[field.id];
+    nextValues[field.id] = typeof rawValue === "string" ? rawValue : "";
+  });
+
+  return nextValues;
 }
 
 function normalizeCustomHeaders(customHeaders) {
@@ -4240,6 +5195,20 @@ function formatTemplateHeadersForPrompt(headers, session = null) {
 
   return visibleHeaders
     .map((header, index) => `${index + 1}. ${header.title.trim()}: ${header.instructions.trim() || "No extra instructions."}`)
+    .join("\n");
+}
+
+function formatTemplateCustomFieldsForPrompt(template, session) {
+  const customFields = normalizeTemplateCustomFields(template.customFields);
+  if (!customFields.length) {
+    return "No template-specific input fields.";
+  }
+
+  return customFields
+    .map((field, index) => {
+      const value = session.customFieldValues?.[field.id]?.trim() || "Not provided";
+      return `${index + 1}. ${field.label.trim()} (${field.type}): ${value}`;
+    })
     .join("\n");
 }
 

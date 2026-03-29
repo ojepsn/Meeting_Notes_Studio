@@ -23,7 +23,7 @@
         <p class="subtitle">
           Capture rough notes and turn them into professional meeting notes without leaving the page.
         </p>
-        <div class="version-pill" id="app-version">v0.10.2</div>
+        <div class="version-pill" id="app-version">v0.10.5</div>
       </div>
 
       <div class="hero-metrics" aria-label="Product highlights">
@@ -105,7 +105,7 @@
               </label>
 
               <label class="field">
-                <span class="field-label">Category</span>
+                <span class="field-label">Template</span>
                 <select id="meeting-template"></select>
               </label>
             </div>
@@ -118,9 +118,15 @@
             <div class="participant-directory" id="participant-directory">
               <div class="participant-directory-header">
                 <span class="participant-directory-label">Saved participants</span>
-                <button class="ghost-button participant-manage-button" id="open-participant-settings" type="button">Manage list</button>
+                <div class="participant-directory-actions">
+                  <button class="ghost-button participant-toggle-button" id="toggle-participant-directory" type="button" aria-expanded="false" aria-controls="participant-chips">
+                    <span class="participant-toggle-arrow" aria-hidden="true">▾</span>
+                    <span class="participant-toggle-label">Show list</span>
+                  </button>
+                  <button class="ghost-button participant-manage-button" id="open-participant-settings" type="button">Manage list</button>
+                </div>
               </div>
-              <div class="chip-row participant-chip-row" id="participant-chips" aria-live="polite"></div>
+              <div class="chip-row participant-chip-row is-hidden-field" id="participant-chips" aria-live="polite"></div>
             </div>
 
             <div class="field-grid field-grid-three" id="meeting-schedule-field">
@@ -139,6 +145,8 @@
                 <input id="meeting-end-time" type="time">
               </label>
             </div>
+
+            <div class="template-custom-fields" id="template-custom-fields"></div>
 
             <label class="field" id="highlights-field">
               <span class="field-label">Quick highlights</span>
@@ -165,12 +173,21 @@
                 readonly
               ></textarea>
             </label>
+
+            <label class="field is-hidden-field" id="uploaded-transcript-field" hidden>
+              <span class="field-label">Uploaded transcript</span>
+              <textarea
+                id="uploaded-transcript"
+                rows="7"
+                placeholder="Uploaded transcript text will appear here..."
+              ></textarea>
+            </label>
           </div>
 
           <aside class="editor-sidebar">
             <div class="field-inline field-inline-sidebar">
               <label class="field field-compact">
-                <span class="field-label">Dictation language</span>
+                <span class="field-label">Transcription language</span>
                 <select id="dictation-language">
                   <option value="auto">Auto</option>
                   <option value="sv-SE">Swedish</option>
@@ -191,9 +208,36 @@
 
               <div class="capture-toolbar capture-toolbar-sidebar">
                 <button class="primary-button" id="polish-notes" type="button">Generate</button>
-                <button class="secondary-button" id="dictation-toggle" type="button">Start recording</button>
                 <button class="ghost-button" id="copy-output" type="button">Copy Output</button>
               </div>
+
+              <section class="audio-capture-card" aria-label="Audio transcription">
+                <div class="audio-capture-copy">
+                  <p class="section-label">Recording & transcription</p>
+                  <h3>Choose your capture mode</h3>
+                  <details class="audio-info-disclosure">
+                    <summary>Information about recording and transcription options</summary>
+                    <p class="support-text">
+                      Dictation uses your browser's built-in transcription and works well for a single voice or when everyone is in the same room. Browser transcription is free of charge. <strong>Record audio</strong> uses OpenAI transcription models and is usually safer for more complex audio, such as speaker playback plus people in the room. OpenAI transcription uses your API key and comes with a cost. Both add text to the <strong>Live transcript</strong> field.
+                    </p>
+                  </details>
+                  <p class="support-text" id="audio-model-note">
+                    Audio transcription uses <strong>gpt-4o-mini-transcribe</strong>.
+                  </p>
+                </div>
+                <div class="capture-toolbar audio-capture-actions">
+                  <button class="secondary-button" id="dictation-toggle" type="button">Start dictation</button>
+                  <button class="secondary-button" id="audio-record-toggle" type="button">Record audio</button>
+                  <button class="ghost-button" id="upload-audio" type="button">Upload audio</button>
+                  <button class="ghost-button" id="upload-transcript" type="button">Upload transcript</button>
+                  <button class="ghost-button" id="transcribe-audio" type="button">Transcribe audio</button>
+                </div>
+                <p class="support-text" id="audio-capture-status">
+                  No audio file selected yet. You can record here or upload mp3, m4a, wav, mp4, or webm.
+                </p>
+                <input id="audio-file-input" type="file" accept=".mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm,audio/*,video/mp4" hidden>
+                <input id="transcript-file-input" type="file" accept=".txt,.md,.text,.docx,.doc,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" hidden>
+              </section>
 
               <section class="config-card config-card-inline" aria-label="Output configuration">
                 <div class="config-card-copy">
@@ -406,6 +450,11 @@
           <input class="custom-template-name" type="text" maxlength="60" placeholder="Board update">
         </label>
 
+        <div class="template-input-fields-heading">
+          <p class="section-label">Input Fields</p>
+          <h4>Choose which fields appear</h4>
+        </div>
+
         <div class="settings-checkbox-grid">
           <label class="config-option">
             <input class="custom-template-show-title" type="checkbox">
@@ -441,6 +490,38 @@
           </label>
         </div>
 
+        <section class="template-input-builder" aria-label="Custom input fields">
+          <div class="custom-headers-heading">
+            <div>
+              <p class="section-label">Custom Input Fields</p>
+              <h4>Add your own fields</h4>
+            </div>
+            <button class="ghost-button custom-template-field-add" type="button">Add Field</button>
+          </div>
+
+          <div class="custom-template-field-add-form is-hidden-field">
+            <label class="field field-tight">
+              <span class="field-label">Field name</span>
+              <input class="custom-template-new-field-label" type="text" maxlength="80" placeholder="Project code">
+            </label>
+            <label class="field field-tight">
+              <span class="field-label">Field type</span>
+              <select class="custom-template-new-field-type">
+                <option value="text">Text</option>
+                <option value="number">Number</option>
+                <option value="date">Date</option>
+                <option value="time">Time</option>
+              </select>
+            </label>
+            <div class="custom-header-add-actions">
+              <button class="secondary-button custom-template-field-save" type="button">Save Field</button>
+              <button class="ghost-button custom-template-field-cancel" type="button">Cancel</button>
+            </div>
+          </div>
+
+          <div class="template-field-list"></div>
+        </section>
+
         <label class="field">
           <span class="field-label">Instructions to AI</span>
           <textarea
@@ -459,6 +540,25 @@
             <button class="ghost-button custom-template-header-add" type="button">Add Section</button>
           </div>
 
+          <div class="custom-template-header-add-form is-hidden-field">
+            <label class="field field-tight">
+              <span class="field-label">Section</span>
+              <input class="custom-template-new-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
+            </label>
+            <label class="field field-tight">
+              <span class="field-label">Instructions to AI</span>
+              <textarea
+                class="custom-template-new-header-instructions"
+                rows="3"
+                placeholder="Explain what this section should focus on."
+              ></textarea>
+            </label>
+            <div class="custom-header-add-actions">
+              <button class="secondary-button custom-template-header-save" type="button">Save Section</button>
+              <button class="ghost-button custom-template-header-cancel" type="button">Cancel</button>
+            </div>
+          </div>
+
           <div class="template-header-list"></div>
         </section>
       </div>
@@ -467,25 +567,65 @@
 
   <template id="template-header-template">
     <article class="template-header-item">
-      <label class="field">
-        <span class="field-label">Section</span>
-        <input class="template-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
-      </label>
-      <label class="field">
-        <span class="field-label">Instructions to AI</span>
-        <textarea
-          class="template-header-instructions"
-          rows="3"
-          placeholder="Explain what this section should focus on."
-        ></textarea>
-      </label>
-      <button class="ghost-button template-header-remove" type="button">Remove</button>
+      <div class="config-option custom-header-toggle template-header-toggle">
+        <span class="custom-header-toggle-main">
+          <span class="custom-header-toggle-label template-header-label">New template section</span>
+        </span>
+        <span class="custom-header-toggle-actions">
+          <button class="ghost-button template-header-edit" type="button">Edit</button>
+          <button class="ghost-button template-header-remove" type="button">Remove</button>
+        </span>
+      </div>
+      <div class="template-header-editor is-hidden-field">
+        <label class="field field-tight">
+          <span class="field-label">Section</span>
+          <input class="template-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
+        </label>
+        <label class="field field-tight">
+          <span class="field-label">Instructions to AI</span>
+          <textarea
+            class="template-header-instructions"
+            rows="3"
+            placeholder="Explain what this section should focus on."
+          ></textarea>
+        </label>
+      </div>
+    </article>
+  </template>
+
+  <template id="template-field-template">
+    <article class="template-field-item">
+      <div class="config-option custom-header-toggle template-field-toggle">
+        <span class="custom-header-toggle-main">
+          <span class="custom-header-toggle-label template-field-label">New field</span>
+        </span>
+        <span class="custom-header-toggle-actions">
+          <span class="template-field-type-badge">Text</span>
+          <button class="ghost-button template-field-edit" type="button">Edit</button>
+          <button class="ghost-button template-field-remove" type="button">Remove</button>
+        </span>
+      </div>
+      <div class="template-field-editor is-hidden-field">
+        <label class="field field-tight">
+          <span class="field-label">Field name</span>
+          <input class="template-field-name" type="text" maxlength="80" placeholder="Project code">
+        </label>
+        <label class="field field-tight">
+          <span class="field-label">Field type</span>
+          <select class="template-field-type">
+            <option value="text">Text</option>
+            <option value="number">Number</option>
+            <option value="date">Date</option>
+            <option value="time">Time</option>
+          </select>
+        </label>
+      </div>
     </article>
   </template>
 
   <div class="modal-shell is-hidden" id="ai-settings-modal" aria-hidden="true">
     <div class="modal-backdrop" id="close-ai-settings"></div>
-    <section class="modal-card" aria-label="AI settings dialog" aria-modal="true" role="dialog">
+    <section class="modal-card modal-card-settings" aria-label="AI settings dialog" aria-modal="true" role="dialog">
       <div class="panel-heading modal-heading">
         <div>
           <p class="section-label">AI Settings</p>
@@ -495,44 +635,89 @@
       </div>
 
       <form class="modal-form" id="ai-settings-form">
-        <label class="field">
-          <span class="field-label">OpenAI API key</span>
-          <input id="api-key" type="password" placeholder="sk-..." autocomplete="off">
-        </label>
+        <div class="settings-shell">
+          <aside class="settings-nav" aria-label="AI settings sections">
+            <p class="support-text settings-nav-copy">
+              Move between connection, note-generation models, and audio transcription settings.
+            </p>
+            <div class="settings-nav-list">
+              <button class="settings-nav-button is-active" data-ai-settings-tab="connection" type="button">Connection</button>
+              <button class="settings-nav-button" data-ai-settings-tab="models" type="button">Text Models</button>
+              <button class="settings-nav-button" data-ai-settings-tab="transcription" type="button">Audio Transcription</button>
+            </div>
+          </aside>
 
-        <p class="support-text">
-          Get an API key from
-          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">platform.openai.com/api-keys</a>.
-          It is a good idea to set a spending limit in
-          <a href="https://platform.openai.com/settings/organization/billing/overview" target="_blank" rel="noreferrer">OpenAI billing settings</a>
-          before using the app.
-        </p>
+          <div class="settings-content">
+            <section class="config-card settings-card" data-ai-settings-section="connection" aria-label="AI connection settings">
+              <div class="config-card-copy">
+                <p class="section-label">Connection</p>
+                <h3>Connect your OpenAI account</h3>
+              </div>
 
-        <input id="model-select" type="hidden" value="gpt-5-mini">
+              <label class="field">
+                <span class="field-label">OpenAI API key</span>
+                <input id="api-key" type="password" placeholder="sk-..." autocomplete="off">
+              </label>
 
-        <section class="config-card settings-card" aria-label="OpenAI model selection">
-          <div class="config-card-copy">
-            <p class="section-label">Model</p>
-            <h3>Choose an OpenAI model</h3>
+              <p class="support-text">
+                Get an API key from
+                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">platform.openai.com/api-keys</a>.
+                It is a good idea to set a spending limit in
+                <a href="https://platform.openai.com/settings/organization/billing/overview" target="_blank" rel="noreferrer">OpenAI billing settings</a>
+                before using the app.
+              </p>
+
+              <p class="support-text">
+                Your API key is stored only in this browser so the app can call OpenAI directly from the client.
+              </p>
+            </section>
+
+            <input id="model-select" type="hidden" value="gpt-5-mini">
+
+            <section class="config-card settings-card is-hidden-field" data-ai-settings-section="models" aria-label="OpenAI model selection">
+              <div class="config-card-copy">
+                <p class="section-label">Model</p>
+                <h3>Choose an OpenAI model</h3>
+              </div>
+
+              <p class="support-text" id="model-pricing-status">
+                Loading model guidance and pricing...
+              </p>
+
+              <p class="support-text">
+                Pricing is shown per 1 million tokens. In plain language, tokens are small chunks of text, so this is a standardized way to compare cost across models. For normal meeting notes, a single polish pass usually uses only a tiny fraction of that amount. As a rough guide, one page of text is about 500 words, which is approximately 750 tokens.
+              </p>
+
+              <div class="model-option-list" id="model-options" aria-live="polite"></div>
+            </section>
+
+            <section class="config-card settings-card is-hidden-field" data-ai-settings-section="transcription" aria-label="Audio transcription model">
+              <div class="config-card-copy">
+                <p class="section-label">Transcription model</p>
+                <h3>Choose audio transcription quality</h3>
+              </div>
+
+              <label class="field">
+                <span class="field-label">Recorded or uploaded audio</span>
+                <select id="transcription-model-select">
+                  <option value="gpt-4o-mini-transcribe">GPT-4o mini transcribe</option>
+                  <option value="gpt-4o-transcribe">GPT-4o transcribe</option>
+                  <option value="gpt-4o-transcribe-diarize">GPT-4o transcribe diarize</option>
+                </select>
+              </label>
+
+              <p class="support-text" id="transcription-model-description">
+                Best value for most recorded meeting audio and speaker playback.
+              </p>
+              <p class="support-text" id="transcription-model-pricing">
+                Estimated transcription cost: about $0.003 per minute. Pricing info date: 2026-03-29.
+              </p>
+            </section>
+
+            <div class="capture-toolbar">
+              <button class="primary-button" type="submit">Save AI Settings</button>
+            </div>
           </div>
-
-          <p class="support-text" id="model-pricing-status">
-            Loading model guidance and pricing...
-          </p>
-
-          <p class="support-text">
-            Pricing is shown per 1 million tokens. In plain language, tokens are small chunks of text, so this is a standardized way to compare cost across models. For normal meeting notes, a single polish pass usually uses only a tiny fraction of that amount. As a rough guide, one page of text is about 500 words, which is approximately 750 tokens.
-          </p>
-
-          <div class="model-option-list" id="model-options" aria-live="polite"></div>
-        </section>
-
-        <p class="support-text">
-          Your API key is stored only in this browser so the app can call OpenAI directly from the client.
-        </p>
-
-        <div class="capture-toolbar">
-          <button class="primary-button" type="submit">Save AI Settings</button>
         </div>
       </form>
     </section>
@@ -710,6 +895,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.17/mammoth.browser.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
