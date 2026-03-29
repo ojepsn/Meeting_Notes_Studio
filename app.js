@@ -1603,8 +1603,8 @@ function setActiveSettingsSection(sectionId) {
 
 function updateAiStatusCopy() {
   aiStatusCopy.innerHTML = settings.apiKey
-    ? `AI polishing is connected with <strong>${escapeHtml(getAiModelLabel(settings.model))}</strong>. Open <strong>AI Settings</strong> to update or remove the key.`
-    : `Open <strong>AI Settings</strong> to connect your OpenAI API key when you want AI polishing.`;
+    ? `AI polishing is connected with <strong>${escapeHtml(getAiModelLabel(settings.model))}</strong>. Open <strong>AI Settings</strong> to update or remove the key. If no OpenAI API key is provided, generation will not work well, although transcription is still possible.`
+    : `Open <strong>AI Settings</strong> to connect your OpenAI API key. If no OpenAI API key is provided, generation will not work well, although transcription is still possible.`;
 }
 
 function syncModalScrollLock() {
