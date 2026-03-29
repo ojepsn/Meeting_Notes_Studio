@@ -50,8 +50,12 @@ const importSessionsButton = document.querySelector("#import-sessions");
 const saveLocalFileButton = document.querySelector("#save-local-file");
 const importSessionsInput = document.querySelector("#import-sessions-input");
 const sessionStorageStatus = document.querySelector("#session-storage-status");
+const openBackupPanelButton = document.querySelector("#open-backup-panel");
 const openSettingsButton = document.querySelector("#open-settings");
 const openAiSettingsButton = document.querySelector("#open-ai-settings");
+const backupPanelModal = document.querySelector("#backup-panel-modal");
+const closeBackupPanelBackdrop = document.querySelector("#close-backup-panel");
+const closeBackupPanelButton = document.querySelector("#close-backup-panel-button");
 const settingsModal = document.querySelector("#settings-modal");
 const closeSettingsBackdrop = document.querySelector("#close-settings");
 const closeSettingsButton = document.querySelector("#close-settings-button");
@@ -549,6 +553,10 @@ function bindEvents() {
   saveLocalFileButton.addEventListener("click", async () => {
     await saveSessionsToLocalFile();
   });
+
+  openBackupPanelButton.addEventListener("click", openBackupPanel);
+  closeBackupPanelBackdrop.addEventListener("click", closeBackupPanel);
+  closeBackupPanelButton.addEventListener("click", closeBackupPanel);
 
   openParticipantSettingsButton.addEventListener("click", () => {
     openSettings();
@@ -1079,6 +1087,10 @@ function bindEvents() {
 
     if (event.key === "Escape" && !backupReminderModal.classList.contains("is-hidden")) {
       closeBackupReminder();
+    }
+
+    if (event.key === "Escape" && !backupPanelModal.classList.contains("is-hidden")) {
+      closeBackupPanel();
     }
 
     if (event.key === "Escape" && getRecentSessionsExpanded()) {
@@ -2387,6 +2399,20 @@ function closeBackupReminder() {
   syncModalScrollLock();
 }
 
+function openBackupPanel() {
+  backupPanelModal.classList.remove("is-hidden");
+  backupPanelModal.setAttribute("aria-hidden", "false");
+  syncModalScrollLock();
+  exportSessionsButton.focus();
+}
+
+function closeBackupPanel() {
+  backupPanelModal.classList.add("is-hidden");
+  backupPanelModal.setAttribute("aria-hidden", "true");
+  syncModalScrollLock();
+  openBackupPanelButton.focus();
+}
+
 function setActiveAiSettingsSection(sectionId) {
   activeAiSettingsSection = aiSettingsSections.some((section) => section.dataset.aiSettingsSection === sectionId)
     ? sectionId
@@ -2472,7 +2498,8 @@ function updateTranscriptionModelDescription() {
 function syncModalScrollLock() {
   const hasOpenModal = !aiSettingsModal.classList.contains("is-hidden")
     || !settingsModal.classList.contains("is-hidden")
-    || !backupReminderModal.classList.contains("is-hidden");
+    || !backupReminderModal.classList.contains("is-hidden")
+    || !backupPanelModal.classList.contains("is-hidden");
   document.body.classList.toggle("modal-open", hasOpenModal);
 }
 

@@ -67,24 +67,6 @@
           <p>No saved sessions yet. Start with a fresh note and it will appear here automatically.</p>
         </div>
 
-        <div class="session-storage">
-          <p class="section-label">Session Files</p>
-          <div class="session-storage-actions">
-            <button class="ghost-button" id="export-sessions" type="button">Export Sessions</button>
-            <button class="ghost-button" id="import-sessions" type="button">Import Sessions</button>
-            <button class="ghost-button" id="save-local-file" type="button">Save Local File</button>
-          </div>
-          <p class="support-text" id="session-storage-status">
-            Export sessions to a file, import them later, or save directly to a local file on supported desktop browsers.
-          </p>
-          <p class="support-text">
-            <strong>Export Sessions</strong> is the best general backup option and works broadly across browsers and devices.
-          </p>
-          <p class="support-text">
-            <strong>Save Local File</strong> is best on supported desktop browsers when you want to save directly to a chosen file on your computer.
-          </p>
-          <input id="import-sessions-input" type="file" accept="application/json,.json" hidden>
-        </div>
       </aside>
 
       <section class="editor-panel">
@@ -96,6 +78,7 @@
           <div class="panel-actions">
             <button class="primary-button header-new-session-button" id="new-session-main" type="button">+ New Session</button>
             <button class="ghost-button" id="toggle-sessions-panel" type="button" aria-expanded="false" aria-controls="sessions-panel">All Sessions</button>
+            <button class="ghost-button" id="open-backup-panel" type="button">Data Backup</button>
             <button class="ghost-button" id="open-settings" type="button">Settings</button>
             <button class="ghost-button" id="open-ai-settings" type="button">AI Settings</button>
             <button class="ghost-button is-hidden-field" id="update-app" type="button">Update App</button>
@@ -952,6 +935,39 @@
           <button class="primary-button" id="backup-reminder-export" type="button">Export Sessions</button>
           <button class="secondary-button" id="backup-reminder-save-local" type="button">Save Local File</button>
           <button class="ghost-button" id="backup-reminder-later" type="button">Remind Me Later</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-shell is-hidden" id="backup-panel-modal" aria-hidden="true">
+    <div class="modal-backdrop" id="close-backup-panel"></div>
+    <section class="modal-card" aria-label="Data backup" aria-modal="true" role="dialog">
+      <div class="panel-heading modal-heading">
+        <div>
+          <p class="section-label">Data Backup</p>
+          <h2>Back up your sessions</h2>
+        </div>
+        <button class="ghost-button" id="close-backup-panel-button" type="button">Close</button>
+      </div>
+
+      <div class="modal-form">
+        <div class="session-storage session-storage-modal">
+          <div class="session-storage-actions">
+            <button class="ghost-button" id="export-sessions" type="button">Export Sessions</button>
+            <button class="ghost-button" id="import-sessions" type="button">Import Sessions</button>
+            <button class="ghost-button" id="save-local-file" type="button">Save Local File</button>
+          </div>
+          <p class="support-text" id="session-storage-status">
+            Export sessions to a file, import them later, or save directly to a local file on supported desktop browsers.
+          </p>
+          <p class="support-text">
+            <strong>Export Sessions</strong> is the best general backup option and works broadly across browsers and devices.
+          </p>
+          <p class="support-text">
+            <strong>Save Local File</strong> is best on supported desktop browsers when you want to save directly to a chosen file on your computer.
+          </p>
+          <input id="import-sessions-input" type="file" accept="application/json,.json" hidden>
         </div>
       </div>
     </section>
