@@ -123,6 +123,7 @@ const manualNotesField = document.querySelector("#manual-notes-field");
 const manualNotesDisclosure = document.querySelector("#manual-notes-disclosure");
 const liveTranscriptField = document.querySelector("#live-transcript-field");
 const uploadedTranscriptField = document.querySelector("#uploaded-transcript-field");
+const mobileCaptureStatus = document.querySelector("#mobile-capture-status");
 const apiKeyInput = document.querySelector("#api-key");
 const modelSelect = document.querySelector("#model-select");
 const modelOptions = document.querySelector("#model-options");
@@ -1766,6 +1767,8 @@ function bindEvents() {
   });
 }
 
+bindMobileStatusMirrors();
+
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
     checkForRemoteAppUpdate().catch(() => {
@@ -2865,6 +2868,41 @@ function syncMobileUi() {
   if (!isMobileLayout()) {
     closeMobileSheets();
   }
+}
+
+function syncMobileCaptureStatus(text = "") {
+  if (!mobileCaptureStatus) {
+    return;
+  }
+
+  const nextText = String(text || "").trim()
+    || "Start dictation for live transcript, or use More to record audio instead.";
+  mobileCaptureStatus.textContent = nextText;
+}
+
+function bindMobileStatusMirrors() {
+  if (!mobileCaptureStatus) {
+    return;
+  }
+
+  const mirrorStatus = (element) => {
+    if (!element) {
+      return;
+    }
+
+    syncMobileCaptureStatus(element.textContent);
+    const observer = new MutationObserver(() => {
+      syncMobileCaptureStatus(element.textContent);
+    });
+    observer.observe(element, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  };
+
+  mirrorStatus(dictationStatus);
+  mirrorStatus(audioCaptureStatus);
 }
 
 function persistAiSettings({ announce = true } = {}) {

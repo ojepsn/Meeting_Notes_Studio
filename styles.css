@@ -1550,6 +1550,24 @@ textarea:focus {
   transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease, color 150ms ease;
 }
 
+.capture-mode-button {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  text-align: left;
+}
+
+.capture-mode-title {
+  font-weight: 800;
+}
+
+.capture-mode-hint {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
 .primary-button {
   background: var(--accent);
   color: #fffaf5;
@@ -2436,6 +2454,22 @@ textarea:focus {
     line-height: 1.65;
   }
 
+  .mobile-capture-status {
+    margin: 8px 0 0;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    font-weight: 700;
+  }
+
+  :root[data-theme$="-dark"] .mobile-capture-status {
+    background: rgba(212, 123, 81, 0.14);
+    color: var(--accent-strong);
+  }
+
   .manual-notes-disclosure {
     margin-top: 0;
     padding-top: 0;
@@ -2547,6 +2581,16 @@ textarea:focus {
     border-radius: 16px;
     justify-content: center;
     font-size: 0.88rem;
+  }
+
+  .mobile-bottom-bar .capture-mode-button {
+    justify-items: center;
+    text-align: center;
+    gap: 1px;
+  }
+
+  .mobile-bottom-bar .capture-mode-hint {
+    font-size: 0.66rem;
   }
 
   .mobile-bottom-primary {

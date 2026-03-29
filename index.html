@@ -177,6 +177,10 @@
                 ></textarea>
               </label>
 
+              <p class="support-text mobile-capture-status mobile-only" id="mobile-capture-status">
+                Start dictation for live transcript, or use More to record audio instead.
+              </p>
+
               <details class="manual-notes-disclosure" id="manual-notes-disclosure" open>
                 <summary>Manual notes</summary>
                 <label class="field" id="manual-notes-field">
@@ -247,8 +251,14 @@
                   </p>
                 </div>
                 <div class="capture-toolbar audio-capture-actions">
-                  <button class="secondary-button" id="dictation-toggle" type="button">Start dictation</button>
-                  <button class="secondary-button" id="audio-record-toggle" type="button">Record audio</button>
+                  <button class="secondary-button capture-mode-button" id="dictation-toggle" type="button">
+                    <span class="capture-mode-title">Start dictation</span>
+                    <span class="capture-mode-hint">Fastest option when supported</span>
+                  </button>
+                  <button class="secondary-button capture-mode-button" id="audio-record-toggle" type="button">
+                    <span class="capture-mode-title">Record audio</span>
+                    <span class="capture-mode-hint">Most reliable</span>
+                  </button>
                   <button class="ghost-button" id="upload-audio" type="button">Upload audio</button>
                   <button class="ghost-button" id="upload-transcript" type="button">Upload transcript</button>
                   <button class="ghost-button" id="transcribe-audio" type="button">Transcribe audio</button>
@@ -418,7 +428,10 @@
       <div class="mobile-sheet-backdrop mobile-only" id="mobile-sheet-backdrop" hidden></div>
 
       <div class="mobile-bottom-bar mobile-only" aria-label="Mobile actions">
-        <button class="primary-button mobile-bottom-primary" id="mobile-dictation-toggle" type="button">Start dictation</button>
+        <button class="primary-button mobile-bottom-primary capture-mode-button" id="mobile-dictation-toggle" type="button">
+          <span class="capture-mode-title">Start dictation</span>
+          <span class="capture-mode-hint">Fastest when supported</span>
+        </button>
         <button class="secondary-button mobile-bottom-action is-hidden-field" id="mobile-generate" type="button" hidden>Generate</button>
         <button class="ghost-button mobile-bottom-action is-hidden-field" id="mobile-view-output-bar" type="button" hidden>Output</button>
         <button class="ghost-button mobile-bottom-action" id="mobile-open-more" type="button">More</button>
