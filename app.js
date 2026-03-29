@@ -3,6 +3,9 @@ const SETTINGS_KEY = "notesmith-settings";
 const AI_MODEL_CATALOG_KEY = "notesmith-ai-model-catalog";
 const PENDING_AUDIO_DB_NAME = "notesmith-pending-audio";
 const PENDING_AUDIO_STORE_NAME = "audioDrafts";
+const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
+const STORAGE_HANDLE_STORE_NAME = "handles";
+const STORAGE_HANDLE_KEY = "localDataFile";
 const APP_VERSION = "v0.10.5";
 
 const BUILT_IN_TEMPLATES = {
@@ -50,12 +53,17 @@ const importSessionsButton = document.querySelector("#import-sessions");
 const saveLocalFileButton = document.querySelector("#save-local-file");
 const importSessionsInput = document.querySelector("#import-sessions-input");
 const sessionStorageStatus = document.querySelector("#session-storage-status");
-const openBackupPanelButton = document.querySelector("#open-backup-panel");
+const openWorkspacePanelButton = document.querySelector("#open-workspace-panel");
 const openSettingsButton = document.querySelector("#open-settings");
-const openAiSettingsButton = document.querySelector("#open-ai-settings");
+const openAiSettingsInlineButton = document.querySelector("#open-ai-settings-inline");
 const backupPanelModal = document.querySelector("#backup-panel-modal");
 const closeBackupPanelBackdrop = document.querySelector("#close-backup-panel");
 const closeBackupPanelButton = document.querySelector("#close-backup-panel-button");
+const workspacePanelModal = document.querySelector("#workspace-panel-modal");
+const closeWorkspacePanelBackdrop = document.querySelector("#close-workspace-panel");
+const closeWorkspacePanelButton = document.querySelector("#close-workspace-panel-button");
+const openSessionsShortcutButton = document.querySelector("#open-sessions-shortcut");
+const openBackupShortcutButton = document.querySelector("#open-backup-shortcut");
 const settingsModal = document.querySelector("#settings-modal");
 const closeSettingsBackdrop = document.querySelector("#close-settings");
 const closeSettingsButton = document.querySelector("#close-settings-button");
@@ -73,6 +81,14 @@ const themeModeSelect = document.querySelector("#theme-mode");
 const settingsThemeDescription = document.querySelector("#settings-theme-description");
 const exportStylePresetSelect = document.querySelector("#export-style-preset");
 const exportStyleDescription = document.querySelector("#export-style-description");
+const storageModeBrowserInput = document.querySelector("#storage-mode-browser");
+const storageModeFileInput = document.querySelector("#storage-mode-file");
+const storageModeCopy = document.querySelector("#storage-mode-copy");
+const storageStatusCopy = document.querySelector("#storage-status-copy");
+const createStorageFileButton = document.querySelector("#create-storage-file");
+const useStorageFileButton = document.querySelector("#use-storage-file");
+const reconnectStorageFileButton = document.querySelector("#reconnect-storage-file");
+const disconnectStorageFileButton = document.querySelector("#disconnect-storage-file");
 const exportTitleFontInput = document.querySelector("#export-title-font");
 const exportHeadingFontInput = document.querySelector("#export-heading-font");
 const exportBodyFontInput = document.querySelector("#export-body-font");
@@ -97,6 +113,7 @@ const titleField = document.querySelector("#title-field");
 const titleFieldLabel = document.querySelector("#title-field-label");
 const participantsField = document.querySelector("#participants-field");
 const meetingScheduleField = document.querySelector("#meeting-schedule-field");
+const contextDisclosure = document.querySelector(".context-disclosure");
 const meetingDateField = document.querySelector("#meeting-date-field");
 const meetingStartTimeField = document.querySelector("#meeting-start-time-field");
 const meetingEndTimeField = document.querySelector("#meeting-end-time-field");
@@ -136,6 +153,7 @@ const includeHighlightsInput = document.querySelector("#include-highlights");
 const includeDecisionsInput = document.querySelector("#include-decisions");
 const includeActionsInput = document.querySelector("#include-actions");
 const transcribeOnlyInput = document.querySelector("#transcribe-only");
+const templateSectionList = document.querySelector("#template-section-list");
 const outputLanguageSelect = document.querySelector("#output-language");
 const detailLevelInput = document.querySelector("#detail-level");
 const detailLevelLabel = document.querySelector("#detail-level-label");
@@ -152,6 +170,7 @@ const highlightChips = document.querySelector("#highlight-chips");
 const liveTranscriptInput = document.querySelector("#live-transcript");
 const uploadedTranscriptInput = document.querySelector("#uploaded-transcript");
 const rawNotesInput = document.querySelector("#raw-notes");
+const highlightsSection = highlightsField?.closest(".form-section");
 const dictationLanguageSelect = document.querySelector("#dictation-language");
 const polishButton = document.querySelector("#polish-notes");
 const dictationToggle = document.querySelector("#dictation-toggle");
@@ -215,6 +234,10 @@ const MAX_AUDIO_UPLOAD_BYTES = 25 * 1024 * 1024;
 const AUDIO_CHUNK_TARGET_BYTES = 23 * 1024 * 1024;
 const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 const BACKUP_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+const STORAGE_MODES = {
+  browser: "browser",
+  file: "file",
+};
 const TRANSCRIPTION_MODELS = {
   "gpt-4o-mini-transcribe": {
     label: "GPT-4o mini transcribe",
@@ -241,6 +264,11 @@ const THEME_DESCRIPTIONS = {
   teal: "A crisp teal palette for a clean, modern product look.",
   forest: "A graphite-forward theme with restrained forest-green accents.",
 };
+
+let localDataFileHandle = null;
+let storageHandleDbPromise = null;
+let storagePersistTimeout = null;
+let isApplyingStoragePayload = false;
 const DEFAULT_EXPORT_PRESET = "modern-aptos";
 const EXPORT_STYLE_PRESETS = {
   "modern-aptos": {
@@ -462,6 +490,29 @@ function getTemplateDefinition(templateId) {
   return (settings?.customTemplates || []).find((template) => template.id === templateId) || BUILT_IN_TEMPLATES.meeting;
 }
 
+function createDefaultSettings() {
+  return {
+    apiKey: "",
+    model: "gpt-5-mini",
+    transcriptionModel: DEFAULT_TRANSCRIPTION_MODEL,
+    dictationLanguage: "auto",
+    lastBackupAt: 0,
+    themeFamily: "olive",
+    themeMode: "light",
+    recentSessionsExpanded: false,
+    abbreviationDirectory: [],
+    participantDirectory: [],
+    defaultCustomHeaders: [],
+    customTemplates: [],
+    exportStylePreset: DEFAULT_EXPORT_PRESET,
+    exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
+    storageMode: STORAGE_MODES.browser,
+    storageFileName: "",
+    storageFileConnected: false,
+    storageLastSyncAt: 0,
+  };
+}
+
 let settings = loadSettings();
 let sessions = loadSessions();
 let aiModelCatalog = loadAiModelCatalog();
@@ -503,6 +554,7 @@ render();
 bindEvents();
 registerServiceWorker();
 appVersionLabel.textContent = APP_VERSION;
+void initializeStorageMode();
 window.setTimeout(() => {
   maybeShowBackupReminder();
 }, 350);
@@ -554,7 +606,20 @@ function bindEvents() {
     await saveSessionsToLocalFile();
   });
 
-  openBackupPanelButton.addEventListener("click", openBackupPanel);
+  openWorkspacePanelButton.addEventListener("click", openWorkspacePanel);
+  closeWorkspacePanelBackdrop.addEventListener("click", closeWorkspacePanel);
+  closeWorkspacePanelButton.addEventListener("click", closeWorkspacePanel);
+  openSessionsShortcutButton.addEventListener("click", () => {
+    closeWorkspacePanel();
+    settings.recentSessionsExpanded = true;
+    persistSettings();
+    updateRecentSessionsPanelUi();
+  });
+  openBackupShortcutButton.addEventListener("click", () => {
+    closeWorkspacePanel();
+    openBackupPanel();
+  });
+
   closeBackupPanelBackdrop.addEventListener("click", closeBackupPanel);
   closeBackupPanelButton.addEventListener("click", closeBackupPanel);
 
@@ -625,6 +690,10 @@ function bindEvents() {
   closeSettingsButton.addEventListener("click", closeSettings);
   settingsNavButtons.forEach((button) => {
     button.addEventListener("click", () => {
+      if (button.dataset.settingsTab === "ai") {
+        openAiSettingsFromSettings();
+        return;
+      }
       setActiveSettingsSection(button.dataset.settingsTab);
     });
   });
@@ -636,6 +705,59 @@ function bindEvents() {
     settings.exportStyle = readExportStyleInputs();
     persistSettings();
     dictationStatus.textContent = `${getExportStyleDisplayName(settings.exportStylePreset)} export style saved.`;
+  });
+  storageModeBrowserInput?.addEventListener("change", async () => {
+    if (!storageModeBrowserInput.checked) {
+      return;
+    }
+    await switchToBrowserStorageMode();
+    dictationStatus.textContent = "Browser storage is now active.";
+  });
+  storageModeFileInput?.addEventListener("change", () => {
+    if (!storageModeFileInput.checked) {
+      return;
+    }
+    settings.storageMode = STORAGE_MODES.file;
+    settings.storageFileConnected = false;
+    persistSettings();
+    updateStorageUi();
+    dictationStatus.textContent = "Choose or create a local data file to finish switching storage mode.";
+  });
+  createStorageFileButton?.addEventListener("click", async () => {
+    try {
+      await createLocalDataFile();
+      dictationStatus.textContent = "A local data file was created and connected.";
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        dictationStatus.textContent = "Creating a local data file was cancelled.";
+      } else {
+        dictationStatus.textContent = `Could not create the local data file: ${error.message}`;
+      }
+    }
+  });
+  useStorageFileButton?.addEventListener("click", async () => {
+    try {
+      await useExistingLocalDataFile();
+      dictationStatus.textContent = "The local data file is now connected.";
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        dictationStatus.textContent = "Choosing a local data file was cancelled.";
+      } else {
+        dictationStatus.textContent = `Could not use that local data file: ${error.message}`;
+      }
+    }
+  });
+  reconnectStorageFileButton?.addEventListener("click", async () => {
+    try {
+      await reconnectLocalDataFile();
+      dictationStatus.textContent = "The local data file was reconnected.";
+    } catch (error) {
+      dictationStatus.textContent = `Could not reconnect the local data file: ${error.message}`;
+    }
+  });
+  disconnectStorageFileButton?.addEventListener("click", async () => {
+    await switchToBrowserStorageMode();
+    dictationStatus.textContent = "Switched back to browser storage.";
   });
   [
     exportTitleFontInput,
@@ -1013,7 +1135,7 @@ function bindEvents() {
     }
   });
 
-  openAiSettingsButton.addEventListener("click", openAiSettings);
+  openAiSettingsInlineButton.addEventListener("click", openAiSettingsFromSettings);
   closeAiSettingsBackdrop.addEventListener("click", closeAiSettings);
   closeAiSettingsButton.addEventListener("click", closeAiSettings);
   closeBackupReminderBackdrop.addEventListener("click", closeBackupReminder);
@@ -1091,6 +1213,10 @@ function bindEvents() {
 
     if (event.key === "Escape" && !backupPanelModal.classList.contains("is-hidden")) {
       closeBackupPanel();
+    }
+
+    if (event.key === "Escape" && !workspacePanelModal.classList.contains("is-hidden")) {
+      closeWorkspacePanel();
     }
 
     if (event.key === "Escape" && getRecentSessionsExpanded()) {
@@ -1197,6 +1323,23 @@ function bindEvents() {
     });
   });
 
+  templateSectionList?.addEventListener("change", (event) => {
+    const input = event.target.closest(".template-section-include");
+    if (!input) {
+      return;
+    }
+
+    const session = getActiveSession();
+    const sectionId = input.dataset.sectionId;
+
+    updateActiveSession({
+      templateSectionStates: {
+        ...(session.templateSectionStates || {}),
+        [sectionId]: input.checked,
+      },
+    }, true);
+  });
+
   outputLanguageSelect.addEventListener("change", () => {
     updateActiveSession({ outputLanguage: outputLanguageSelect.value }, true);
   });
@@ -1239,19 +1382,6 @@ function bindEvents() {
 
   customHeaderList.addEventListener("input", (event) => {
     const target = event.target;
-    const templateSectionItem = target.closest(".template-section-item");
-    if (templateSectionItem) {
-      const sectionId = templateSectionItem.dataset.sectionId;
-      const session = getActiveSession();
-      updateActiveSessionSilently({
-        templateSectionStates: {
-          ...(session.templateSectionStates || {}),
-          [sectionId]: target.checked,
-        },
-      });
-      return;
-    }
-
     const item = target.closest(".custom-header-item");
     if (!item) {
       return;
@@ -1771,6 +1901,7 @@ function render() {
   syncFieldsFromSession();
   renderHighlights();
   renderParticipantSuggestions();
+  renderTemplateSectionOptions();
   renderCustomHeaders();
   renderOutput();
   syncAudioCaptureUi();
@@ -1915,16 +2046,20 @@ function applyTemplateUi(session) {
   const showLiveTranscript = liveTranscriptEnabled;
   const showUploadedTranscript = liveTranscriptEnabled && Boolean(session.uploadedTranscript?.trim());
   const showTitle = fields.title !== false;
+  const templateCustomFields = normalizeTemplateCustomFields(template.customFields);
+  const showContextDisclosure = showMeetingSchedule || templateCustomFields.length > 0;
 
   setElementVisibility(titleField, showTitle);
   setElementVisibility(participantsField, showParticipants);
   setElementVisibility(participantDirectoryPanel, showParticipants);
+  setElementVisibility(contextDisclosure, showContextDisclosure);
   setElementVisibility(meetingScheduleField, showMeetingSchedule);
   setElementVisibility(meetingDateField, showMeetingDate);
   setElementVisibility(meetingStartTimeField, showMeetingStartTime);
   setElementVisibility(meetingEndTimeField, showMeetingEndTime);
   setElementVisibility(highlightsField, showHighlights);
   setElementVisibility(highlightChips, showHighlights);
+  setElementVisibility(highlightsSection, showHighlights);
   setElementVisibility(manualNotesField, showManualNotes);
   setElementVisibility(liveTranscriptField, showLiveTranscript);
   setElementVisibility(uploadedTranscriptField, showUploadedTranscript);
@@ -1994,10 +2129,18 @@ function updateTranscribeOnlyUi(session = getActiveSession()) {
   customHeaderList.classList.toggle("is-disabled", isTranscriptOnly);
   addCustomHeaderButton.disabled = isTranscriptOnly;
   addCustomHeaderButton.classList.toggle("is-disabled", isTranscriptOnly);
+  templateSectionList?.classList.toggle("is-disabled", isTranscriptOnly);
 
   if (isTranscriptOnly) {
     resetCustomHeaderAddForm();
   }
+
+  templateSectionList
+    ?.querySelectorAll("input")
+    .forEach((control) => {
+      control.disabled = isTranscriptOnly;
+      control.closest(".config-option")?.classList.toggle("is-disabled", isTranscriptOnly);
+    });
 
   customHeaderList
     .querySelectorAll("input, textarea, button")
@@ -2379,11 +2522,21 @@ function openAiSettings() {
   targetControl?.focus();
 }
 
+function openAiSettingsFromSettings() {
+  closeSettings();
+  window.setTimeout(() => {
+    openAiSettings();
+  }, 0);
+}
+
 function closeAiSettings() {
   aiSettingsModal.classList.add("is-hidden");
   aiSettingsModal.setAttribute("aria-hidden", "true");
   syncModalScrollLock();
-  openAiSettingsButton.focus();
+  const focusTarget = !settingsModal.classList.contains("is-hidden")
+    ? openAiSettingsInlineButton
+    : openSettingsButton;
+  focusTarget?.focus();
 }
 
 function openBackupReminder() {
@@ -2410,7 +2563,25 @@ function closeBackupPanel() {
   backupPanelModal.classList.add("is-hidden");
   backupPanelModal.setAttribute("aria-hidden", "true");
   syncModalScrollLock();
-  openBackupPanelButton.focus();
+  if (!workspacePanelModal.classList.contains("is-hidden")) {
+    openBackupShortcutButton.focus();
+    return;
+  }
+  openWorkspacePanelButton.focus();
+}
+
+function openWorkspacePanel() {
+  workspacePanelModal.classList.remove("is-hidden");
+  workspacePanelModal.setAttribute("aria-hidden", "false");
+  syncModalScrollLock();
+  openSessionsShortcutButton.focus();
+}
+
+function closeWorkspacePanel() {
+  workspacePanelModal.classList.add("is-hidden");
+  workspacePanelModal.setAttribute("aria-hidden", "true");
+  syncModalScrollLock();
+  openWorkspacePanelButton.focus();
 }
 
 function setActiveAiSettingsSection(sectionId) {
@@ -2432,6 +2603,9 @@ function setActiveAiSettingsSection(sectionId) {
 }
 
 function openSettings() {
+  if (activeSettingsSection === "ai") {
+    activeSettingsSection = "appearance";
+  }
   syncSettingsForm();
   settingsModal.classList.remove("is-hidden");
   settingsModal.setAttribute("aria-hidden", "false");
@@ -2468,8 +2642,8 @@ function setActiveSettingsSection(sectionId) {
 
 function updateAiStatusCopy() {
   aiStatusCopy.innerHTML = settings.apiKey
-    ? `AI polishing is connected with <strong>${escapeHtml(getAiModelLabel(settings.model))}</strong>. Open <strong>AI Settings</strong> to update or remove the key. If no OpenAI API key is provided, generation will not work well, although transcription is still possible.`
-    : `Open <strong>AI Settings</strong> to connect your OpenAI API key. If no OpenAI API key is provided, generation will not work well, although transcription is still possible.`;
+    ? `AI polishing is connected with <strong>${escapeHtml(getAiModelLabel(settings.model))}</strong>. Open <strong>Settings → AI</strong> to update or remove the key. If no OpenAI API key is provided, generation will not work well, although transcription is still possible.`
+    : `Open <strong>Settings → AI</strong> to connect your OpenAI API key. If no OpenAI API key is provided, generation will not work well, although transcription is still possible.`;
 }
 
 function resolveSelectedTranscriptionModel(modelId) {
@@ -2499,7 +2673,8 @@ function syncModalScrollLock() {
   const hasOpenModal = !aiSettingsModal.classList.contains("is-hidden")
     || !settingsModal.classList.contains("is-hidden")
     || !backupReminderModal.classList.contains("is-hidden")
-    || !backupPanelModal.classList.contains("is-hidden");
+    || !backupPanelModal.classList.contains("is-hidden")
+    || !workspacePanelModal.classList.contains("is-hidden");
   document.body.classList.toggle("modal-open", hasOpenModal);
 }
 
@@ -2759,11 +2934,7 @@ function formatCatalogDate(value) {
     return "Unknown";
   }
 
-  return new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(date);
+  return formatIsoDate(date);
 }
 
 function parsePrice(value) {
@@ -2921,26 +3092,7 @@ function renderAbbreviationDirectoryManager() {
 
 function renderCustomHeaders() {
   const session = getActiveSession();
-  const template = getTemplateDefinition(session.template);
   customHeaderList.innerHTML = "";
-
-  normalizeTemplateHeaders(template.headers || []).forEach((section, index) => {
-    const article = document.createElement("article");
-    article.className = "custom-header-item template-section-item";
-    article.dataset.sectionId = section.id;
-    article.innerHTML = `
-      <div class="config-option custom-header-toggle">
-        <label class="custom-header-toggle-main">
-          <input class="template-section-include" type="checkbox" ${session.templateSectionStates?.[section.id] !== false ? "checked" : ""}>
-          <span class="custom-header-toggle-label">${escapeHtml(section.title.trim() || `Template Section ${index + 1}`)}</span>
-        </label>
-        <span class="custom-header-toggle-actions">
-          <span class="template-section-badge">Template</span>
-        </span>
-      </div>
-    `;
-    customHeaderList.appendChild(article);
-  });
 
   session.customHeaders.forEach((header, index) => {
     const fragment = customHeaderTemplate.content.cloneNode(true);
@@ -2964,6 +3116,29 @@ function renderCustomHeaders() {
   });
 
   updateTranscribeOnlyUi(session);
+}
+
+function renderTemplateSectionOptions() {
+  const session = getActiveSession();
+  const template = getTemplateDefinition(session.template);
+  const templateSections = normalizeTemplateHeaders(template.headers || []);
+
+  if (!templateSectionList) {
+    return;
+  }
+
+  templateSectionList.innerHTML = "";
+  setElementVisibility(templateSectionList, templateSections.length > 0);
+
+  templateSections.forEach((section, index) => {
+    const label = document.createElement("label");
+    label.className = "config-option template-section-option";
+    label.innerHTML = `
+      <input class="template-section-include" data-section-id="${escapeHtml(section.id)}" type="checkbox" ${session.templateSectionStates?.[section.id] !== false ? "checked" : ""}>
+      <span>${escapeHtml(section.title.trim() || `Template Section ${index + 1}`)}</span>
+    `;
+    templateSectionList.appendChild(label);
+  });
 }
 
 function updateDetailLevelLabel() {
@@ -3029,6 +3204,10 @@ function updateActiveSession(patch, shouldScheduleSave) {
     renderCustomHeaders();
   }
 
+  if (patch.templateSectionStates !== undefined || patch.template !== undefined) {
+    renderTemplateSectionOptions();
+  }
+
   if (patch.transcribeOnly !== undefined) {
     updateTranscribeOnlyUi(getActiveSession());
   }
@@ -3057,6 +3236,9 @@ function updateActiveSessionSilently(patch) {
   setAppStatus("Saving changes", APP_STATUS_STATES.saving);
   if (patch.customHeaders !== undefined) {
     syncDefaultCustomHeaders(patch.customHeaders);
+  }
+  if (patch.templateSectionStates !== undefined || patch.template !== undefined) {
+    renderTemplateSectionOptions();
   }
   renderSessionList();
   schedulePersist();
@@ -4605,6 +4787,299 @@ function loadSessions() {
 
 function persistSessions() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  queueStorageFilePersist();
+}
+
+function isLocalDataFileMode() {
+  return settings.storageMode === STORAGE_MODES.file;
+}
+
+function supportsLocalDataFileMode() {
+  return typeof window.showSaveFilePicker === "function" && typeof window.showOpenFilePicker === "function";
+}
+
+function buildSharedDataPayload() {
+  return {
+    app: "Meeting Notes Studio",
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    sessions,
+    settingsSubset: {
+      participantDirectory: settings.participantDirectory || [],
+      abbreviationDirectory: settings.abbreviationDirectory || [],
+      customTemplates: settings.customTemplates || [],
+    },
+  };
+}
+
+function applySharedDataPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("The selected data file is not valid.");
+  }
+
+  if (payload.version !== undefined && Number(payload.version) !== 1) {
+    throw new Error("This data file uses an unsupported version.");
+  }
+
+  const importedSessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+  const settingsSubset = payload.settingsSubset && typeof payload.settingsSubset === "object"
+    ? payload.settingsSubset
+    : {};
+
+  isApplyingStoragePayload = true;
+  try {
+    settings.participantDirectory = normalizeParticipantDirectory(settingsSubset.participantDirectory);
+    settings.abbreviationDirectory = normalizeAbbreviationDirectory(settingsSubset.abbreviationDirectory);
+    settings.customTemplates = normalizeCustomTemplates(settingsSubset.customTemplates);
+    sessions = normalizeImportedSessions(importedSessions);
+    if (!sessions.length) {
+      const freshSession = createSession();
+      sessions = [freshSession];
+    }
+    activeSessionId = sessions[0]?.id ?? null;
+  } finally {
+    isApplyingStoragePayload = false;
+  }
+}
+
+async function openStorageHandleDb() {
+  if (!("indexedDB" in window)) {
+    throw new Error("This browser does not support persistent file-handle storage.");
+  }
+
+  if (!storageHandleDbPromise) {
+    storageHandleDbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(STORAGE_HANDLE_DB_NAME, 1);
+
+      request.addEventListener("upgradeneeded", () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(STORAGE_HANDLE_STORE_NAME)) {
+          db.createObjectStore(STORAGE_HANDLE_STORE_NAME);
+        }
+      });
+
+      request.addEventListener("success", () => resolve(request.result));
+      request.addEventListener("error", () => reject(request.error || new Error("Storage handle database could not be opened.")));
+    });
+  }
+
+  return storageHandleDbPromise;
+}
+
+async function saveLocalDataFileHandle(handle) {
+  const db = await openStorageHandleDb();
+  await new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORAGE_HANDLE_STORE_NAME, "readwrite");
+    transaction.objectStore(STORAGE_HANDLE_STORE_NAME).put(handle, STORAGE_HANDLE_KEY);
+    transaction.addEventListener("complete", resolve);
+    transaction.addEventListener("error", () => reject(transaction.error || new Error("Could not save the local data file handle.")));
+  });
+}
+
+async function loadLocalDataFileHandle() {
+  const db = await openStorageHandleDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORAGE_HANDLE_STORE_NAME, "readonly");
+    const request = transaction.objectStore(STORAGE_HANDLE_STORE_NAME).get(STORAGE_HANDLE_KEY);
+    request.addEventListener("success", () => resolve(request.result || null));
+    request.addEventListener("error", () => reject(request.error || new Error("Could not load the local data file handle.")));
+  });
+}
+
+async function clearLocalDataFileHandle() {
+  const db = await openStorageHandleDb();
+  await new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORAGE_HANDLE_STORE_NAME, "readwrite");
+    transaction.objectStore(STORAGE_HANDLE_STORE_NAME).delete(STORAGE_HANDLE_KEY);
+    transaction.addEventListener("complete", resolve);
+    transaction.addEventListener("error", () => reject(transaction.error || new Error("Could not clear the local data file handle.")));
+  });
+}
+
+async function ensureHandlePermission(handle, readWrite = true) {
+  if (!handle) {
+    return false;
+  }
+
+  const options = readWrite ? { mode: "readwrite" } : {};
+  if (typeof handle.queryPermission === "function") {
+    const permission = await handle.queryPermission(options);
+    if (permission === "granted") {
+      return true;
+    }
+  }
+
+  if (typeof handle.requestPermission === "function") {
+    const permission = await handle.requestPermission(options);
+    return permission === "granted";
+  }
+
+  return true;
+}
+
+async function readSharedDataFile(handle) {
+  const hasPermission = await ensureHandlePermission(handle, false);
+  if (!hasPermission) {
+    throw new Error("Permission to read the local data file was not granted.");
+  }
+
+  const file = await handle.getFile();
+  const text = await file.text();
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    throw new Error("The selected data file is not valid JSON.");
+  }
+  if (!payload || typeof payload !== "object") {
+    throw new Error("The selected data file is not valid JSON.");
+  }
+
+  return payload;
+}
+
+async function writeSharedDataFile(handle) {
+  const hasPermission = await ensureHandlePermission(handle, true);
+  if (!hasPermission) {
+    throw new Error("Permission to write to the local data file was not granted.");
+  }
+
+  const writable = await handle.createWritable();
+  await writable.write(JSON.stringify(buildSharedDataPayload(), null, 2));
+  await writable.close();
+}
+
+function updateStorageConnectionState(isConnected, fileName = settings.storageFileName || "") {
+  settings.storageFileConnected = isConnected;
+  settings.storageFileName = fileName;
+  if (isConnected) {
+    settings.storageLastSyncAt = Date.now();
+  }
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+async function connectLocalDataFileHandle(handle, options = {}) {
+  const payload = await readSharedDataFile(handle);
+  localDataFileHandle = handle;
+  await saveLocalDataFileHandle(handle);
+  applySharedDataPayload(payload);
+  syncParticipantDirectoryFromAllSessions();
+  settings.storageMode = STORAGE_MODES.file;
+  updateStorageConnectionState(true, handle.name || "Local data file");
+  if (options.prependFreshSession !== false) {
+    const freshSession = createSession();
+    sessions = [freshSession, ...sessions];
+    activeSessionId = freshSession.id;
+  }
+  persistSessions();
+  persistSettings();
+  render();
+}
+
+async function createLocalDataFile() {
+  if (!supportsLocalDataFileMode()) {
+    throw new Error("Local data file mode is not supported in this browser.");
+  }
+
+  const handle = await window.showSaveFilePicker({
+    suggestedName: `meeting-notes-data-${new Date().toISOString().slice(0, 10)}.json`,
+    types: [
+      {
+        description: "JSON files",
+        accept: {
+          "application/json": [".json"],
+        },
+      },
+    ],
+  });
+
+  settings.storageMode = STORAGE_MODES.file;
+  localDataFileHandle = handle;
+  await writeSharedDataFile(handle);
+  await saveLocalDataFileHandle(handle);
+  updateStorageConnectionState(true, handle.name || "Local data file");
+  persistSettings();
+  render();
+}
+
+async function useExistingLocalDataFile() {
+  if (!supportsLocalDataFileMode()) {
+    throw new Error("Local data file mode is not supported in this browser.");
+  }
+
+  const [handle] = await window.showOpenFilePicker({
+    multiple: false,
+    types: [
+      {
+        description: "JSON files",
+        accept: {
+          "application/json": [".json"],
+        },
+      },
+    ],
+  });
+
+  await connectLocalDataFileHandle(handle, { prependFreshSession: false });
+}
+
+async function reconnectLocalDataFile(options = {}) {
+  const handle = localDataFileHandle || await loadLocalDataFileHandle();
+  if (!handle) {
+    throw new Error("No previously selected local data file was found.");
+  }
+
+  await connectLocalDataFileHandle(handle, { prependFreshSession: false, ...options });
+}
+
+async function switchToBrowserStorageMode() {
+  settings.storageMode = STORAGE_MODES.browser;
+  localDataFileHandle = null;
+  updateStorageConnectionState(false, "");
+  await clearLocalDataFileHandle().catch(() => {});
+  persistSettings();
+  render();
+}
+
+function queueStorageFilePersist() {
+  if (!isLocalDataFileMode() || !localDataFileHandle || isApplyingStoragePayload) {
+    return;
+  }
+
+  window.clearTimeout(storagePersistTimeout);
+  storagePersistTimeout = window.setTimeout(() => {
+    void persistSharedDataFile();
+  }, 260);
+}
+
+async function persistSharedDataFile() {
+  if (!isLocalDataFileMode() || !localDataFileHandle || isApplyingStoragePayload) {
+    return;
+  }
+
+  try {
+    await writeSharedDataFile(localDataFileHandle);
+    updateStorageConnectionState(true, localDataFileHandle.name || settings.storageFileName || "Local data file");
+    updateStorageUi();
+  } catch {
+    updateStorageConnectionState(false, settings.storageFileName || "");
+    updateStorageUi();
+  }
+}
+
+async function initializeStorageMode() {
+  if (!isLocalDataFileMode()) {
+    updateStorageUi();
+    return;
+  }
+
+  try {
+    await reconnectLocalDataFile({ prependFreshSession: true });
+    dictationStatus.textContent = "Connected to your local data file.";
+  } catch (error) {
+    updateStorageConnectionState(false, settings.storageFileName || "");
+    updateStorageUi();
+    dictationStatus.textContent = `Local data file mode is selected, but the file needs to be reconnected. ${error.message}`;
+  }
 }
 
 function syncParticipantDirectoryFromAllSessions() {
@@ -4645,22 +5120,7 @@ function loadSettings() {
   try {
     const stored = localStorage.getItem(SETTINGS_KEY);
     if (!stored) {
-      return {
-        apiKey: "",
-        model: "gpt-5-mini",
-        transcriptionModel: DEFAULT_TRANSCRIPTION_MODEL,
-        dictationLanguage: "auto",
-        lastBackupAt: 0,
-        themeFamily: "olive",
-        themeMode: "light",
-        recentSessionsExpanded: false,
-        abbreviationDirectory: [],
-        participantDirectory: [],
-        defaultCustomHeaders: [],
-        customTemplates: [],
-        exportStylePreset: DEFAULT_EXPORT_PRESET,
-        exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
-      };
+      return createDefaultSettings();
     }
 
     const parsed = JSON.parse(stored);
@@ -4668,15 +5128,11 @@ function loadSettings() {
     const exportStylePreset = EXPORT_STYLE_PRESETS[parsed.exportStylePreset] ? parsed.exportStylePreset : DEFAULT_EXPORT_PRESET;
 
     return {
-      apiKey: "",
-      model: "gpt-5-mini",
-      transcriptionModel: DEFAULT_TRANSCRIPTION_MODEL,
-      dictationLanguage: "auto",
-      lastBackupAt: 0,
-      themeFamily: "olive",
-      themeMode: legacyThemeMode,
+      ...createDefaultSettings(),
       ...parsed,
+      apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
       lastBackupAt: Number.isFinite(parsed.lastBackupAt) ? Number(parsed.lastBackupAt) : 0,
+      themeMode: parsed.themeMode === "dark" || parsed.themeMode === "light" ? parsed.themeMode : legacyThemeMode,
       transcriptionModel: resolveSelectedTranscriptionModel(parsed.transcriptionModel),
       recentSessionsExpanded: parsed.recentSessionsExpanded === true,
       abbreviationDirectory: normalizeAbbreviationDirectory(parsed.abbreviationDirectory),
@@ -4688,29 +5144,19 @@ function loadSettings() {
         ...EXPORT_STYLE_PRESETS[exportStylePreset].style,
         ...(parsed.exportStyle || {}),
       }),
+      storageMode: parsed.storageMode === STORAGE_MODES.file ? STORAGE_MODES.file : STORAGE_MODES.browser,
+      storageFileName: typeof parsed.storageFileName === "string" ? parsed.storageFileName : "",
+      storageFileConnected: parsed.storageFileConnected === true,
+      storageLastSyncAt: Number.isFinite(parsed.storageLastSyncAt) ? Number(parsed.storageLastSyncAt) : 0,
     };
   } catch {
-    return {
-      apiKey: "",
-      model: "gpt-5-mini",
-      transcriptionModel: DEFAULT_TRANSCRIPTION_MODEL,
-      dictationLanguage: "auto",
-      lastBackupAt: 0,
-      themeFamily: "olive",
-      themeMode: "light",
-      recentSessionsExpanded: false,
-      abbreviationDirectory: [],
-      participantDirectory: [],
-      defaultCustomHeaders: [],
-      customTemplates: [],
-      exportStylePreset: DEFAULT_EXPORT_PRESET,
-      exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
-    };
+    return createDefaultSettings();
   }
 }
 
 function persistSettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  queueStorageFilePersist();
 }
 
 function markBackupCompleted() {
@@ -4850,9 +5296,48 @@ function syncSettingsForm() {
   writeExportStyleInputs(getCurrentExportStyle());
   updateThemeDescription();
   updateExportStyleDescription();
+  updateStorageUi();
   renderCustomTemplates();
   renderAbbreviationDirectoryManager();
   renderParticipantDirectoryManager();
+}
+
+function updateStorageUi() {
+  if (!storageModeBrowserInput || !storageModeFileInput) {
+    return;
+  }
+
+  const isFileMode = isLocalDataFileMode();
+  storageModeBrowserInput.checked = !isFileMode;
+  storageModeFileInput.checked = isFileMode;
+
+  const supported = supportsLocalDataFileMode();
+  storageModeFileInput.disabled = !supported;
+  createStorageFileButton.disabled = !supported;
+  useStorageFileButton.disabled = !supported;
+  reconnectStorageFileButton.disabled = !supported;
+
+  if (!supported) {
+    storageModeCopy.textContent = "Local data file mode is not supported in this browser. Browser storage remains the recommended and available option here.";
+    storageStatusCopy.textContent = "No local data file is connected.";
+    disconnectStorageFileButton.disabled = true;
+    return;
+  }
+
+  if (!isFileMode) {
+    storageModeCopy.textContent = "Browser storage is active. Your data stays in this browser profile, and you can still back it up from the Data Backup menu.";
+    storageStatusCopy.textContent = "No local data file is connected.";
+    reconnectStorageFileButton.disabled = true;
+    disconnectStorageFileButton.disabled = true;
+    return;
+  }
+
+  storageModeCopy.textContent = "Local data file mode is active. Sessions, saved participants, abbreviations, and custom templates are written to a file on this computer.";
+  storageStatusCopy.textContent = settings.storageFileConnected
+    ? `Connected to ${settings.storageFileName || "your local data file"}. Last sync: ${settings.storageLastSyncAt ? `${formatDate(settings.storageLastSyncAt)} ${formatTime(settings.storageLastSyncAt)}` : "just now"}.`
+    : `Local data file mode is selected${settings.storageFileName ? ` for ${settings.storageFileName}` : ""}, but the file needs to be reconnected.`;
+  reconnectStorageFileButton.disabled = false;
+  disconnectStorageFileButton.disabled = false;
 }
 
 function getRecentSessionsExpanded() {

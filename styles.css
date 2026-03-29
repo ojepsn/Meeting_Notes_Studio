@@ -446,17 +446,21 @@ body.sessions-panel-open {
 
 .editor-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(160px, 14vw);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 20px;
   align-items: start;
 }
 
 .editor-main {
   min-width: 0;
+  display: grid;
+  gap: 16px;
 }
 
 .editor-sidebar {
   min-width: 0;
+  display: grid;
+  gap: 14px;
 }
 
 .panel-heading {
@@ -716,10 +720,81 @@ body.sessions-panel-open {
   border-radius: 12px;
 }
 
+.settings-inline-actions {
+  margin-top: 14px;
+}
+
+.workspace-shortcuts {
+  display: grid;
+  gap: 12px;
+}
+
+.workspace-shortcut {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 18px;
+  border-radius: 18px;
+  text-align: left;
+}
+
+.workspace-shortcut strong {
+  color: var(--ink);
+  font-size: 0.98rem;
+}
+
+.workspace-shortcut span {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.storage-mode-list {
+  display: grid;
+  gap: 10px;
+}
+
+.storage-mode-option {
+  align-items: flex-start;
+}
+
+.audio-info-disclosure summary::before,
+.advanced-options-disclosure summary::before,
+.context-disclosure summary::before {
+  content: "▸";
+}
+
 .field-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 220px);
   gap: 14px;
+}
+
+.form-section {
+  padding: 18px;
+  border-radius: 22px;
+  background: linear-gradient(160deg, rgba(252, 254, 249, 0.95), rgba(235, 242, 228, 0.92));
+  border: 1px solid rgba(62, 81, 48, 0.08);
+}
+
+.form-section-header {
+  margin-bottom: 14px;
+}
+
+.form-section-header h3 {
+  margin: 0;
+  font-family: "Newsreader", serif;
+  font-size: 1.24rem;
+  line-height: 1;
+}
+
+.form-section .section-label {
+  margin-bottom: 6px;
+}
+
+:root[data-theme$="-dark"] .form-section {
+  background: linear-gradient(180deg, rgba(22, 31, 44, 0.98), rgba(18, 26, 37, 0.95));
+  border-color: rgba(207, 219, 231, 0.08);
 }
 
 .field-grid-three {
@@ -762,11 +837,15 @@ body.sessions-panel-open {
 }
 
 .audio-capture-card {
-  margin: 12px 0;
+  margin: 12px 0 0;
   padding: 14px;
   border-radius: 20px;
   background: linear-gradient(160deg, rgba(250, 252, 247, 0.96), rgba(232, 239, 224, 0.92));
   border: 1px solid rgba(62, 81, 48, 0.08);
+}
+
+.workflow-card {
+  margin-bottom: 0;
 }
 
 .audio-capture-copy h3 {
@@ -837,6 +916,47 @@ body.sessions-panel-open {
   margin-bottom: 0;
 }
 
+.advanced-options-disclosure,
+.context-disclosure {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(62, 81, 48, 0.08);
+}
+
+.advanced-options-disclosure summary,
+.context-disclosure summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.advanced-options-disclosure summary::-webkit-details-marker,
+.context-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-options-disclosure summary::before,
+.context-disclosure summary::before,
+.audio-info-disclosure summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 8px;
+  transition: transform 150ms ease;
+}
+
+.advanced-options-disclosure[open] summary::before,
+.context-disclosure[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.advanced-options-body,
+.context-disclosure-body {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
 .config-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -846,6 +966,10 @@ body.sessions-panel-open {
 .config-grid-inline {
   grid-template-columns: 1fr;
   gap: 8px;
+}
+
+#template-section-list {
+  margin-top: 8px;
 }
 
 .config-option {
@@ -924,7 +1048,7 @@ body.sessions-panel-open {
 }
 
 .custom-headers-inline {
-  margin-top: 14px;
+  margin-top: 0;
 }
 
 .custom-headers-heading {
