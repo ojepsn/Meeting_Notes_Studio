@@ -37,7 +37,7 @@ const BUILT_IN_TEMPLATES = {
 const sessionList = document.querySelector("#session-list");
 const emptySessions = document.querySelector("#empty-sessions");
 const sessionsPanel = document.querySelector("#sessions-panel");
-const workspace = document.querySelector(".workspace");
+const sessionsPanelBackdrop = document.querySelector("#sessions-panel-backdrop");
 const toggleSessionsPanelButton = document.querySelector("#toggle-sessions-panel");
 const collapseSessionsPanelButton = document.querySelector("#collapse-sessions-panel");
 const newSessionButton = document.querySelector("#new-session");
@@ -437,6 +437,8 @@ function bindEvents() {
     const nextSession = createSession();
     sessions.unshift(nextSession);
     activeSessionId = nextSession.id;
+    settings.recentSessionsExpanded = false;
+    persistSettings();
     persistSessions();
     render();
     meetingTitleInput.focus();
@@ -446,16 +448,22 @@ function bindEvents() {
     const nextSession = createSession();
     sessions.unshift(nextSession);
     activeSessionId = nextSession.id;
-    settings.recentSessionsExpanded = true;
+    settings.recentSessionsExpanded = false;
     persistSettings();
     persistSessions();
     render();
     meetingTitleInput.focus();
   });
 
-  [toggleSessionsPanelButton, collapseSessionsPanelButton].forEach((button) => {
+  toggleSessionsPanelButton?.addEventListener("click", () => {
+    settings.recentSessionsExpanded = true;
+    persistSettings();
+    updateRecentSessionsPanelUi();
+  });
+
+  [collapseSessionsPanelButton, sessionsPanelBackdrop].forEach((button) => {
     button?.addEventListener("click", () => {
-      settings.recentSessionsExpanded = !getRecentSessionsExpanded();
+      settings.recentSessionsExpanded = false;
       persistSettings();
       updateRecentSessionsPanelUi();
     });
@@ -718,6 +726,12 @@ function bindEvents() {
 
     if (event.key === "Escape" && !aiSettingsModal.classList.contains("is-hidden")) {
       closeAiSettings();
+    }
+
+    if (event.key === "Escape" && getRecentSessionsExpanded()) {
+      settings.recentSessionsExpanded = false;
+      persistSettings();
+      updateRecentSessionsPanelUi();
     }
   });
 
@@ -1318,11 +1332,15 @@ function renderSessionList() {
 
     button.addEventListener("click", () => {
       activeSessionId = session.id;
+      settings.recentSessionsExpanded = false;
+      persistSettings();
       render();
     });
 
     editButton.addEventListener("click", () => {
       activeSessionId = session.id;
+      settings.recentSessionsExpanded = false;
+      persistSettings();
       render();
       if (!titleField.classList.contains("is-hidden-field")) {
         meetingTitleInput.focus();
@@ -3362,9 +3380,11 @@ function getRecentSessionsExpanded() {
 }
 
 function updateRecentSessionsPanelUi() {
-  const isExpanded = getRecentSessionsExpanded() || window.innerWidth <= 1180;
-  workspace.classList.toggle("sessions-collapsed", !isExpanded);
-  sessionsPanel.classList.toggle("is-collapsed", !isExpanded);
+  const isExpanded = getRecentSessionsExpanded();
+  sessionsPanel.classList.toggle("is-open", isExpanded);
+  sessionsPanelBackdrop.hidden = !isExpanded;
+  sessionsPanelBackdrop.classList.toggle("is-visible", isExpanded);
+  document.body.classList.toggle("sessions-panel-open", isExpanded);
   toggleSessionsPanelButton?.setAttribute("aria-expanded", String(isExpanded));
   collapseSessionsPanelButton?.setAttribute("aria-expanded", String(isExpanded));
 }
