@@ -624,7 +624,13 @@ function bindEvents() {
     closeMobileSheets();
     createAndOpenNewSession();
   });
-  mobileDictationToggle?.addEventListener("click", toggleDictation);
+  mobileDictationToggle?.addEventListener("click", () => {
+    if (mobileDictationToggle.dataset.captureMode === "audio") {
+      toggleAudioCapture();
+      return;
+    }
+    toggleDictation();
+  });
   mobileGenerateButton?.addEventListener("click", () => {
     polishButton.click();
   });
@@ -2582,6 +2588,8 @@ function syncAudioCaptureUi(session = getActiveSession()) {
   } else {
     audioCaptureStatus.textContent = "No audio file selected yet. You can record here or upload mp3, m4a, wav, mp4, or webm. Larger files will be split automatically before transcription.";
   }
+
+  syncMobileUi();
 }
 
 function setElementVisibility(element, isVisible) {
@@ -2942,12 +2950,14 @@ function syncMobileUi() {
   const canGenerate = hasSessionContent(session);
   const hasOutput = Boolean(session.polishedHtml);
   const template = getTemplateDefinition(session.template);
-  const canDictate = template.fields.liveTranscript !== false;
+  const supportsTranscriptField = template.fields.liveTranscript !== false;
+  const canDictate = supportsTranscriptField && Boolean(recognition);
+  const isRecordingAudio = audioRecordingSessionId === session.id;
 
   setElementVisibility(mobileGenerateButton, canGenerate);
   setElementVisibility(mobileOpenOutputBarButton, hasOutput);
   setElementVisibility(mobileOpenOutputButton, hasOutput);
-  setElementVisibility(mobileDictationToggle, canDictate);
+  setElementVisibility(mobileDictationToggle, supportsTranscriptField);
 
   if (mobileGenerateButton) {
     mobileGenerateButton.textContent = polishButton.textContent;
@@ -2955,9 +2965,36 @@ function syncMobileUi() {
   }
 
   if (mobileDictationToggle) {
-    mobileDictationToggle.textContent = dictationToggle.textContent;
-    mobileDictationToggle.classList.toggle("is-recording", dictationToggle.classList.contains("is-recording"));
-    mobileDictationToggle.disabled = dictationToggle.disabled;
+    const titleNode = mobileDictationToggle.querySelector(".capture-mode-title");
+    const hintNode = mobileDictationToggle.querySelector(".capture-mode-hint");
+
+    if (canDictate) {
+      if (titleNode) {
+        titleNode.textContent = dictationToggle.textContent;
+      } else {
+        mobileDictationToggle.textContent = dictationToggle.textContent;
+      }
+      if (hintNode) {
+        hintNode.textContent = isRecording ? "Live browser transcription" : "Fastest option when supported";
+      }
+      mobileDictationToggle.classList.toggle("is-recording", dictationToggle.classList.contains("is-recording"));
+      mobileDictationToggle.disabled = dictationToggle.disabled;
+      mobileDictationToggle.dataset.captureMode = "dictation";
+    } else {
+      if (titleNode) {
+        titleNode.textContent = isRecordingAudio ? "Stop audio" : "Record audio";
+      } else {
+        mobileDictationToggle.textContent = isRecordingAudio ? "Stop audio" : "Record audio";
+      }
+      if (hintNode) {
+        hintNode.textContent = SUPPORTS_AUDIO_RECORDING
+          ? "Most reliable on this device"
+          : "Use More to upload audio";
+      }
+      mobileDictationToggle.classList.toggle("is-recording", isRecordingAudio);
+      mobileDictationToggle.disabled = !SUPPORTS_AUDIO_RECORDING && !isRecordingAudio;
+      mobileDictationToggle.dataset.captureMode = "audio";
+    }
   }
 
   if (manualNotesDisclosure) {
