@@ -1542,12 +1542,35 @@ function bindEvents() {
   });
 
   polishButton.addEventListener("click", async () => {
-    const session = getActiveSession();
+    let session = getActiveSession();
     polishButton.disabled = true;
     polishButton.textContent = "Polishing...";
     setAppStatus("Generating", APP_STATUS_STATES.generating);
 
     try {
+      const pendingAudioDraft = await getAudioDraft(session.id);
+      if (pendingAudioDraft) {
+        if (!settings.apiKey) {
+          throw new Error("Recorded audio is available, but it has not been transcribed yet. Add an OpenAI API key and click \"Transcribe audio\" first.");
+        }
+
+        audioCaptureStatus.textContent = "Transcribing recorded audio before generation...";
+        const transcriptText = await transcribeAudioDraftWithOpenAI(pendingAudioDraft, settings, {
+          onProgress: (message) => {
+            audioCaptureStatus.textContent = message;
+          },
+        });
+        const nextTranscript = [session.liveTranscript?.trim(), transcriptText.trim()]
+          .filter(Boolean)
+          .join("\n\n");
+
+        updateActiveSession({ liveTranscript: nextTranscript }, true);
+        liveTranscriptInput.value = nextTranscript;
+        await clearAudioDraft(session.id);
+        audioCaptureStatus.textContent = "Recorded audio was transcribed and added to the Live transcript field.";
+        session = getActiveSession();
+      }
+
       const polishedHtml = settings.apiKey
         ? await polishWithOpenAI(session, settings)
         : buildLocalPolishedNotes(session);
