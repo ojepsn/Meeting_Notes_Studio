@@ -1,6 +1,8 @@
 ﻿const STORAGE_KEY = "notesmith-sessions";
 const SETTINGS_KEY = "notesmith-settings";
 const AI_MODEL_CATALOG_KEY = "notesmith-ai-model-catalog";
+const PENDING_AUDIO_DB_NAME = "notesmith-pending-audio";
+const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const APP_VERSION = "v0.10.5";
 
 const BUILT_IN_TEMPLATES = {
@@ -469,6 +471,7 @@ let mediaRecorderStream = null;
 let mediaRecorderChunks = [];
 let audioRecordingSessionId = null;
 const audioDrafts = new Map();
+let pendingAudioDbPromise = null;
 
 applyTheme(settings.themeFamily, settings.themeMode);
 settings.model = resolveSelectedModel(settings.model);
@@ -1286,19 +1289,23 @@ function bindEvents() {
     transcriptFileInput.click();
   });
 
-  audioFileInput.addEventListener("change", () => {
+  audioFileInput.addEventListener("change", async () => {
     const [file] = [...audioFileInput.files];
     if (!file) {
       return;
     }
 
-    setAudioDraft({
-      blob: file,
-      fileName: file.name || `audio-upload-${Date.now()}.webm`,
-      mimeType: file.type || "audio/webm",
-      size: file.size,
-      source: "upload",
-    });
+    try {
+      await setAudioDraft({
+        blob: file,
+        fileName: file.name || `audio-upload-${Date.now()}.webm`,
+        mimeType: file.type || "audio/webm",
+        size: file.size,
+        source: "upload",
+      });
+    } catch {
+      audioCaptureStatus.textContent = "The audio file could not be saved locally for later transcription.";
+    }
     audioFileInput.value = "";
   });
 
@@ -1311,8 +1318,11 @@ function bindEvents() {
     try {
       const transcriptText = await readTranscriptFile(file);
       updateActiveSession({ uploadedTranscript: transcriptText }, true);
+      render();
+      setElementVisibility(uploadedTranscriptField, Boolean(transcriptText.trim()));
       uploadedTranscriptInput.value = transcriptText;
-      applyTemplateUi(getActiveSession());
+      uploadedTranscriptField.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      uploadedTranscriptInput.focus();
       audioCaptureStatus.textContent = `Transcript uploaded from ${file.name} and added to the Uploaded transcript field.`;
     } catch (error) {
       audioCaptureStatus.textContent = error.message || "That transcript file could not be read in this browser.";
@@ -1323,7 +1333,7 @@ function bindEvents() {
 
   transcribeAudioButton.addEventListener("click", async () => {
     const session = getActiveSession();
-    const audioDraft = getAudioDraft(session.id);
+    const audioDraft = await getAudioDraft(session.id);
     let wasSuccessful = false;
 
     if (!audioDraft) {
@@ -1354,7 +1364,7 @@ function bindEvents() {
       updateActiveSession({ liveTranscript: nextTranscript }, true);
       liveTranscriptInput.value = nextTranscript;
       dictationStatus.textContent = `Audio transcription complete with ${getTranscriptionModelLabel(settings.transcriptionModel)}.`;
-      clearAudioDraft(session.id);
+      await clearAudioDraft(session.id);
       audioCaptureStatus.textContent = "Audio transcription complete. The transcript has been added to the Live transcript field.";
       wasSuccessful = true;
     } catch (error) {
@@ -1908,38 +1918,177 @@ function updateTranscribeOnlyUi(session = getActiveSession()) {
   polishButton.textContent = "Generate";
 }
 
-function getAudioDraft(sessionId = activeSessionId) {
-  return sessionId ? audioDrafts.get(sessionId) || null : null;
+function normalizePendingAudioDraftMeta(meta) {
+  if (!meta || typeof meta !== "object") {
+    return null;
+  }
+
+  const fileName = typeof meta.fileName === "string" ? meta.fileName : "";
+  const mimeType = typeof meta.mimeType === "string" ? meta.mimeType : "audio/webm";
+  const source = typeof meta.source === "string" ? meta.source : "upload";
+  const size = Number.isFinite(meta.size) ? Number(meta.size) : 0;
+  const createdAt = Number.isFinite(meta.createdAt) ? Number(meta.createdAt) : Date.now();
+
+  if (!fileName || size <= 0) {
+    return null;
+  }
+
+  return {
+    fileName,
+    mimeType,
+    source,
+    size,
+    createdAt,
+  };
 }
 
-function clearAudioDraft(sessionId = activeSessionId) {
-  if (sessionId) {
-    audioDrafts.delete(sessionId);
+function patchSessionById(sessionId, patch, shouldPersist = true) {
+  sessions = sessions.map((session) => {
+    if (session.id !== sessionId) {
+      return session;
+    }
+
+    return {
+      ...session,
+      ...patch,
+      updatedAt: Date.now(),
+    };
+  });
+
+  sessions.sort((first, second) => second.updatedAt - first.updatedAt);
+  if (shouldPersist) {
+    persistSessions();
   }
+  renderSessionList();
+}
+
+function openPendingAudioDb() {
+  if (!("indexedDB" in window)) {
+    return Promise.reject(new Error("This browser does not support IndexedDB for pending recordings."));
+  }
+
+  if (!pendingAudioDbPromise) {
+    pendingAudioDbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(PENDING_AUDIO_DB_NAME, 1);
+
+      request.addEventListener("upgradeneeded", () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(PENDING_AUDIO_STORE_NAME)) {
+          db.createObjectStore(PENDING_AUDIO_STORE_NAME);
+        }
+      });
+
+      request.addEventListener("success", () => resolve(request.result));
+      request.addEventListener("error", () => reject(request.error || new Error("Pending audio storage could not be opened.")));
+    });
+  }
+
+  return pendingAudioDbPromise;
+}
+
+async function saveAudioDraftToIndexedDb(sessionId, draft) {
+  const db = await openPendingAudioDb();
+  await new Promise((resolve, reject) => {
+    const transaction = db.transaction(PENDING_AUDIO_STORE_NAME, "readwrite");
+    transaction.objectStore(PENDING_AUDIO_STORE_NAME).put({
+      blob: draft.blob,
+      fileName: draft.fileName,
+      mimeType: draft.mimeType,
+      source: draft.source,
+      size: draft.size,
+      createdAt: draft.createdAt,
+    }, sessionId);
+    transaction.addEventListener("complete", resolve);
+    transaction.addEventListener("error", () => reject(transaction.error || new Error("Pending audio could not be saved.")));
+    transaction.addEventListener("abort", () => reject(transaction.error || new Error("Pending audio save was aborted.")));
+  });
+}
+
+async function loadAudioDraftFromIndexedDb(sessionId) {
+  const db = await openPendingAudioDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(PENDING_AUDIO_STORE_NAME, "readonly");
+    const request = transaction.objectStore(PENDING_AUDIO_STORE_NAME).get(sessionId);
+    request.addEventListener("success", () => resolve(request.result || null));
+    request.addEventListener("error", () => reject(request.error || new Error("Pending audio could not be loaded.")));
+  });
+}
+
+async function deleteAudioDraftFromIndexedDb(sessionId) {
+  const db = await openPendingAudioDb();
+  await new Promise((resolve, reject) => {
+    const transaction = db.transaction(PENDING_AUDIO_STORE_NAME, "readwrite");
+    transaction.objectStore(PENDING_AUDIO_STORE_NAME).delete(sessionId);
+    transaction.addEventListener("complete", resolve);
+    transaction.addEventListener("error", () => reject(transaction.error || new Error("Pending audio could not be deleted.")));
+    transaction.addEventListener("abort", () => reject(transaction.error || new Error("Pending audio delete was aborted.")));
+  });
+}
+
+async function getAudioDraft(sessionId = activeSessionId) {
+  if (!sessionId) {
+    return null;
+  }
+
+  if (audioDrafts.has(sessionId)) {
+    return audioDrafts.get(sessionId) || null;
+  }
+
+  const storedDraft = await loadAudioDraftFromIndexedDb(sessionId).catch(() => null);
+  if (!storedDraft?.blob) {
+    return null;
+  }
+
+  const hydratedDraft = {
+    blob: storedDraft.blob,
+    fileName: storedDraft.fileName,
+    mimeType: storedDraft.mimeType || storedDraft.blob?.type || "audio/webm",
+    source: storedDraft.source || "upload",
+    size: storedDraft.size ?? storedDraft.blob?.size ?? 0,
+    createdAt: storedDraft.createdAt || Date.now(),
+  };
+  audioDrafts.set(sessionId, hydratedDraft);
+  return hydratedDraft;
+}
+
+async function clearAudioDraft(sessionId = activeSessionId) {
+  if (!sessionId) {
+    return;
+  }
+
+  audioDrafts.delete(sessionId);
+  await deleteAudioDraftFromIndexedDb(sessionId).catch(() => {});
+  patchSessionById(sessionId, { pendingAudioDraftMeta: null }, true);
 
   if (sessionId === activeSessionId) {
     syncAudioCaptureUi(getActiveSession());
   }
 }
 
-function setAudioDraft(draft, sessionId = activeSessionId) {
+async function setAudioDraft(draft, sessionId = activeSessionId) {
   if (!sessionId) {
     return;
   }
 
   if (!draft) {
-    clearAudioDraft(sessionId);
+    await clearAudioDraft(sessionId);
     return;
   }
 
-  audioDrafts.set(sessionId, {
+  const normalizedDraft = {
     blob: draft.blob,
     fileName: draft.fileName,
     mimeType: draft.mimeType || draft.blob?.type || "audio/webm",
     source: draft.source || "upload",
     size: draft.size ?? draft.blob?.size ?? 0,
     createdAt: draft.createdAt || Date.now(),
-  });
+  };
+
+  audioDrafts.set(sessionId, normalizedDraft);
+  await saveAudioDraftToIndexedDb(sessionId, normalizedDraft);
+  patchSessionById(sessionId, {
+    pendingAudioDraftMeta: normalizePendingAudioDraftMeta(normalizedDraft),
+  }, true);
 
   if (sessionId === activeSessionId) {
     syncAudioCaptureUi(getActiveSession());
@@ -1961,9 +2110,9 @@ function formatAudioFileSize(bytes) {
 function syncAudioCaptureUi(session = getActiveSession()) {
   const template = session ? getTemplateDefinition(session.template) : BUILT_IN_TEMPLATES.meeting;
   const supportsTranscriptField = template.fields?.liveTranscript !== false;
-  const audioDraft = getAudioDraft(session?.id);
+  const audioDraftMeta = normalizePendingAudioDraftMeta(session?.pendingAudioDraftMeta);
   const isAudioRecording = audioRecordingSessionId === session?.id;
-  const canTranscribe = Boolean(audioDraft) && !isAudioRecording;
+  const canTranscribe = Boolean(audioDraftMeta) && !isAudioRecording;
 
   setElementVisibility(audioRecordToggle?.closest(".audio-capture-card"), supportsTranscriptField);
 
@@ -1988,12 +2137,12 @@ function syncAudioCaptureUi(session = getActiveSession()) {
 
   if (!SUPPORTS_AUDIO_RECORDING) {
     audioCaptureStatus.textContent = "This browser cannot record raw audio here, but you can still upload an audio file to transcribe.";
-  } else if (audioDraft) {
-    const sourceLabel = audioDraft.source === "recording" ? "Recorded audio ready" : "Uploaded audio ready";
-    const sizeHint = audioDraft.size > MAX_AUDIO_UPLOAD_BYTES
+  } else if (audioDraftMeta) {
+    const sourceLabel = audioDraftMeta.source === "recording" ? "Recorded audio ready" : "Uploaded audio ready";
+    const sizeHint = audioDraftMeta.size > MAX_AUDIO_UPLOAD_BYTES
       ? " It will be split into smaller parts automatically before transcription."
       : "";
-    audioCaptureStatus.textContent = `${sourceLabel}: ${audioDraft.fileName} (${formatAudioFileSize(audioDraft.size)}). Click "Transcribe audio" to add it to the Live transcript field.${sizeHint}`;
+    audioCaptureStatus.textContent = `${sourceLabel}: ${audioDraftMeta.fileName} (${formatAudioFileSize(audioDraftMeta.size)}). Click "Transcribe audio" to add it to the Live transcript field.${sizeHint}`;
   } else {
     audioCaptureStatus.textContent = "No audio file selected yet. You can record here or upload mp3, m4a, wav, mp4, or webm. Larger files will be split automatically before transcription.";
   }
@@ -2816,6 +2965,7 @@ function createSession() {
     highlights: [],
     liveTranscript: "",
     uploadedTranscript: "",
+    pendingAudioDraftMeta: null,
     rawNotes: "",
     outputFeedback: "",
     polishedHtml: "",
@@ -2934,6 +3084,7 @@ function readCustomTemplateItem(item, fallbackTemplate) {
 }
 
 function deleteSession(sessionId) {
+  void clearAudioDraft(sessionId);
   sessions = sessions.filter((session) => session.id !== sessionId);
 
   if (!sessions.length) {
@@ -4194,14 +4345,18 @@ async function stopAudioCapture() {
   audioRecordingSessionId = null;
 
   if (audioBlob.size > 0) {
-    setAudioDraft({
-      blob: audioBlob,
-      fileName: buildAudioRecordingFileName(),
-      mimeType,
-      size: audioBlob.size,
-      source: "recording",
-    }, activeSessionForRecording);
-    audioCaptureStatus.textContent = "Audio capture stopped. Your recording is ready to transcribe.";
+    try {
+      await setAudioDraft({
+        blob: audioBlob,
+        fileName: buildAudioRecordingFileName(),
+        mimeType,
+        size: audioBlob.size,
+        source: "recording",
+      }, activeSessionForRecording);
+      audioCaptureStatus.textContent = "Audio capture stopped. Your recording is saved locally and ready to transcribe later.";
+    } catch {
+      audioCaptureStatus.textContent = "Audio capture stopped, but the recording could not be saved locally for later transcription.";
+    }
   } else {
     syncAudioCaptureUi(getActiveSession());
   }
@@ -4994,6 +5149,7 @@ function normalizeImportedSessions(importedSessions) {
       highlights: Array.isArray(session.highlights) ? session.highlights.filter((item) => typeof item === "string") : [],
       liveTranscript: typeof session.liveTranscript === "string" ? session.liveTranscript : "",
       uploadedTranscript: typeof session.uploadedTranscript === "string" ? session.uploadedTranscript : "",
+      pendingAudioDraftMeta: normalizePendingAudioDraftMeta(session.pendingAudioDraftMeta),
       rawNotes: typeof session.rawNotes === "string" ? session.rawNotes : "",
       outputFeedback: typeof session.outputFeedback === "string" ? session.outputFeedback : "",
       polishedHtml: typeof session.polishedHtml === "string" ? session.polishedHtml : "",
