@@ -77,6 +77,12 @@
           <p class="support-text" id="session-storage-status">
             Export sessions to a file, import them later, or save directly to a local file on supported desktop browsers.
           </p>
+          <p class="support-text">
+            <strong>Export Sessions</strong> is the best general backup option and works broadly across browsers and devices.
+          </p>
+          <p class="support-text">
+            <strong>Save Local File</strong> is best on supported desktop browsers when you want to save directly to a chosen file on your computer.
+          </p>
           <input id="import-sessions-input" type="file" accept="application/json,.json" hidden>
         </div>
       </aside>
@@ -397,6 +403,14 @@
     <article class="participant-directory-item">
       <input class="participant-directory-name" type="text" maxlength="80" placeholder="Participant name">
       <button class="ghost-button participant-directory-remove" type="button">Remove</button>
+    </article>
+  </template>
+
+  <template id="abbreviation-directory-item-template">
+    <article class="abbreviation-directory-item">
+      <input class="abbreviation-short-name" type="text" maxlength="40" placeholder="Abbreviation">
+      <input class="abbreviation-full-name" type="text" maxlength="180" placeholder="Full wording">
+      <button class="ghost-button abbreviation-directory-remove" type="button">Remove</button>
     </article>
   </template>
 
@@ -744,6 +758,7 @@
               <button class="settings-nav-button is-active" data-settings-tab="appearance" type="button">Appearance</button>
               <button class="settings-nav-button" data-settings-tab="exports" type="button">Exports</button>
               <button class="settings-nav-button" data-settings-tab="templates" type="button">Templates</button>
+              <button class="settings-nav-button" data-settings-tab="abbreviations" type="button">Abbreviations</button>
               <button class="settings-nav-button" data-settings-tab="participants" type="button">Participants</button>
             </div>
           </aside>
@@ -867,6 +882,31 @@
               <div class="custom-template-list" id="custom-template-list"></div>
             </section>
 
+            <section class="config-card settings-card is-hidden-field" data-settings-section="abbreviations" aria-label="Abbreviation settings">
+              <div class="config-card-copy">
+                <p class="section-label">Abbreviations</p>
+                <h3>Store your personal shorthand</h3>
+              </div>
+
+              <p class="support-text">
+                Add abbreviations you often use in notes so the app can expand them during generation.
+              </p>
+
+              <div class="abbreviation-settings-add">
+                <label class="field field-tight">
+                  <span class="field-label">Abbreviation</span>
+                  <input id="abbreviation-short-input" type="text" maxlength="40" placeholder="ex. mtg">
+                </label>
+                <label class="field field-tight">
+                  <span class="field-label">Full wording</span>
+                  <input id="abbreviation-full-input" type="text" maxlength="180" placeholder="meeting">
+                </label>
+                <button class="secondary-button" id="add-abbreviation" type="button">Add</button>
+              </div>
+
+              <div class="abbreviation-directory-list" id="abbreviation-directory-list"></div>
+            </section>
+
             <section class="config-card settings-card is-hidden-field" data-settings-section="participants" aria-label="Participant directory settings">
               <div class="config-card-copy">
                 <p class="section-label">Participants</p>
@@ -890,6 +930,30 @@
           </div>
         </div>
       </form>
+    </section>
+  </div>
+
+  <div class="modal-shell is-hidden" id="backup-reminder-modal" aria-hidden="true">
+    <div class="modal-backdrop" id="close-backup-reminder"></div>
+    <section class="modal-card" aria-label="Backup reminder" aria-modal="true" role="dialog">
+      <div class="panel-heading modal-heading">
+        <div>
+          <p class="section-label">Backup Reminder</p>
+          <h2>It has been a while since your last backup</h2>
+        </div>
+        <button class="ghost-button" id="close-backup-reminder-button" type="button">Dismiss</button>
+      </div>
+
+      <div class="modal-form">
+        <p class="support-text">
+          Your sessions are stored locally in the browser. To reduce the risk of losing them, create a backup now if you have not exported or saved your data in the last 7 days.
+        </p>
+        <div class="capture-toolbar">
+          <button class="primary-button" id="backup-reminder-export" type="button">Export Sessions</button>
+          <button class="secondary-button" id="backup-reminder-save-local" type="button">Save Local File</button>
+          <button class="ghost-button" id="backup-reminder-later" type="button">Remind Me Later</button>
+        </div>
+      </div>
     </section>
   </div>
 

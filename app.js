@@ -56,6 +56,12 @@ const settingsModal = document.querySelector("#settings-modal");
 const closeSettingsBackdrop = document.querySelector("#close-settings");
 const closeSettingsButton = document.querySelector("#close-settings-button");
 const settingsForm = document.querySelector("#settings-form");
+const backupReminderModal = document.querySelector("#backup-reminder-modal");
+const closeBackupReminderBackdrop = document.querySelector("#close-backup-reminder");
+const closeBackupReminderButton = document.querySelector("#close-backup-reminder-button");
+const backupReminderExportButton = document.querySelector("#backup-reminder-export");
+const backupReminderSaveLocalButton = document.querySelector("#backup-reminder-save-local");
+const backupReminderLaterButton = document.querySelector("#backup-reminder-later");
 const settingsNavButtons = [...document.querySelectorAll("[data-settings-tab]")];
 const settingsSections = [...document.querySelectorAll("[data-settings-section]")];
 const themeFamilySelect = document.querySelector("#theme-family");
@@ -114,6 +120,10 @@ const openParticipantSettingsButton = document.querySelector("#open-participant-
 const participantDirectoryInput = document.querySelector("#participant-directory-input");
 const addDirectoryParticipantButton = document.querySelector("#add-directory-participant");
 const participantDirectoryList = document.querySelector("#participant-directory-list");
+const abbreviationShortInput = document.querySelector("#abbreviation-short-input");
+const abbreviationFullInput = document.querySelector("#abbreviation-full-input");
+const addAbbreviationButton = document.querySelector("#add-abbreviation");
+const abbreviationDirectoryList = document.querySelector("#abbreviation-directory-list");
 const meetingDateInput = document.querySelector("#meeting-date");
 const meetingStartTimeInput = document.querySelector("#meeting-start-time");
 const meetingEndTimeInput = document.querySelector("#meeting-end-time");
@@ -161,6 +171,7 @@ const appVersionLabel = document.querySelector("#app-version");
 const sessionItemTemplate = document.querySelector("#session-item-template");
 const highlightChipTemplate = document.querySelector("#highlight-chip-template");
 const participantDirectoryItemTemplate = document.querySelector("#participant-directory-item-template");
+const abbreviationDirectoryItemTemplate = document.querySelector("#abbreviation-directory-item-template");
 const customHeaderTemplate = document.querySelector("#custom-header-template");
 const addCustomTemplateButton = document.querySelector("#add-custom-template");
 const customTemplateList = document.querySelector("#custom-template-list");
@@ -199,6 +210,7 @@ const APPROX_TOKENS_PER_PAGE = 750;
 const MAX_AUDIO_UPLOAD_BYTES = 25 * 1024 * 1024;
 const AUDIO_CHUNK_TARGET_BYTES = 23 * 1024 * 1024;
 const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+const BACKUP_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const TRANSCRIPTION_MODELS = {
   "gpt-4o-mini-transcribe": {
     label: "GPT-4o mini transcribe",
@@ -487,6 +499,9 @@ render();
 bindEvents();
 registerServiceWorker();
 appVersionLabel.textContent = APP_VERSION;
+window.setTimeout(() => {
+  maybeShowBackupReminder();
+}, 350);
 
 function bindEvents() {
   const createAndOpenNewSession = () => {
@@ -538,8 +553,54 @@ function bindEvents() {
   openParticipantSettingsButton.addEventListener("click", () => {
     openSettings();
     window.setTimeout(() => {
+      setActiveSettingsSection("participants");
       participantDirectoryInput.focus();
     }, 0);
+  });
+
+  addAbbreviationButton.addEventListener("click", () => {
+    addAbbreviationToDirectory(abbreviationShortInput.value, abbreviationFullInput.value);
+  });
+
+  abbreviationDirectoryList.addEventListener("input", (event) => {
+    const item = event.target.closest(".abbreviation-directory-item");
+    if (!item) {
+      return;
+    }
+
+    const currentShort = item.dataset.abbreviationShort;
+    const nextShort = item.querySelector(".abbreviation-short-name").value;
+    const nextFull = item.querySelector(".abbreviation-full-name").value;
+
+    settings.abbreviationDirectory = normalizeAbbreviationDirectory(
+      (settings.abbreviationDirectory || []).map((entry) => {
+        if (entry.short !== currentShort) {
+          return entry;
+        }
+
+        return {
+          short: nextShort,
+          full: nextFull,
+        };
+      })
+    );
+    persistSettings();
+    renderAbbreviationDirectoryManager();
+  });
+
+  abbreviationDirectoryList.addEventListener("click", (event) => {
+    const removeButton = event.target.closest(".abbreviation-directory-remove");
+    if (!removeButton) {
+      return;
+    }
+
+    const item = removeButton.closest(".abbreviation-directory-item");
+    const shortValue = item?.dataset.abbreviationShort;
+    settings.abbreviationDirectory = normalizeAbbreviationDirectory(
+      (settings.abbreviationDirectory || []).filter((entry) => entry.short !== shortValue)
+    );
+    persistSettings();
+    renderAbbreviationDirectoryManager();
   });
 
   toggleParticipantDirectoryButton.addEventListener("click", () => {
@@ -947,6 +1008,19 @@ function bindEvents() {
   openAiSettingsButton.addEventListener("click", openAiSettings);
   closeAiSettingsBackdrop.addEventListener("click", closeAiSettings);
   closeAiSettingsButton.addEventListener("click", closeAiSettings);
+  closeBackupReminderBackdrop.addEventListener("click", closeBackupReminder);
+  closeBackupReminderButton.addEventListener("click", closeBackupReminder);
+  backupReminderLaterButton.addEventListener("click", closeBackupReminder);
+  backupReminderExportButton.addEventListener("click", () => {
+    exportSessions();
+    closeBackupReminder();
+  });
+  backupReminderSaveLocalButton.addEventListener("click", async () => {
+    const didSave = await saveSessionsToLocalFile();
+    if (didSave) {
+      closeBackupReminder();
+    }
+  });
   aiSettingsNavButtons.forEach((button) => {
     button.addEventListener("click", () => {
       setActiveAiSettingsSection(button.dataset.aiSettingsTab);
@@ -1001,6 +1075,10 @@ function bindEvents() {
 
     if (event.key === "Escape" && !aiSettingsModal.classList.contains("is-hidden")) {
       closeAiSettings();
+    }
+
+    if (event.key === "Escape" && !backupReminderModal.classList.contains("is-hidden")) {
+      closeBackupReminder();
     }
 
     if (event.key === "Escape" && getRecentSessionsExpanded()) {
@@ -2296,6 +2374,19 @@ function closeAiSettings() {
   openAiSettingsButton.focus();
 }
 
+function openBackupReminder() {
+  backupReminderModal.classList.remove("is-hidden");
+  backupReminderModal.setAttribute("aria-hidden", "false");
+  syncModalScrollLock();
+  backupReminderExportButton.focus();
+}
+
+function closeBackupReminder() {
+  backupReminderModal.classList.add("is-hidden");
+  backupReminderModal.setAttribute("aria-hidden", "true");
+  syncModalScrollLock();
+}
+
 function setActiveAiSettingsSection(sectionId) {
   activeAiSettingsSection = aiSettingsSections.some((section) => section.dataset.aiSettingsSection === sectionId)
     ? sectionId
@@ -2380,7 +2471,8 @@ function updateTranscriptionModelDescription() {
 
 function syncModalScrollLock() {
   const hasOpenModal = !aiSettingsModal.classList.contains("is-hidden")
-    || !settingsModal.classList.contains("is-hidden");
+    || !settingsModal.classList.contains("is-hidden")
+    || !backupReminderModal.classList.contains("is-hidden");
   document.body.classList.toggle("modal-open", hasOpenModal);
 }
 
@@ -2782,6 +2874,21 @@ function renderParticipantDirectoryManager() {
     item.dataset.participantName = name;
     input.value = name;
     participantDirectoryList.appendChild(fragment);
+  });
+}
+
+function renderAbbreviationDirectoryManager() {
+  abbreviationDirectoryList.innerHTML = "";
+
+  (settings.abbreviationDirectory || []).forEach((entry) => {
+    const fragment = abbreviationDirectoryItemTemplate.content.cloneNode(true);
+    const item = fragment.querySelector(".abbreviation-directory-item");
+    const shortInput = fragment.querySelector(".abbreviation-short-name");
+    const fullInput = fragment.querySelector(".abbreviation-full-name");
+    item.dataset.abbreviationShort = entry.short;
+    shortInput.value = entry.short;
+    fullInput.value = entry.full;
+    abbreviationDirectoryList.appendChild(fragment);
   });
 }
 
@@ -3758,6 +3865,9 @@ function buildAiPrompt(session, template, outputLanguage) {
     "Custom sections and instructions:",
     formatCustomHeadersForPrompt(session.customHeaders),
     "",
+    "Known user abbreviations and full wording:",
+    formatAbbreviationsForPrompt(settings.abbreviationDirectory),
+    "",
     "Additional user instructions:",
     session.additionalInstructions?.trim() || "No additional instructions.",
     "",
@@ -3821,6 +3931,9 @@ function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
     "",
     "Custom sections and instructions:",
     formatCustomHeadersForPrompt(session.customHeaders),
+    "",
+    "Known user abbreviations and full wording:",
+    formatAbbreviationsForPrompt(settings.abbreviationDirectory),
     "",
     "Additional user instructions:",
     session.additionalInstructions?.trim() || "No additional instructions.",
@@ -3945,6 +4058,7 @@ function buildCombinedNotes(session) {
   const scheduleLine = buildMeetingScheduleText(session);
   return [scheduleLine, session.liveTranscript?.trim(), session.uploadedTranscript?.trim(), session.rawNotes?.trim()]
     .filter(Boolean)
+    .map((part) => expandKnownAbbreviations(part, settings.abbreviationDirectory))
     .join("\n\n");
 }
 
@@ -3977,6 +4091,33 @@ function normalizeNotes(rawNotes) {
     .split(/\r?\n/)
     .map((line) => line.replace(/^[\s*\-\u2022]+/, "").trim())
     .filter(Boolean);
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function expandKnownAbbreviations(text, abbreviationDirectory = settings.abbreviationDirectory) {
+  let nextText = String(text || "");
+  const abbreviations = normalizeAbbreviationDirectory(abbreviationDirectory);
+
+  abbreviations.forEach((entry) => {
+    const pattern = new RegExp(`\\b${escapeRegExp(entry.short)}\\b`, "gi");
+    nextText = nextText.replace(pattern, entry.full);
+  });
+
+  return nextText;
+}
+
+function formatAbbreviationsForPrompt(abbreviationDirectory) {
+  const abbreviations = normalizeAbbreviationDirectory(abbreviationDirectory);
+  if (!abbreviations.length) {
+    return "No abbreviations provided.";
+  }
+
+  return abbreviations
+    .map((entry, index) => `${index + 1}. ${entry.short} = ${entry.full}`)
+    .join("\n");
 }
 
 function splitIntoSections(lines, headings) {
@@ -4482,9 +4623,11 @@ function loadSettings() {
         model: "gpt-5-mini",
         transcriptionModel: DEFAULT_TRANSCRIPTION_MODEL,
         dictationLanguage: "auto",
+        lastBackupAt: 0,
         themeFamily: "olive",
         themeMode: "light",
         recentSessionsExpanded: false,
+        abbreviationDirectory: [],
         participantDirectory: [],
         defaultCustomHeaders: [],
         customTemplates: [],
@@ -4502,11 +4645,14 @@ function loadSettings() {
       model: "gpt-5-mini",
       transcriptionModel: DEFAULT_TRANSCRIPTION_MODEL,
       dictationLanguage: "auto",
+      lastBackupAt: 0,
       themeFamily: "olive",
       themeMode: legacyThemeMode,
       ...parsed,
+      lastBackupAt: Number.isFinite(parsed.lastBackupAt) ? Number(parsed.lastBackupAt) : 0,
       transcriptionModel: resolveSelectedTranscriptionModel(parsed.transcriptionModel),
       recentSessionsExpanded: parsed.recentSessionsExpanded === true,
+      abbreviationDirectory: normalizeAbbreviationDirectory(parsed.abbreviationDirectory),
       participantDirectory: normalizeParticipantDirectory(parsed.participantDirectory),
       defaultCustomHeaders: normalizeCustomHeaders(parsed.defaultCustomHeaders),
       customTemplates: normalizeCustomTemplates(parsed.customTemplates),
@@ -4522,9 +4668,11 @@ function loadSettings() {
       model: "gpt-5-mini",
       transcriptionModel: DEFAULT_TRANSCRIPTION_MODEL,
       dictationLanguage: "auto",
+      lastBackupAt: 0,
       themeFamily: "olive",
       themeMode: "light",
       recentSessionsExpanded: false,
+      abbreviationDirectory: [],
       participantDirectory: [],
       defaultCustomHeaders: [],
       customTemplates: [],
@@ -4536,6 +4684,22 @@ function loadSettings() {
 
 function persistSettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function markBackupCompleted() {
+  settings.lastBackupAt = Date.now();
+  persistSettings();
+}
+
+function shouldShowBackupReminder() {
+  const lastBackupAt = Number(settings.lastBackupAt || 0);
+  return !lastBackupAt || (Date.now() - lastBackupAt) >= BACKUP_REMINDER_INTERVAL_MS;
+}
+
+function maybeShowBackupReminder() {
+  if (shouldShowBackupReminder()) {
+    openBackupReminder();
+  }
 }
 
 function parseParticipants(value) {
@@ -4598,6 +4762,54 @@ function addParticipantToDirectory(value) {
   participantDirectoryInput.focus();
 }
 
+function normalizeAbbreviationDirectory(entries) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+
+  const byKey = new Map();
+  entries.forEach((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return;
+    }
+
+    const short = String(entry.short || "").trim();
+    const full = String(entry.full || "").trim();
+    if (!short || !full) {
+      return;
+    }
+
+    byKey.set(short.toLocaleLowerCase(), { short, full });
+  });
+
+  return [...byKey.values()].sort((first, second) => first.short.localeCompare(second.short, undefined, { sensitivity: "base" }));
+}
+
+function addAbbreviationToDirectory(shortValue, fullValue) {
+  const short = String(shortValue || "").trim();
+  const full = String(fullValue || "").trim();
+
+  if (!short) {
+    abbreviationShortInput.focus();
+    return;
+  }
+
+  if (!full) {
+    abbreviationFullInput.focus();
+    return;
+  }
+
+  settings.abbreviationDirectory = normalizeAbbreviationDirectory([
+    ...(settings.abbreviationDirectory || []),
+    { short, full },
+  ]);
+  persistSettings();
+  abbreviationShortInput.value = "";
+  abbreviationFullInput.value = "";
+  renderAbbreviationDirectoryManager();
+  abbreviationShortInput.focus();
+}
+
 function applyTheme(themeFamily, themeMode) {
   const resolvedFamily = THEME_DESCRIPTIONS[themeFamily] ? themeFamily : "olive";
   const resolvedMode = themeMode === "dark" ? "dark" : "light";
@@ -4612,6 +4824,7 @@ function syncSettingsForm() {
   updateThemeDescription();
   updateExportStyleDescription();
   renderCustomTemplates();
+  renderAbbreviationDirectoryManager();
   renderParticipantDirectoryManager();
 }
 
@@ -5057,6 +5270,7 @@ function exportSessions() {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+  markBackupCompleted();
   sessionStorageStatus.textContent = "Sessions exported to a JSON file.";
 }
 
@@ -5091,7 +5305,7 @@ async function importSessionsFromFile(event) {
 async function saveSessionsToLocalFile() {
   if (!SUPPORTS_FILE_SAVE) {
     sessionStorageStatus.textContent = "Direct local file saving is not supported in this browser.";
-    return;
+    return false;
   }
 
   try {
@@ -5110,14 +5324,17 @@ async function saveSessionsToLocalFile() {
     const writable = await handle.createWritable();
     await writable.write(JSON.stringify(buildSessionsExportPayload(), null, 2));
     await writable.close();
+    markBackupCompleted();
     sessionStorageStatus.textContent = "Sessions were saved to your chosen local file.";
+    return true;
   } catch (error) {
     if (error?.name === "AbortError") {
       sessionStorageStatus.textContent = "Local file save was cancelled.";
-      return;
+      return false;
     }
 
     sessionStorageStatus.textContent = `Local file save failed: ${error.message}`;
+    return false;
   }
 }
 

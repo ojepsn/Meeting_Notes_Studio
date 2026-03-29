@@ -1280,11 +1280,24 @@ textarea:focus {
   margin-bottom: 12px;
 }
 
+.abbreviation-settings-add {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
 .participant-settings-add .secondary-button {
   width: auto;
 }
 
 .participant-directory-list {
+  display: grid;
+  gap: 10px;
+}
+
+.abbreviation-directory-list {
   display: grid;
   gap: 10px;
 }
@@ -1296,7 +1309,21 @@ textarea:focus {
   align-items: center;
 }
 
+.abbreviation-directory-item {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
 .participant-directory-item .ghost-button {
+  width: auto;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+.abbreviation-directory-item .ghost-button,
+.abbreviation-settings-add .secondary-button {
   width: auto;
   padding: 10px 12px;
   border-radius: 12px;
@@ -1815,12 +1842,16 @@ textarea:focus {
   }
 
   .participant-settings-add,
-  .participant-directory-item {
+  .participant-directory-item,
+  .abbreviation-settings-add,
+  .abbreviation-directory-item {
     grid-template-columns: 1fr;
   }
 
   .participant-settings-add .secondary-button,
-  .participant-directory-item .ghost-button {
+  .participant-directory-item .ghost-button,
+  .abbreviation-settings-add .secondary-button,
+  .abbreviation-directory-item .ghost-button {
     width: 100%;
   }
 
