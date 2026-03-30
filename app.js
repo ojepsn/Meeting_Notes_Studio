@@ -45,9 +45,7 @@ const sessionsPanel = document.querySelector("#sessions-panel");
 const sessionsPanelBackdrop = document.querySelector("#sessions-panel-backdrop");
 const toggleSessionsPanelButton = document.querySelector("#toggle-sessions-panel");
 const collapseSessionsPanelButton = document.querySelector("#collapse-sessions-panel");
-const desktopViewSwitch = document.querySelector("#desktop-view-switch");
-const desktopViewCaptureButton = document.querySelector("#desktop-view-capture");
-const desktopViewOutputButton = document.querySelector("#desktop-view-output");
+const desktopViewButtons = [...document.querySelectorAll("[data-desktop-view]")];
 const newSessionButton = document.querySelector("#new-session");
 const newSessionMainButton = document.querySelector("#new-session-main");
 const sessionFilterInput = document.querySelector("#session-filter");
@@ -166,6 +164,8 @@ const toggleParticipantDirectoryLabel = document.querySelector(".participant-tog
 const openParticipantSettingsButton = document.querySelector("#open-participant-settings");
 const participantDirectoryInput = document.querySelector("#participant-directory-input");
 const addDirectoryParticipantButton = document.querySelector("#add-directory-participant");
+const selectAllParticipantsInput = document.querySelector("#select-all-participants");
+const deleteSelectedParticipantsButton = document.querySelector("#delete-selected-participants");
 const participantDirectoryList = document.querySelector("#participant-directory-list");
 const abbreviationShortInput = document.querySelector("#abbreviation-short-input");
 const abbreviationFullInput = document.querySelector("#abbreviation-full-input");
@@ -639,6 +639,7 @@ let activeAiSettingsSection = "connection";
 let latestRemoteVersion = APP_VERSION;
 let sessionFilterQuery = "";
 let selectedSessionIds = new Set();
+let selectedParticipantNames = new Set();
 let desktopWorkspaceView = "capture";
 let participantDirectoryExpanded = false;
 let mediaRecorder = null;
@@ -769,12 +770,10 @@ function bindEvents() {
     });
   });
 
-  desktopViewCaptureButton?.addEventListener("click", () => {
-    setDesktopWorkspaceView("capture");
-  });
-
-  desktopViewOutputButton?.addEventListener("click", () => {
-    setDesktopWorkspaceView("output");
+  desktopViewButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setDesktopWorkspaceView(button.dataset.desktopView);
+    });
   });
 
   exportSessionsButton.addEventListener("click", exportSessions);
@@ -983,6 +982,44 @@ function bindEvents() {
     }
   });
 
+  selectAllParticipantsInput?.addEventListener("change", () => {
+    const participantNames = settings.participantDirectory || [];
+    if (selectAllParticipantsInput.checked) {
+      selectedParticipantNames = new Set(participantNames);
+    } else {
+      selectedParticipantNames.clear();
+    }
+    renderParticipantDirectoryManager();
+  });
+
+  deleteSelectedParticipantsButton?.addEventListener("click", async () => {
+    const selectedNames = Array.from(selectedParticipantNames).filter((name) => (settings.participantDirectory || []).includes(name));
+    if (!selectedNames.length) {
+      return;
+    }
+
+    const confirmed = await showConfirmModal({
+      eyebrow: "Delete participants",
+      title: "Delete selected participants?",
+      message: `Are you sure you want to delete ${selectedNames.length} selected participants from the saved list?`,
+      confirmLabel: "Delete selected",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    settings.participantDirectory = normalizeParticipantDirectory(
+      (settings.participantDirectory || []).filter((entry) => !selectedParticipantNames.has(entry))
+    );
+    settings.participantDirectoryInitialized = true;
+    selectedParticipantNames.clear();
+    persistSettings();
+    renderParticipantDirectoryManager();
+    renderParticipantSuggestions();
+  });
+
   participantDirectoryList.addEventListener("input", (event) => {
     const item = event.target.closest(".participant-directory-item");
     if (!item) {
@@ -994,13 +1031,25 @@ function bindEvents() {
     settings.participantDirectory = normalizeParticipantDirectory(
       settings.participantDirectory.map((name) => (name === previousName ? nextName : name))
     );
+    if (selectedParticipantNames.has(previousName)) {
+      selectedParticipantNames.delete(previousName);
+      if (nextName.trim()) {
+        selectedParticipantNames.add(nextName.trim());
+      }
+    }
     settings.participantDirectoryInitialized = true;
     persistSettings();
     item.dataset.participantName = nextName.trim();
+    renderParticipantDirectoryManager();
     renderParticipantSuggestions();
   });
 
   participantDirectoryList.addEventListener("click", (event) => {
+    const selectInput = event.target.closest(".participant-directory-select");
+    if (selectInput) {
+      return;
+    }
+
     const removeButton = event.target.closest(".participant-directory-remove");
     if (!removeButton) {
       return;
@@ -1011,10 +1060,32 @@ function bindEvents() {
     settings.participantDirectory = normalizeParticipantDirectory(
       settings.participantDirectory.filter((entry) => entry !== name)
     );
+    selectedParticipantNames.delete(name);
     settings.participantDirectoryInitialized = true;
     persistSettings();
     renderParticipantDirectoryManager();
     renderParticipantSuggestions();
+  });
+
+  participantDirectoryList.addEventListener("change", (event) => {
+    const selectInput = event.target.closest(".participant-directory-select");
+    if (!selectInput) {
+      return;
+    }
+
+    const item = selectInput.closest(".participant-directory-item");
+    const name = item?.dataset.participantName || "";
+    if (!name) {
+      return;
+    }
+
+    if (selectInput.checked) {
+      selectedParticipantNames.add(name);
+    } else {
+      selectedParticipantNames.delete(name);
+    }
+
+    updateParticipantSelectionControls();
   });
 
   participantChips.addEventListener("click", (event) => {
@@ -3273,22 +3344,19 @@ function setDesktopWorkspaceView(view) {
 }
 
 function updateDesktopWorkspaceViewUi() {
-  if (!desktopViewSwitch || !editorPanel || !outputPanel) {
+  if (!desktopViewButtons.length || !editorPanel || !outputPanel) {
     return;
   }
 
   const isMobile = isMobileLayout();
-  const hasOutput = Boolean(getActiveSession()?.polishedHtml);
 
-  if (!isMobile && desktopWorkspaceView === "output" && !hasOutput) {
-    desktopWorkspaceView = "capture";
-  }
-
-  desktopViewCaptureButton.classList.toggle("is-active", desktopWorkspaceView === "capture");
-  desktopViewOutputButton.classList.toggle("is-active", desktopWorkspaceView === "output");
-  desktopViewCaptureButton.setAttribute("aria-pressed", String(desktopWorkspaceView === "capture"));
-  desktopViewOutputButton.setAttribute("aria-pressed", String(desktopWorkspaceView === "output"));
-  desktopViewOutputButton.disabled = !hasOutput;
+  desktopViewButtons.forEach((button) => {
+    const view = button.dataset.desktopView === "output" ? "output" : "capture";
+    const isActive = desktopWorkspaceView === view;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+    button.disabled = false;
+  });
 
   const hideEditor = !isMobile && desktopWorkspaceView === "output";
   const hideOutput = !isMobile && desktopWorkspaceView !== "output";
@@ -3828,15 +3896,37 @@ function updateParticipantDirectoryVisibility() {
 
 function renderParticipantDirectoryManager() {
   participantDirectoryList.innerHTML = "";
+  selectedParticipantNames = new Set(
+    Array.from(selectedParticipantNames).filter((name) => (settings.participantDirectory || []).includes(name))
+  );
 
   (settings.participantDirectory || []).forEach((name) => {
     const fragment = participantDirectoryItemTemplate.content.cloneNode(true);
     const item = fragment.querySelector(".participant-directory-item");
+    const selectInput = fragment.querySelector(".participant-directory-select");
     const input = fragment.querySelector(".participant-directory-name");
     item.dataset.participantName = name;
+    selectInput.checked = selectedParticipantNames.has(name);
     input.value = name;
     participantDirectoryList.appendChild(fragment);
   });
+
+  updateParticipantSelectionControls();
+}
+
+function updateParticipantSelectionControls() {
+  const participantNames = settings.participantDirectory || [];
+  const selectedCount = participantNames.filter((name) => selectedParticipantNames.has(name)).length;
+  const hasParticipants = participantNames.length > 0;
+
+  selectAllParticipantsInput.checked = hasParticipants && selectedCount === participantNames.length;
+  selectAllParticipantsInput.indeterminate = selectedCount > 0 && selectedCount < participantNames.length;
+  selectAllParticipantsInput.disabled = !hasParticipants;
+
+  deleteSelectedParticipantsButton.disabled = selectedCount === 0;
+  deleteSelectedParticipantsButton.textContent = selectedCount > 0
+    ? `Delete selected (${selectedCount})`
+    : "Delete selected";
 }
 
 function renderAbbreviationDirectoryManager() {
