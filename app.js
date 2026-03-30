@@ -1644,15 +1644,21 @@ function bindEvents() {
           ? "No API key found in AI Settings, so a local polish pass was used. Language translation requires AI polishing."
           : (session.transcribeOnly ? "No API key found in AI Settings, so a local transcription cleanup was used instead." : "No API key found in AI Settings, so a local polish pass was used instead.");
     } catch (error) {
-      const polishedHtml = buildLocalPolishedNotes(session);
-      updateActiveSession({ polishedHtml }, false);
-      renderOutput();
-      if (isMobileLayout()) {
-        openMobileOutputSheet();
+      if (settings.apiKey) {
+        dictationStatus.textContent = session.transcribeOnly
+          ? `AI transcription failed: ${error.message}. No local fallback was applied.`
+          : `AI polishing failed: ${error.message}. No local fallback was applied, so the output was not replaced with a weaker local draft.`;
+      } else {
+        const polishedHtml = buildLocalPolishedNotes(session);
+        updateActiveSession({ polishedHtml }, false);
+        renderOutput();
+        if (isMobileLayout()) {
+          openMobileOutputSheet();
+        }
+        dictationStatus.textContent = session.transcribeOnly
+          ? `AI transcription failed: ${error.message}. A local transcription cleanup was used instead.`
+          : `AI polishing failed: ${error.message}. A local polish pass was used instead.`;
       }
-      dictationStatus.textContent = session.transcribeOnly
-        ? `AI transcription failed: ${error.message}. A local transcription cleanup was used instead.`
-        : `AI polishing failed: ${error.message}. A local polish pass was used instead.`;
     } finally {
       polishButton.disabled = false;
       polishButton.textContent = "Generate";
@@ -4181,7 +4187,7 @@ async function polishWithOpenAI(session, activeSettings) {
             {
               type: "input_text",
               text:
-                "You turn rough business notes into polished professional notes. Be concise, accurate, and businesslike. Do not invent facts. If details are missing, stay neutral. Preserve the language of the source notes. If the notes are Swedish, write Swedish. If the notes are English, write English. Always focus on business-related discussion. Exclude private matters, social chatter, greetings, and small talk from the final output.",
+                "You turn rough business notes and transcripts into polished professional meeting notes. Be concise, accurate, and businesslike. Do not invent facts. If details are missing, stay neutral. Preserve the language of the source notes. If the notes are Swedish, write Swedish. If the notes are English, write English. Always focus on business-related discussion. Exclude private matters, social chatter, greetings, and small talk from the final output. Never reproduce the transcript verbatim. Synthesize the discussion into structured professional notes grouped by topic rather than by speaking order.",
             },
           ],
         },
@@ -4766,7 +4772,15 @@ function buildAiPrompt(session, template, outputLanguage) {
       ? `- Translate the notes from ${sourceLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"} into ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}.`
       : "- Keep the wording in the same language as the source notes.",
     `- Match this detail level: ${getDetailLevelLabel(session.detailLevel ?? 3)}.`,
+    "- Convert the transcript and notes into structured professional meeting notes rather than a transcript reproduction.",
+    "- Synthesize what was said into concise business language instead of copying spoken phrasing.",
+    "- Group discussion points by business topic or theme, not by speaking order or transcript chronology.",
+    "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.",
+    "- Use headings that reflect the actual topics discussed, not generic placeholders.",
+    "- Only include a discussion point when the transcript supports a substantive theme or issue.",
     "- Keep the summary to 3-5 sentences.",
+    "- Make the summary a real executive-style synthesis of the most important business discussion, not a transcript recap.",
+    "- Highlights should be key takeaways, risks, or updates, not quoted phrases from the transcript.",
     "- Keep action items specific.",
     "- Only include decisions that are actually supported by the notes.",
     "- Use discussion point headings that fit the meeting.",
@@ -4832,6 +4846,8 @@ function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
     "- Do not rewrite, reorder, or rephrase sections unless needed to satisfy the user's requested improvements.",
     "- If the user asks for a specific change, preserve everything else as much as possible.",
     "- Do not invent new facts or decisions.",
+    "- Keep the revised output in the form of structured professional notes, not transcript-style prose.",
+    "- Keep discussion points grouped by business topic with concise synthesized bullets.",
     `- Write the output in ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}.`,
     sourceLanguage !== outputLanguage
       ? `- Translate the revised notes into ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"} while keeping the meaning faithful to the source notes.`
