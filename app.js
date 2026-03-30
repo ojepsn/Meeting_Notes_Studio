@@ -97,6 +97,22 @@ const closeTodoPanelBackdrop = document.querySelector("#close-todo-panel");
 const closeTodoPanelButton = document.querySelector("#close-todo-panel-button");
 const todoList = document.querySelector("#todo-list");
 const emptyTodos = document.querySelector("#empty-todos");
+const todoFilterInput = document.querySelector("#todo-filter");
+const todoSortCompletedButton = document.querySelector("#todo-sort-completed");
+const todoSortDescriptionButton = document.querySelector("#todo-sort-description");
+const todoSortAddedButton = document.querySelector("#todo-sort-added");
+const todoSortSessionsButton = document.querySelector("#todo-sort-sessions");
+const todoSortCommentsButton = document.querySelector("#todo-sort-comments");
+const todoDetailModal = document.querySelector("#todo-detail-modal");
+const closeTodoDetailBackdrop = document.querySelector("#close-todo-detail");
+const closeTodoDetailButton = document.querySelector("#close-todo-detail-button");
+const todoDetailTitle = document.querySelector("#todo-detail-title");
+const todoDetailComplete = document.querySelector("#todo-detail-complete");
+const todoDetailDescription = document.querySelector("#todo-detail-description");
+const todoDetailAdded = document.querySelector("#todo-detail-added");
+const todoDetailSessions = document.querySelector("#todo-detail-sessions");
+const todoDetailComments = document.querySelector("#todo-detail-comments");
+const todoDetailRemoveButton = document.querySelector("#todo-detail-remove");
 const workspacePanelModal = document.querySelector("#workspace-panel-modal");
 const closeWorkspacePanelBackdrop = document.querySelector("#close-workspace-panel");
 const closeWorkspacePanelButton = document.querySelector("#close-workspace-panel-button");
@@ -677,6 +693,10 @@ let selectedSessionIds = new Set();
 let selectedParticipantNames = new Set();
 let desktopWorkspaceView = "capture";
 let participantDirectoryExpanded = false;
+let todoFilterQuery = "";
+let todoSortKey = "addedAt";
+let todoSortDirection = "desc";
+let activeTodoDetailId = null;
 let mediaRecorder = null;
 let mediaRecorderStream = null;
 let mediaRecorderChunks = [];
@@ -864,6 +884,29 @@ function bindEvents() {
   closeBackupPanelButton.addEventListener("click", closeBackupPanel);
   closeTodoPanelBackdrop.addEventListener("click", closeTodoPanel);
   closeTodoPanelButton.addEventListener("click", closeTodoPanel);
+  closeTodoDetailBackdrop?.addEventListener("click", closeTodoDetailModal);
+  closeTodoDetailButton?.addEventListener("click", closeTodoDetailModal);
+  todoFilterInput?.addEventListener("input", () => {
+    todoFilterQuery = todoFilterInput.value.trim().toLowerCase();
+    renderTodoList();
+  });
+  [
+    [todoSortCompletedButton, "completed"],
+    [todoSortDescriptionButton, "description"],
+    [todoSortAddedButton, "addedAt"],
+    [todoSortSessionsButton, "sessions"],
+    [todoSortCommentsButton, "comments"],
+  ].forEach(([button, key]) => {
+    button?.addEventListener("click", () => {
+      if (todoSortKey === key) {
+        todoSortDirection = todoSortDirection === "asc" ? "desc" : "asc";
+      } else {
+        todoSortKey = key;
+        todoSortDirection = key === "addedAt" ? "desc" : "asc";
+      }
+      renderTodoList();
+    });
+  });
 
   openParticipantSettingsButton.addEventListener("click", () => {
     openSettings();
@@ -988,6 +1031,56 @@ function bindEvents() {
     settings.todoItems = normalizeTodoItems((settings.todoItems || []).filter((entry) => entry.id !== todoId));
     persistSettings();
     renderTodoList();
+  });
+
+  todoList?.addEventListener("dblclick", (event) => {
+    const item = event.target.closest(".todo-item");
+    if (!item) {
+      return;
+    }
+
+    openTodoDetailModal(item.dataset.todoId);
+  });
+
+  todoDetailComplete?.addEventListener("change", () => {
+    syncActiveTodoDetailFromInputs();
+    const todo = getTodoItemById(activeTodoDetailId);
+    if (todo) {
+      todoDetailTitle.textContent = todo.description;
+    }
+  });
+
+  todoDetailDescription?.addEventListener("input", () => {
+    syncActiveTodoDetailFromInputs();
+    todoDetailTitle.textContent = polishTodoText(todoDetailDescription.value) || "To-do details";
+  });
+
+  todoDetailComments?.addEventListener("input", () => {
+    syncActiveTodoDetailFromInputs();
+  });
+
+  todoDetailRemoveButton?.addEventListener("click", async () => {
+    const todo = getTodoItemById(activeTodoDetailId);
+    if (!todo) {
+      return;
+    }
+
+    const confirmed = await showConfirmModal({
+      eyebrow: "Delete to-do",
+      title: "Remove this to-do item?",
+      message: `Remove "${todo.description}" from your personal to-do list?`,
+      confirmLabel: "Remove",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    settings.todoItems = normalizeTodoItems((settings.todoItems || []).filter((entry) => entry.id !== todo.id));
+    persistSettings();
+    renderTodoList();
+    closeTodoDetailModal();
   });
 
   toggleParticipantDirectoryButton.addEventListener("click", () => {
@@ -1721,6 +1814,10 @@ function bindEvents() {
 
     if (event.key === "Escape" && !todoPanelModal.classList.contains("is-hidden")) {
       closeTodoPanel();
+    }
+
+    if (event.key === "Escape" && !todoDetailModal.classList.contains("is-hidden")) {
+      closeTodoDetailModal();
     }
 
     if (event.key === "Escape" && !workspacePanelModal.classList.contains("is-hidden")) {
@@ -2782,12 +2879,57 @@ function renderTodoList() {
     return;
   }
 
-  const items = normalizeTodoItems(settings.todoItems).slice().sort((left, right) => {
-    if (left.completed !== right.completed) {
-      return Number(left.completed) - Number(right.completed);
-    }
-    return right.addedAt.localeCompare(left.addedAt);
-  });
+  if (todoFilterInput) {
+    todoFilterInput.value = todoFilterQuery;
+  }
+
+  const items = normalizeTodoItems(settings.todoItems)
+    .filter((item) => {
+      if (!todoFilterQuery) {
+        return true;
+      }
+
+      const searchableText = [
+        item.description,
+        item.addedAt,
+        item.comments,
+        ...normalizeTodoSessionRefs(item.sessionRefs).map((ref) => ref.title),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(todoFilterQuery);
+    })
+    .slice()
+    .sort((left, right) => {
+      const leftSessions = normalizeTodoSessionRefs(left.sessionRefs).map((ref) => ref.title).join(", ");
+      const rightSessions = normalizeTodoSessionRefs(right.sessionRefs).map((ref) => ref.title).join(", ");
+      const leftValue = todoSortKey === "completed"
+        ? Number(left.completed)
+        : todoSortKey === "description"
+          ? left.description
+          : todoSortKey === "comments"
+            ? left.comments
+            : todoSortKey === "sessions"
+              ? leftSessions
+              : left.addedAt;
+      const rightValue = todoSortKey === "completed"
+        ? Number(right.completed)
+        : todoSortKey === "description"
+          ? right.description
+          : todoSortKey === "comments"
+            ? right.comments
+            : todoSortKey === "sessions"
+              ? rightSessions
+              : right.addedAt;
+
+      const comparison = typeof leftValue === "number" && typeof rightValue === "number"
+        ? leftValue - rightValue
+        : String(leftValue || "").localeCompare(String(rightValue || ""), undefined, { sensitivity: "base" });
+
+      return todoSortDirection === "asc" ? comparison : -comparison;
+    });
 
   todoList.innerHTML = "";
   emptyTodos.classList.toggle("is-visible", items.length === 0);
@@ -2797,21 +2939,48 @@ function renderTodoList() {
     const article = fragment.querySelector(".todo-item");
     const checkbox = fragment.querySelector(".todo-item-complete");
     const description = fragment.querySelector(".todo-item-description");
-    const meta = fragment.querySelector(".todo-item-meta");
+    const added = fragment.querySelector(".todo-item-added");
+    const sessions = fragment.querySelector(".todo-item-sessions");
     const comments = fragment.querySelector(".todo-item-comments");
 
     article.dataset.todoId = item.id;
     article.classList.toggle("is-complete", item.completed);
     checkbox.checked = item.completed;
     description.textContent = item.description;
+    article.title = item.description;
+    added.textContent = item.addedAt;
     comments.value = item.comments || "";
 
     const sessionLabels = normalizeTodoSessionRefs(item.sessionRefs)
       .map((ref) => ref.title)
       .filter(Boolean);
-    meta.textContent = `Added ${item.addedAt}${sessionLabels.length ? ` · From: ${sessionLabels.join(", ")}` : ""}`;
+    sessions.textContent = sessionLabels.join(", ") || "—";
 
     todoList.appendChild(fragment);
+  });
+
+  updateTodoSortUi();
+}
+
+function updateTodoSortUi() {
+  const controls = [
+    [todoSortCompletedButton, "completed"],
+    [todoSortDescriptionButton, "description"],
+    [todoSortAddedButton, "addedAt"],
+    [todoSortSessionsButton, "sessions"],
+    [todoSortCommentsButton, "comments"],
+  ];
+
+  controls.forEach(([button, key]) => {
+    if (!button) {
+      return;
+    }
+
+    const isActive = todoSortKey === key;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+    const baseLabel = button.textContent.replace(/\s+[▲▼]$/, "");
+    button.textContent = isActive ? `${baseLabel} ${todoSortDirection === "asc" ? "▲" : "▼"}` : baseLabel;
   });
 }
 
@@ -3455,6 +3624,55 @@ function closeTodoPanel() {
   (openTodoOutputButton || openTodoMainButton)?.focus();
 }
 
+function getTodoItemById(todoId) {
+  return normalizeTodoItems(settings.todoItems).find((item) => item.id === todoId) || null;
+}
+
+function syncActiveTodoDetailFromInputs() {
+  if (!activeTodoDetailId) {
+    return;
+  }
+
+  settings.todoItems = normalizeTodoItems((settings.todoItems || []).map((item) => (
+    item.id === activeTodoDetailId
+      ? {
+          ...item,
+          completed: todoDetailComplete.checked,
+          description: polishTodoText(todoDetailDescription.value) || item.description,
+          comments: todoDetailComments.value,
+        }
+      : item
+  )));
+  persistSettings();
+  renderTodoList();
+}
+
+function openTodoDetailModal(todoId) {
+  const todo = getTodoItemById(todoId);
+  if (!todo) {
+    return;
+  }
+
+  activeTodoDetailId = todo.id;
+  todoDetailTitle.textContent = todo.description;
+  todoDetailComplete.checked = todo.completed;
+  todoDetailDescription.value = todo.description;
+  todoDetailAdded.value = todo.addedAt;
+  todoDetailSessions.value = normalizeTodoSessionRefs(todo.sessionRefs).map((ref) => ref.title).filter(Boolean).join("\n");
+  todoDetailComments.value = todo.comments || "";
+  todoDetailModal.classList.remove("is-hidden");
+  todoDetailModal.setAttribute("aria-hidden", "false");
+  syncModalScrollLock();
+  todoDetailDescription.focus();
+}
+
+function closeTodoDetailModal() {
+  todoDetailModal.classList.add("is-hidden");
+  todoDetailModal.setAttribute("aria-hidden", "true");
+  activeTodoDetailId = null;
+  syncModalScrollLock();
+}
+
 function openWorkspacePanel() {
   workspacePanelModal.classList.remove("is-hidden");
   workspacePanelModal.setAttribute("aria-hidden", "false");
@@ -3591,6 +3809,7 @@ function syncModalScrollLock() {
     || !backupReminderModal.classList.contains("is-hidden")
     || !backupPanelModal.classList.contains("is-hidden")
     || !todoPanelModal.classList.contains("is-hidden")
+    || !todoDetailModal.classList.contains("is-hidden")
     || !workspacePanelModal.classList.contains("is-hidden")
     || !confirmModal.classList.contains("is-hidden")
     || (isMobileLayout() && (mobileMoreSheetOpen || mobileOutputSheetOpen));
@@ -6650,7 +6869,7 @@ function polishTodoText(text) {
 }
 
 function extractTodoEntriesFromManualNotes(rawNotes) {
-  const matches = String(rawNotes || "").matchAll(/(?:^|\n)\s*todo:\s*(.+)/gi);
+  const matches = String(rawNotes || "").matchAll(/(?:^|\n)\s*todo:?\s+(.+)/gi);
   return [...matches]
     .map((match) => polishTodoText(match[1]))
     .filter(Boolean);

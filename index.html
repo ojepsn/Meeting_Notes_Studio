@@ -802,18 +802,20 @@
 
   <template id="todo-item-template">
     <article class="todo-item">
-      <div class="todo-item-head">
+      <div class="todo-item-cell todo-item-description-cell">
         <label class="checkbox-field compact-checkbox todo-item-toggle">
           <input class="todo-item-complete" type="checkbox">
           <span class="todo-item-description"></span>
         </label>
+      </div>
+      <div class="todo-item-cell todo-item-added"></div>
+      <div class="todo-item-cell todo-item-sessions"></div>
+      <div class="todo-item-cell todo-item-comments-cell">
+        <textarea class="todo-item-comments" rows="2" placeholder="Add your own follow-up comments here."></textarea>
+      </div>
+      <div class="todo-item-cell todo-item-actions">
         <button class="ghost-button todo-item-remove" type="button">Remove</button>
       </div>
-      <p class="support-text todo-item-meta"></p>
-      <label class="field field-tight">
-        <span class="field-label">Comments</span>
-        <textarea class="todo-item-comments" rows="3" placeholder="Add your own follow-up comments here."></textarea>
-      </label>
     </article>
   </template>
 
@@ -1293,7 +1295,7 @@
 
   <div class="modal-shell is-hidden" id="todo-panel-modal" aria-hidden="true">
     <div class="modal-backdrop" id="close-todo-panel"></div>
-    <section class="modal-card" aria-label="Personal to-do list" aria-modal="true" role="dialog">
+    <section class="modal-card todo-modal-card" aria-label="Personal to-do list" aria-modal="true" role="dialog">
       <div class="panel-heading modal-heading">
         <div>
           <p class="section-label">Personal To-do</p>
@@ -1304,11 +1306,68 @@
 
       <div class="modal-form">
         <p class="support-text">
-          When you write <strong>todo:</strong> in Manual notes and generate output, the app adds that item here as a personal follow-up.
+          When you write <strong>todo</strong> or <strong>todo:</strong> in Manual notes and generate output, the app adds that item here as a personal follow-up.
         </p>
+        <label class="field field-tight todo-filter-field">
+          <span class="field-label">Filter to-do items</span>
+          <input id="todo-filter" type="text" maxlength="120" placeholder="Type to filter by title, session, comment, or date">
+        </label>
+        <div class="todo-header-row" aria-label="To-do columns">
+          <button class="ghost-button todo-sort-button" id="todo-sort-completed" type="button">Done</button>
+          <button class="ghost-button todo-sort-button" id="todo-sort-description" type="button">Item</button>
+          <button class="ghost-button todo-sort-button" id="todo-sort-added" type="button">Date added</button>
+          <button class="ghost-button todo-sort-button" id="todo-sort-sessions" type="button">From session</button>
+          <button class="ghost-button todo-sort-button" id="todo-sort-comments" type="button">Comments</button>
+          <span class="todo-header-spacer" aria-hidden="true"></span>
+        </div>
         <div class="todo-list" id="todo-list"></div>
         <div class="empty-sessions" id="empty-todos">
-          <p>No to-do items yet. Add lines like <strong>todo:</strong> in Manual notes, then click <strong>Generate</strong>.</p>
+          <p>No to-do items yet. Add lines like <strong>todo</strong> or <strong>todo:</strong> in Manual notes, then click <strong>Generate</strong>.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-shell is-hidden" id="todo-detail-modal" aria-hidden="true">
+    <div class="modal-backdrop" id="close-todo-detail"></div>
+    <section class="modal-card todo-detail-card" aria-label="To-do item details" aria-modal="true" role="dialog">
+      <div class="panel-heading modal-heading">
+        <div>
+          <p class="section-label">To-do Item</p>
+          <h2 id="todo-detail-title">To-do details</h2>
+        </div>
+        <button class="ghost-button" id="close-todo-detail-button" type="button">Close</button>
+      </div>
+
+      <div class="modal-form">
+        <label class="checkbox-field compact-checkbox todo-detail-toggle">
+          <input id="todo-detail-complete" type="checkbox">
+          <span>Completed</span>
+        </label>
+
+        <label class="field field-tight">
+          <span class="field-label">Item</span>
+          <textarea id="todo-detail-description" rows="4"></textarea>
+        </label>
+
+        <div class="field-grid">
+          <label class="field field-tight">
+            <span class="field-label">Date added</span>
+            <input id="todo-detail-added" type="text" readonly>
+          </label>
+          <label class="field field-tight">
+            <span class="field-label">From session</span>
+            <textarea id="todo-detail-sessions" rows="3" readonly></textarea>
+          </label>
+        </div>
+
+        <label class="field field-tight">
+          <span class="field-label">Comments</span>
+          <textarea id="todo-detail-comments" rows="8" placeholder="Add your own follow-up comments here."></textarea>
+        </label>
+
+        <div class="capture-toolbar">
+          <button class="ghost-button" id="todo-detail-remove" type="button">Remove</button>
         </div>
       </div>
     </section>
