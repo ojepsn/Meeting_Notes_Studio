@@ -810,9 +810,6 @@
       </div>
       <div class="todo-item-cell todo-item-added"></div>
       <div class="todo-item-cell todo-item-sessions"></div>
-      <div class="todo-item-cell todo-item-comments-cell">
-        <textarea class="todo-item-comments" rows="2" placeholder="Add your own follow-up comments here."></textarea>
-      </div>
       <div class="todo-item-cell todo-item-actions">
         <button class="ghost-button todo-item-remove" type="button">Remove</button>
       </div>
@@ -1317,8 +1314,6 @@
           <button class="ghost-button todo-sort-button" id="todo-sort-description" type="button">Item</button>
           <button class="ghost-button todo-sort-button" id="todo-sort-added" type="button">Date added</button>
           <button class="ghost-button todo-sort-button" id="todo-sort-sessions" type="button">From session</button>
-          <button class="ghost-button todo-sort-button" id="todo-sort-comments" type="button">Comments</button>
-          <span class="todo-header-spacer" aria-hidden="true"></span>
         </div>
         <div class="todo-list" id="todo-list"></div>
         <div class="empty-sessions" id="empty-todos">
@@ -1350,16 +1345,8 @@
           <textarea id="todo-detail-description" rows="4"></textarea>
         </label>
 
-        <div class="field-grid">
-          <label class="field field-tight">
-            <span class="field-label">Date added</span>
-            <input id="todo-detail-added" type="text" readonly>
-          </label>
-          <label class="field field-tight">
-            <span class="field-label">From session</span>
-            <textarea id="todo-detail-sessions" rows="3" readonly></textarea>
-          </label>
-        </div>
+        <p class="support-text todo-detail-meta-line"><strong>Date added:</strong> <span id="todo-detail-added"></span></p>
+        <p class="support-text todo-detail-meta-line"><strong>From session:</strong> <span id="todo-detail-sessions"></span></p>
 
         <label class="field field-tight">
           <span class="field-label">Comments</span>

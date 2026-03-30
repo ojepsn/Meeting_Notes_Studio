@@ -102,7 +102,6 @@ const todoSortCompletedButton = document.querySelector("#todo-sort-completed");
 const todoSortDescriptionButton = document.querySelector("#todo-sort-description");
 const todoSortAddedButton = document.querySelector("#todo-sort-added");
 const todoSortSessionsButton = document.querySelector("#todo-sort-sessions");
-const todoSortCommentsButton = document.querySelector("#todo-sort-comments");
 const todoDetailModal = document.querySelector("#todo-detail-modal");
 const closeTodoDetailBackdrop = document.querySelector("#close-todo-detail");
 const closeTodoDetailButton = document.querySelector("#close-todo-detail-button");
@@ -895,7 +894,6 @@ function bindEvents() {
     [todoSortDescriptionButton, "description"],
     [todoSortAddedButton, "addedAt"],
     [todoSortSessionsButton, "sessions"],
-    [todoSortCommentsButton, "comments"],
   ].forEach(([button, key]) => {
     button?.addEventListener("click", () => {
       if (todoSortKey === key) {
@@ -973,34 +971,11 @@ function bindEvents() {
         ? {
             ...todo,
             completed: item.querySelector(".todo-item-complete").checked,
-            comments: item.querySelector(".todo-item-comments").value,
           }
         : todo
     )));
     persistSettings();
     renderTodoList();
-  });
-
-  todoList?.addEventListener("input", (event) => {
-    if (!event.target.classList.contains("todo-item-comments")) {
-      return;
-    }
-
-    const item = event.target.closest(".todo-item");
-    if (!item) {
-      return;
-    }
-
-    const todoId = item.dataset.todoId;
-    settings.todoItems = normalizeTodoItems((settings.todoItems || []).map((todo) => (
-      todo.id === todoId
-        ? {
-            ...todo,
-            comments: event.target.value,
-          }
-        : todo
-    )));
-    persistSettings();
   });
 
   todoList?.addEventListener("click", async (event) => {
@@ -2909,18 +2884,14 @@ function renderTodoList() {
         ? Number(left.completed)
         : todoSortKey === "description"
           ? left.description
-          : todoSortKey === "comments"
-            ? left.comments
-            : todoSortKey === "sessions"
+          : todoSortKey === "sessions"
               ? leftSessions
               : left.addedAt;
       const rightValue = todoSortKey === "completed"
         ? Number(right.completed)
         : todoSortKey === "description"
           ? right.description
-          : todoSortKey === "comments"
-            ? right.comments
-            : todoSortKey === "sessions"
+          : todoSortKey === "sessions"
               ? rightSessions
               : right.addedAt;
 
@@ -2941,7 +2912,6 @@ function renderTodoList() {
     const description = fragment.querySelector(".todo-item-description");
     const added = fragment.querySelector(".todo-item-added");
     const sessions = fragment.querySelector(".todo-item-sessions");
-    const comments = fragment.querySelector(".todo-item-comments");
 
     article.dataset.todoId = item.id;
     article.classList.toggle("is-complete", item.completed);
@@ -2949,7 +2919,6 @@ function renderTodoList() {
     description.textContent = item.description;
     article.title = item.description;
     added.textContent = item.addedAt;
-    comments.value = item.comments || "";
 
     const sessionLabels = normalizeTodoSessionRefs(item.sessionRefs)
       .map((ref) => ref.title)
@@ -2968,7 +2937,6 @@ function updateTodoSortUi() {
     [todoSortDescriptionButton, "description"],
     [todoSortAddedButton, "addedAt"],
     [todoSortSessionsButton, "sessions"],
-    [todoSortCommentsButton, "comments"],
   ];
 
   controls.forEach(([button, key]) => {
@@ -3657,8 +3625,8 @@ function openTodoDetailModal(todoId) {
   todoDetailTitle.textContent = todo.description;
   todoDetailComplete.checked = todo.completed;
   todoDetailDescription.value = todo.description;
-  todoDetailAdded.value = todo.addedAt;
-  todoDetailSessions.value = normalizeTodoSessionRefs(todo.sessionRefs).map((ref) => ref.title).filter(Boolean).join("\n");
+  todoDetailAdded.textContent = todo.addedAt;
+  todoDetailSessions.textContent = normalizeTodoSessionRefs(todo.sessionRefs).map((ref) => ref.title).filter(Boolean).join(", ") || "—";
   todoDetailComments.value = todo.comments || "";
   todoDetailModal.classList.remove("is-hidden");
   todoDetailModal.setAttribute("aria-hidden", "false");
