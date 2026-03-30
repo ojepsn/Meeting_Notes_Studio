@@ -491,6 +491,26 @@
     </article>
   </template>
 
+  <template id="prompt-block-template">
+    <article class="prompt-block-item">
+      <label class="checkbox-field compact-checkbox prompt-block-toggle">
+        <input class="prompt-block-enabled" type="checkbox">
+        <span>Use this prompt block</span>
+      </label>
+      <label class="field field-tight">
+        <span class="field-label">Label</span>
+        <input class="prompt-block-label" type="text" maxlength="80" placeholder="ex. Board meeting emphasis">
+      </label>
+      <label class="field field-tight">
+        <span class="field-label">Prompt text</span>
+        <textarea class="prompt-block-text" rows="5" placeholder="Extra prompt instructions to include in AI generation"></textarea>
+      </label>
+      <div class="capture-toolbar settings-inline-actions">
+        <button class="ghost-button prompt-block-remove" type="button">Remove</button>
+      </div>
+    </article>
+  </template>
+
   <template id="custom-header-template">
     <article class="custom-header-item">
       <div class="config-option custom-header-toggle">
@@ -829,11 +849,12 @@
         <div class="settings-shell">
           <aside class="settings-nav" aria-label="Settings sections">
             <p class="support-text settings-nav-copy">
-              Changes save automatically. Pick a section to tune appearance, AI, exports, templates, and saved people.
+              Changes save automatically. Pick a section to tune appearance, AI, prompts, exports, templates, and saved people.
             </p>
             <div class="settings-nav-list">
               <button class="settings-nav-button is-active" data-settings-tab="appearance" type="button">Appearance</button>
               <button class="settings-nav-button" data-settings-tab="ai" type="button">AI</button>
+              <button class="settings-nav-button" data-settings-tab="prompts" type="button">Prompts</button>
               <button class="settings-nav-button" data-settings-tab="storage" type="button">Storage</button>
               <button class="settings-nav-button" data-settings-tab="exports" type="button">Exports</button>
               <button class="settings-nav-button" data-settings-tab="templates" type="button">Templates</button>
@@ -886,6 +907,58 @@
 
               <div class="capture-toolbar settings-inline-actions">
                 <button class="primary-button" id="open-ai-settings-inline" type="button">Open AI Settings</button>
+              </div>
+            </section>
+
+            <section class="config-card settings-card is-hidden-field" data-settings-section="prompts" aria-label="Prompt settings">
+              <div class="config-card-copy">
+                <p class="section-label">Prompts</p>
+                <h3>Tune how AI writes your notes</h3>
+              </div>
+
+              <p class="support-text">
+                These prompts shape how the app turns transcripts and rough notes into structured professional meeting notes. Changes save automatically and stay local to this browser.
+              </p>
+
+              <div class="settings-stack">
+                <label class="field">
+                  <span class="field-label">Notes generation system prompt</span>
+                  <textarea id="prompt-generation-system" rows="7" placeholder="Core instructions for structured professional notes"></textarea>
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Notes generation rules</span>
+                  <textarea id="prompt-generation-rules" rows="8" placeholder="Extra requirements for structure, synthesis, and tone"></textarea>
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Revision rules</span>
+                  <textarea id="prompt-revision-rules" rows="7" placeholder="How improvement requests should be handled"></textarea>
+                </label>
+
+                <label class="field">
+                  <span class="field-label">Translation rules</span>
+                  <textarea id="prompt-translation-rules" rows="6" placeholder="How translated output should preserve structure and meaning"></textarea>
+                </label>
+              </div>
+
+              <div class="config-card-copy prompt-additional-copy">
+                <p class="section-label">Additional prompts</p>
+                <h4>Add your own reusable prompt blocks</h4>
+              </div>
+
+              <p class="support-text">
+                These extra prompt blocks are included below the standard prompts during generation, revision, and translation.
+              </p>
+
+              <div class="prompt-additional-list" id="prompt-additional-list"></div>
+
+              <div class="capture-toolbar settings-inline-actions">
+                <button class="secondary-button" id="add-prompt-block" type="button">Add prompt block</button>
+              </div>
+
+              <div class="capture-toolbar settings-inline-actions">
+                <button class="ghost-button" id="reset-prompt-settings" type="button">Reset to recommended defaults</button>
               </div>
             </section>
 

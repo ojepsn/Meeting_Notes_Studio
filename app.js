@@ -58,6 +58,13 @@ const sessionStorageStatus = document.querySelector("#session-storage-status");
 const openWorkspacePanelButton = document.querySelector("#open-workspace-panel");
 const openSettingsButton = document.querySelector("#open-settings");
 const openAiSettingsInlineButton = document.querySelector("#open-ai-settings-inline");
+const promptGenerationSystemInput = document.querySelector("#prompt-generation-system");
+const promptGenerationRulesInput = document.querySelector("#prompt-generation-rules");
+const promptRevisionRulesInput = document.querySelector("#prompt-revision-rules");
+const promptTranslationRulesInput = document.querySelector("#prompt-translation-rules");
+const promptAdditionalList = document.querySelector("#prompt-additional-list");
+const addPromptBlockButton = document.querySelector("#add-prompt-block");
+const resetPromptSettingsButton = document.querySelector("#reset-prompt-settings");
 const backupPanelModal = document.querySelector("#backup-panel-modal");
 const closeBackupPanelBackdrop = document.querySelector("#close-backup-panel");
 const closeBackupPanelButton = document.querySelector("#close-backup-panel-button");
@@ -223,6 +230,7 @@ const sessionItemTemplate = document.querySelector("#session-item-template");
 const highlightChipTemplate = document.querySelector("#highlight-chip-template");
 const participantDirectoryItemTemplate = document.querySelector("#participant-directory-item-template");
 const abbreviationDirectoryItemTemplate = document.querySelector("#abbreviation-directory-item-template");
+const promptBlockTemplate = document.querySelector("#prompt-block-template");
 const customHeaderTemplate = document.querySelector("#custom-header-template");
 const addCustomTemplateButton = document.querySelector("#add-custom-template");
 const customTemplateList = document.querySelector("#custom-template-list");
@@ -262,6 +270,41 @@ const APPROX_TOKENS_PER_PAGE = 750;
 const MAX_AUDIO_UPLOAD_BYTES = 25 * 1024 * 1024;
 const AUDIO_CHUNK_TARGET_BYTES = 23 * 1024 * 1024;
 const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+const DEFAULT_PROMPT_SETTINGS = {
+  generationSystem: "You turn rough business notes and transcripts into polished professional meeting notes. Be concise, accurate, and businesslike. Do not invent facts. If details are missing, stay neutral. Preserve the language of the source notes. If the notes are Swedish, write Swedish. If the notes are English, write English. Always focus on business-related discussion. Exclude private matters, social chatter, greetings, and small talk from the final output. Never reproduce the transcript verbatim. Synthesize the discussion into structured professional notes grouped by topic rather than by speaking order.",
+  generationRules: [
+    "- Use a professional tone.",
+    "- Convert the transcript and notes into structured professional meeting notes rather than a transcript reproduction.",
+    "- Synthesize what was said into concise business language instead of copying spoken phrasing.",
+    "- Group discussion points by business topic or theme, not by speaking order or transcript chronology.",
+    "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.",
+    "- Use headings that reflect the actual topics discussed, not generic placeholders.",
+    "- Only include a discussion point when the transcript supports a substantive theme or issue.",
+    "- Make the summary a real executive-style synthesis of the most important business discussion, not a transcript recap.",
+    "- Highlights should be key takeaways, risks, or updates, not quoted phrases from the transcript.",
+    "- Keep action items specific.",
+    "- Only include decisions that are actually supported by the notes.",
+    "- Exclude private matters, greetings, and small talk. Keep the output focused on business discussion only.",
+  ].join("\n"),
+  revisionRules: [
+    "- Apply the user's requested improvements when they are supported by the notes.",
+    "- Keep the revised output as close as possible to the current polished output.",
+    "- Do not rewrite, reorder, or rephrase sections unless needed to satisfy the user's requested improvements.",
+    "- If the user asks for a specific change, preserve everything else as much as possible.",
+    "- Do not invent new facts or decisions.",
+    "- Keep the revised output in the form of structured professional notes, not transcript-style prose.",
+    "- Keep discussion points grouped by business topic with concise synthesized bullets.",
+    "- Keep the output focused on business discussion only.",
+  ].join("\n"),
+  translationRules: [
+    "- Keep the meaning faithful to the current output.",
+    "- Do not summarize, expand, shorten, or reorganize the content.",
+    "- Translate headings and labels too, but preserve the HTML structure.",
+    "- Preserve the structure, order, headings, lists, emphasis, and HTML markup as closely as possible.",
+    "- Translate only the user-visible text and return only translated HTML.",
+  ].join("\n"),
+  additionalPrompts: [],
+};
 const BACKUP_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const STORAGE_MODES = {
   browser: "browser",
@@ -562,6 +605,7 @@ function createDefaultSettings() {
     templateUsageCounts: {},
     exportStylePreset: DEFAULT_EXPORT_PRESET,
     exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
+    promptSettings: { ...DEFAULT_PROMPT_SETTINGS },
     storageMode: STORAGE_MODES.browser,
     storageFileName: "",
     storageFileConnected: false,
@@ -1264,6 +1308,81 @@ function bindEvents() {
   });
 
   openAiSettingsInlineButton.addEventListener("click", openAiSettingsFromSettings);
+  [
+    [promptGenerationSystemInput, "generationSystem"],
+    [promptGenerationRulesInput, "generationRules"],
+    [promptRevisionRulesInput, "revisionRules"],
+    [promptTranslationRulesInput, "translationRules"],
+  ].forEach(([input, key]) => {
+    input?.addEventListener("input", () => {
+      settings.promptSettings = normalizePromptSettings({
+        ...settings.promptSettings,
+        [key]: input.value,
+      });
+      persistSettings();
+    });
+  });
+  resetPromptSettingsButton?.addEventListener("click", () => {
+    settings.promptSettings = normalizePromptSettings({
+      ...DEFAULT_PROMPT_SETTINGS,
+      additionalPrompts: (settings.promptSettings?.additionalPrompts || []).map((prompt) => ({
+        ...prompt,
+        enabled: false,
+      })),
+    });
+    persistSettings();
+    syncPromptSettingsUi();
+    dictationStatus.textContent = "Recommended prompt defaults restored. Your added prompt blocks were kept and unchecked.";
+  });
+  addPromptBlockButton?.addEventListener("click", () => {
+    settings.promptSettings = normalizePromptSettings({
+      ...settings.promptSettings,
+      additionalPrompts: [
+        ...(settings.promptSettings?.additionalPrompts || []),
+        { id: crypto.randomUUID(), label: "", text: "", enabled: true },
+      ],
+    });
+    persistSettings();
+    syncPromptSettingsUi();
+  });
+  promptAdditionalList?.addEventListener("input", (event) => {
+    const item = event.target.closest(".prompt-block-item");
+    if (!item) {
+      return;
+    }
+
+    const promptId = item.dataset.promptId;
+    const enabled = item.querySelector(".prompt-block-enabled")?.checked !== false;
+    const nextLabel = item.querySelector(".prompt-block-label")?.value || "";
+    const nextText = item.querySelector(".prompt-block-text")?.value || "";
+    settings.promptSettings = normalizePromptSettings({
+      ...settings.promptSettings,
+      additionalPrompts: (settings.promptSettings?.additionalPrompts || []).map((prompt) => (
+        prompt.id === promptId ? {
+          ...prompt,
+          enabled,
+          label: nextLabel,
+          text: nextText,
+        } : prompt
+      )),
+    });
+    persistSettings();
+  });
+  promptAdditionalList?.addEventListener("click", (event) => {
+    const removeButton = event.target.closest(".prompt-block-remove");
+    if (!removeButton) {
+      return;
+    }
+
+    const item = removeButton.closest(".prompt-block-item");
+    const promptId = item?.dataset.promptId;
+    settings.promptSettings = normalizePromptSettings({
+      ...settings.promptSettings,
+      additionalPrompts: (settings.promptSettings?.additionalPrompts || []).filter((prompt) => prompt.id !== promptId),
+    });
+    persistSettings();
+    syncPromptSettingsUi();
+  });
   closeAiSettingsBackdrop.addEventListener("click", closeAiSettings);
   closeAiSettingsButton.addEventListener("click", closeAiSettings);
   closeBackupReminderBackdrop.addEventListener("click", closeBackupReminder);
@@ -1390,7 +1509,7 @@ function bindEvents() {
       }, true);
 
       if (field.id === "participants") {
-        syncParticipantDirectoryWithSession(field.value);
+        renderParticipantSuggestions();
       }
     });
   });
@@ -1634,6 +1753,7 @@ function bindEvents() {
         : buildLocalPolishedNotes(session);
 
       updateActiveSession({ polishedHtml }, false);
+      syncParticipantDirectoryWithSession(getActiveSession().participants);
       renderOutput();
       if (isMobileLayout()) {
         openMobileOutputSheet();
@@ -4172,6 +4292,7 @@ async function polishWithOpenAI(session, activeSettings) {
   const template = getTemplateDefinition(session.template);
   const outputLanguage = resolveOutputLanguage(session);
   const prompt = buildAiPrompt(session, template, outputLanguage);
+  const promptSettings = normalizePromptSettings(activeSettings.promptSettings);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -4186,8 +4307,7 @@ async function polishWithOpenAI(session, activeSettings) {
           content: [
             {
               type: "input_text",
-              text:
-                "You turn rough business notes and transcripts into polished professional meeting notes. Be concise, accurate, and businesslike. Do not invent facts. If details are missing, stay neutral. Preserve the language of the source notes. If the notes are Swedish, write Swedish. If the notes are English, write English. Always focus on business-related discussion. Exclude private matters, social chatter, greetings, and small talk from the final output. Never reproduce the transcript verbatim. Synthesize the discussion into structured professional notes grouped by topic rather than by speaking order.",
+              text: promptSettings.generationSystem,
             },
           ],
         },
@@ -4344,6 +4464,7 @@ async function transcribeWithOpenAI(session, activeSettings) {
 async function translateOutputWithOpenAI(session, activeSettings, targetLanguage) {
   const sourceHtml = session.polishedHtml || polishedOutput.innerHTML || "";
   const sourceLanguage = detectOutputContentLanguage(session);
+  const promptSettings = normalizePromptSettings(activeSettings.promptSettings);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -4358,7 +4479,7 @@ async function translateOutputWithOpenAI(session, activeSettings, targetLanguage
           content: [
             {
               type: "input_text",
-              text: "You translate existing HTML notes. Preserve the structure, order, headings, lists, emphasis, and HTML markup as closely as possible. Translate only the user-visible text. Do not add commentary, markdown fences, or explanations. Return only the translated HTML.",
+              text: "You translate existing HTML meeting notes. Preserve the HTML structure faithfully and return only translated HTML with no commentary or markdown fences.",
             },
           ],
         },
@@ -4369,9 +4490,10 @@ async function translateOutputWithOpenAI(session, activeSettings, targetLanguage
               type: "input_text",
               text: [
                 `Translate this HTML from ${getOutputLanguageLabel(sourceLanguage)} to ${getOutputLanguageLabel(targetLanguage)}.`,
-                "Keep the meaning faithful to the current output.",
-                "Do not summarize, expand, shorten, or reorganize the content.",
-                "Translate headings and labels too, but preserve the HTML structure.",
+                promptSettings.translationRules,
+                "",
+                "Additional prompt blocks:",
+                formatAdditionalPromptsForPrompt(promptSettings.additionalPrompts),
                 "",
                 "Current HTML:",
                 sourceHtml,
@@ -4725,6 +4847,7 @@ function buildAiPrompt(session, template, outputLanguage) {
   const sourceLanguage = detectSourceLanguage(session);
   const templateHeaders = formatTemplateHeadersForPrompt(template.headers || [], session);
   const templateCustomFields = formatTemplateCustomFieldsForPrompt(template, session);
+  const promptSettings = normalizePromptSettings(settings.promptSettings);
   return [
     `Template: ${template.label}`,
     `Meeting title: ${session.title.trim() || "Untitled session"}`,
@@ -4764,27 +4887,18 @@ function buildAiPrompt(session, template, outputLanguage) {
     "Additional user instructions:",
     session.additionalInstructions?.trim() || "No additional instructions.",
     "",
+    "Additional prompt blocks:",
+    formatAdditionalPromptsForPrompt(promptSettings.additionalPrompts),
+    "",
     "Return polished professional notes in the requested schema.",
     "Requirements:",
-    "- Use a professional tone.",
     `- Write the output in ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}.`,
     sourceLanguage !== outputLanguage
       ? `- Translate the notes from ${sourceLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"} into ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}.`
       : "- Keep the wording in the same language as the source notes.",
     `- Match this detail level: ${getDetailLevelLabel(session.detailLevel ?? 3)}.`,
-    "- Convert the transcript and notes into structured professional meeting notes rather than a transcript reproduction.",
-    "- Synthesize what was said into concise business language instead of copying spoken phrasing.",
-    "- Group discussion points by business topic or theme, not by speaking order or transcript chronology.",
-    "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.",
-    "- Use headings that reflect the actual topics discussed, not generic placeholders.",
-    "- Only include a discussion point when the transcript supports a substantive theme or issue.",
     "- Keep the summary to 3-5 sentences.",
-    "- Make the summary a real executive-style synthesis of the most important business discussion, not a transcript recap.",
-    "- Highlights should be key takeaways, risks, or updates, not quoted phrases from the transcript.",
-    "- Keep action items specific.",
-    "- Only include decisions that are actually supported by the notes.",
-    "- Use discussion point headings that fit the meeting.",
-    "- Exclude private matters, greetings, and small talk. Keep the output focused on business discussion only.",
+    promptSettings.generationRules,
   ].join("\n");
 }
 
@@ -4794,6 +4908,7 @@ function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
   const sourceLanguage = detectSourceLanguage(session);
   const templateHeaders = formatTemplateHeadersForPrompt(template.headers || [], session);
   const templateCustomFields = formatTemplateCustomFieldsForPrompt(template, session);
+  const promptSettings = normalizePromptSettings(settings.promptSettings);
 
   return [
     `Template: ${template.label}`,
@@ -4839,20 +4954,16 @@ function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
     "Additional user instructions:",
     session.additionalInstructions?.trim() || "No additional instructions.",
     "",
+    "Additional prompt blocks:",
+    formatAdditionalPromptsForPrompt(promptSettings.additionalPrompts),
+    "",
     "Return a revised version in the requested schema.",
     "Requirements:",
-    "- Apply the user's requested improvements when they are supported by the notes.",
-    "- Keep the revised output as close as possible to the current polished output.",
-    "- Do not rewrite, reorder, or rephrase sections unless needed to satisfy the user's requested improvements.",
-    "- If the user asks for a specific change, preserve everything else as much as possible.",
-    "- Do not invent new facts or decisions.",
-    "- Keep the revised output in the form of structured professional notes, not transcript-style prose.",
-    "- Keep discussion points grouped by business topic with concise synthesized bullets.",
     `- Write the output in ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}.`,
     sourceLanguage !== outputLanguage
       ? `- Translate the revised notes into ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"} while keeping the meaning faithful to the source notes.`
       : "- Keep the revised notes in the same language as the source notes.",
-    "- Keep the output focused on business discussion only.",
+    promptSettings.revisionRules,
   ].join("\n");
 }
 
@@ -5881,6 +5992,7 @@ function loadSettings() {
         ...EXPORT_STYLE_PRESETS[exportStylePreset].style,
         ...(parsed.exportStyle || {}),
       }),
+      promptSettings: normalizePromptSettings(parsed.promptSettings),
       storageMode: parsed.storageMode === STORAGE_MODES.file ? STORAGE_MODES.file : STORAGE_MODES.browser,
       storageFileName: typeof parsed.storageFileName === "string" ? parsed.storageFileName : "",
       storageFileConnected: parsed.storageFileConnected === true,
@@ -5889,6 +6001,38 @@ function loadSettings() {
   } catch {
     return createDefaultSettings();
   }
+}
+
+function normalizePromptSettings(promptSettings) {
+  return {
+    generationSystem: typeof promptSettings?.generationSystem === "string" && promptSettings.generationSystem.trim()
+      ? promptSettings.generationSystem
+      : DEFAULT_PROMPT_SETTINGS.generationSystem,
+    generationRules: typeof promptSettings?.generationRules === "string" && promptSettings.generationRules.trim()
+      ? promptSettings.generationRules
+      : DEFAULT_PROMPT_SETTINGS.generationRules,
+    revisionRules: typeof promptSettings?.revisionRules === "string" && promptSettings.revisionRules.trim()
+      ? promptSettings.revisionRules
+      : DEFAULT_PROMPT_SETTINGS.revisionRules,
+    translationRules: typeof promptSettings?.translationRules === "string" && promptSettings.translationRules.trim()
+      ? promptSettings.translationRules
+      : DEFAULT_PROMPT_SETTINGS.translationRules,
+    additionalPrompts: normalizeAdditionalPrompts(promptSettings?.additionalPrompts),
+  };
+}
+
+function normalizeAdditionalPrompts(additionalPrompts) {
+  if (!Array.isArray(additionalPrompts)) {
+    return [];
+  }
+
+  return additionalPrompts
+    .map((prompt) => ({
+      id: typeof prompt?.id === "string" && prompt.id.trim() ? prompt.id : crypto.randomUUID(),
+      enabled: prompt?.enabled !== false,
+      label: typeof prompt?.label === "string" ? prompt.label.trim() : "",
+      text: typeof prompt?.text === "string" ? prompt.text.trim() : "",
+    }));
 }
 
 function persistSettings() {
@@ -6036,9 +6180,33 @@ function syncSettingsForm() {
   updateThemeDescription();
   updateExportStyleDescription();
   updateStorageUi();
+  syncPromptSettingsUi();
   renderCustomTemplates();
   renderAbbreviationDirectoryManager();
   renderParticipantDirectoryManager();
+}
+
+function syncPromptSettingsUi() {
+  const promptSettings = normalizePromptSettings(settings.promptSettings);
+  promptGenerationSystemInput.value = promptSettings.generationSystem;
+  promptGenerationRulesInput.value = promptSettings.generationRules;
+  promptRevisionRulesInput.value = promptSettings.revisionRules;
+  promptTranslationRulesInput.value = promptSettings.translationRules;
+  renderAdditionalPromptBlocks(promptSettings.additionalPrompts);
+}
+
+function renderAdditionalPromptBlocks(additionalPrompts) {
+  promptAdditionalList.innerHTML = "";
+
+  additionalPrompts.forEach((prompt) => {
+    const fragment = promptBlockTemplate.content.cloneNode(true);
+    const item = fragment.querySelector(".prompt-block-item");
+    item.dataset.promptId = prompt.id;
+    fragment.querySelector(".prompt-block-enabled").checked = prompt.enabled !== false;
+    fragment.querySelector(".prompt-block-label").value = prompt.label;
+    fragment.querySelector(".prompt-block-text").value = prompt.text;
+    promptAdditionalList.appendChild(fragment);
+  });
 }
 
 function updateStorageUi() {
@@ -6833,6 +7001,17 @@ function formatTemplateCustomFieldsForPrompt(template, session) {
       const value = session.customFieldValues?.[field.id]?.trim() || "Not provided";
       return `${index + 1}. ${field.label.trim()} (${field.type}): ${value}`;
     })
+    .join("\n");
+}
+
+function formatAdditionalPromptsForPrompt(additionalPrompts) {
+  const prompts = normalizeAdditionalPrompts(additionalPrompts).filter((prompt) => prompt.enabled !== false && (prompt.label || prompt.text));
+  if (!prompts.length) {
+    return "No additional prompt blocks.";
+  }
+
+  return prompts
+    .map((prompt, index) => `${index + 1}. ${prompt.label || `Prompt block ${index + 1}`}: ${prompt.text || "No prompt text provided."}`)
     .join("\n");
 }
 
