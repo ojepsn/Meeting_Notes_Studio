@@ -209,6 +209,8 @@ const transcribeAudioButton = document.querySelector("#transcribe-audio");
 const audioFileInput = document.querySelector("#audio-file-input");
 const transcriptFileInput = document.querySelector("#transcript-file-input");
 const audioCaptureStatus = document.querySelector("#audio-capture-status");
+const pendingRecordingsPanel = document.querySelector("#pending-recordings-panel");
+const pendingRecordingsList = document.querySelector("#pending-recordings-list");
 const dictationStatus = document.querySelector("#dictation-status");
 const copyOutputButton = document.querySelector("#copy-output");
 const exportWordButton = document.querySelector("#export-word");
@@ -235,6 +237,7 @@ const mobileSheetBackdrop = document.querySelector("#mobile-sheet-backdrop");
 const sessionItemTemplate = document.querySelector("#session-item-template");
 const highlightChipTemplate = document.querySelector("#highlight-chip-template");
 const participantDirectoryItemTemplate = document.querySelector("#participant-directory-item-template");
+const pendingRecordingItemTemplate = document.querySelector("#pending-recording-item-template");
 const abbreviationDirectoryItemTemplate = document.querySelector("#abbreviation-directory-item-template");
 const promptBlockTemplate = document.querySelector("#prompt-block-template");
 const customHeaderTemplate = document.querySelector("#custom-header-template");
@@ -1088,6 +1091,53 @@ function bindEvents() {
     updateParticipantSelectionControls();
   });
 
+  pendingRecordingsList?.addEventListener("click", async (event) => {
+    const openButton = event.target.closest(".pending-recording-open");
+    if (openButton) {
+      const item = openButton.closest(".pending-recording-item");
+      const sessionId = item?.dataset.sessionId;
+      if (!sessionId) {
+        return;
+      }
+
+      if (audioRecordingSessionId) {
+        await stopAudioCapture();
+      }
+      activeSessionId = sessionId;
+      render();
+      return;
+    }
+
+    const deleteButton = event.target.closest(".pending-recording-delete");
+    if (!deleteButton) {
+      return;
+    }
+
+    const item = deleteButton.closest(".pending-recording-item");
+    const sessionId = item?.dataset.sessionId;
+    const session = sessions.find((entry) => entry.id === sessionId);
+    if (!sessionId || !session) {
+      return;
+    }
+
+    const recordingLabel = normalizePendingAudioDraftMeta(session.pendingAudioDraftMeta)?.fileName || "this recording";
+    const confirmed = await showConfirmModal({
+      eyebrow: "Delete recording",
+      title: "Delete this recording?",
+      message: `Are you sure you want to delete ${recordingLabel} from "${session.title.trim() || "Untitled session"}"?`,
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    await clearAudioDraft(sessionId);
+    renderPendingRecordings();
+    audioCaptureStatus.textContent = "Recording deleted.";
+  });
+
   participantChips.addEventListener("click", (event) => {
     const chip = event.target.closest(".chip");
     if (!chip) {
@@ -1807,12 +1857,14 @@ function bindEvents() {
   polishButton.addEventListener("click", async () => {
     let session = getActiveSession();
     polishButton.disabled = true;
-    polishButton.textContent = "Polishing...";
+    polishButton.textContent = "Generating output...";
+    polishButton.classList.add("is-busy");
     setAppStatus("Generating", APP_STATUS_STATES.generating);
 
     try {
       const pendingAudioDraft = await getAudioDraft(session.id);
-      if (pendingAudioDraft) {
+      const shouldAutoTranscribePendingAudio = Boolean(pendingAudioDraft) && !hasTextInputForGeneration(session);
+      if (shouldAutoTranscribePendingAudio) {
         if (!settings.apiKey) {
           throw new Error("Recorded audio is available, but it has not been transcribed yet. Add an OpenAI API key and click \"Transcribe audio\" first.");
         }
@@ -1832,6 +1884,8 @@ function bindEvents() {
         await clearAudioDraft(session.id);
         audioCaptureStatus.textContent = "Recorded audio was transcribed and added to the Live transcript field.";
         session = getActiveSession();
+      } else if (pendingAudioDraft) {
+        audioCaptureStatus.textContent = "Using the notes and transcript already in this session. Pending audio was not auto-transcribed.";
       }
 
       const polishedHtml = settings.apiKey
@@ -1872,6 +1926,7 @@ function bindEvents() {
     } finally {
       polishButton.disabled = false;
       polishButton.textContent = "Generate";
+      polishButton.classList.remove("is-busy");
       setAppStatus("Saved locally", APP_STATUS_STATES.idle);
     }
   });
@@ -2955,6 +3010,32 @@ function syncAudioCaptureUi(session = getActiveSession()) {
   }
 
   syncMobileUi();
+  renderPendingRecordings();
+}
+
+function renderPendingRecordings() {
+  if (!pendingRecordingsPanel || !pendingRecordingsList) {
+    return;
+  }
+
+  pendingRecordingsList.innerHTML = "";
+  const sessionsWithPendingAudio = sessions
+    .map((session) => ({
+      session,
+      meta: normalizePendingAudioDraftMeta(session.pendingAudioDraftMeta),
+    }))
+    .filter((entry) => entry.meta);
+
+  pendingRecordingsPanel.hidden = sessionsWithPendingAudio.length === 0;
+
+  sessionsWithPendingAudio.forEach(({ session, meta }) => {
+    const fragment = pendingRecordingItemTemplate.content.cloneNode(true);
+    const item = fragment.querySelector(".pending-recording-item");
+    item.dataset.sessionId = session.id;
+    fragment.querySelector(".pending-recording-session").textContent = session.title.trim() || "Untitled session";
+    fragment.querySelector(".pending-recording-meta").textContent = `${meta.fileName} • ${formatAudioFileSize(meta.size)} • ${meta.source === "recording" ? "Recorded audio" : "Uploaded audio"}`;
+    pendingRecordingsList.appendChild(fragment);
+  });
 }
 
 function setElementVisibility(element, isVisible) {
@@ -4318,6 +4399,14 @@ function getActiveSession() {
   return sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
 }
 
+function hasTextInputForGeneration(session) {
+  return Boolean(
+    session?.liveTranscript?.trim()
+    || session?.uploadedTranscript?.trim()
+    || session?.rawNotes?.trim()
+  );
+}
+
 function buildLocalPolishedNotes(session) {
   if (session.transcribeOnly) {
     return buildTranscriptOnlyHtml(session);
@@ -4711,13 +4800,18 @@ async function transcribeAudioDraftWithOpenAI(audioDraft, activeSettings, option
 
 async function transcribeSingleAudioFileWithOpenAI(file, activeSettings) {
   const formData = new FormData();
+  const transcriptionModel = resolveSelectedTranscriptionModel(activeSettings.transcriptionModel);
+  const isDiarizationModel = transcriptionModel.includes("diarize");
 
   formData.append("file", file);
-  formData.append("model", resolveSelectedTranscriptionModel(activeSettings.transcriptionModel));
-  formData.append(
-    "prompt",
-    "Transcribe the audio faithfully. Preserve the original language, keep both nearby and speaker voices when they are audible, and return only the transcript text with clean punctuation."
-  );
+  formData.append("model", transcriptionModel);
+
+  if (!isDiarizationModel) {
+    formData.append(
+      "prompt",
+      "Transcribe the audio faithfully. Preserve the original language, keep both nearby and speaker voices when they are audible, and return only the transcript text with clean punctuation."
+    );
+  }
 
   const forcedLanguage = settings.dictationLanguage === "sv-SE"
     ? "sv"

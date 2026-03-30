@@ -501,6 +501,28 @@ body.sessions-panel-open {
   gap: 14px;
 }
 
+.output-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 20px;
+  align-items: start;
+}
+
+.output-main,
+.output-sidebar {
+  min-width: 0;
+}
+
+.output-main {
+  display: grid;
+  gap: 14px;
+}
+
+.output-sidebar {
+  display: grid;
+  gap: 14px;
+}
+
 .sidebar-status-row {
   display: flex;
   justify-content: flex-end;
@@ -1659,6 +1681,58 @@ textarea:focus {
   cursor: pointer;
 }
 
+.pending-recordings-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(62, 81, 48, 0.08);
+}
+
+.pending-recordings-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.pending-recordings-list {
+  display: grid;
+  gap: 8px;
+}
+
+.pending-recording-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(62, 81, 48, 0.06);
+}
+
+.pending-recording-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pending-recording-session {
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+
+.pending-recording-meta {
+  font-size: 0.74rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.pending-recording-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .abbreviation-directory-item {
   display: grid;
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr) auto;
@@ -1720,6 +1794,7 @@ textarea:focus {
 .capture-toolbar-sidebar {
   display: grid;
   grid-template-columns: 1fr;
+  margin-bottom: 10px;
 }
 
 .field-polish-language {
@@ -1757,6 +1832,12 @@ textarea:focus {
   background: var(--accent);
   color: #fffaf5;
   box-shadow: 0 14px 28px rgba(143, 62, 28, 0.22);
+}
+
+.primary-button.is-busy {
+  background: linear-gradient(180deg, #9f572d, #c76e34);
+  color: #fffaf5;
+  box-shadow: 0 16px 34px rgba(159, 87, 45, 0.28);
 }
 
 .secondary-button {
@@ -2190,6 +2271,11 @@ textarea:focus {
 }
 
 @media (max-width: 720px) {
+  .output-layout {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
   .sidebar-status-row {
     display: none;
   }

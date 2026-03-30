@@ -291,6 +291,13 @@
                 <p class="support-text" id="audio-capture-status">
                   No audio file selected yet. You can record here or upload mp3, m4a, wav, mp4, or webm.
                 </p>
+                <div class="pending-recordings-panel" id="pending-recordings-panel" hidden>
+                  <div class="pending-recordings-heading">
+                    <p class="section-label">Saved recordings</p>
+                    <span class="support-text">Delete recordings you no longer need before transcription.</span>
+                  </div>
+                  <div class="pending-recordings-list" id="pending-recordings-list"></div>
+                </div>
                 <input id="audio-file-input" type="file" accept=".mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm,audio/*,video/mp4" hidden>
                 <input id="transcript-file-input" type="file" accept=".txt,.md,.text,.docx,.doc,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" hidden>
               </section>
@@ -327,132 +334,138 @@
           </div>
         </div>
 
-        <div class="output-card" id="polished-output">
-          <div class="output-empty">
-            <h3>Your finished notes will appear here.</h3>
-            <p>Add notes or transcript above, include highlights if useful, then click <strong>Generate</strong>.</p>
-          </div>
-        </div>
-
-        <section class="config-card workflow-card output-workflow-card" aria-label="Generation controls">
-          <div class="config-card-copy">
-            <p class="section-label">Generate</p>
-            <h3>Shape the output</h3>
-          </div>
-
-          <label class="field field-compact field-polish-language">
-            <span class="field-label">Output language</span>
-            <select id="output-language">
-              <option value="auto">Same as notes</option>
-              <option value="sv">Swedish</option>
-              <option value="en">English</option>
-            </select>
-          </label>
-
-          <div class="capture-toolbar capture-toolbar-sidebar">
-            <button class="primary-button" id="polish-notes" type="button">Generate</button>
-            <button class="ghost-button" id="copy-output" type="button">Copy Output</button>
-          </div>
-
-          <label class="config-option config-option-featured">
-            <input id="transcribe-only" type="checkbox">
-            <span class="config-option-copy">
-              <span class="config-option-title">Transcribe only</span>
-              <span class="config-option-hint">Use this when you want clean transcript text instead of polished notes.</span>
-            </span>
-          </label>
-
-          <details class="advanced-options-disclosure">
-            <summary>More output options</summary>
-            <div class="advanced-options-body">
-              <p class="support-text">
-                Select the sections you want in the generated output. Checked sections are included, and unchecked sections are left out.
-              </p>
-              <div class="config-grid config-grid-inline">
-                <label class="config-option">
-                  <input id="include-summary" type="checkbox">
-                  <span>Summary</span>
-                </label>
-                <label class="config-option">
-                  <input id="include-highlights" type="checkbox">
-                  <span>Highlights</span>
-                </label>
-                <label class="config-option">
-                  <input id="include-decisions" type="checkbox">
-                  <span>Decisions</span>
-                </label>
-                <label class="config-option">
-                  <input id="include-actions" type="checkbox">
-                  <span>Action Items</span>
-                </label>
+        <div class="output-layout">
+          <div class="output-main">
+            <div class="output-card" id="polished-output">
+              <div class="output-empty">
+                <h3>Your finished notes will appear here.</h3>
+                <p>Add notes or transcript above, include highlights if useful, then click <strong>Generate</strong>.</p>
               </div>
+            </div>
 
-              <div class="config-grid config-grid-inline" id="template-section-list" aria-live="polite"></div>
-
-              <section class="custom-headers custom-headers-inline" aria-label="Custom sections">
-                <div class="custom-header-list" id="custom-header-list"></div>
-
-                <div class="custom-headers-heading">
-                  <button class="ghost-button custom-header-add" id="add-custom-header" type="button">Add section</button>
-                </div>
-
-                <div class="custom-header-add-form is-hidden-field" id="custom-header-add-form">
-                  <label class="field field-tight">
-                    <span class="field-label">Section</span>
-                    <input id="new-custom-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
-                  </label>
-                  <label class="field field-tight">
-                    <span class="field-label">Instructions to AI</span>
-                    <textarea
-                      id="new-custom-header-instructions"
-                      rows="3"
-                      placeholder="Explain what this section should focus on."
-                    ></textarea>
-                  </label>
-                  <div class="custom-header-add-actions">
-                    <button class="secondary-button" id="save-custom-header" type="button">Save</button>
-                    <button class="ghost-button" id="cancel-custom-header" type="button">Cancel</button>
-                  </div>
-                </div>
-              </section>
-
-              <label class="field config-field">
-                <span class="field-label">Detail level</span>
-                <input id="detail-level" type="range" min="1" max="5" step="1" value="3">
-                <span class="range-caption" id="detail-level-label">Balanced detail</span>
-              </label>
-
-              <label class="field config-field">
-                <span class="field-label">Additional LLM instructions</span>
+            <section class="output-feedback-card" aria-label="Improve polished output">
+              <label class="field">
+                <span class="field-label">Comments to improve the output</span>
                 <textarea
-                  id="additional-instructions"
+                  id="output-feedback"
                   rows="4"
-                  placeholder="Example: Focus more on risks and decisions, and exclude implementation details."
+                  placeholder="Example: Make the summary shorter, emphasize risks more, and make the action items more specific."
                 ></textarea>
               </label>
-            </div>
-          </details>
-        </section>
 
-        <section class="output-feedback-card" aria-label="Improve polished output">
-          <label class="field">
-            <span class="field-label">Comments to improve the output</span>
-            <textarea
-              id="output-feedback"
-              rows="4"
-              placeholder="Example: Make the summary shorter, emphasize risks more, and make the action items more specific."
-            ></textarea>
-          </label>
+              <div class="capture-toolbar output-feedback-actions">
+                <button class="secondary-button" id="improve-output" type="button">Update Output</button>
+                <button class="ghost-button" id="revert-output" type="button">Revert to Previous Version</button>
+              </div>
 
-          <div class="capture-toolbar output-feedback-actions">
-            <button class="secondary-button" id="improve-output" type="button">Update Output</button>
-            <button class="ghost-button" id="revert-output" type="button">Revert to Previous Version</button>
+              <p class="support-text" id="output-feedback-status">
+                Add comments here when you want the polished output adjusted. You can always revert the latest revision.
+              </p>
+            </section>
           </div>
 
-          <p class="support-text" id="output-feedback-status">
-            Add comments here when you want the polished output adjusted. You can always revert the latest revision.
-          </p>
-        </section>
+          <aside class="output-sidebar">
+            <section class="config-card workflow-card output-workflow-card" aria-label="Generation controls">
+              <div class="config-card-copy">
+                <p class="section-label">Generate</p>
+                <h3>Shape the output</h3>
+              </div>
+
+              <label class="field field-compact field-polish-language">
+                <span class="field-label">Output language</span>
+                <select id="output-language">
+                  <option value="auto">Same as notes</option>
+                  <option value="sv">Swedish</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+
+              <div class="capture-toolbar capture-toolbar-sidebar">
+                <button class="primary-button" id="polish-notes" type="button">Generate</button>
+                <button class="ghost-button" id="copy-output" type="button">Copy Output</button>
+              </div>
+
+              <label class="config-option config-option-featured">
+                <input id="transcribe-only" type="checkbox">
+                <span class="config-option-copy">
+                  <span class="config-option-title">Transcribe only</span>
+                  <span class="config-option-hint">Use this when you want clean transcript text instead of polished notes.</span>
+                </span>
+              </label>
+
+              <details class="advanced-options-disclosure" open>
+                <summary>More output options</summary>
+                <div class="advanced-options-body">
+                  <p class="support-text">
+                    Select the sections you want in the generated output. Checked sections are included, and unchecked sections are left out.
+                  </p>
+                  <div class="config-grid config-grid-inline">
+                    <label class="config-option">
+                      <input id="include-summary" type="checkbox">
+                      <span>Summary</span>
+                    </label>
+                    <label class="config-option">
+                      <input id="include-highlights" type="checkbox">
+                      <span>Highlights</span>
+                    </label>
+                    <label class="config-option">
+                      <input id="include-decisions" type="checkbox">
+                      <span>Decisions</span>
+                    </label>
+                    <label class="config-option">
+                      <input id="include-actions" type="checkbox">
+                      <span>Action Items</span>
+                    </label>
+                  </div>
+
+                  <div class="config-grid config-grid-inline" id="template-section-list" aria-live="polite"></div>
+
+                  <section class="custom-headers custom-headers-inline" aria-label="Custom sections">
+                    <div class="custom-header-list" id="custom-header-list"></div>
+
+                    <div class="custom-headers-heading">
+                      <button class="ghost-button custom-header-add" id="add-custom-header" type="button">Add section</button>
+                    </div>
+
+                    <div class="custom-header-add-form is-hidden-field" id="custom-header-add-form">
+                      <label class="field field-tight">
+                        <span class="field-label">Section</span>
+                        <input id="new-custom-header-title" type="text" maxlength="80" placeholder="Risks to monitor">
+                      </label>
+                      <label class="field field-tight">
+                        <span class="field-label">Instructions to AI</span>
+                        <textarea
+                          id="new-custom-header-instructions"
+                          rows="3"
+                          placeholder="Explain what this section should focus on."
+                        ></textarea>
+                      </label>
+                      <div class="custom-header-add-actions">
+                        <button class="secondary-button" id="save-custom-header" type="button">Save</button>
+                        <button class="ghost-button" id="cancel-custom-header" type="button">Cancel</button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <label class="field config-field">
+                    <span class="field-label">Detail level</span>
+                    <input id="detail-level" type="range" min="1" max="5" step="1" value="3">
+                    <span class="range-caption" id="detail-level-label">Balanced detail</span>
+                  </label>
+
+                  <label class="field config-field">
+                    <span class="field-label">Additional LLM instructions</span>
+                    <textarea
+                      id="additional-instructions"
+                      rows="4"
+                      placeholder="Example: Focus more on risks and decisions, and exclude implementation details."
+                    ></textarea>
+                  </label>
+                </div>
+              </details>
+            </section>
+          </aside>
+        </div>
       </section>
 
       <div class="mobile-sheet-backdrop mobile-only" id="mobile-sheet-backdrop" hidden></div>
@@ -503,6 +516,19 @@
       </label>
       <input class="participant-directory-name" type="text" maxlength="80" placeholder="Participant name">
       <button class="ghost-button participant-directory-remove" type="button">Remove</button>
+    </article>
+  </template>
+
+  <template id="pending-recording-item-template">
+    <article class="pending-recording-item">
+      <div class="pending-recording-copy">
+        <strong class="pending-recording-session"></strong>
+        <span class="pending-recording-meta"></span>
+      </div>
+      <div class="pending-recording-actions">
+        <button class="ghost-button pending-recording-open" type="button">Open</button>
+        <button class="ghost-button pending-recording-delete" type="button">Delete</button>
+      </div>
     </article>
   </template>
 
