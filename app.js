@@ -45,6 +45,9 @@ const sessionsPanel = document.querySelector("#sessions-panel");
 const sessionsPanelBackdrop = document.querySelector("#sessions-panel-backdrop");
 const toggleSessionsPanelButton = document.querySelector("#toggle-sessions-panel");
 const collapseSessionsPanelButton = document.querySelector("#collapse-sessions-panel");
+const desktopViewSwitch = document.querySelector("#desktop-view-switch");
+const desktopViewCaptureButton = document.querySelector("#desktop-view-capture");
+const desktopViewOutputButton = document.querySelector("#desktop-view-output");
 const newSessionButton = document.querySelector("#new-session");
 const newSessionMainButton = document.querySelector("#new-session-main");
 const sessionFilterInput = document.querySelector("#session-filter");
@@ -144,6 +147,7 @@ const manualNotesDisclosure = document.querySelector("#manual-notes-disclosure")
 const liveTranscriptField = document.querySelector("#live-transcript-field");
 const uploadedTranscriptField = document.querySelector("#uploaded-transcript-field");
 const mobileCaptureStatus = document.querySelector("#mobile-capture-status");
+const editorPanel = document.querySelector(".editor-panel");
 const apiKeyInput = document.querySelector("#api-key");
 const modelSelect = document.querySelector("#model-select");
 const modelOptions = document.querySelector("#model-options");
@@ -635,6 +639,7 @@ let activeAiSettingsSection = "connection";
 let latestRemoteVersion = APP_VERSION;
 let sessionFilterQuery = "";
 let selectedSessionIds = new Set();
+let desktopWorkspaceView = "capture";
 let participantDirectoryExpanded = false;
 let mediaRecorder = null;
 let mediaRecorderStream = null;
@@ -762,6 +767,14 @@ function bindEvents() {
       persistSettings();
       updateRecentSessionsPanelUi();
     });
+  });
+
+  desktopViewCaptureButton?.addEventListener("click", () => {
+    setDesktopWorkspaceView("capture");
+  });
+
+  desktopViewOutputButton?.addEventListener("click", () => {
+    setDesktopWorkspaceView("output");
   });
 
   exportSessionsButton.addEventListener("click", exportSessions);
@@ -1759,6 +1772,8 @@ function bindEvents() {
       renderOutput();
       if (isMobileLayout()) {
         openMobileOutputSheet();
+      } else {
+        setDesktopWorkspaceView("output");
       }
       dictationStatus.textContent = settings.apiKey
         ? (session.transcribeOnly ? "AI transcription complete." : "AI polishing complete.")
@@ -1776,6 +1791,8 @@ function bindEvents() {
         renderOutput();
         if (isMobileLayout()) {
           openMobileOutputSheet();
+        } else {
+          setDesktopWorkspaceView("output");
         }
         dictationStatus.textContent = session.transcribeOnly
           ? `AI transcription failed: ${error.message}. A local transcription cleanup was used instead.`
@@ -3250,6 +3267,35 @@ function openMobileOutputSheet() {
   syncModalScrollLock();
 }
 
+function setDesktopWorkspaceView(view) {
+  desktopWorkspaceView = view === "output" ? "output" : "capture";
+  updateDesktopWorkspaceViewUi();
+}
+
+function updateDesktopWorkspaceViewUi() {
+  if (!desktopViewSwitch || !editorPanel || !outputPanel) {
+    return;
+  }
+
+  const isMobile = isMobileLayout();
+  const hasOutput = Boolean(getActiveSession()?.polishedHtml);
+
+  if (!isMobile && desktopWorkspaceView === "output" && !hasOutput) {
+    desktopWorkspaceView = "capture";
+  }
+
+  desktopViewCaptureButton.classList.toggle("is-active", desktopWorkspaceView === "capture");
+  desktopViewOutputButton.classList.toggle("is-active", desktopWorkspaceView === "output");
+  desktopViewCaptureButton.setAttribute("aria-pressed", String(desktopWorkspaceView === "capture"));
+  desktopViewOutputButton.setAttribute("aria-pressed", String(desktopWorkspaceView === "output"));
+  desktopViewOutputButton.disabled = !hasOutput;
+
+  const hideEditor = !isMobile && desktopWorkspaceView === "output";
+  const hideOutput = !isMobile && desktopWorkspaceView !== "output";
+  editorPanel.classList.toggle("desktop-panel-hidden", hideEditor);
+  outputPanel.classList.toggle("desktop-panel-hidden", hideOutput);
+}
+
 function syncMobileUi() {
   const session = getActiveSession();
   if (!session) {
@@ -3272,6 +3318,8 @@ function syncMobileUi() {
     mobileGenerateButton.textContent = polishButton.textContent;
     mobileGenerateButton.disabled = polishButton.disabled;
   }
+
+  updateDesktopWorkspaceViewUi();
 
   if (mobileDictationToggle) {
     const titleNode = mobileDictationToggle.querySelector(".capture-mode-title");

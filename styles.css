@@ -388,6 +388,40 @@ button {
   align-items: start;
 }
 
+.workspace-view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: center;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(62, 81, 48, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+  margin-bottom: -2px;
+}
+
+.workspace-view-button {
+  min-width: 112px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 800;
+  transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.workspace-view-button.is-active {
+  background: linear-gradient(180deg, rgba(108, 127, 79, 0.18), rgba(255, 255, 255, 0.92));
+  color: var(--accent-strong);
+  box-shadow: 0 10px 22px rgba(53, 68, 40, 0.08);
+}
+
+.workspace-view-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .sessions-panel,
 .editor-panel,
 .output-panel {
@@ -442,6 +476,10 @@ body.sessions-panel-open {
 .output-panel {
   grid-column: 1;
   grid-row: 2;
+}
+
+.desktop-panel-hidden {
+  display: none;
 }
 
 .editor-layout {
@@ -2107,6 +2145,10 @@ textarea:focus {
 }
 
 @media (max-width: 720px) {
+  .desktop-panel-hidden {
+    display: block;
+  }
+
   .desktop-card-disclosure {
     display: block;
   }
