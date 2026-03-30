@@ -1138,6 +1138,29 @@
     </section>
   </div>
 
+  <div class="modal-shell is-hidden" id="confirm-modal" aria-hidden="true">
+    <div class="modal-backdrop" id="close-confirm-modal"></div>
+    <section class="modal-card" aria-label="Confirmation dialog" aria-modal="true" role="dialog">
+      <div class="panel-heading modal-heading">
+        <div>
+          <p class="section-label" id="confirm-modal-eyebrow">Please confirm</p>
+          <h2 id="confirm-modal-title">Are you sure?</h2>
+        </div>
+        <button class="ghost-button" id="close-confirm-modal-button" type="button">Close</button>
+      </div>
+
+      <div class="modal-form">
+        <p class="support-text" id="confirm-modal-message">
+          Confirm this action to continue.
+        </p>
+        <div class="capture-toolbar">
+          <button class="secondary-button" id="confirm-modal-cancel" type="button">Cancel</button>
+          <button class="primary-button" id="confirm-modal-confirm" type="button">Confirm</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.17/mammoth.browser.min.js"></script>

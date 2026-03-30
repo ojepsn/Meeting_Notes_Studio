@@ -1193,6 +1193,11 @@ body.sessions-panel-open {
   margin-top: 4px;
   padding-top: 14px;
   border-top: 1px solid rgba(62, 81, 48, 0.08);
+  order: 1;
+}
+
+#live-transcript-field {
+  order: 2;
 }
 
 .manual-notes-disclosure summary {
@@ -1706,8 +1711,21 @@ textarea:focus {
   border: 1px solid var(--line);
 }
 
+.output-card.is-editable {
+  cursor: text;
+}
+
+.output-card.is-editable:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(108, 127, 79, 0.12);
+}
+
 :root[data-theme$="-dark"] .output-card {
   background: linear-gradient(180deg, rgba(20, 29, 40, 0.98), rgba(17, 25, 36, 0.96));
+}
+
+:root[data-theme$="-dark"] .output-card.is-editable:focus {
+  box-shadow: 0 0 0 4px rgba(212, 123, 81, 0.14);
 }
 
 .output-feedback-card {
@@ -2495,6 +2513,14 @@ textarea:focus {
     padding: 16px;
     font-size: 0.98rem;
     line-height: 1.65;
+  }
+
+  .manual-notes-disclosure {
+    order: 2;
+  }
+
+  #live-transcript-field {
+    order: 1;
   }
 
   .mobile-capture-status {

@@ -64,6 +64,14 @@ const closeWorkspacePanelBackdrop = document.querySelector("#close-workspace-pan
 const closeWorkspacePanelButton = document.querySelector("#close-workspace-panel-button");
 const openSessionsShortcutButton = document.querySelector("#open-sessions-shortcut");
 const openBackupShortcutButton = document.querySelector("#open-backup-shortcut");
+const confirmModal = document.querySelector("#confirm-modal");
+const closeConfirmModalBackdrop = document.querySelector("#close-confirm-modal");
+const closeConfirmModalButton = document.querySelector("#close-confirm-modal-button");
+const confirmModalEyebrow = document.querySelector("#confirm-modal-eyebrow");
+const confirmModalTitle = document.querySelector("#confirm-modal-title");
+const confirmModalMessage = document.querySelector("#confirm-modal-message");
+const confirmModalCancelButton = document.querySelector("#confirm-modal-cancel");
+const confirmModalConfirmButton = document.querySelector("#confirm-modal-confirm");
 const settingsModal = document.querySelector("#settings-modal");
 const closeSettingsBackdrop = document.querySelector("#close-settings");
 const closeSettingsButton = document.querySelector("#close-settings-button");
@@ -290,6 +298,7 @@ let isApplyingStoragePayload = false;
 let mobileMoreSheetOpen = false;
 let mobileOutputSheetOpen = false;
 let aiSettingsOpenedFromSettings = false;
+let confirmModalResolver = null;
 
 function isMobileLayout() {
   return MOBILE_LAYOUT_QUERY.matches;
@@ -687,6 +696,10 @@ function bindEvents() {
   openWorkspacePanelButton.addEventListener("click", openWorkspacePanel);
   closeWorkspacePanelBackdrop.addEventListener("click", closeWorkspacePanel);
   closeWorkspacePanelButton.addEventListener("click", closeWorkspacePanel);
+  closeConfirmModalBackdrop.addEventListener("click", () => closeConfirmModal(false));
+  closeConfirmModalButton.addEventListener("click", () => closeConfirmModal(false));
+  confirmModalCancelButton.addEventListener("click", () => closeConfirmModal(false));
+  confirmModalConfirmButton.addEventListener("click", () => closeConfirmModal(true));
   openSessionsShortcutButton.addEventListener("click", () => {
     closeWorkspacePanel();
     settings.recentSessionsExpanded = true;
@@ -1294,6 +1307,10 @@ function bindEvents() {
       closeWorkspacePanel();
     }
 
+    if (event.key === "Escape" && !confirmModal.classList.contains("is-hidden")) {
+      closeConfirmModal(false);
+    }
+
     if (event.key === "Escape" && (mobileMoreSheetOpen || mobileOutputSheetOpen)) {
       closeMobileSheets();
     }
@@ -1738,6 +1755,17 @@ function bindEvents() {
 
   outputFeedbackInput.addEventListener("input", () => {
     updateActiveSession({ outputFeedback: outputFeedbackInput.value }, true);
+  });
+
+  polishedOutput.addEventListener("input", () => {
+    const session = getActiveSession();
+    if (!session?.polishedHtml) {
+      return;
+    }
+
+    updateActiveSessionSilently({ polishedHtml: polishedOutput.innerHTML });
+    updateExportButtons();
+    outputFeedbackStatus.textContent = "Output edits are saved automatically.";
   });
 
   improveOutputButton.addEventListener("click", async () => {
@@ -2220,9 +2248,15 @@ function renderSessionList() {
       }
     });
 
-    deleteButton.addEventListener("click", () => {
+    deleteButton.addEventListener("click", async () => {
       const sessionName = session.title.trim() || "Untitled session";
-      const confirmed = window.confirm(`Are you sure you want to delete "${sessionName}"?`);
+      const confirmed = await showConfirmModal({
+        eyebrow: "Delete session",
+        title: "Delete this session?",
+        message: `Are you sure you want to delete "${sessionName}"? This cannot be undone.`,
+        confirmLabel: "Delete",
+        cancelLabel: "Cancel",
+      });
 
       if (!confirmed) {
         return;
@@ -2807,6 +2841,37 @@ function closeWorkspacePanel() {
   openWorkspacePanelButton.focus();
 }
 
+function showConfirmModal({
+  eyebrow = "Please confirm",
+  title = "Are you sure?",
+  message = "Confirm this action to continue.",
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+} = {}) {
+  confirmModalEyebrow.textContent = eyebrow;
+  confirmModalTitle.textContent = title;
+  confirmModalMessage.textContent = message;
+  confirmModalConfirmButton.textContent = confirmLabel;
+  confirmModalCancelButton.textContent = cancelLabel;
+  confirmModal.classList.remove("is-hidden");
+  confirmModal.setAttribute("aria-hidden", "false");
+  syncModalScrollLock();
+  confirmModalConfirmButton.focus();
+
+  return new Promise((resolve) => {
+    confirmModalResolver = resolve;
+  });
+}
+
+function closeConfirmModal(result) {
+  confirmModal.classList.add("is-hidden");
+  confirmModal.setAttribute("aria-hidden", "true");
+  syncModalScrollLock();
+  const resolver = confirmModalResolver;
+  confirmModalResolver = null;
+  resolver?.(result);
+}
+
 function setActiveAiSettingsSection(sectionId) {
   activeAiSettingsSection = aiSettingsSections.some((section) => section.dataset.aiSettingsSection === sectionId)
     ? sectionId
@@ -2898,6 +2963,7 @@ function syncModalScrollLock() {
     || !backupReminderModal.classList.contains("is-hidden")
     || !backupPanelModal.classList.contains("is-hidden")
     || !workspacePanelModal.classList.contains("is-hidden")
+    || !confirmModal.classList.contains("is-hidden")
     || (isMobileLayout() && (mobileMoreSheetOpen || mobileOutputSheetOpen));
   document.body.classList.toggle("modal-open", hasOpenModal);
 }
@@ -3545,6 +3611,9 @@ function renderOutput() {
   const session = getActiveSession();
 
   if (!session.polishedHtml) {
+    polishedOutput.contentEditable = "false";
+    polishedOutput.spellcheck = false;
+    polishedOutput.classList.remove("is-editable");
     polishedOutput.innerHTML = `
       <div class="output-empty">
         <div>
@@ -3557,6 +3626,9 @@ function renderOutput() {
   }
 
   polishedOutput.innerHTML = session.polishedHtml;
+  polishedOutput.contentEditable = "true";
+  polishedOutput.spellcheck = true;
+  polishedOutput.classList.add("is-editable");
   syncMobileUi();
 }
 
@@ -4548,6 +4620,9 @@ function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
     "Return a revised version in the requested schema.",
     "Requirements:",
     "- Apply the user's requested improvements when they are supported by the notes.",
+    "- Keep the revised output as close as possible to the current polished output.",
+    "- Do not rewrite, reorder, or rephrase sections unless needed to satisfy the user's requested improvements.",
+    "- If the user asks for a specific change, preserve everything else as much as possible.",
     "- Do not invent new facts or decisions.",
     `- Write the output in ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}.`,
     sourceLanguage !== outputLanguage
