@@ -132,11 +132,13 @@ const titleFieldLabel = document.querySelector("#title-field-label");
 const participantsField = document.querySelector("#participants-field");
 const meetingScheduleField = document.querySelector("#meeting-schedule-field");
 const contextDisclosure = document.querySelector(".context-disclosure");
+const contextCardDisclosure = document.querySelector("#context-card-disclosure");
 const meetingDateField = document.querySelector("#meeting-date-field");
 const meetingStartTimeField = document.querySelector("#meeting-start-time-field");
 const meetingEndTimeField = document.querySelector("#meeting-end-time-field");
 const templateCustomFieldsContainer = document.querySelector("#template-custom-fields");
 const highlightsField = document.querySelector("#highlights-field");
+const highlightsCardDisclosure = document.querySelector("#highlights-card-disclosure");
 const manualNotesField = document.querySelector("#manual-notes-field");
 const manualNotesDisclosure = document.querySelector("#manual-notes-disclosure");
 const liveTranscriptField = document.querySelector("#live-transcript-field");
@@ -3323,6 +3325,17 @@ function syncMobileUi() {
       contextDisclosure.dataset.mobileInitialized = "true";
     }
   }
+
+  [contextCardDisclosure, highlightsCardDisclosure].forEach((disclosure) => {
+    if (!disclosure) {
+      return;
+    }
+
+    if (isMobileLayout()) {
+      disclosure.open = true;
+      disclosure.dataset.mobileInitialized = "false";
+    }
+  });
 
   if (!isMobileLayout()) {
     closeMobileSheets();

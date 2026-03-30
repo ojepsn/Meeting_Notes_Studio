@@ -94,88 +94,108 @@
         <div class="editor-layout">
           <div class="editor-main">
             <section class="form-section" aria-label="Session context">
-              <div class="form-section-header">
-                <p class="section-label">Context</p>
-                <h3>Session setup</h3>
-              </div>
-
-              <div class="field-grid">
-                <label class="field" id="title-field">
-                  <span class="field-label" id="title-field-label">Meeting title</span>
-                  <input id="meeting-title" type="text" maxlength="100" placeholder="Weekly project meeting">
-                </label>
-
-                <label class="field">
-                  <span class="field-label">Template</span>
-                  <select id="meeting-template"></select>
-                </label>
-              </div>
-
-              <div class="template-quick-selectors desktop-only" id="template-quick-selectors" aria-label="Quick template selection"></div>
-
-              <label class="field" id="participants-field">
-                <span class="field-label">Participants</span>
-                <input id="participants" type="text" maxlength="160" placeholder="Add participants" list="participant-suggestions">
-              </label>
-              <datalist id="participant-suggestions"></datalist>
-              <div class="participant-directory" id="participant-directory">
-                <div class="participant-directory-header">
-                  <span class="participant-directory-label">Saved participants</span>
-                  <div class="participant-directory-actions">
-                    <button class="ghost-button participant-toggle-button" id="toggle-participant-directory" type="button" aria-expanded="false" aria-controls="participant-chips">
-                      <span class="participant-toggle-arrow" aria-hidden="true">▾</span>
-                      <span class="participant-toggle-label">Show list</span>
-                    </button>
-                    <button class="ghost-button participant-manage-button" id="open-participant-settings" type="button">Manage list</button>
+              <details class="desktop-card-disclosure" id="context-card-disclosure">
+                <summary>
+                  <div class="form-section-header">
+                    <p class="section-label">Context</p>
+                    <h3>Session setup</h3>
                   </div>
+                </summary>
+
+                <div class="field-grid">
+                  <label class="field" id="title-field">
+                    <span class="field-label" id="title-field-label">Meeting title</span>
+                    <input id="meeting-title" type="text" maxlength="100" placeholder="Weekly project meeting">
+                  </label>
+
+                  <label class="field">
+                    <span class="field-label">Template</span>
+                    <select id="meeting-template"></select>
+                  </label>
                 </div>
-                <div class="chip-row participant-chip-row is-hidden-field" id="participant-chips" aria-live="polite"></div>
-              </div>
 
-              <details class="context-disclosure" open>
-                <summary>Meeting details</summary>
-                <div class="context-disclosure-body">
-                  <div class="field-grid field-grid-three" id="meeting-schedule-field">
-                    <label class="field field-tight" id="meeting-date-field">
-                      <span class="field-label">Date</span>
-                      <input id="meeting-date" type="date">
-                    </label>
+                <div class="template-quick-selectors desktop-only" id="template-quick-selectors" aria-label="Quick template selection"></div>
 
-                    <label class="field field-tight" id="meeting-start-time-field">
-                      <span class="field-label">Start time</span>
-                      <input id="meeting-start-time" type="time">
-                    </label>
-
-                    <label class="field field-tight" id="meeting-end-time-field">
-                      <span class="field-label">End time</span>
-                      <input id="meeting-end-time" type="time">
-                    </label>
+                <label class="field" id="participants-field">
+                  <span class="field-label">Participants</span>
+                  <input id="participants" type="text" maxlength="160" placeholder="Add participants" list="participant-suggestions">
+                </label>
+                <datalist id="participant-suggestions"></datalist>
+                <div class="participant-directory" id="participant-directory">
+                  <div class="participant-directory-header">
+                    <span class="participant-directory-label">Saved participants</span>
+                    <div class="participant-directory-actions">
+                      <button class="ghost-button participant-toggle-button" id="toggle-participant-directory" type="button" aria-expanded="false" aria-controls="participant-chips">
+                        <span class="participant-toggle-arrow" aria-hidden="true">▾</span>
+                        <span class="participant-toggle-label">Show list</span>
+                      </button>
+                      <button class="ghost-button participant-manage-button" id="open-participant-settings" type="button">Manage list</button>
+                    </div>
                   </div>
-
-                  <div class="template-custom-fields" id="template-custom-fields"></div>
+                  <div class="chip-row participant-chip-row is-hidden-field" id="participant-chips" aria-live="polite"></div>
                 </div>
+
+                <details class="context-disclosure" open>
+                  <summary>Meeting details</summary>
+                  <div class="context-disclosure-body">
+                    <div class="field-grid field-grid-three" id="meeting-schedule-field">
+                      <label class="field field-tight" id="meeting-date-field">
+                        <span class="field-label">Date</span>
+                        <input id="meeting-date" type="date">
+                      </label>
+
+                      <label class="field field-tight" id="meeting-start-time-field">
+                        <span class="field-label">Start time</span>
+                        <input id="meeting-start-time" type="time">
+                      </label>
+
+                      <label class="field field-tight" id="meeting-end-time-field">
+                        <span class="field-label">End time</span>
+                        <input id="meeting-end-time" type="time">
+                      </label>
+                    </div>
+
+                    <div class="template-custom-fields" id="template-custom-fields"></div>
+                  </div>
+                </details>
               </details>
             </section>
 
             <section class="form-section" aria-label="Highlights">
-              <div class="form-section-header">
-                <p class="section-label">Highlights</p>
-                <h3>Pin the most important points</h3>
-              </div>
+              <details class="desktop-card-disclosure" id="highlights-card-disclosure">
+                <summary>
+                  <div class="form-section-header">
+                    <p class="section-label">Highlights</p>
+                    <h3>Pin the most important points</h3>
+                  </div>
+                </summary>
 
-              <label class="field" id="highlights-field">
-                <span class="field-label">Quick highlights</span>
-                <input id="highlights-input" type="text" maxlength="180" placeholder="Type a highlight and press Enter">
-              </label>
+                <label class="field" id="highlights-field">
+                  <span class="field-label">Quick highlights</span>
+                  <input id="highlights-input" type="text" maxlength="180" placeholder="Type a highlight and press Enter">
+                </label>
 
-              <div class="chip-row" id="highlight-chips" aria-live="polite"></div>
+                <div class="chip-row" id="highlight-chips" aria-live="polite"></div>
+              </details>
             </section>
 
-            <section class="form-section" aria-label="Notes and transcripts">
+            <section class="form-section notes-transcript-section" aria-label="Notes and transcripts">
               <div class="form-section-header">
                 <p class="section-label">Capture</p>
                 <h3>Work from notes, transcript, or both</h3>
               </div>
+
+              <details class="manual-notes-disclosure" id="manual-notes-disclosure" open>
+                <summary>Manual notes</summary>
+                <label class="field" id="manual-notes-field">
+                  <span class="field-label">Manual notes</span>
+                  <textarea
+                    id="raw-notes"
+                    rows="12"
+                    placeholder="Write your own notes here while dictation continues in the transcript field..."
+                  ></textarea>
+                </label>
+              </details>
 
               <label class="field" id="live-transcript-field">
                 <span class="field-label">Live transcript</span>
@@ -190,18 +210,6 @@
               <p class="support-text mobile-capture-status mobile-only" id="mobile-capture-status">
                 Start dictation for live transcript, or use More to record audio instead.
               </p>
-
-              <details class="manual-notes-disclosure" id="manual-notes-disclosure" open>
-                <summary>Manual notes</summary>
-                <label class="field" id="manual-notes-field">
-                  <span class="field-label">Manual notes</span>
-                  <textarea
-                    id="raw-notes"
-                    rows="12"
-                    placeholder="Write your own notes here while dictation continues in the transcript field..."
-                  ></textarea>
-                </label>
-              </details>
 
               <label class="field is-hidden-field" id="uploaded-transcript-field" hidden>
                 <span class="field-label">Uploaded transcript</span>
@@ -493,12 +501,14 @@
 
   <template id="prompt-block-template">
     <article class="prompt-block-item">
-      <label class="checkbox-field compact-checkbox prompt-block-toggle">
-        <input class="prompt-block-enabled" type="checkbox">
-        <span>Use this prompt block</span>
-      </label>
       <label class="field field-tight">
-        <span class="field-label">Label</span>
+        <span class="field-label prompt-block-label-row">
+          <span>Label</span>
+          <label class="checkbox-field compact-checkbox prompt-block-toggle">
+            <input class="prompt-block-enabled" type="checkbox">
+            <span>Use</span>
+          </label>
+        </span>
         <input class="prompt-block-label" type="text" maxlength="80" placeholder="ex. Board meeting emphasis">
       </label>
       <label class="field field-tight">

@@ -815,6 +815,31 @@ body.sessions-panel-open {
   border: 1px solid rgba(62, 81, 48, 0.08);
 }
 
+.desktop-card-disclosure > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.desktop-card-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.desktop-card-disclosure > summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 10px;
+  color: var(--accent-strong);
+  transition: transform 150ms ease;
+}
+
+.desktop-card-disclosure[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.desktop-card-disclosure > :not(summary) {
+  margin-top: 14px;
+}
+
 .form-section-header {
   margin-bottom: 14px;
 }
@@ -1231,11 +1256,6 @@ body.sessions-panel-open {
   margin-top: 4px;
   padding-top: 14px;
   border-top: 1px solid rgba(62, 81, 48, 0.08);
-  order: 1;
-}
-
-#live-transcript-field {
-  order: 2;
 }
 
 .manual-notes-disclosure summary {
@@ -1864,6 +1884,19 @@ textarea:focus {
   box-shadow: inset 0 0 0 1px rgba(62, 81, 48, 0.06);
 }
 
+.prompt-block-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.prompt-block-toggle {
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2074,6 +2107,19 @@ textarea:focus {
 }
 
 @media (max-width: 720px) {
+  .desktop-card-disclosure {
+    display: block;
+  }
+
+  .desktop-card-disclosure > summary::before {
+    display: none;
+  }
+
+  .notes-transcript-section {
+    display: flex;
+    flex-direction: column;
+  }
+
   .session-card {
     grid-template-columns: 1fr;
     align-items: stretch;
