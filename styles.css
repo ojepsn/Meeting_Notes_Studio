@@ -1612,6 +1612,12 @@ textarea:focus {
   margin-bottom: 12px;
 }
 
+.participant-selection-bar .compact-checkbox {
+  display: inline-flex;
+  align-items: center;
+  flex-direction: row;
+}
+
 .participant-bulk-delete {
   min-width: 118px;
   padding-inline: 12px;
