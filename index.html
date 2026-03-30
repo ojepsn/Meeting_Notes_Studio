@@ -84,13 +84,19 @@
             <h2 id="session-title">Untitled session</h2>
           </div>
           <div class="panel-actions">
-            <button class="primary-button header-new-session-button" id="new-session-main" type="button">+ New Session</button>
-            <button class="ghost-button" id="open-workspace-panel" type="button">Workspace</button>
-            <button class="ghost-button" id="open-settings" type="button">Settings</button>
-            <button class="ghost-button is-hidden-field" id="update-app" type="button">Update App</button>
-            <div class="workspace-view-switch desktop-only" aria-label="Workspace view">
-              <button class="workspace-view-button is-active" data-desktop-view="capture" type="button">Capture</button>
-              <button class="workspace-view-button" data-desktop-view="output" type="button">Output</button>
+            <div class="panel-actions-page">
+              <button class="primary-button header-new-session-button" id="new-session-main" type="button">+ New Session</button>
+              <button class="ghost-button is-hidden-field" id="update-app" type="button">Update App</button>
+            </div>
+            <div class="panel-actions-shared desktop-only">
+              <button class="ghost-button" id="open-sessions-main" type="button">All Sessions</button>
+              <button class="ghost-button" id="open-todo-main" type="button">To-do</button>
+              <button class="ghost-button" id="open-backup-panel" type="button">Back-up</button>
+              <button class="ghost-button" id="open-settings" type="button">Settings</button>
+              <div class="workspace-view-switch" aria-label="Workspace view">
+                <button class="workspace-view-button is-active" data-desktop-view="capture" type="button">Capture</button>
+                <button class="workspace-view-button" data-desktop-view="output" type="button">Output</button>
+              </div>
             </div>
           </div>
         </div>
@@ -241,6 +247,7 @@
             <div class="mobile-sheet-shortcuts mobile-only">
               <button class="ghost-button" id="mobile-new-session" type="button">New Session</button>
               <button class="ghost-button" id="mobile-open-sessions" type="button">All Sessions</button>
+              <button class="ghost-button" id="mobile-open-todo" type="button">To-do</button>
               <button class="ghost-button" id="mobile-open-settings" type="button">Settings</button>
               <button class="ghost-button" id="mobile-open-backup" type="button">Data Backup</button>
               <button class="ghost-button" id="mobile-open-output" type="button">View Output</button>
@@ -323,13 +330,21 @@
             <h2>Professional notes</h2>
           </div>
           <div class="panel-actions">
-            <button class="ghost-button mobile-only" id="close-mobile-output" type="button">Close</button>
-            <button class="ghost-button" id="export-word" type="button">Export Word</button>
-            <button class="ghost-button" id="export-pdf" type="button">Export PDF</button>
-            <button class="ghost-button" id="translate-output" type="button">Translate</button>
-            <div class="workspace-view-switch desktop-only" aria-label="Workspace view">
-              <button class="workspace-view-button" data-desktop-view="capture" type="button">Capture</button>
-              <button class="workspace-view-button is-active" data-desktop-view="output" type="button">Output</button>
+            <div class="panel-actions-page">
+              <button class="ghost-button mobile-only" id="close-mobile-output" type="button">Close</button>
+              <button class="ghost-button" id="export-word" type="button">Export Word</button>
+              <button class="ghost-button" id="export-pdf" type="button">Export PDF</button>
+              <button class="ghost-button" id="translate-output" type="button">Translate</button>
+            </div>
+            <div class="panel-actions-shared desktop-only">
+              <button class="ghost-button" id="open-sessions-output" type="button">All Sessions</button>
+              <button class="ghost-button" id="open-todo-output" type="button">To-do</button>
+              <button class="ghost-button" id="open-backup-output" type="button">Back-up</button>
+              <button class="ghost-button" id="open-settings-output" type="button">Settings</button>
+              <div class="workspace-view-switch" aria-label="Workspace view">
+                <button class="workspace-view-button" data-desktop-view="capture" type="button">Capture</button>
+                <button class="workspace-view-button is-active" data-desktop-view="output" type="button">Output</button>
+              </div>
             </div>
           </div>
         </div>
@@ -782,6 +797,23 @@
           </select>
         </label>
       </div>
+    </article>
+  </template>
+
+  <template id="todo-item-template">
+    <article class="todo-item">
+      <div class="todo-item-head">
+        <label class="checkbox-field compact-checkbox todo-item-toggle">
+          <input class="todo-item-complete" type="checkbox">
+          <span class="todo-item-description"></span>
+        </label>
+        <button class="ghost-button todo-item-remove" type="button">Remove</button>
+      </div>
+      <p class="support-text todo-item-meta"></p>
+      <label class="field field-tight">
+        <span class="field-label">Comments</span>
+        <textarea class="todo-item-comments" rows="3" placeholder="Add your own follow-up comments here."></textarea>
+      </label>
     </article>
   </template>
 
@@ -1254,6 +1286,29 @@
             <strong>Save Local File</strong> is best on supported desktop browsers when you want to save directly to a chosen file on your computer.
           </p>
           <input id="import-sessions-input" type="file" accept="application/json,.json" hidden>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-shell is-hidden" id="todo-panel-modal" aria-hidden="true">
+    <div class="modal-backdrop" id="close-todo-panel"></div>
+    <section class="modal-card" aria-label="Personal to-do list" aria-modal="true" role="dialog">
+      <div class="panel-heading modal-heading">
+        <div>
+          <p class="section-label">Personal To-do</p>
+          <h2>Your follow-up list</h2>
+        </div>
+        <button class="ghost-button" id="close-todo-panel-button" type="button">Close</button>
+      </div>
+
+      <div class="modal-form">
+        <p class="support-text">
+          When you write <strong>todo:</strong> in Manual notes and generate output, the app adds that item here as a personal follow-up.
+        </p>
+        <div class="todo-list" id="todo-list"></div>
+        <div class="empty-sessions" id="empty-todos">
+          <p>No to-do items yet. Add lines like <strong>todo:</strong> in Manual notes, then click <strong>Generate</strong>.</p>
         </div>
       </div>
     </section>

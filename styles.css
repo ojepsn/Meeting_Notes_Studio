@@ -539,8 +539,22 @@ body.sessions-panel-open {
 .panel-actions {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  width: 100%;
+}
+
+.panel-actions-page,
+.panel-actions-shared {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.panel-actions-shared {
+  margin-left: auto;
 }
 
 .header-new-session-button {
@@ -677,8 +691,21 @@ body.sessions-panel-open {
   margin-bottom: 12px;
 }
 
+.checkbox-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-field input {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
 .compact-checkbox {
   margin: 0;
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
   font-size: 0.8rem;
 }
@@ -821,6 +848,62 @@ body.sessions-panel-open {
   padding: 10px 12px;
   font-size: 0.76rem;
   border-radius: 12px;
+}
+
+.todo-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.todo-item {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(62, 81, 48, 0.08);
+}
+
+.todo-item.is-complete {
+  opacity: 0.78;
+}
+
+.todo-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.todo-item-toggle {
+  margin: 0;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.todo-item-toggle input {
+  margin-top: 2px;
+}
+
+.todo-item-description {
+  line-height: 1.45;
+}
+
+.todo-item.is-complete .todo-item-description {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.todo-item-remove {
+  white-space: nowrap;
+}
+
+.todo-item-meta {
+  margin: 0;
 }
 
 .settings-inline-actions {
@@ -2885,6 +2968,11 @@ textarea:focus {
 
   .output-panel .panel-actions {
     flex-direction: column;
+  }
+
+  .output-panel .panel-actions-page,
+  .output-panel .panel-actions-shared {
+    width: 100%;
   }
 
   .output-card {

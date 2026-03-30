@@ -23,6 +23,23 @@ const BUILT_IN_TEMPLATES = {
       liveTranscript: true,
     },
   },
+  oneToOneCall: {
+    id: "oneToOneCall",
+    label: "1:1 / Phone call",
+    summaryLead: "This 1:1 or phone call focused on the most important discussion points, decisions, and follow-ups.",
+    sections: ["Overview", "Key Discussion Points", "Decisions", "Action Items"],
+    templateInstructions: "Structure the output like concise professional call notes with clear key discussion points, decisions, and follow-up actions.",
+    fields: {
+      title: true,
+      participants: true,
+      highlights: false,
+      manualNotes: true,
+      liveTranscript: true,
+      meetingDate: true,
+      meetingStartTime: true,
+      meetingEndTime: true,
+    },
+  },
   personalNote: {
     id: "personalNote",
     label: "Personal Note",
@@ -56,8 +73,14 @@ const importSessionsButton = document.querySelector("#import-sessions");
 const saveLocalFileButton = document.querySelector("#save-local-file");
 const importSessionsInput = document.querySelector("#import-sessions-input");
 const sessionStorageStatus = document.querySelector("#session-storage-status");
-const openWorkspacePanelButton = document.querySelector("#open-workspace-panel");
+const openSessionsMainButton = document.querySelector("#open-sessions-main");
+const openSessionsOutputButton = document.querySelector("#open-sessions-output");
+const openTodoMainButton = document.querySelector("#open-todo-main");
+const openTodoOutputButton = document.querySelector("#open-todo-output");
+const openBackupPanelButton = document.querySelector("#open-backup-panel");
+const openBackupOutputButton = document.querySelector("#open-backup-output");
 const openSettingsButton = document.querySelector("#open-settings");
+const openSettingsOutputButton = document.querySelector("#open-settings-output");
 const openAiSettingsInlineButton = document.querySelector("#open-ai-settings-inline");
 const promptGenerationSystemInput = document.querySelector("#prompt-generation-system");
 const promptGenerationRulesInput = document.querySelector("#prompt-generation-rules");
@@ -69,6 +92,11 @@ const resetPromptSettingsButton = document.querySelector("#reset-prompt-settings
 const backupPanelModal = document.querySelector("#backup-panel-modal");
 const closeBackupPanelBackdrop = document.querySelector("#close-backup-panel");
 const closeBackupPanelButton = document.querySelector("#close-backup-panel-button");
+const todoPanelModal = document.querySelector("#todo-panel-modal");
+const closeTodoPanelBackdrop = document.querySelector("#close-todo-panel");
+const closeTodoPanelButton = document.querySelector("#close-todo-panel-button");
+const todoList = document.querySelector("#todo-list");
+const emptyTodos = document.querySelector("#empty-todos");
 const workspacePanelModal = document.querySelector("#workspace-panel-modal");
 const closeWorkspacePanelBackdrop = document.querySelector("#close-workspace-panel");
 const closeWorkspacePanelButton = document.querySelector("#close-workspace-panel-button");
@@ -131,6 +159,7 @@ const templateQuickSelectors = document.querySelector("#template-quick-selectors
 const titleField = document.querySelector("#title-field");
 const titleFieldLabel = document.querySelector("#title-field-label");
 const participantsField = document.querySelector("#participants-field");
+const participantsFieldLabel = participantsField?.querySelector(".field-label");
 const meetingScheduleField = document.querySelector("#meeting-schedule-field");
 const contextDisclosure = document.querySelector(".context-disclosure");
 const contextCardDisclosure = document.querySelector("#context-card-disclosure");
@@ -231,6 +260,7 @@ const mobileOpenOutputBarButton = document.querySelector("#mobile-view-output-ba
 const closeMobileOutputButton = document.querySelector("#close-mobile-output");
 const mobileNewSessionButton = document.querySelector("#mobile-new-session");
 const mobileOpenSessionsButton = document.querySelector("#mobile-open-sessions");
+const mobileOpenTodoButton = document.querySelector("#mobile-open-todo");
 const mobileOpenSettingsButton = document.querySelector("#mobile-open-settings");
 const mobileOpenBackupButton = document.querySelector("#mobile-open-backup");
 const mobileSheetBackdrop = document.querySelector("#mobile-sheet-backdrop");
@@ -239,6 +269,7 @@ const highlightChipTemplate = document.querySelector("#highlight-chip-template")
 const participantDirectoryItemTemplate = document.querySelector("#participant-directory-item-template");
 const pendingRecordingItemTemplate = document.querySelector("#pending-recording-item-template");
 const abbreviationDirectoryItemTemplate = document.querySelector("#abbreviation-directory-item-template");
+const todoItemTemplate = document.querySelector("#todo-item-template");
 const promptBlockTemplate = document.querySelector("#prompt-block-template");
 const customHeaderTemplate = document.querySelector("#custom-header-template");
 const addCustomTemplateButton = document.querySelector("#add-custom-template");
@@ -607,6 +638,7 @@ function createDefaultSettings() {
     themeMode: "light",
     recentSessionsExpanded: false,
     abbreviationDirectory: [],
+    todoItems: [],
     participantDirectory: [],
     participantDirectoryInitialized: false,
     defaultCustomHeaders: [],
@@ -656,10 +688,12 @@ applyTheme(settings.themeFamily, settings.themeMode);
 settings.model = resolveSelectedModel(settings.model);
 syncParticipantDirectoryFromAllSessions();
 
-const startupSession = createSession();
-sessions = [startupSession, ...sessions];
-activeSessionId = startupSession.id;
-persistSessions();
+if (!sessions.length) {
+  const startupSession = createSession();
+  sessions = [startupSession];
+  activeSessionId = startupSession.id;
+  persistSessions();
+}
 
 setupSpeechRecognition();
 render();
@@ -713,6 +747,10 @@ function bindEvents() {
     settings.recentSessionsExpanded = true;
     persistSettings();
     updateRecentSessionsPanelUi();
+  });
+  mobileOpenTodoButton?.addEventListener("click", () => {
+    closeMobileSheets();
+    openTodoPanel();
   });
   mobileOpenSettingsButton?.addEventListener("click", () => {
     closeMobileSheets();
@@ -789,7 +827,22 @@ function bindEvents() {
     await saveSessionsToLocalFile();
   });
 
-  openWorkspacePanelButton.addEventListener("click", openWorkspacePanel);
+  [openSessionsMainButton, openSessionsOutputButton].forEach((button) => {
+    button?.addEventListener("click", () => {
+      settings.recentSessionsExpanded = true;
+      persistSettings();
+      updateRecentSessionsPanelUi();
+    });
+  });
+  [openTodoMainButton, openTodoOutputButton].forEach((button) => {
+    button?.addEventListener("click", openTodoPanel);
+  });
+  [openBackupPanelButton, openBackupOutputButton].forEach((button) => {
+    button?.addEventListener("click", openBackupPanel);
+  });
+  [openSettingsButton, openSettingsOutputButton].forEach((button) => {
+    button?.addEventListener("click", openSettings);
+  });
   closeWorkspacePanelBackdrop.addEventListener("click", closeWorkspacePanel);
   closeWorkspacePanelButton.addEventListener("click", closeWorkspacePanel);
   closeConfirmModalBackdrop.addEventListener("click", () => closeConfirmModal(false));
@@ -809,6 +862,8 @@ function bindEvents() {
 
   closeBackupPanelBackdrop.addEventListener("click", closeBackupPanel);
   closeBackupPanelButton.addEventListener("click", closeBackupPanel);
+  closeTodoPanelBackdrop.addEventListener("click", closeTodoPanel);
+  closeTodoPanelButton.addEventListener("click", closeTodoPanel);
 
   openParticipantSettingsButton.addEventListener("click", () => {
     openSettings();
@@ -863,6 +918,78 @@ function bindEvents() {
     renderAbbreviationDirectoryManager();
   });
 
+  todoList?.addEventListener("change", (event) => {
+    const item = event.target.closest(".todo-item");
+    if (!item) {
+      return;
+    }
+
+    const todoId = item.dataset.todoId;
+    settings.todoItems = normalizeTodoItems((settings.todoItems || []).map((todo) => (
+      todo.id === todoId
+        ? {
+            ...todo,
+            completed: item.querySelector(".todo-item-complete").checked,
+            comments: item.querySelector(".todo-item-comments").value,
+          }
+        : todo
+    )));
+    persistSettings();
+    renderTodoList();
+  });
+
+  todoList?.addEventListener("input", (event) => {
+    if (!event.target.classList.contains("todo-item-comments")) {
+      return;
+    }
+
+    const item = event.target.closest(".todo-item");
+    if (!item) {
+      return;
+    }
+
+    const todoId = item.dataset.todoId;
+    settings.todoItems = normalizeTodoItems((settings.todoItems || []).map((todo) => (
+      todo.id === todoId
+        ? {
+            ...todo,
+            comments: event.target.value,
+          }
+        : todo
+    )));
+    persistSettings();
+  });
+
+  todoList?.addEventListener("click", async (event) => {
+    const removeButton = event.target.closest(".todo-item-remove");
+    if (!removeButton) {
+      return;
+    }
+
+    const item = removeButton.closest(".todo-item");
+    const todoId = item?.dataset.todoId;
+    const todo = normalizeTodoItems(settings.todoItems).find((entry) => entry.id === todoId);
+    if (!todo) {
+      return;
+    }
+
+    const confirmed = await showConfirmModal({
+      eyebrow: "Delete to-do",
+      title: "Remove this to-do item?",
+      message: `Remove "${todo.description}" from your personal to-do list?`,
+      confirmLabel: "Remove",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    settings.todoItems = normalizeTodoItems((settings.todoItems || []).filter((entry) => entry.id !== todoId));
+    persistSettings();
+    renderTodoList();
+  });
+
   toggleParticipantDirectoryButton.addEventListener("click", () => {
     participantDirectoryExpanded = !participantDirectoryExpanded;
     updateParticipantDirectoryVisibility();
@@ -872,7 +999,6 @@ function bindEvents() {
     applyLatestAppUpdate();
   });
 
-  openSettingsButton.addEventListener("click", openSettings);
   closeSettingsBackdrop.addEventListener("click", closeSettings);
   closeSettingsButton.addEventListener("click", closeSettings);
   settingsNavButtons.forEach((button) => {
@@ -1593,6 +1719,10 @@ function bindEvents() {
       closeBackupPanel();
     }
 
+    if (event.key === "Escape" && !todoPanelModal.classList.contains("is-hidden")) {
+      closeTodoPanel();
+    }
+
     if (event.key === "Escape" && !workspacePanelModal.classList.contains("is-hidden")) {
       closeWorkspacePanel();
     }
@@ -1628,7 +1758,8 @@ function bindEvents() {
     rawNotesInput,
   ].forEach((field) => {
     field.addEventListener("input", () => {
-      updateActiveSession({
+      const session = getActiveSession();
+      const patch = {
         [field.id === "meeting-title"
           ? "title"
           : field.id === "meeting-template"
@@ -1642,7 +1773,23 @@ function bindEvents() {
                   : field.id === "meeting-end-time"
                     ? "meetingEndTime"
               : "rawNotes"]: field.value,
-      }, true);
+      };
+
+      const nextSession = {
+        ...session,
+        ...patch,
+      };
+
+      if (
+        session.template === "oneToOneCall"
+        && field.id !== "meeting-title"
+        && (!session.title.trim() || isAutoGeneratedTitle(session.title))
+      ) {
+        patch.title = getDefaultTitleForTemplate(getTemplateDefinition(session.template), Date.now(), nextSession);
+        meetingTitleInput.value = patch.title;
+      }
+
+      updateActiveSession(patch, true);
 
       if (field.id === "participants") {
         renderParticipantSuggestions();
@@ -1671,27 +1818,7 @@ function bindEvents() {
   });
 
   templateSelect.addEventListener("change", () => {
-    const currentSession = getActiveSession();
-    const template = getTemplateDefinition(templateSelect.value);
-    recordTemplateUsage(template.id);
-    const patch = {
-      template: template.id,
-      transcribeOnly: getDefaultTranscribeOnlyForTemplate(template),
-      templateSectionStates: normalizeTemplateSectionStates({}, template.headers || []),
-      customFieldValues: normalizeCustomFieldValues({}, template.customFields || []),
-    };
-
-    if (!currentSession.title.trim() || isAutoGeneratedTitle(currentSession.title)) {
-      patch.title = getDefaultTitleForTemplate(template);
-      meetingTitleInput.value = patch.title;
-    }
-
-    transcribeOnlyInput.checked = patch.transcribeOnly;
-    updateActiveSession(patch, true);
-    applyTemplateUi({ ...currentSession, ...patch });
-    dictationStatus.textContent = patch.transcribeOnly
-      ? `Template selected: ${template.label}. This session will generate a cleaned transcript by default.`
-      : `Template selected: ${template.label}. Click "Generate" whenever you want a professional summary.`;
+    applySelectedTemplate(templateSelect.value);
   });
 
   [
@@ -1893,6 +2020,7 @@ function bindEvents() {
         : buildLocalPolishedNotes(session);
 
       updateActiveSession({ polishedHtml }, false);
+      syncTodoItemsFromSession(getActiveSession());
       syncParticipantDirectoryWithSession(getActiveSession().participants);
       renderOutput();
       if (isMobileLayout()) {
@@ -1913,6 +2041,7 @@ function bindEvents() {
       } else {
         const polishedHtml = buildLocalPolishedNotes(session);
         updateActiveSession({ polishedHtml }, false);
+        syncTodoItemsFromSession(getActiveSession());
         renderOutput();
         if (isMobileLayout()) {
           openMobileOutputSheet();
@@ -2399,6 +2528,7 @@ function render() {
   renderTemplateOptions();
   renderTemplateQuickSelectors();
   renderSessionList();
+  renderTodoList();
   syncFieldsFromSession();
   renderHighlights();
   renderParticipantSuggestions();
@@ -2482,6 +2612,52 @@ function recordTemplateUsage(templateId) {
   persistSettings();
 }
 
+function applySelectedTemplate(templateId, options = {}) {
+  const currentSession = getActiveSession();
+  const template = getTemplateDefinition(templateId);
+  const shouldRecordUsage = options.recordUsage !== false;
+
+  if (shouldRecordUsage) {
+    recordTemplateUsage(template.id);
+  }
+
+  const defaultSchedule = getDefaultMeetingScheduleForTemplate(template);
+  const patch = {
+    template: template.id,
+    transcribeOnly: getDefaultTranscribeOnlyForTemplate(template),
+    templateSectionStates: normalizeTemplateSectionStates({}, template.headers || []),
+    customFieldValues: normalizeCustomFieldValues({}, template.customFields || []),
+  };
+
+  if (template.id === "oneToOneCall") {
+    if (!currentSession.meetingDate) {
+      patch.meetingDate = defaultSchedule.meetingDate;
+    }
+    if (!currentSession.meetingStartTime) {
+      patch.meetingStartTime = defaultSchedule.meetingStartTime;
+    }
+    if (!currentSession.meetingEndTime) {
+      patch.meetingEndTime = defaultSchedule.meetingEndTime;
+    }
+  }
+
+  if (!currentSession.title.trim() || isAutoGeneratedTitle(currentSession.title)) {
+    patch.title = getDefaultTitleForTemplate(template, Date.now(), {
+      ...currentSession,
+      ...patch,
+    });
+    meetingTitleInput.value = patch.title;
+  }
+
+  templateSelect.value = template.id;
+  transcribeOnlyInput.checked = patch.transcribeOnly;
+  updateActiveSession(patch, true);
+  applyTemplateUi({ ...currentSession, ...patch });
+  dictationStatus.textContent = patch.transcribeOnly
+    ? `Template selected: ${template.label}. This session will generate a cleaned transcript by default.`
+    : `Template selected: ${template.label}. Click "Generate" whenever you want a professional summary.`;
+}
+
 function renderTemplateQuickSelectors() {
   if (!templateQuickSelectors) {
     return;
@@ -2489,16 +2665,13 @@ function renderTemplateQuickSelectors() {
 
   const activeTemplateId = getActiveSession()?.template || getPreferredDesktopTemplateId();
   const usageCounts = normalizeTemplateUsageCounts(settings.templateUsageCounts);
-  const templatesById = new Map(getAllTemplates().map((template) => [template.id, template]));
-  const rankedTemplates = Object.entries(usageCounts)
-    .filter(([templateId]) => templatesById.has(templateId))
-    .sort((left, right) => right[1] - left[1] || templatesById.get(left[0]).label.localeCompare(templatesById.get(right[0]).label))
-    .slice(0, 3)
-    .map(([templateId]) => templatesById.get(templateId));
-
-  if (rankedTemplates.length === 0) {
-    rankedTemplates.push(BUILT_IN_TEMPLATES.meeting, BUILT_IN_TEMPLATES.personalNote);
-  }
+  const rankedTemplates = getAllTemplates().slice().sort((left, right) => {
+    const usageDelta = (usageCounts[right.id] || 0) - (usageCounts[left.id] || 0);
+    if (usageDelta !== 0) {
+      return usageDelta;
+    }
+    return left.label.localeCompare(right.label);
+  });
 
   templateQuickSelectors.innerHTML = "";
   rankedTemplates.forEach((template) => {
@@ -2512,24 +2685,7 @@ function renderTemplateQuickSelectors() {
     button.textContent = template.label;
     button.classList.toggle("is-active", template.id === activeTemplateId);
     button.addEventListener("click", () => {
-      templateSelect.value = template.id;
-      recordTemplateUsage(template.id);
-      const selectedTemplate = getTemplateDefinition(template.id);
-      const patch = {
-        template: selectedTemplate.id,
-        transcribeOnly: getDefaultTranscribeOnlyForTemplate(selectedTemplate),
-        templateSectionStates: normalizeTemplateSectionStates({}, selectedTemplate.headers || []),
-        customFieldValues: normalizeCustomFieldValues({}, selectedTemplate.customFields || []),
-      };
-      const currentSession = getActiveSession();
-      if (!currentSession.title.trim() || isAutoGeneratedTitle(currentSession.title)) {
-        patch.title = getDefaultTitleForTemplate(selectedTemplate);
-        meetingTitleInput.value = patch.title;
-      }
-      applyTemplateDefaultsToSession(getActiveSession(), selectedTemplate, patch);
-      transcribeOnlyInput.checked = patch.transcribeOnly;
-      updateActiveSession(patch, true);
-      applyTemplateUi({ ...currentSession, ...patch });
+      applySelectedTemplate(template.id);
     });
     templateQuickSelectors.appendChild(button);
   });
@@ -2550,7 +2706,7 @@ function renderSessionList() {
     const name = fragment.querySelector(".session-name");
     const meta = fragment.querySelector(".session-meta");
 
-    name.textContent = session.title.trim() || "Untitled session";
+    name.textContent = `${formatDate(session.updatedAt)} ${session.title.trim() || "Untitled session"}`;
     meta.textContent = `${getTemplateDefinition(session.template).label} - ${formatDate(session.updatedAt)}`;
     button.classList.toggle("is-active", session.id === activeSessionId);
     selectInput.checked = selectedSessionIds.has(session.id);
@@ -2621,6 +2777,44 @@ function renderSessionList() {
   updateSessionSelectionControls(visibleSessions);
 }
 
+function renderTodoList() {
+  if (!todoList || !emptyTodos || !todoItemTemplate) {
+    return;
+  }
+
+  const items = normalizeTodoItems(settings.todoItems).slice().sort((left, right) => {
+    if (left.completed !== right.completed) {
+      return Number(left.completed) - Number(right.completed);
+    }
+    return right.addedAt.localeCompare(left.addedAt);
+  });
+
+  todoList.innerHTML = "";
+  emptyTodos.classList.toggle("is-visible", items.length === 0);
+
+  items.forEach((item) => {
+    const fragment = todoItemTemplate.content.cloneNode(true);
+    const article = fragment.querySelector(".todo-item");
+    const checkbox = fragment.querySelector(".todo-item-complete");
+    const description = fragment.querySelector(".todo-item-description");
+    const meta = fragment.querySelector(".todo-item-meta");
+    const comments = fragment.querySelector(".todo-item-comments");
+
+    article.dataset.todoId = item.id;
+    article.classList.toggle("is-complete", item.completed);
+    checkbox.checked = item.completed;
+    description.textContent = item.description;
+    comments.value = item.comments || "";
+
+    const sessionLabels = normalizeTodoSessionRefs(item.sessionRefs)
+      .map((ref) => ref.title)
+      .filter(Boolean);
+    meta.textContent = `Added ${item.addedAt}${sessionLabels.length ? ` · From: ${sessionLabels.join(", ")}` : ""}`;
+
+    todoList.appendChild(fragment);
+  });
+}
+
 function getVisibleSessions() {
   return sessions.filter((session) => {
     if (!sessionFilterQuery) {
@@ -2665,6 +2859,7 @@ function applyTemplateUi(session) {
   const fields = template.fields || BUILT_IN_TEMPLATES.meeting.fields;
   const liveTranscriptEnabled = fields.liveTranscript !== false;
   const isPersonalNote = template.id === "personalNote";
+  const isOneToOneCall = template.id === "oneToOneCall";
   const showParticipants = !isPersonalNote && fields.participants !== false;
   const showHighlights = !isPersonalNote && fields.highlights !== false;
   const showMeetingDate = template.id === "meeting" || fields.meetingDate === true;
@@ -2693,12 +2888,18 @@ function applyTemplateUi(session) {
   setElementVisibility(liveTranscriptField, showLiveTranscript);
   setElementVisibility(uploadedTranscriptField, showUploadedTranscript);
   renderTemplateCustomFields(session, template);
-  titleFieldLabel.textContent = isPersonalNote ? "Note title" : "Meeting title";
+  titleFieldLabel.textContent = isPersonalNote ? "Note title" : isOneToOneCall ? "Title" : "Meeting title";
+  if (participantsFieldLabel) {
+    participantsFieldLabel.textContent = isOneToOneCall ? "Participant" : "Participants";
+  }
   updateTranscribeOnlyUi(session);
 
   meetingTitleInput.placeholder = isPersonalNote
     ? `${formatDateTimeForTitle(Date.now())} Personal note`
-    : "Weekly project meeting";
+    : isOneToOneCall
+      ? "2026-03-30 14:30 Participant"
+      : "Weekly project meeting";
+  participantsInput.placeholder = isOneToOneCall ? "Add participant" : "Add participants";
 
   if (!SpeechRecognition) {
     syncAudioCaptureUi(session);
@@ -3236,7 +3437,22 @@ function closeBackupPanel() {
     openBackupShortcutButton.focus();
     return;
   }
-  openWorkspacePanelButton.focus();
+  openBackupPanelButton.focus();
+}
+
+function openTodoPanel() {
+  renderTodoList();
+  todoPanelModal.classList.remove("is-hidden");
+  todoPanelModal.setAttribute("aria-hidden", "false");
+  syncModalScrollLock();
+  todoList.querySelector("input, textarea, button")?.focus();
+}
+
+function closeTodoPanel() {
+  todoPanelModal.classList.add("is-hidden");
+  todoPanelModal.setAttribute("aria-hidden", "true");
+  syncModalScrollLock();
+  (openTodoOutputButton || openTodoMainButton)?.focus();
 }
 
 function openWorkspacePanel() {
@@ -3250,7 +3466,7 @@ function closeWorkspacePanel() {
   workspacePanelModal.classList.add("is-hidden");
   workspacePanelModal.setAttribute("aria-hidden", "true");
   syncModalScrollLock();
-  openWorkspacePanelButton.focus();
+  (openBackupPanelButton || openSessionsMainButton)?.focus();
 }
 
 function showConfirmModal({
@@ -3374,6 +3590,7 @@ function syncModalScrollLock() {
     || !settingsModal.classList.contains("is-hidden")
     || !backupReminderModal.classList.contains("is-hidden")
     || !backupPanelModal.classList.contains("is-hidden")
+    || !todoPanelModal.classList.contains("is-hidden")
     || !workspacePanelModal.classList.contains("is-hidden")
     || !confirmModal.classList.contains("is-hidden")
     || (isMobileLayout() && (mobileMoreSheetOpen || mobileOutputSheetOpen));
@@ -4221,14 +4438,22 @@ function schedulePersist() {
 
 function createSession() {
   const defaultTemplate = getTemplateDefinition(isMobileLayout() ? "personalNote" : getPreferredDesktopTemplateId());
+  const createdAt = Date.now();
+  const defaultSchedule = getDefaultMeetingScheduleForTemplate(defaultTemplate, createdAt);
+  const defaultTitle = getDefaultTitleForTemplate(defaultTemplate, createdAt, {
+    meetingDate: defaultSchedule.meetingDate,
+    meetingStartTime: defaultSchedule.meetingStartTime,
+    meetingEndTime: defaultSchedule.meetingEndTime,
+    participants: "",
+  });
   return {
     id: crypto.randomUUID(),
-    title: "",
+    title: defaultTitle,
     template: defaultTemplate.id,
     participants: "",
-    meetingDate: "",
-    meetingStartTime: "",
-    meetingEndTime: "",
+    meetingDate: defaultSchedule.meetingDate,
+    meetingStartTime: defaultSchedule.meetingStartTime,
+    meetingEndTime: defaultSchedule.meetingEndTime,
     sections: createDefaultSections(),
     transcribeOnly: getDefaultTranscribeOnlyForTemplate(defaultTemplate),
     outputLanguage: "auto",
@@ -4245,7 +4470,7 @@ function createSession() {
     outputFeedback: "",
     polishedHtml: "",
     previousPolishedHtml: "",
-    updatedAt: Date.now(),
+    updatedAt: createdAt,
   };
 }
 
@@ -5571,9 +5796,50 @@ function formatDateTimeForTitle(timestamp) {
   return `${formatIsoDate(date)} ${formatIsoTime(date)}`;
 }
 
-function getDefaultTitleForTemplate(template, timestamp = Date.now()) {
+function getDefaultMeetingScheduleForTemplate(template, timestamp = Date.now()) {
+  if (template.id !== "oneToOneCall") {
+    return {
+      meetingDate: "",
+      meetingStartTime: "",
+      meetingEndTime: "",
+    };
+  }
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return {
+      meetingDate: "",
+      meetingStartTime: "",
+      meetingEndTime: "",
+    };
+  }
+
+  const isoDate = formatIsoDate(date);
+  const isoTime = formatIsoTime(date);
+  return {
+    meetingDate: isoDate,
+    meetingStartTime: isoTime,
+    meetingEndTime: isoTime,
+  };
+}
+
+function getPrimaryParticipantName(participants) {
+  return (participants || "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean)[0] || "";
+}
+
+function getDefaultTitleForTemplate(template, timestamp = Date.now(), sessionData = {}) {
   if (template.id === "personalNote") {
     return `${formatDateTimeForTitle(timestamp)} Personal note`;
+  }
+
+  if (template.id === "oneToOneCall") {
+    const meetingDate = sessionData.meetingDate || getDefaultMeetingScheduleForTemplate(template, timestamp).meetingDate;
+    const meetingStartTime = sessionData.meetingStartTime || getDefaultMeetingScheduleForTemplate(template, timestamp).meetingStartTime;
+    const participant = getPrimaryParticipantName(sessionData.participants);
+    return [meetingDate, meetingStartTime, participant].filter(Boolean).join(" ");
   }
 
   return "";
@@ -5584,7 +5850,7 @@ function getDefaultTranscribeOnlyForTemplate(template) {
 }
 
 function isAutoGeneratedTitle(title) {
-  return /personal note$/i.test(title.trim()) || /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(title.trim());
+  return /personal note$/i.test(title.trim()) || /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?:\s+.+)?$/.test(title.trim());
 }
 
 function formatIsoDate(date) {
@@ -6051,7 +6317,7 @@ async function connectLocalDataFileHandle(handle, options = {}) {
   syncParticipantDirectoryFromAllSessions();
   settings.storageMode = STORAGE_MODES.file;
   updateStorageConnectionState(true, handle.name || "Local data file");
-  if (options.prependFreshSession !== false) {
+  if (options.prependFreshSession === true) {
     const freshSession = createSession();
     sessions = [freshSession, ...sessions];
     activeSessionId = freshSession.id;
@@ -6226,6 +6492,7 @@ function loadSettings() {
       transcriptionModel: resolveSelectedTranscriptionModel(parsed.transcriptionModel),
       recentSessionsExpanded: parsed.recentSessionsExpanded === true,
       abbreviationDirectory: normalizeAbbreviationDirectory(parsed.abbreviationDirectory),
+      todoItems: normalizeTodoItems(parsed.todoItems),
       participantDirectory: normalizeParticipantDirectory(parsed.participantDirectory),
       participantDirectoryInitialized: parsed.participantDirectoryInitialized === true
         || normalizeParticipantDirectory(parsed.participantDirectory).length > 0,
@@ -6325,6 +6592,110 @@ function normalizeParticipantDirectory(participants) {
     });
 
   return [...uniqueByKey.values()].sort((first, second) => first.localeCompare(second, undefined, { sensitivity: "base" }));
+}
+
+function normalizeTodoItems(todoItems) {
+  if (!Array.isArray(todoItems)) {
+    return [];
+  }
+
+  return todoItems
+    .filter((item) => item && typeof item === "object")
+    .map((item) => ({
+      id: typeof item.id === "string" && item.id.trim() ? item.id : crypto.randomUUID(),
+      completed: item.completed === true,
+      description: typeof item.description === "string" ? item.description.trim() : "",
+      addedAt: typeof item.addedAt === "string" && item.addedAt.trim() ? item.addedAt : formatIsoDate(new Date()),
+      sessionRefs: normalizeTodoSessionRefs(item.sessionRefs),
+      comments: typeof item.comments === "string" ? item.comments : "",
+    }))
+    .filter((item) => item.description);
+}
+
+function normalizeTodoSessionRefs(sessionRefs) {
+  if (!Array.isArray(sessionRefs)) {
+    return [];
+  }
+
+  const seen = new Set();
+  return sessionRefs
+    .filter((ref) => ref && typeof ref === "object")
+    .map((ref) => ({
+      sessionId: typeof ref.sessionId === "string" ? ref.sessionId : "",
+      title: typeof ref.title === "string" ? ref.title.trim() : "",
+    }))
+    .filter((ref) => ref.sessionId || ref.title)
+    .filter((ref) => {
+      const key = `${ref.sessionId}::${ref.title.toLocaleLowerCase()}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+}
+
+function polishTodoText(text) {
+  const normalized = String(text || "")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s\-–—•]+/, "")
+    .trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  const capitalized = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  return capitalized.replace(/[.]+$/, "");
+}
+
+function extractTodoEntriesFromManualNotes(rawNotes) {
+  const matches = String(rawNotes || "").matchAll(/(?:^|\n)\s*todo:\s*(.+)/gi);
+  return [...matches]
+    .map((match) => polishTodoText(match[1]))
+    .filter(Boolean);
+}
+
+function buildTodoSessionRef(session) {
+  return {
+    sessionId: session.id,
+    title: session.title?.trim() || "Untitled session",
+  };
+}
+
+function syncTodoItemsFromSession(session) {
+  const extractedTodos = extractTodoEntriesFromManualNotes(session.rawNotes);
+  if (!extractedTodos.length) {
+    return;
+  }
+
+  const sessionRef = buildTodoSessionRef(session);
+  const existingItems = normalizeTodoItems(settings.todoItems);
+  const byDescription = new Map(
+    existingItems.map((item) => [item.description.toLocaleLowerCase(), item])
+  );
+
+  extractedTodos.forEach((description) => {
+    const key = description.toLocaleLowerCase();
+    const existingItem = byDescription.get(key);
+
+    if (existingItem) {
+      existingItem.sessionRefs = normalizeTodoSessionRefs([...(existingItem.sessionRefs || []), sessionRef]);
+      return;
+    }
+
+    byDescription.set(key, {
+      id: crypto.randomUUID(),
+      completed: false,
+      description,
+      addedAt: formatIsoDate(new Date()),
+      sessionRefs: [sessionRef],
+      comments: "",
+    });
+  });
+
+  settings.todoItems = [...byDescription.values()];
+  persistSettings();
 }
 
 function syncParticipantDirectoryWithSession(value) {
