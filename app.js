@@ -48,6 +48,8 @@ const collapseSessionsPanelButton = document.querySelector("#collapse-sessions-p
 const newSessionButton = document.querySelector("#new-session");
 const newSessionMainButton = document.querySelector("#new-session-main");
 const sessionFilterInput = document.querySelector("#session-filter");
+const selectAllSessionsInput = document.querySelector("#select-all-sessions");
+const deleteSelectedSessionsButton = document.querySelector("#delete-selected-sessions");
 const exportSessionsButton = document.querySelector("#export-sessions");
 const importSessionsButton = document.querySelector("#import-sessions");
 const saveLocalFileButton = document.querySelector("#save-local-file");
@@ -198,6 +200,7 @@ const dictationStatus = document.querySelector("#dictation-status");
 const copyOutputButton = document.querySelector("#copy-output");
 const exportWordButton = document.querySelector("#export-word");
 const exportPdfButton = document.querySelector("#export-pdf");
+const translateOutputButton = document.querySelector("#translate-output");
 const polishedOutput = document.querySelector("#polished-output");
 const outputFeedbackInput = document.querySelector("#output-feedback");
 const improveOutputButton = document.querySelector("#improve-output");
@@ -585,6 +588,7 @@ let activeSettingsSection = "appearance";
 let activeAiSettingsSection = "connection";
 let latestRemoteVersion = APP_VERSION;
 let sessionFilterQuery = "";
+let selectedSessionIds = new Set();
 let participantDirectoryExpanded = false;
 let mediaRecorder = null;
 let mediaRecorderStream = null;
@@ -667,6 +671,37 @@ function bindEvents() {
   sessionFilterInput.addEventListener("input", () => {
     sessionFilterQuery = sessionFilterInput.value.trim().toLowerCase();
     renderSessionList();
+  });
+
+  selectAllSessionsInput?.addEventListener("change", () => {
+    const visibleSessionIds = getVisibleSessions().map((session) => session.id);
+    if (selectAllSessionsInput.checked) {
+      visibleSessionIds.forEach((sessionId) => selectedSessionIds.add(sessionId));
+    } else {
+      visibleSessionIds.forEach((sessionId) => selectedSessionIds.delete(sessionId));
+    }
+    renderSessionList();
+  });
+
+  deleteSelectedSessionsButton?.addEventListener("click", async () => {
+    const selectedIds = Array.from(selectedSessionIds).filter((sessionId) => sessions.some((session) => session.id === sessionId));
+    if (!selectedIds.length) {
+      return;
+    }
+
+    const confirmed = await showConfirmModal({
+      eyebrow: "Delete sessions",
+      title: "Delete selected sessions?",
+      message: `Are you sure you want to delete ${selectedIds.length} selected sessions? This cannot be undone.`,
+      confirmLabel: "Delete selected",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    deleteSessions(selectedIds);
   });
 
   toggleSessionsPanelButton?.addEventListener("click", () => {
@@ -1753,6 +1788,50 @@ function bindEvents() {
     exportCurrentSessionAsPdf();
   });
 
+  translateOutputButton.addEventListener("click", async () => {
+    const session = getActiveSession();
+    if (!session?.polishedHtml) {
+      outputFeedbackStatus.textContent = "Generate output first, then translate it from here.";
+      return;
+    }
+
+    if (!settings.apiKey) {
+      outputFeedbackStatus.textContent = "Add an OpenAI API key in AI Settings to translate the output.";
+      return;
+    }
+
+    const currentLanguage = detectOutputContentLanguage(session);
+    const targetLanguage = getOppositeOutputLanguage(currentLanguage);
+    const targetLabel = getOutputLanguageLabel(targetLanguage);
+    const previousLabel = translateOutputButton.textContent;
+
+    translateOutputButton.disabled = true;
+    translateOutputButton.textContent = `Translating to ${targetLabel}...`;
+    outputFeedbackStatus.textContent = `Translating the current output to ${targetLabel}...`;
+    setAppStatus("Generating", APP_STATUS_STATES.generating);
+
+    try {
+      const translatedHtml = await translateOutputWithOpenAI(session, settings, targetLanguage);
+      updateActiveSession({
+        polishedHtml: translatedHtml,
+        previousPolishedHtml: session.polishedHtml,
+        outputLanguage: targetLanguage === OUTPUT_LANGUAGES.swedish ? "sv" : "en",
+      }, false);
+      renderOutput();
+      if (isMobileLayout()) {
+        openMobileOutputSheet();
+      }
+      outputFeedbackStatus.textContent = `Output translated to ${targetLabel}. You can revert to the previous version if needed.`;
+    } catch (error) {
+      outputFeedbackStatus.textContent = `Could not translate the output: ${error.message}`;
+    } finally {
+      translateOutputButton.disabled = false;
+      translateOutputButton.textContent = previousLabel;
+      setAppStatus("Saved locally", APP_STATUS_STATES.idle);
+      updateExportButtons();
+    }
+  });
+
   outputFeedbackInput.addEventListener("input", () => {
     updateActiveSession({ outputFeedback: outputFeedbackInput.value }, true);
   });
@@ -2188,30 +2267,12 @@ function renderTemplateQuickSelectors() {
 function renderSessionList() {
   sessionList.innerHTML = "";
   sessionFilterInput.value = sessionFilterQuery;
-
-  const visibleSessions = sessions.filter((session) => {
-    if (!sessionFilterQuery) {
-      return true;
-    }
-
-    const searchableText = [
-      session.title,
-      getTemplateDefinition(session.template).label,
-      session.participants,
-      session.meetingDate,
-      session.rawNotes,
-      session.liveTranscript,
-      session.uploadedTranscript,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-
-    return searchableText.includes(sessionFilterQuery);
-  });
+  const visibleSessions = getVisibleSessions();
+  selectedSessionIds = new Set(Array.from(selectedSessionIds).filter((sessionId) => sessions.some((session) => session.id === sessionId)));
 
   visibleSessions.forEach((session) => {
     const fragment = sessionItemTemplate.content.cloneNode(true);
+    const selectInput = fragment.querySelector(".session-select");
     const button = fragment.querySelector(".session-button");
     const editButton = fragment.querySelector(".session-edit");
     const deleteButton = fragment.querySelector(".session-delete");
@@ -2221,6 +2282,20 @@ function renderSessionList() {
     name.textContent = session.title.trim() || "Untitled session";
     meta.textContent = `${getTemplateDefinition(session.template).label} - ${formatDate(session.updatedAt)}`;
     button.classList.toggle("is-active", session.id === activeSessionId);
+    selectInput.checked = selectedSessionIds.has(session.id);
+
+    selectInput.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+
+    selectInput.addEventListener("change", () => {
+      if (selectInput.checked) {
+        selectedSessionIds.add(session.id);
+      } else {
+        selectedSessionIds.delete(session.id);
+      }
+      updateSessionSelectionControls(visibleSessions);
+    });
 
     button.addEventListener("click", () => {
       if (audioRecordingSessionId) {
@@ -2272,6 +2347,46 @@ function renderSessionList() {
   emptySessions.querySelector("p").textContent = sessionFilterQuery
     ? "No sessions match your filter yet. Try a different search."
     : "No saved sessions yet. Start with a fresh note and it will appear here automatically.";
+  updateSessionSelectionControls(visibleSessions);
+}
+
+function getVisibleSessions() {
+  return sessions.filter((session) => {
+    if (!sessionFilterQuery) {
+      return true;
+    }
+
+    const searchableText = [
+      session.title,
+      getTemplateDefinition(session.template).label,
+      session.participants,
+      session.meetingDate,
+      session.rawNotes,
+      session.liveTranscript,
+      session.uploadedTranscript,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return searchableText.includes(sessionFilterQuery);
+  });
+}
+
+function updateSessionSelectionControls(visibleSessions = getVisibleSessions()) {
+  const visibleSessionIds = visibleSessions.map((session) => session.id);
+  const selectedVisibleCount = visibleSessionIds.filter((sessionId) => selectedSessionIds.has(sessionId)).length;
+  const totalSelectedCount = Array.from(selectedSessionIds).filter((sessionId) => sessions.some((session) => session.id === sessionId)).length;
+  const hasVisibleSessions = visibleSessionIds.length > 0;
+
+  selectAllSessionsInput.checked = hasVisibleSessions && selectedVisibleCount === visibleSessionIds.length;
+  selectAllSessionsInput.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleSessionIds.length;
+  selectAllSessionsInput.disabled = !hasVisibleSessions;
+
+  deleteSelectedSessionsButton.disabled = totalSelectedCount === 0;
+  deleteSelectedSessionsButton.textContent = totalSelectedCount > 0
+    ? `Delete selected (${totalSelectedCount})`
+    : "Delete selected";
 }
 
 function applyTemplateUi(session) {
@@ -3622,6 +3737,7 @@ function renderOutput() {
         </div>
       </div>
     `;
+    updateTranslateButton();
     return;
   }
 
@@ -3629,6 +3745,7 @@ function renderOutput() {
   polishedOutput.contentEditable = "true";
   polishedOutput.spellcheck = true;
   polishedOutput.classList.add("is-editable");
+  updateTranslateButton();
   syncMobileUi();
 }
 
@@ -3636,9 +3753,23 @@ function updateExportButtons() {
   const hasOutput = Boolean(getActiveSession()?.polishedHtml);
   exportWordButton.disabled = !hasOutput;
   exportPdfButton.disabled = !hasOutput;
+  translateOutputButton.disabled = !hasOutput;
   improveOutputButton.disabled = !hasOutput;
   revertOutputButton.disabled = !Boolean(getActiveSession()?.previousPolishedHtml);
+  updateTranslateButton();
   syncMobileUi();
+}
+
+function updateTranslateButton() {
+  const session = getActiveSession();
+  if (!session?.polishedHtml) {
+    translateOutputButton.textContent = "Translate";
+    return;
+  }
+
+  const currentLanguage = detectOutputContentLanguage(session);
+  const targetLanguage = getOppositeOutputLanguage(currentLanguage);
+  translateOutputButton.textContent = `Translate to ${getOutputLanguageLabel(targetLanguage)}`;
 }
 
 function updateActiveSession(patch, shouldScheduleSave) {
@@ -3870,6 +4001,7 @@ function readCustomTemplateItem(item, fallbackTemplate) {
 }
 
 function deleteSession(sessionId) {
+  selectedSessionIds.delete(sessionId);
   void clearAudioDraft(sessionId);
   sessions = sessions.filter((session) => session.id !== sessionId);
 
@@ -3878,6 +4010,26 @@ function deleteSession(sessionId) {
     sessions = [nextSession];
     activeSessionId = nextSession.id;
   } else if (activeSessionId === sessionId) {
+    activeSessionId = sessions[0].id;
+  }
+
+  persistSessions();
+  render();
+}
+
+function deleteSessions(sessionIds) {
+  const idsToDelete = new Set(sessionIds);
+  selectedSessionIds = new Set(Array.from(selectedSessionIds).filter((sessionId) => !idsToDelete.has(sessionId)));
+  sessionIds.forEach((sessionId) => {
+    void clearAudioDraft(sessionId);
+  });
+  sessions = sessions.filter((session) => !idsToDelete.has(session.id));
+
+  if (!sessions.length) {
+    const nextSession = createSession();
+    sessions = [nextSession];
+    activeSessionId = nextSession.id;
+  } else if (idsToDelete.has(activeSessionId)) {
     activeSessionId = sessions[0].id;
   }
 
@@ -4181,6 +4333,62 @@ async function transcribeWithOpenAI(session, activeSettings) {
   }
 
   return buildTranscriptOnlyHtml(session, responseText);
+}
+
+async function translateOutputWithOpenAI(session, activeSettings, targetLanguage) {
+  const sourceHtml = session.polishedHtml || polishedOutput.innerHTML || "";
+  const sourceLanguage = detectOutputContentLanguage(session);
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${activeSettings.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: activeSettings.model || "gpt-5-mini",
+      input: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text: "You translate existing HTML notes. Preserve the structure, order, headings, lists, emphasis, and HTML markup as closely as possible. Translate only the user-visible text. Do not add commentary, markdown fences, or explanations. Return only the translated HTML.",
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: [
+                `Translate this HTML from ${getOutputLanguageLabel(sourceLanguage)} to ${getOutputLanguageLabel(targetLanguage)}.`,
+                "Keep the meaning faithful to the current output.",
+                "Do not summarize, expand, shorten, or reorganize the content.",
+                "Translate headings and labels too, but preserve the HTML structure.",
+                "",
+                "Current HTML:",
+                sourceHtml,
+              ].join("\n"),
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  const payload = await response.json();
+  if (!response.ok) {
+    const message = payload?.error?.message || "The OpenAI translation request did not complete successfully.";
+    throw new Error(message);
+  }
+
+  const responseText = stripCodeFences(extractResponseText(payload));
+  if (!responseText) {
+    throw new Error("The OpenAI translation response did not include any readable HTML.");
+  }
+
+  return responseText;
 }
 
 async function transcribeAudioDraftWithOpenAI(audioDraft, activeSettings, options = {}) {
@@ -4748,6 +4956,14 @@ function htmlToPlainText(html) {
   const wrapper = document.createElement("div");
   wrapper.innerHTML = html || "";
   return wrapper.textContent?.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim() || "";
+}
+
+function stripCodeFences(text) {
+  return String(text || "")
+    .replace(/^```html\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
 }
 
 function extractResponseText(payload) {
@@ -6630,6 +6846,23 @@ function resolveOutputLanguage(session) {
   }
 
   return detectSourceLanguage(session);
+}
+
+function detectOutputContentLanguage(session) {
+  const outputText = htmlToPlainText(session?.polishedHtml || polishedOutput.innerHTML);
+  return detectPreferredLanguage(outputText || navigator.language, DICTATION_LANGUAGES.english) === DICTATION_LANGUAGES.swedish
+    ? OUTPUT_LANGUAGES.swedish
+    : OUTPUT_LANGUAGES.english;
+}
+
+function getOppositeOutputLanguage(outputLanguage) {
+  return outputLanguage === OUTPUT_LANGUAGES.swedish
+    ? OUTPUT_LANGUAGES.english
+    : OUTPUT_LANGUAGES.swedish;
+}
+
+function getOutputLanguageLabel(outputLanguage) {
+  return outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English";
 }
 
 function getOutputCopy(outputLanguage) {

@@ -61,6 +61,14 @@
           <input id="session-filter" type="text" maxlength="80" placeholder="Type to filter sessions">
         </label>
 
+        <div class="session-selection-bar">
+          <label class="checkbox-field compact-checkbox">
+            <input id="select-all-sessions" type="checkbox">
+            <span>Select all</span>
+          </label>
+          <button class="ghost-button session-bulk-delete" id="delete-selected-sessions" type="button" disabled>Delete selected</button>
+        </div>
+
         <ul class="session-list" id="session-list" aria-live="polite"></ul>
 
         <div class="empty-sessions" id="empty-sessions">
@@ -396,6 +404,7 @@
             <button class="ghost-button mobile-only" id="close-mobile-output" type="button">Close</button>
             <button class="ghost-button" id="export-word" type="button">Export Word</button>
             <button class="ghost-button" id="export-pdf" type="button">Export PDF</button>
+            <button class="ghost-button" id="translate-output" type="button">Translate</button>
           </div>
         </div>
 
@@ -444,6 +453,10 @@
   <template id="session-item-template">
     <li class="session-item">
       <div class="session-card">
+        <label class="session-select-field" aria-label="Select session">
+          <input class="session-select" type="checkbox">
+          <span></span>
+        </label>
         <button class="session-button" type="button">
           <span class="session-name"></span>
           <span class="session-meta"></span>
