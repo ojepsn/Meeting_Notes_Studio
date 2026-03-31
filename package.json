@@ -1,0 +1,16 @@
+{
+  "name": "notesmith-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/desktop",
+    "packages/domain",
+    "packages/prompts"
+  ],
+  "scripts": {
+    "desktop:dev": "npm run dev --workspace @notesmith/desktop",
+    "desktop:build": "npm run build --workspace @notesmith/desktop",
+    "desktop:tauri:dev": "npm run tauri:dev --workspace @notesmith/desktop",
+    "desktop:tauri:build": "npm run tauri:build --workspace @notesmith/desktop"
+  }
+}

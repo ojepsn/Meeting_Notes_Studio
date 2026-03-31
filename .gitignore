@@ -10,3 +10,13 @@ Thumbs.db
 # Editor folders
 .vscode/
 .idea/
+
+# Node / Tauri
+node_modules/
+dist/
+target/
+src-tauri/target/
+apps/*/node_modules/
+apps/*/dist/
+apps/*/src-tauri/target/
+*.tsbuildinfo
