@@ -43,6 +43,18 @@ jobs:
       - name: Prepare release assets
         run: node ./scripts/prepare-desktop-release.mjs
 
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-${{ github.ref_name }}
+          path: |
+            apps/desktop/src-tauri/target/release/release-assets/latest.json
+            apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.exe
+            apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.nsis.zip
+            apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.nsis.zip.sig
+            apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.msi
+          if-no-files-found: error
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
