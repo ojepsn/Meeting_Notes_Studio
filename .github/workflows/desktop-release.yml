@@ -1,0 +1,56 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    env:
+      CI: true
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_REF_NAME: ${{ github.ref_name }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build signed desktop release
+        run: npm run desktop:tauri:build
+
+      - name: Prepare release assets
+        run: node ./scripts/prepare-desktop-release.mjs
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            apps/desktop/src-tauri/target/release/release-assets/latest.json
+            apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.exe
+            apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.nsis.zip
+            apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.nsis.zip.sig
+            apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.msi
+          fail_on_unmatched_files: true
+          generate_release_notes: true
