@@ -6,6 +6,7 @@ interface DesktopState {
     activeSessionId: string | null;
     activeView: DesktopView;
     isLoaded: boolean;
+    loadError: string | null;
     repository: ReturnType<typeof createAppRepository>;
     load: () => Promise<void>;
     setActiveView: (view: DesktopView) => void;

@@ -6,14 +6,26 @@ export const useDesktopStore = create((set, get) => ({
     activeSessionId: null,
     activeView: "capture",
     isLoaded: false,
+    loadError: null,
     repository: createAppRepository(),
     load: async () => {
-        const snapshot = await get().repository.loadSnapshot();
-        set({
-            snapshot,
-            activeSessionId: snapshot.sessions[0]?.id ?? null,
-            isLoaded: true,
-        });
+        try {
+            const snapshot = await get().repository.loadSnapshot();
+            set({
+                snapshot,
+                activeSessionId: snapshot.sessions[0]?.id ?? null,
+                isLoaded: true,
+                loadError: null,
+            });
+        }
+        catch (error) {
+            set({
+                snapshot: null,
+                activeSessionId: null,
+                isLoaded: true,
+                loadError: error instanceof Error ? error.message : "Desktop startup failed.",
+            });
+        }
     },
     setActiveView: (activeView) => set({ activeView }),
     setActiveSessionId: (activeSessionId) => set({ activeSessionId }),

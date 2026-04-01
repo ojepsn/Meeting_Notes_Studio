@@ -26,6 +26,7 @@ export const App = () => {
     activeSessionId,
     activeView,
     isLoaded,
+    loadError,
     load,
     setActiveSessionId,
     setActiveView,
@@ -61,9 +62,27 @@ export const App = () => {
         <div className="topbar">
           <div>
             <h1>NoteSmith Desktop</h1>
-            <p>Preparing the new local-first desktop foundation...</p>
+            <p>{loadError || "Preparing the new local-first desktop foundation..."}</p>
           </div>
         </div>
+        {isLoaded && loadError ? (
+          <main className="workspace">
+            <div className="card">
+              <div className="card-header">
+                <div>
+                  <h2>Desktop startup failed</h2>
+                  <p>The app could not finish loading its local services.</p>
+                </div>
+              </div>
+              <div className="stack">
+                <p className="muted">{loadError}</p>
+                <p className="tiny-text">
+                  This is usually caused by a missing Tauri capability or a blocked plugin/database permission.
+                </p>
+              </div>
+            </div>
+          </main>
+        ) : null}
       </div>
     );
   }

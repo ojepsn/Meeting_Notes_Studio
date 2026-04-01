@@ -14,7 +14,7 @@ import { translateOutput } from "../lib/ai/services/translateOutput";
 import { exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsText } from "../lib/export/exportService";
 import { fileToAttachmentRecord, pickAudioFile, pickTranscriptFile, persistSelectedAttachment, readTranscriptFile, removePersistedAttachment, } from "../lib/files/attachmentStore";
 export const App = () => {
-    const { snapshot, activeSessionId, activeView, isLoaded, load, setActiveSessionId, setActiveView, saveSession, createNewSession, deleteSession, saveTodo, addTodo, deleteTodo, saveSettings, saveTemplate, importLegacyBrowserData, saveAttachments, } = useDesktopStore();
+    const { snapshot, activeSessionId, activeView, isLoaded, loadError, load, setActiveSessionId, setActiveView, saveSession, createNewSession, deleteSession, saveTodo, addTodo, deleteTodo, saveSettings, saveTemplate, importLegacyBrowserData, saveAttachments, } = useDesktopStore();
     const [statusNote, setStatusNote] = useState("Core desktop foundation ready for migration.");
     const [isGenerating, setIsGenerating] = useState(false);
     const [isRevising, setIsRevising] = useState(false);
@@ -25,7 +25,7 @@ export const App = () => {
     }, [load]);
     const activeSession = useMemo(() => snapshot?.sessions.find((session) => session.id === activeSessionId) ?? snapshot?.sessions[0] ?? null, [activeSessionId, snapshot]);
     if (!isLoaded || !snapshot || !activeSession) {
-        return (_jsx("div", { className: "app-shell", children: _jsx("div", { className: "topbar", children: _jsxs("div", { children: [_jsx("h1", { children: "NoteSmith Desktop" }), _jsx("p", { children: "Preparing the new local-first desktop foundation..." })] }) }) }));
+        return (_jsxs("div", { className: "app-shell", children: [_jsx("div", { className: "topbar", children: _jsxs("div", { children: [_jsx("h1", { children: "NoteSmith Desktop" }), _jsx("p", { children: loadError || "Preparing the new local-first desktop foundation..." })] }) }), isLoaded && loadError ? (_jsx("main", { className: "workspace", children: _jsxs("div", { className: "card", children: [_jsx("div", { className: "card-header", children: _jsxs("div", { children: [_jsx("h2", { children: "Desktop startup failed" }), _jsx("p", { children: "The app could not finish loading its local services." })] }) }), _jsxs("div", { className: "stack", children: [_jsx("p", { className: "muted", children: loadError }), _jsx("p", { className: "tiny-text", children: "This is usually caused by a missing Tauri capability or a blocked plugin/database permission." })] })] }) })) : null] }));
     }
     const scrollToSection = (id) => {
         document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
