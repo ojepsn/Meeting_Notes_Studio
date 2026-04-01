@@ -3,7 +3,6 @@ import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
 import { OutputWorkspace } from "../features/output/components/OutputWorkspace";
-import { TemplatesCard } from "../features/templates/components/TemplatesCard";
 import { TodosCard } from "../features/todos/components/TodosCard";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
 import { generateNotes } from "../lib/ai/services/generateNotes";
@@ -22,7 +21,7 @@ import {
 } from "../lib/files/attachmentStore";
 
 type AppWorkspace = "notes" | "tasks" | "calendar" | "assistant" | "files";
-type OverlayPanel = "sessions" | "templates" | "todos" | "backup" | "settings" | null;
+type OverlayPanel = "sessions" | "todos" | "backup" | "settings" | null;
 
 const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: string; available: boolean }> = [
   { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
@@ -407,8 +406,6 @@ export const App = () => {
             onDelete={(id) => void deleteSession(id)}
           />
         );
-      case "templates":
-        return <TemplatesCard templates={snapshot.templates} onSave={(template) => void saveTemplate(template)} />;
       case "todos":
         return (
           <TodosCard
@@ -422,7 +419,9 @@ export const App = () => {
         return (
           <SettingsCard
             settings={snapshot.settings}
+            templates={snapshot.templates}
             onChange={(settings) => void saveSettings(settings)}
+            onSaveTemplate={(template) => void saveTemplate(template)}
             onImportLegacy={handleImportLegacy}
             onCheckForUpdates={handleCheckForUpdates}
             updateStatusNote={updateStatusNote}
@@ -505,9 +504,6 @@ export const App = () => {
             )}
             <button className="shell-button" type="button" onClick={() => openOverlay("sessions")}>
               All Sessions
-            </button>
-            <button className="shell-button" type="button" onClick={() => openOverlay("templates")}>
-              Templates
             </button>
             <button className="shell-button" type="button" onClick={() => openOverlay("todos")}>
               To-dos
@@ -604,7 +600,7 @@ export const App = () => {
                 </div>
                 <div className="list-item">
                   <strong>{activeSession.participantText || "No participants yet"}</strong>
-                  <span className="muted">Participants</span>
+                  <span className="muted">People</span>
                 </div>
               </div>
             </div>
@@ -678,9 +674,7 @@ export const App = () => {
                 <strong>
                   {openPanel === "sessions"
                     ? "All Sessions"
-                    : openPanel === "templates"
-                      ? "Templates"
-                      : openPanel === "todos"
+                    : openPanel === "todos"
                         ? "To-dos"
                         : openPanel === "backup"
                           ? "Back-up"
