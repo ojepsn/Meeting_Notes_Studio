@@ -3,6 +3,8 @@ interface SettingsCardProps {
     settings: LocalAppSettings;
     onChange: (settings: LocalAppSettings) => void;
     onImportLegacy: () => Promise<void>;
+    onCheckForUpdates: () => Promise<void>;
+    updateStatusNote?: string | null;
 }
-export declare const SettingsCard: ({ settings, onChange, onImportLegacy }: SettingsCardProps) => import("react/jsx-runtime").JSX.Element;
+export declare const SettingsCard: ({ settings, onChange, onImportLegacy, onCheckForUpdates, updateStatusNote, }: SettingsCardProps) => import("react/jsx-runtime").JSX.Element;
 export {};

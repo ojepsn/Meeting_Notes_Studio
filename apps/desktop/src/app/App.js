@@ -11,6 +11,7 @@ import { generateNotes } from "../lib/ai/services/generateNotes";
 import { reviseOutput } from "../lib/ai/services/reviseOutput";
 import { transcribeAudio } from "../lib/ai/services/transcribeAudio";
 import { translateOutput } from "../lib/ai/services/translateOutput";
+import { checkForDesktopUpdates } from "../lib/ai/updater";
 import { exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsText } from "../lib/export/exportService";
 import { fileToAttachmentRecord, pickAudioFile, pickTranscriptFile, persistSelectedAttachment, readTranscriptFile, removePersistedAttachment, } from "../lib/files/attachmentStore";
 export const App = () => {
@@ -20,9 +21,51 @@ export const App = () => {
     const [isRevising, setIsRevising] = useState(false);
     const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
     const [pendingAudioBySession, setPendingAudioBySession] = useState({});
+    const [availableUpdateVersion, setAvailableUpdateVersion] = useState(null);
+    const [installUpdate, setInstallUpdate] = useState(null);
+    const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
+    const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+    const [updateStatusNote, setUpdateStatusNote] = useState(null);
     useEffect(() => {
         void load();
     }, [load]);
+    useEffect(() => {
+        if (!isLoaded || loadError) {
+            return;
+        }
+        let cancelled = false;
+        const runUpdateCheck = async () => {
+            setIsCheckingForUpdates(true);
+            try {
+                const result = await checkForDesktopUpdates();
+                if (cancelled)
+                    return;
+                if (result.available) {
+                    setAvailableUpdateVersion(result.version);
+                    setInstallUpdate(() => result.install);
+                    setUpdateStatusNote(`Version ${result.version} is available to install.`);
+                    setStatusNote(`Update available: ${result.version}`);
+                }
+                else {
+                    setUpdateStatusNote("Desktop app is up to date.");
+                }
+            }
+            catch (error) {
+                if (cancelled)
+                    return;
+                setUpdateStatusNote(error instanceof Error ? error.message : "Could not check for updates.");
+            }
+            finally {
+                if (!cancelled) {
+                    setIsCheckingForUpdates(false);
+                }
+            }
+        };
+        void runUpdateCheck();
+        return () => {
+            cancelled = true;
+        };
+    }, [isLoaded, loadError]);
     const activeSession = useMemo(() => snapshot?.sessions.find((session) => session.id === activeSessionId) ?? snapshot?.sessions[0] ?? null, [activeSessionId, snapshot]);
     if (!isLoaded || !snapshot || !activeSession) {
         return (_jsxs("div", { className: "app-shell", children: [_jsx("div", { className: "topbar", children: _jsxs("div", { children: [_jsx("h1", { children: "NoteSmith Desktop" }), _jsx("p", { children: loadError || "Preparing the new local-first desktop foundation..." })] }) }), isLoaded && loadError ? (_jsx("main", { className: "workspace", children: _jsxs("div", { className: "card", children: [_jsx("div", { className: "card-header", children: _jsxs("div", { children: [_jsx("h2", { children: "Desktop startup failed" }), _jsx("p", { children: "The app could not finish loading its local services." })] }) }), _jsxs("div", { className: "stack", children: [_jsx("p", { className: "muted", children: loadError }), _jsx("p", { className: "tiny-text", children: "This is usually caused by a missing Tauri capability or a blocked plugin/database permission." })] })] }) })) : null] }));
@@ -45,6 +88,56 @@ export const App = () => {
         link.click();
         URL.revokeObjectURL(url);
         setStatusNote("Exported a local desktop snapshot.");
+    };
+    const handleCheckForUpdates = async () => {
+        setIsCheckingForUpdates(true);
+        setUpdateStatusNote("Checking GitHub Releases for a newer desktop version...");
+        try {
+            const result = await checkForDesktopUpdates();
+            if (result.available) {
+                setAvailableUpdateVersion(result.version);
+                setInstallUpdate(() => result.install);
+                setUpdateStatusNote(`Version ${result.version} is available to install.`);
+                setStatusNote(`Update available: ${result.version}`);
+            }
+            else {
+                setAvailableUpdateVersion(null);
+                setInstallUpdate(null);
+                setUpdateStatusNote("Desktop app is already up to date.");
+                setStatusNote("Desktop app is already up to date.");
+            }
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : "Could not check for updates.";
+            setUpdateStatusNote(message);
+            setStatusNote(message);
+        }
+        finally {
+            setIsCheckingForUpdates(false);
+        }
+    };
+    const handleInstallUpdate = async () => {
+        if (!installUpdate || !availableUpdateVersion) {
+            return;
+        }
+        setIsInstallingUpdate(true);
+        setUpdateStatusNote(`Downloading and installing version ${availableUpdateVersion}...`);
+        setStatusNote(`Installing update ${availableUpdateVersion}...`);
+        try {
+            await installUpdate();
+            setUpdateStatusNote(`Version ${availableUpdateVersion} was installed. Restart the app to finish updating.`);
+            setStatusNote(`Update ${availableUpdateVersion} installed. Restart the app to finish updating.`);
+            setInstallUpdate(null);
+            setAvailableUpdateVersion(null);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : "Could not install the update.";
+            setUpdateStatusNote(message);
+            setStatusNote(message);
+        }
+        finally {
+            setIsInstallingUpdate(false);
+        }
     };
     const handleGenerate = async () => {
         const template = snapshot.templates.find((entry) => entry.id === activeSession.templateId);
@@ -198,5 +291,5 @@ export const App = () => {
         }
         setStatusNote(`Removed ${attachment.filename} from the session attachments.`);
     };
-    return (_jsxs("div", { className: "app-shell", children: [_jsxs("header", { className: "topbar", children: [_jsxs("div", { children: [_jsx("h1", { children: "NoteSmith Desktop" }), _jsx("p", { children: statusNote })] }), _jsxs("div", { className: "topbar-actions", children: [_jsx("button", { className: "shell-button", type: "button", onClick: () => scrollToSection("desktop-sessions-card"), children: "All Sessions" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => scrollToSection("desktop-backup-card"), children: "Back-up" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => scrollToSection("desktop-settings-card"), children: "Settings" }), _jsxs("div", { className: "view-switch", children: [_jsx("button", { className: "segment-button", "data-active": activeView === "capture", type: "button", onClick: () => setActiveView("capture"), children: "Capture" }), _jsx("button", { className: "segment-button", "data-active": activeView === "output", type: "button", onClick: () => setActiveView("output"), children: "Output" })] })] })] }), _jsxs("main", { className: "workspace", children: [_jsxs("div", { className: "stack", children: [activeView === "capture" ? (_jsx(SessionEditor, { session: activeSession, templates: snapshot.templates, attachments: snapshot.attachments.filter((attachment) => attachment.sessionId === activeSession.id), isTranscribingAudio: isTranscribingAudio, onChange: (session) => void saveSession(session), onImportAudio: () => void handleImportAudio(), onTranscribeAudio: () => void handleTranscribeAudio(), onImportTranscript: () => void handleImportTranscript(), onRemoveAttachment: (attachmentId) => void handleRemoveAttachment(attachmentId) })) : (_jsx(OutputWorkspace, { session: activeSession, onChange: (session) => void saveSession(session), isGenerating: isGenerating, isRevising: isRevising, onGenerate: () => void handleGenerate(), onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onExportText: () => exportOutputAsText({ title: activeSession.title, output: activeSession.output }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output }), onExportHtml: () => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output }) })), _jsx(TodosCard, { todos: snapshot.todos, onToggle: (todo) => void saveTodo(todo), onAdd: (description) => void addTodo(description), onDelete: (id) => void deleteTodo(id) })] }), _jsxs("div", { className: "stack", children: [_jsx(SessionsSidebar, { sessions: snapshot.sessions, activeSessionId: activeSession.id, onSelect: setActiveSessionId, onCreate: () => void createNewSession(), onDelete: (id) => void deleteSession(id) }), _jsx(TemplatesCard, { templates: snapshot.templates, onSave: (template) => void saveTemplate(template) }), _jsxs("div", { id: "desktop-backup-card", className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Back-up" }), _jsx("p", { children: "This will later become the full desktop backup and import/export flow." })] }), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportLegacy(), children: "Import current browser data" }), _jsx("button", { className: "small-button", type: "button", onClick: handleExportSnapshot, children: "Export snapshot" })] }), _jsx("p", { className: "tiny-text", children: "The export/import actions are intentionally simple in this first pass while we move the product into the new architecture." })] }), _jsx(SettingsCard, { settings: snapshot.settings, onChange: (settings) => void saveSettings(settings), onImportLegacy: handleImportLegacy })] })] })] }));
+    return (_jsxs("div", { className: "app-shell", children: [_jsxs("header", { className: "topbar", children: [_jsxs("div", { children: [_jsx("h1", { children: "NoteSmith Desktop" }), _jsx("p", { children: statusNote })] }), _jsxs("div", { className: "topbar-actions", children: [availableUpdateVersion ? (_jsx("button", { className: "primary-button", type: "button", onClick: () => void handleInstallUpdate(), disabled: isInstallingUpdate, children: isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}` })) : (_jsx("button", { className: "shell-button", type: "button", onClick: () => void handleCheckForUpdates(), disabled: isCheckingForUpdates, children: isCheckingForUpdates ? "Checking updates..." : "Check for updates" })), _jsx("button", { className: "shell-button", type: "button", onClick: () => scrollToSection("desktop-sessions-card"), children: "All Sessions" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => scrollToSection("desktop-backup-card"), children: "Back-up" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => scrollToSection("desktop-settings-card"), children: "Settings" }), _jsxs("div", { className: "view-switch", children: [_jsx("button", { className: "segment-button", "data-active": activeView === "capture", type: "button", onClick: () => setActiveView("capture"), children: "Capture" }), _jsx("button", { className: "segment-button", "data-active": activeView === "output", type: "button", onClick: () => setActiveView("output"), children: "Output" })] })] })] }), _jsxs("main", { className: "workspace", children: [_jsxs("div", { className: "stack", children: [activeView === "capture" ? (_jsx(SessionEditor, { session: activeSession, templates: snapshot.templates, attachments: snapshot.attachments.filter((attachment) => attachment.sessionId === activeSession.id), isTranscribingAudio: isTranscribingAudio, onChange: (session) => void saveSession(session), onImportAudio: () => void handleImportAudio(), onTranscribeAudio: () => void handleTranscribeAudio(), onImportTranscript: () => void handleImportTranscript(), onRemoveAttachment: (attachmentId) => void handleRemoveAttachment(attachmentId) })) : (_jsx(OutputWorkspace, { session: activeSession, onChange: (session) => void saveSession(session), isGenerating: isGenerating, isRevising: isRevising, onGenerate: () => void handleGenerate(), onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onExportText: () => exportOutputAsText({ title: activeSession.title, output: activeSession.output }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output }), onExportHtml: () => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output }) })), _jsx(TodosCard, { todos: snapshot.todos, onToggle: (todo) => void saveTodo(todo), onAdd: (description) => void addTodo(description), onDelete: (id) => void deleteTodo(id) })] }), _jsxs("div", { className: "stack", children: [_jsx(SessionsSidebar, { sessions: snapshot.sessions, activeSessionId: activeSession.id, onSelect: setActiveSessionId, onCreate: () => void createNewSession(), onDelete: (id) => void deleteSession(id) }), _jsx(TemplatesCard, { templates: snapshot.templates, onSave: (template) => void saveTemplate(template) }), _jsxs("div", { id: "desktop-backup-card", className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Back-up" }), _jsx("p", { children: "This will later become the full desktop backup and import/export flow." })] }), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportLegacy(), children: "Import current browser data" }), _jsx("button", { className: "small-button", type: "button", onClick: handleExportSnapshot, children: "Export snapshot" })] }), _jsx("p", { className: "tiny-text", children: "The export/import actions are intentionally simple in this first pass while we move the product into the new architecture." })] }), _jsx(SettingsCard, { settings: snapshot.settings, onChange: (settings) => void saveSettings(settings), onImportLegacy: handleImportLegacy, onCheckForUpdates: handleCheckForUpdates, updateStatusNote: updateStatusNote })] })] })] }));
 };
