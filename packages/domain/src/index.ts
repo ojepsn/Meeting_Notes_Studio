@@ -80,6 +80,9 @@ export interface AttachmentRecord {
   mimeType: string;
   filePath: string;
   sizeBytes: number;
+  caption: string;
+  includeInOutput: boolean;
+  outputPosition: number;
   createdAt: string;
 }
 

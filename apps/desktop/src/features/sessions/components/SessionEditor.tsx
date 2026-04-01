@@ -1,3 +1,4 @@
+import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
 import type { AttachmentRecord, SessionRecord, TemplateDefinition } from "@notesmith/domain";
 
 interface SessionEditorProps {
@@ -8,8 +9,10 @@ interface SessionEditorProps {
   onChange: (session: SessionRecord) => void;
   onImportTranscript: () => void;
   onImportAudio: () => void;
+  onImportImage: () => void;
   onTranscribeAudio: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
+  onUpdateAttachment: (attachment: AttachmentRecord) => void;
 }
 
 const DETAIL_LEVEL_LABELS: Record<number, string> = {
@@ -28,8 +31,10 @@ export const SessionEditor = ({
   onChange,
   onImportTranscript,
   onImportAudio,
+  onImportImage,
   onTranscribeAudio,
   onRemoveAttachment,
+  onUpdateAttachment,
 }: SessionEditorProps) => {
   const update = <K extends keyof SessionRecord>(key: K, value: SessionRecord[K]) =>
     onChange({ ...session, [key]: value });
@@ -45,6 +50,8 @@ export const SessionEditor = ({
       ...section,
       checked: !session.excludedSectionIds.includes(section.id),
     })) ?? [];
+  const imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
+  const otherAttachments = attachments.filter((attachment) => attachment.kind !== "image");
 
   return (
     <div className="card">
@@ -229,6 +236,9 @@ export const SessionEditor = ({
           </div>
         ) : null}
         <div className="page-actions field-wide">
+          <button className="small-button" type="button" onClick={onImportImage}>
+            Upload image
+          </button>
           <button className="small-button" type="button" onClick={onImportAudio}>
             Upload audio
           </button>
@@ -239,11 +249,66 @@ export const SessionEditor = ({
             Upload transcript file
           </button>
         </div>
-        {attachments.length ? (
+        {imageAttachments.length ? (
+          <div className="field field-wide">
+            <label>Session images</label>
+            <div className="section-list">
+              {imageAttachments.map((attachment, index) => (
+                <div key={attachment.id} className="list-item image-attachment-item">
+                  <AttachmentImagePreview attachment={attachment} />
+                  <div className="image-attachment-details">
+                    <strong>{attachment.filename}</strong>
+                    <span className="muted">
+                      {Math.max(1, Math.round(attachment.sizeBytes / 1024))} KB
+                    </span>
+                    <div className="field">
+                      <label htmlFor={`image-caption-${attachment.id}`}>Caption</label>
+                      <input
+                        id={`image-caption-${attachment.id}`}
+                        value={attachment.caption}
+                        onChange={(event) =>
+                          onUpdateAttachment({
+                            ...attachment,
+                            caption: event.target.value,
+                          })
+                        }
+                        placeholder="Optional caption for the polished output"
+                      />
+                    </div>
+                    <div className="inline-row">
+                      <label className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={attachment.includeInOutput}
+                          onChange={(event) =>
+                            onUpdateAttachment({
+                              ...attachment,
+                              includeInOutput: event.target.checked,
+                              outputPosition: event.target.checked ? attachment.outputPosition || index + 1 : 0,
+                            })
+                          }
+                        />
+                        Include in output
+                      </label>
+                      <button
+                        className="small-button danger-button inline-action"
+                        type="button"
+                        onClick={() => onRemoveAttachment(attachment.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {otherAttachments.length ? (
           <div className="field field-wide">
             <label>Session attachments</label>
             <div className="section-list">
-              {attachments.map((attachment) => (
+              {otherAttachments.map((attachment) => (
                 <div key={attachment.id} className="list-item">
                   <strong>{attachment.filename}</strong>
                   <span className="muted">

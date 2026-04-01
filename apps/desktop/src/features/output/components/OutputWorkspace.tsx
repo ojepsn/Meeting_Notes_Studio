@@ -1,8 +1,10 @@
-import type { SessionRecord } from "@notesmith/domain";
+import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
+import type { AttachmentRecord, SessionRecord } from "@notesmith/domain";
 import { useState } from "react";
 
 interface OutputWorkspaceProps {
   session: SessionRecord;
+  attachments: AttachmentRecord[];
   onChange: (session: SessionRecord) => void;
   isGenerating: boolean;
   isRevising: boolean;
@@ -16,6 +18,7 @@ interface OutputWorkspaceProps {
 
 export const OutputWorkspace = ({
   session,
+  attachments,
   onChange,
   isGenerating,
   isRevising,
@@ -27,6 +30,9 @@ export const OutputWorkspace = ({
   onExportHtml,
 }: OutputWorkspaceProps) => {
   const [revisionInstructions, setRevisionInstructions] = useState("");
+  const includedImages = attachments
+    .filter((attachment) => attachment.kind === "image" && attachment.includeInOutput)
+    .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt));
 
   return (
     <div className="card">
@@ -74,6 +80,24 @@ export const OutputWorkspace = ({
           placeholder="Generated notes will appear here. In the Tauri app this will later be backed by AI jobs, versioned outputs, and editable drafts."
         />
       </div>
+      {includedImages.length ? (
+        <div className="field field-wide">
+          <label>Images marked for polished output</label>
+          <div className="section-list">
+            {includedImages.map((attachment) => (
+              <div key={attachment.id} className="list-item image-output-item">
+                <AttachmentImagePreview attachment={attachment} />
+                <div className="image-attachment-details">
+                  <strong>{attachment.caption || attachment.filename}</strong>
+                  <span className="muted">
+                    This image is staged for future structured output and richer Word/PDF export.
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="field field-wide">
         <label htmlFor="revision-instructions">Revision instructions</label>
         <textarea

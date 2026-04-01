@@ -1,4 +1,4 @@
-import type { LocalAppSettings, SessionRecord, TemplateDefinition } from "@notesmith/domain";
+import type { AttachmentRecord, LocalAppSettings, SessionRecord, TemplateDefinition } from "@notesmith/domain";
 import { callResponsesApi } from "../client/openaiClient";
 
 const buildTemplateSectionPrompt = (template: TemplateDefinition) =>
@@ -41,10 +41,12 @@ export const generateNotes = async ({
   session,
   settings,
   template,
+  attachments = [],
 }: {
   session: SessionRecord;
   settings: LocalAppSettings;
   template: TemplateDefinition;
+  attachments?: AttachmentRecord[];
 }) => {
   const activeSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
   const sourceText = [
@@ -70,6 +72,14 @@ export const generateNotes = async ({
     settings.outputLanguage === "same"
       ? "Keep the output in the same language as the source notes."
       : `Return the final notes in ${settings.outputLanguage === "sv" ? "Swedish" : "English"}.`;
+  const includedImagesPrompt = attachments
+    .filter((attachment) => attachment.kind === "image" && attachment.includeInOutput)
+    .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt))
+    .map(
+      (attachment, index) =>
+        `- Image ${index + 1}: ${attachment.caption.trim() || attachment.filename} (${attachment.filename})`,
+    )
+    .join("\n");
 
   const response = await callResponsesApi({
     apiKey: settings.apiKey,
@@ -94,7 +104,11 @@ export const generateNotes = async ({
                 template.promptInstructions?.trim()
                   ? `\nTemplate-specific instructions:\n${template.promptInstructions.trim()}`
                   : ""
-              }\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${session.participantText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}\n\n${sourceText}${
+              }\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${session.participantText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}${
+                includedImagesPrompt
+                  ? `\nIncluded images for polished output:\n${includedImagesPrompt}\nReference these images where appropriate and preserve their captions.`
+                  : ""
+              }\n\n${sourceText}${
                 extraPromptBlocks ? `\n\nAdditional prompt blocks:\n${extraPromptBlocks}` : ""
               }`,
             },

@@ -14,6 +14,7 @@ import { exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsText } from "
 import {
   fileToAttachmentRecord,
   pickAudioFile,
+  pickImageFile,
   pickTranscriptFile,
   persistSelectedAttachment,
   readTranscriptFile,
@@ -119,6 +120,11 @@ export const App = () => {
   const activeAttachments = useMemo(
     () => snapshot?.attachments.filter((attachment) => attachment.sessionId === activeSession?.id) ?? [],
     [activeSession, snapshot],
+  );
+  const includedOutputImages = useMemo(
+    () =>
+      activeAttachments.filter((attachment) => attachment.kind === "image" && attachment.includeInOutput),
+    [activeAttachments],
   );
 
   if (!isLoaded || !snapshot || !activeSession) {
@@ -233,6 +239,7 @@ export const App = () => {
         session: activeSession,
         settings: snapshot.settings,
         template,
+        attachments: activeAttachments,
       });
       await saveSession({ ...activeSession, output });
       setStatusNote("Generated structured output with the desktop AI service.");
@@ -333,6 +340,32 @@ export const App = () => {
     setStatusNote("Uploaded audio into the desktop session. You can transcribe it into the live transcript next.");
   };
 
+  const handleImportImage = async () => {
+    const selection = await pickImageFile();
+    if (!selection) return;
+    const persistedPath = await persistSelectedAttachment({
+      sessionId: activeSession.id,
+      selection,
+    });
+
+    const nextOutputPosition =
+      activeAttachments.filter((attachment) => attachment.kind === "image").length + 1;
+
+    await saveAttachments([
+      ...snapshot.attachments,
+      {
+        ...fileToAttachmentRecord({
+          file: selection.file,
+          sessionId: activeSession.id,
+          kind: "image",
+          filePath: persistedPath,
+        }),
+        outputPosition: nextOutputPosition,
+      },
+    ]);
+    setStatusNote("Added image to the session. You can caption it and choose whether it should appear in the polished output.");
+  };
+
   const handleTranscribeAudio = async () => {
     const file = pendingAudioBySession[activeSession.id];
     if (!file) {
@@ -378,6 +411,12 @@ export const App = () => {
     }
 
     setStatusNote(`Removed ${attachment.filename} from the session attachments.`);
+  };
+
+  const handleUpdateAttachment = async (attachmentUpdates: typeof activeAttachments[number]) => {
+    await saveAttachments(
+      snapshot.attachments.map((entry) => (entry.id === attachmentUpdates.id ? attachmentUpdates : entry)),
+    );
   };
 
   const handleWorkspaceSelection = (workspaceId: AppWorkspace, available: boolean) => {
@@ -560,14 +599,17 @@ export const App = () => {
                 attachments={activeAttachments}
                 isTranscribingAudio={isTranscribingAudio}
                 onChange={(session) => void saveSession(session)}
+                onImportImage={() => void handleImportImage()}
                 onImportAudio={() => void handleImportAudio()}
                 onTranscribeAudio={() => void handleTranscribeAudio()}
                 onImportTranscript={() => void handleImportTranscript()}
                 onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
+                onUpdateAttachment={(attachment) => void handleUpdateAttachment(attachment)}
               />
             ) : (
               <OutputWorkspace
                 session={activeSession}
+                attachments={activeAttachments}
                 onChange={(session) => void saveSession(session)}
                 isGenerating={isGenerating}
                 isRevising={isRevising}
@@ -602,6 +644,10 @@ export const App = () => {
                   <strong>{activeSession.participantText || "No participants yet"}</strong>
                   <span className="muted">People</span>
                 </div>
+                <div className="list-item">
+                  <strong>{includedOutputImages.length}</strong>
+                  <span className="muted">Images staged for polished output</span>
+                </div>
               </div>
             </div>
 
@@ -616,6 +662,9 @@ export const App = () => {
               </div>
               {activeView === "capture" ? (
                 <div className="sidebar-actions">
+                  <button className="small-button" type="button" onClick={() => void handleImportImage()}>
+                    Upload image
+                  </button>
                   <button className="small-button" type="button" onClick={() => void handleImportAudio()}>
                     Upload audio
                   </button>

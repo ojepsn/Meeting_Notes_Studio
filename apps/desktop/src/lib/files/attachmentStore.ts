@@ -36,6 +36,16 @@ const getAudioMimeType = (filename: string) => {
   return "application/octet-stream";
 };
 
+const getImageMimeType = (filename: string) => {
+  const extension = filename.split(".").pop()?.toLowerCase();
+  if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
+  if (extension === "png") return "image/png";
+  if (extension === "webp") return "image/webp";
+  if (extension === "gif") return "image/gif";
+  if (extension === "bmp") return "image/bmp";
+  return "application/octet-stream";
+};
+
 const pickFileInBrowser = (accept: string) =>
   new Promise<File | null>((resolve) => {
     const input = document.createElement("input");
@@ -99,6 +109,18 @@ export const pickAudioFile = async (): Promise<SelectedAttachment | null> => {
   return file ? { file } : null;
 };
 
+export const pickImageFile = async (): Promise<SelectedAttachment | null> => {
+  if (isTauriRuntime()) {
+    return pickFileInTauri({
+      filters: [{ name: "Image files", extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp"] }],
+      mimeTypeResolver: getImageMimeType,
+    });
+  }
+
+  const file = await pickFileInBrowser(".jpg,.jpeg,.png,.webp,.gif,.bmp,image/*");
+  return file ? { file } : null;
+};
+
 export const persistSelectedAttachment = async ({
   sessionId,
   selection,
@@ -125,6 +147,26 @@ export const removePersistedAttachment = async (filePath: string) => {
   await invoke("delete_persisted_file", { path: filePath });
 };
 
+export const createAttachmentPreviewUrl = async ({
+  filePath,
+  mimeType,
+}: {
+  filePath: string;
+  mimeType: string;
+}) => {
+  if (!filePath) {
+    return null;
+  }
+
+  if (isTauriRuntime()) {
+    const bytes = await invoke<number[]>("read_file_bytes", { path: filePath });
+    const blob = new Blob([Uint8Array.from(bytes)], { type: mimeType || "application/octet-stream" });
+    return URL.createObjectURL(blob);
+  }
+
+  return null;
+};
+
 export const fileToAttachmentRecord = ({
   file,
   sessionId,
@@ -143,6 +185,9 @@ export const fileToAttachmentRecord = ({
   mimeType: file.type || "application/octet-stream",
   filePath,
   sizeBytes: file.size,
+  caption: "",
+  includeInOutput: kind === "image",
+  outputPosition: 0,
   createdAt: new Date().toISOString(),
 });
 

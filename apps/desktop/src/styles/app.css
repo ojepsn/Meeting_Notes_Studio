@@ -276,6 +276,41 @@ select {
   display: block;
 }
 
+.image-attachment-item,
+.image-output-item {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.attachment-image-preview {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 16px;
+  border: 1px solid rgba(34, 41, 24, 0.08);
+  background: #f0efe6;
+}
+
+.image-preview-placeholder {
+  width: 100%;
+  height: 140px;
+  border-radius: 16px;
+  border: 1px dashed rgba(34, 41, 24, 0.18);
+  display: grid;
+  place-items: center;
+  color: #6d7767;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.image-attachment-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
 .list-item-actions {
   display: flex;
   gap: 0.5rem;

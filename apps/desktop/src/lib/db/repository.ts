@@ -40,6 +40,13 @@ const normalizeSessionRecord = (session: SessionRecord): SessionRecord => ({
   excludedSectionIds: Array.isArray(session.excludedSectionIds) ? session.excludedSectionIds : [],
 });
 
+const normalizeAttachmentRecord = (attachment: AttachmentRecord): AttachmentRecord => ({
+  ...attachment,
+  caption: typeof attachment.caption === "string" ? attachment.caption : "",
+  includeInOutput: Boolean(attachment.includeInOutput),
+  outputPosition: Number.isFinite(Number(attachment.outputPosition)) ? Number(attachment.outputPosition) : 0,
+});
+
 export const createDefaultSettings = (): LocalAppSettings => ({
   theme: "modern-olive",
   outputLanguage: "same",
@@ -82,7 +89,7 @@ export const createDefaultSnapshot = (): DesktopAppSnapshot => ({
   ],
   templates: BUILTIN_TEMPLATES,
   todos: [],
-  attachments: [],
+      attachments: [],
   settings: createDefaultSettings(),
 });
 
@@ -144,7 +151,7 @@ class BrowserEntityRepository implements AppRepository {
   }
 
   async loadAttachments() {
-    return readLocalJson<AttachmentRecord[]>(STORAGE_KEYS.attachments, []);
+    return readLocalJson<AttachmentRecord[]>(STORAGE_KEYS.attachments, []).map(normalizeAttachmentRecord);
   }
 
   async saveAttachments(records: AttachmentRecord[]) {
@@ -208,6 +215,9 @@ class TauriSqliteRepository implements AppRepository {
         await db.execute("ALTER TABLE sessions ADD COLUMN detail_level INTEGER NOT NULL DEFAULT 3").catch(() => {});
         await db.execute("ALTER TABLE sessions ADD COLUMN custom_field_values TEXT NOT NULL DEFAULT '{}'").catch(() => {});
         await db.execute("ALTER TABLE sessions ADD COLUMN excluded_section_ids TEXT NOT NULL DEFAULT '[]'").catch(() => {});
+        await db.execute("ALTER TABLE attachments ADD COLUMN caption TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE attachments ADD COLUMN include_in_output INTEGER NOT NULL DEFAULT 0").catch(() => {});
+        await db.execute("ALTER TABLE attachments ADD COLUMN output_position INTEGER NOT NULL DEFAULT 0").catch(() => {});
         return db;
       })();
     }
@@ -336,9 +346,10 @@ class TauriSqliteRepository implements AppRepository {
 
   async loadAttachments() {
     const db = await this.getDb();
-    return db.select<AttachmentRecord>(
-      "SELECT id, session_id as sessionId, kind, filename, mime_type as mimeType, file_path as filePath, size_bytes as sizeBytes, created_at as createdAt FROM attachments ORDER BY created_at DESC",
+    const rows = await db.select<AttachmentRecord>(
+      "SELECT id, session_id as sessionId, kind, filename, mime_type as mimeType, file_path as filePath, size_bytes as sizeBytes, caption, include_in_output as includeInOutput, output_position as outputPosition, created_at as createdAt FROM attachments ORDER BY created_at DESC",
     );
+    return rows.map(normalizeAttachmentRecord);
   }
 
   async saveAttachments(records: AttachmentRecord[]) {
@@ -347,7 +358,7 @@ class TauriSqliteRepository implements AppRepository {
     await Promise.all(
       records.map((record) =>
         db.execute(
-          "INSERT INTO attachments (id, session_id, kind, filename, mime_type, file_path, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO attachments (id, session_id, kind, filename, mime_type, file_path, size_bytes, caption, include_in_output, output_position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             record.id,
             record.sessionId,
@@ -356,6 +367,9 @@ class TauriSqliteRepository implements AppRepository {
             record.mimeType,
             record.filePath,
             record.sizeBytes,
+            record.caption,
+            record.includeInOutput ? 1 : 0,
+            record.outputPosition,
             record.createdAt,
           ],
         ),
