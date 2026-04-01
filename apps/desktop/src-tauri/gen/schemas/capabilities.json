@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"Default desktop capability for NoteSmith Desktop","local":true,"windows":["main"],"permissions":["core:default","dialog:default","sql:default","sql:allow-execute","updater:default"]}}

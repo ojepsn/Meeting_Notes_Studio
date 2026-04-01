@@ -21,6 +21,17 @@ import {
   removePersistedAttachment,
 } from "../lib/files/attachmentStore";
 
+type AppWorkspace = "notes" | "tasks" | "calendar" | "assistant" | "files";
+type OverlayPanel = "sessions" | "templates" | "todos" | "backup" | "settings" | null;
+
+const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: string; available: boolean }> = [
+  { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
+  { id: "tasks", label: "Tasks", description: "Personal follow-up management", available: false },
+  { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: false },
+  { id: "assistant", label: "Assistant", description: "Future AI workflows and agents", available: false },
+  { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
+];
+
 export const App = () => {
   const {
     snapshot,
@@ -42,6 +53,8 @@ export const App = () => {
     importLegacyBrowserData,
     saveAttachments,
   } = useDesktopStore();
+  const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("notes");
+  const [openPanel, setOpenPanel] = useState<OverlayPanel>(null);
   const [statusNote, setStatusNote] = useState("Core desktop foundation ready for migration.");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRevising, setIsRevising] = useState(false);
@@ -99,6 +112,16 @@ export const App = () => {
     [activeSessionId, snapshot],
   );
 
+  const activeTemplate = useMemo(
+    () => snapshot?.templates.find((template) => template.id === activeSession?.templateId) ?? null,
+    [activeSession, snapshot],
+  );
+
+  const activeAttachments = useMemo(
+    () => snapshot?.attachments.filter((attachment) => attachment.sessionId === activeSession?.id) ?? [],
+    [activeSession, snapshot],
+  );
+
   if (!isLoaded || !snapshot || !activeSession) {
     return (
       <div className="app-shell">
@@ -129,10 +152,6 @@ export const App = () => {
       </div>
     );
   }
-
-  const scrollToSection = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
 
   const handleImportLegacy = async () => {
     const result = await importLegacyBrowserData();
@@ -362,112 +381,59 @@ export const App = () => {
     setStatusNote(`Removed ${attachment.filename} from the session attachments.`);
   };
 
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div>
-          <h1>NoteSmith Desktop</h1>
-          <p>{statusNote}</p>
-        </div>
-        <div className="topbar-actions">
-          {availableUpdateVersion ? (
-            <button
-              className="primary-button"
-              type="button"
-              onClick={() => void handleInstallUpdate()}
-              disabled={isInstallingUpdate}
-            >
-              {isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}`}
-            </button>
-          ) : (
-            <button
-              className="shell-button"
-              type="button"
-              onClick={() => void handleCheckForUpdates()}
-              disabled={isCheckingForUpdates}
-            >
-              {isCheckingForUpdates ? "Checking updates..." : "Check for updates"}
-            </button>
-          )}
-          <button className="shell-button" type="button" onClick={() => scrollToSection("desktop-sessions-card")}>
-            All Sessions
-          </button>
-          <button className="shell-button" type="button" onClick={() => scrollToSection("desktop-backup-card")}>
-            Back-up
-          </button>
-          <button className="shell-button" type="button" onClick={() => scrollToSection("desktop-settings-card")}>
-            Settings
-          </button>
-          <div className="view-switch">
-            <button
-              className="segment-button"
-              data-active={activeView === "capture"}
-              type="button"
-              onClick={() => setActiveView("capture")}
-            >
-              Capture
-            </button>
-            <button
-              className="segment-button"
-              data-active={activeView === "output"}
-              type="button"
-              onClick={() => setActiveView("output")}
-            >
-              Output
-            </button>
-          </div>
-        </div>
-      </header>
+  const handleWorkspaceSelection = (workspaceId: AppWorkspace, available: boolean) => {
+    if (!available) {
+      setStatusNote(`${WORKSPACE_ITEMS.find((item) => item.id === workspaceId)?.label ?? "Workspace"} will arrive in a later desktop phase.`);
+      return;
+    }
+    setActiveWorkspace(workspaceId);
+  };
 
-      <main className="workspace">
-        <div className="stack">
-          {activeView === "capture" ? (
-            <SessionEditor
-              session={activeSession}
-              templates={snapshot.templates}
-              attachments={snapshot.attachments.filter((attachment) => attachment.sessionId === activeSession.id)}
-              isTranscribingAudio={isTranscribingAudio}
-              onChange={(session) => void saveSession(session)}
-              onImportAudio={() => void handleImportAudio()}
-              onTranscribeAudio={() => void handleTranscribeAudio()}
-              onImportTranscript={() => void handleImportTranscript()}
-              onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
-            />
-          ) : (
-            <OutputWorkspace
-              session={activeSession}
-              onChange={(session) => void saveSession(session)}
-              isGenerating={isGenerating}
-              isRevising={isRevising}
-              onGenerate={() => void handleGenerate()}
-              onTranslate={() => void handleTranslate()}
-              onRevise={(instructions) => void handleRevise(instructions)}
-              onExportText={() => exportOutputAsText({ title: activeSession.title, output: activeSession.output })}
-              onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}
-              onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output })}
-            />
-          )}
+  const openOverlay = (panel: OverlayPanel) => setOpenPanel(panel);
+  const closeOverlay = () => setOpenPanel(null);
+
+  const renderOverlayContent = () => {
+    switch (openPanel) {
+      case "sessions":
+        return (
+          <SessionsSidebar
+            sessions={snapshot.sessions}
+            activeSessionId={activeSession.id}
+            onSelect={(id) => {
+              setActiveSessionId(id);
+              closeOverlay();
+            }}
+            onCreate={() => void createNewSession()}
+            onDelete={(id) => void deleteSession(id)}
+          />
+        );
+      case "templates":
+        return <TemplatesCard templates={snapshot.templates} onSave={(template) => void saveTemplate(template)} />;
+      case "todos":
+        return (
           <TodosCard
             todos={snapshot.todos}
             onToggle={(todo) => void saveTodo(todo)}
             onAdd={(description) => void addTodo(description)}
             onDelete={(id) => void deleteTodo(id)}
           />
-        </div>
-
-        <div className="stack">
-          <SessionsSidebar
-            sessions={snapshot.sessions}
-            activeSessionId={activeSession.id}
-            onSelect={setActiveSessionId}
-            onCreate={() => void createNewSession()}
-            onDelete={(id) => void deleteSession(id)}
+        );
+      case "settings":
+        return (
+          <SettingsCard
+            settings={snapshot.settings}
+            onChange={(settings) => void saveSettings(settings)}
+            onImportLegacy={handleImportLegacy}
+            onCheckForUpdates={handleCheckForUpdates}
+            updateStatusNote={updateStatusNote}
           />
-          <TemplatesCard templates={snapshot.templates} onSave={(template) => void saveTemplate(template)} />
-          <div id="desktop-backup-card" className="sidebar-card">
+        );
+      case "backup":
+        return (
+          <div className="sidebar-card overlay-card">
             <div>
               <h3>Back-up</h3>
-              <p>This will later become the full desktop backup and import/export flow.</p>
+              <p>Keep backup and migration actions accessible without leaving the focused Notes workspace.</p>
             </div>
             <div className="sidebar-actions">
               <button className="small-button" type="button" onClick={() => void handleImportLegacy()}>
@@ -478,19 +444,258 @@ export const App = () => {
               </button>
             </div>
             <p className="tiny-text">
-              The export/import actions are intentionally simple in this first pass while we move the
-              product into the new architecture.
+              This backup area stays separate from the main workspace so capture and output remain clear and uncluttered.
             </p>
           </div>
-          <SettingsCard
-            settings={snapshot.settings}
-            onChange={(settings) => void saveSettings(settings)}
-            onImportLegacy={handleImportLegacy}
-            onCheckForUpdates={handleCheckForUpdates}
-            updateStatusNote={updateStatusNote}
-          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="app-shell desktop-shell">
+      <aside className="workspace-rail">
+        <div className="workspace-rail-brand">
+          <strong>NoteSmith</strong>
+          <span className="tiny-text">Desktop</span>
         </div>
-      </main>
+        <nav className="workspace-nav">
+          {WORKSPACE_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="workspace-nav-button"
+              data-active={activeWorkspace === item.id}
+              data-available={item.available}
+              onClick={() => handleWorkspaceSelection(item.id, item.available)}
+            >
+              <span>{item.label}</span>
+              <small>{item.available ? item.description : "Coming later"}</small>
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      <div className="workspace-shell">
+        <header className="topbar app-header">
+          <div>
+            <h1>Notes workspace</h1>
+            <p>{statusNote}</p>
+          </div>
+          <div className="topbar-actions">
+            {availableUpdateVersion ? (
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => void handleInstallUpdate()}
+                disabled={isInstallingUpdate}
+              >
+                {isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}`}
+              </button>
+            ) : (
+              <button
+                className="shell-button"
+                type="button"
+                onClick={() => void handleCheckForUpdates()}
+                disabled={isCheckingForUpdates}
+              >
+                {isCheckingForUpdates ? "Checking updates..." : "Check for updates"}
+              </button>
+            )}
+            <button className="shell-button" type="button" onClick={() => openOverlay("sessions")}>
+              All Sessions
+            </button>
+            <button className="shell-button" type="button" onClick={() => openOverlay("templates")}>
+              Templates
+            </button>
+            <button className="shell-button" type="button" onClick={() => openOverlay("todos")}>
+              To-dos
+            </button>
+            <button className="shell-button" type="button" onClick={() => openOverlay("backup")}>
+              Back-up
+            </button>
+            <button className="shell-button" type="button" onClick={() => openOverlay("settings")}>
+              Settings
+            </button>
+          </div>
+        </header>
+
+        <main className="notes-shell">
+          <section className="workspace-canvas">
+            <div className="workspace-header card">
+              <div className="card-header">
+                <div>
+                  <h2>{activeView === "capture" ? "Capture" : "Output"}</h2>
+                  <p>
+                    Keep the current task in the center. Use the side rail to switch workspaces and overlays for secondary tools.
+                  </p>
+                </div>
+                <div className="page-actions">
+                  <button className="primary-button" type="button" onClick={() => void createNewSession()}>
+                    + New Session
+                  </button>
+                  <div className="view-switch">
+                    <button
+                      className="segment-button"
+                      data-active={activeView === "capture"}
+                      type="button"
+                      onClick={() => setActiveView("capture")}
+                    >
+                      Capture
+                    </button>
+                    <button
+                      className="segment-button"
+                      data-active={activeView === "output"}
+                      type="button"
+                      onClick={() => setActiveView("output")}
+                    >
+                      Output
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {activeView === "capture" ? (
+              <SessionEditor
+                session={activeSession}
+                templates={snapshot.templates}
+                attachments={activeAttachments}
+                isTranscribingAudio={isTranscribingAudio}
+                onChange={(session) => void saveSession(session)}
+                onImportAudio={() => void handleImportAudio()}
+                onTranscribeAudio={() => void handleTranscribeAudio()}
+                onImportTranscript={() => void handleImportTranscript()}
+                onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
+              />
+            ) : (
+              <OutputWorkspace
+                session={activeSession}
+                onChange={(session) => void saveSession(session)}
+                isGenerating={isGenerating}
+                isRevising={isRevising}
+                onGenerate={() => void handleGenerate()}
+                onTranslate={() => void handleTranslate()}
+                onRevise={(instructions) => void handleRevise(instructions)}
+                onExportText={() => exportOutputAsText({ title: activeSession.title, output: activeSession.output })}
+                onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}
+                onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output })}
+              />
+            )}
+          </section>
+
+          <aside className="workspace-inspector stack">
+            <div className="sidebar-card">
+              <div>
+                <h3>Current session</h3>
+                <p>Context stays visible here while the main canvas stays focused on capture or output.</p>
+              </div>
+              <div className="section-list">
+                <div className="list-item">
+                  <strong>{activeSession.title || "Untitled session"}</strong>
+                  <span className="muted">{activeTemplate?.name ?? "No template selected"}</span>
+                </div>
+                <div className="list-item">
+                  <strong>{activeSession.date || "No date set"}</strong>
+                  <span className="muted">
+                    {activeSession.startTime || "--:--"} to {activeSession.endTime || "--:--"}
+                  </span>
+                </div>
+                <div className="list-item">
+                  <strong>{activeSession.participantText || "No participants yet"}</strong>
+                  <span className="muted">Participants</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="sidebar-card">
+              <div>
+                <h3>{activeView === "capture" ? "Capture tools" : "Output tools"}</h3>
+                <p>
+                  {activeView === "capture"
+                    ? "Keep import and transcription actions close at hand without burying the main note fields."
+                    : "Keep generation and export actions visible while the output stays front and center."}
+                </p>
+              </div>
+              {activeView === "capture" ? (
+                <div className="sidebar-actions">
+                  <button className="small-button" type="button" onClick={() => void handleImportAudio()}>
+                    Upload audio
+                  </button>
+                  <button className="small-button" type="button" onClick={() => void handleTranscribeAudio()}>
+                    {isTranscribingAudio ? "Transcribing..." : "Transcribe audio"}
+                  </button>
+                  <button className="small-button" type="button" onClick={() => void handleImportTranscript()}>
+                    Upload transcript
+                  </button>
+                </div>
+              ) : (
+                <div className="sidebar-actions">
+                  <button className="primary-button" type="button" onClick={() => void handleGenerate()} disabled={isGenerating}>
+                    {isGenerating ? "Generating..." : "Generate"}
+                  </button>
+                  <button className="small-button" type="button" onClick={() => void handleTranslate()}>
+                    Translate
+                  </button>
+                  <button className="small-button" type="button" onClick={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}>
+                    Export markdown
+                  </button>
+                </div>
+              )}
+              <p className="tiny-text">
+                {activeView === "capture"
+                  ? "Secondary tools stay here or in overlays so the main capture workflow remains simple."
+                  : "Export and revise from here while keeping the output document itself uncluttered."}
+              </p>
+            </div>
+
+            <div className="sidebar-card">
+              <div>
+                <h3>Quick status</h3>
+                <p>Small passive information belongs in the inspector, not inline with the main workspace buttons.</p>
+              </div>
+              <span className="status-chip">{activeAttachments.length} attachment{activeAttachments.length === 1 ? "" : "s"}</span>
+              <span className="status-chip">
+                {activeTemplate?.sections.length ?? 0} output section{(activeTemplate?.sections.length ?? 0) === 1 ? "" : "s"}
+              </span>
+              {updateStatusNote ? <p className="tiny-text">{updateStatusNote}</p> : null}
+            </div>
+          </aside>
+        </main>
+      </div>
+
+      {openPanel ? (
+        <div className="overlay-backdrop" role="presentation" onClick={closeOverlay}>
+          <div
+            className="overlay-surface"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="overlay-header">
+              <div>
+                <strong>
+                  {openPanel === "sessions"
+                    ? "All Sessions"
+                    : openPanel === "templates"
+                      ? "Templates"
+                      : openPanel === "todos"
+                        ? "To-dos"
+                        : openPanel === "backup"
+                          ? "Back-up"
+                          : "Settings"}
+                </strong>
+                <p className="tiny-text">Secondary tools are kept in overlays so each workspace stays focused.</p>
+              </div>
+              <button className="small-button" type="button" onClick={closeOverlay}>
+                Close
+              </button>
+            </div>
+            {renderOverlayContent()}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

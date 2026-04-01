@@ -8,6 +8,8 @@
     "packages/prompts"
   ],
   "scripts": {
+    "tauri:dev": "npm run tauri:dev --workspace @notesmith/desktop",
+    "tauri:build": "npm run tauri:build --workspace @notesmith/desktop",
     "desktop:dev": "npm run dev --workspace @notesmith/desktop",
     "desktop:build": "npm run build --workspace @notesmith/desktop",
     "desktop:tauri:dev": "npm run tauri:dev --workspace @notesmith/desktop",
