@@ -12,9 +12,17 @@ interface SettingsCardProps {
   settings: LocalAppSettings;
   onChange: (settings: LocalAppSettings) => void;
   onImportLegacy: () => Promise<void>;
+  onCheckForUpdates: () => Promise<void>;
+  updateStatusNote?: string | null;
 }
 
-export const SettingsCard = ({ settings, onChange, onImportLegacy }: SettingsCardProps) => {
+export const SettingsCard = ({
+  settings,
+  onChange,
+  onImportLegacy,
+  onCheckForUpdates,
+  updateStatusNote,
+}: SettingsCardProps) => {
   const [participantDraft, setParticipantDraft] = useState("");
   const [abbrShort, setAbbrShort] = useState("");
   const [abbrFull, setAbbrFull] = useState("");
@@ -288,10 +296,14 @@ export const SettingsCard = ({ settings, onChange, onImportLegacy }: SettingsCar
           >
             Reset prompt defaults
           </button>
+          <button className="small-button" type="button" onClick={() => void onCheckForUpdates()}>
+            Check for updates
+          </button>
           <button className="small-button" type="button" onClick={() => void onImportLegacy()}>
             Import current browser app data
           </button>
         </div>
+        {updateStatusNote ? <p className="tiny-text">{updateStatusNote}</p> : null}
         <p className="tiny-text">
           These prompt settings stay local to this machine. Resetting defaults leaves your extra prompt blocks in place.
         </p>

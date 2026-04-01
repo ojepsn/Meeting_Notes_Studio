@@ -10,6 +10,7 @@ import { generateNotes } from "../lib/ai/services/generateNotes";
 import { reviseOutput } from "../lib/ai/services/reviseOutput";
 import { transcribeAudio } from "../lib/ai/services/transcribeAudio";
 import { translateOutput } from "../lib/ai/services/translateOutput";
+import { checkForDesktopUpdates } from "../lib/ai/updater";
 import { exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsText } from "../lib/export/exportService";
 import {
   fileToAttachmentRecord,
@@ -46,10 +47,52 @@ export const App = () => {
   const [isRevising, setIsRevising] = useState(false);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [pendingAudioBySession, setPendingAudioBySession] = useState<Record<string, File | undefined>>({});
+  const [availableUpdateVersion, setAvailableUpdateVersion] = useState<string | null>(null);
+  const [installUpdate, setInstallUpdate] = useState<null | (() => Promise<void>)>(null);
+  const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
+  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+  const [updateStatusNote, setUpdateStatusNote] = useState<string | null>(null);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!isLoaded || loadError) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const runUpdateCheck = async () => {
+      setIsCheckingForUpdates(true);
+      try {
+        const result = await checkForDesktopUpdates();
+        if (cancelled) return;
+        if (result.available) {
+          setAvailableUpdateVersion(result.version);
+          setInstallUpdate(() => result.install);
+          setUpdateStatusNote(`Version ${result.version} is available to install.`);
+          setStatusNote(`Update available: ${result.version}`);
+        } else {
+          setUpdateStatusNote("Desktop app is up to date.");
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setUpdateStatusNote(error instanceof Error ? error.message : "Could not check for updates.");
+      } finally {
+        if (!cancelled) {
+          setIsCheckingForUpdates(false);
+        }
+      }
+    };
+
+    void runUpdateCheck();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, loadError]);
 
   const activeSession = useMemo(
     () => snapshot?.sessions.find((session) => session.id === activeSessionId) ?? snapshot?.sessions[0] ?? null,
@@ -109,6 +152,54 @@ export const App = () => {
     link.click();
     URL.revokeObjectURL(url);
     setStatusNote("Exported a local desktop snapshot.");
+  };
+
+  const handleCheckForUpdates = async () => {
+    setIsCheckingForUpdates(true);
+    setUpdateStatusNote("Checking GitHub Releases for a newer desktop version...");
+    try {
+      const result = await checkForDesktopUpdates();
+      if (result.available) {
+        setAvailableUpdateVersion(result.version);
+        setInstallUpdate(() => result.install);
+        setUpdateStatusNote(`Version ${result.version} is available to install.`);
+        setStatusNote(`Update available: ${result.version}`);
+      } else {
+        setAvailableUpdateVersion(null);
+        setInstallUpdate(null);
+        setUpdateStatusNote("Desktop app is already up to date.");
+        setStatusNote("Desktop app is already up to date.");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not check for updates.";
+      setUpdateStatusNote(message);
+      setStatusNote(message);
+    } finally {
+      setIsCheckingForUpdates(false);
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!installUpdate || !availableUpdateVersion) {
+      return;
+    }
+
+    setIsInstallingUpdate(true);
+    setUpdateStatusNote(`Downloading and installing version ${availableUpdateVersion}...`);
+    setStatusNote(`Installing update ${availableUpdateVersion}...`);
+    try {
+      await installUpdate();
+      setUpdateStatusNote(`Version ${availableUpdateVersion} was installed. Restart the app to finish updating.`);
+      setStatusNote(`Update ${availableUpdateVersion} installed. Restart the app to finish updating.`);
+      setInstallUpdate(null);
+      setAvailableUpdateVersion(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not install the update.";
+      setUpdateStatusNote(message);
+      setStatusNote(message);
+    } finally {
+      setIsInstallingUpdate(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -279,6 +370,25 @@ export const App = () => {
           <p>{statusNote}</p>
         </div>
         <div className="topbar-actions">
+          {availableUpdateVersion ? (
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => void handleInstallUpdate()}
+              disabled={isInstallingUpdate}
+            >
+              {isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}`}
+            </button>
+          ) : (
+            <button
+              className="shell-button"
+              type="button"
+              onClick={() => void handleCheckForUpdates()}
+              disabled={isCheckingForUpdates}
+            >
+              {isCheckingForUpdates ? "Checking updates..." : "Check for updates"}
+            </button>
+          )}
           <button className="shell-button" type="button" onClick={() => scrollToSection("desktop-sessions-card")}>
             All Sessions
           </button>
@@ -376,6 +486,8 @@ export const App = () => {
             settings={snapshot.settings}
             onChange={(settings) => void saveSettings(settings)}
             onImportLegacy={handleImportLegacy}
+            onCheckForUpdates={handleCheckForUpdates}
+            updateStatusNote={updateStatusNote}
           />
         </div>
       </main>

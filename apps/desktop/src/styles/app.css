@@ -75,6 +75,14 @@ select {
   cursor: pointer;
 }
 
+.shell-button:disabled,
+.segment-button:disabled,
+.primary-button:disabled,
+.small-button:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+
 .primary-button {
   background: #365d32;
   color: #fff;
