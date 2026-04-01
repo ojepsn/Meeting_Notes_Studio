@@ -1,5 +1,5 @@
 import { callResponsesApi } from "../client/openaiClient";
-export const reviseOutput = async ({ currentOutput, instructions, settings, }) => {
+export const reviseOutput = async ({ currentOutput, instructions, detailLevel, settings, }) => {
     if (!currentOutput.trim()) {
         throw new Error("There is no output to revise yet.");
     }
@@ -13,7 +13,13 @@ export const reviseOutput = async ({ currentOutput, instructions, settings, }) =
             input: [
                 {
                     role: "system",
-                    content: [{ type: "input_text", text: settings.promptProfile.revisionRules }],
+                    content: [
+                        { type: "input_text", text: settings.promptProfile.revisionRules },
+                        {
+                            type: "input_text",
+                            text: `Keep the revision aligned to detail level ${Math.min(5, Math.max(1, Math.round(detailLevel)))}.`,
+                        },
+                    ],
                 },
                 {
                     role: "user",

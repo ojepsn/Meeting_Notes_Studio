@@ -19,9 +19,12 @@ export const sqliteBootstrapStatements = [
     start_time TEXT NOT NULL,
     end_time TEXT NOT NULL,
     quick_highlights TEXT NOT NULL,
+    detail_level INTEGER NOT NULL DEFAULT 3,
     manual_notes TEXT NOT NULL,
     live_transcript TEXT NOT NULL,
     uploaded_transcript TEXT NOT NULL,
+    custom_field_values TEXT NOT NULL DEFAULT '{}',
+    excluded_section_ids TEXT NOT NULL DEFAULT '[]',
     output_text TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL

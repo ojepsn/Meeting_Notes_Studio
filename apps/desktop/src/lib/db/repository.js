@@ -10,6 +10,18 @@ const STORAGE_KEYS = {
     settings: "notesmith-desktop-settings",
 };
 const now = () => new Date().toISOString();
+const normalizeDetailLevel = (value) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed))
+        return 3;
+    return Math.min(5, Math.max(1, Math.round(parsed)));
+};
+const normalizeSessionRecord = (session) => ({
+    ...session,
+    detailLevel: normalizeDetailLevel(session.detailLevel),
+    customFieldValues: session.customFieldValues && typeof session.customFieldValues === "object" ? session.customFieldValues : {},
+    excludedSectionIds: Array.isArray(session.excludedSectionIds) ? session.excludedSectionIds : [],
+});
 export const createDefaultSettings = () => ({
     theme: "modern-olive",
     outputLanguage: "same",
@@ -38,9 +50,12 @@ export const createDefaultSnapshot = () => ({
             startTime: "09:00",
             endTime: "10:00",
             quickHighlights: "Release planning, blockers, client timeline",
+            detailLevel: 3,
             manualNotes: "Talked through current blockers and the April release cut.",
             liveTranscript: "",
             uploadedTranscript: "",
+            customFieldValues: {},
+            excludedSectionIds: [],
             output: "",
             createdAt: now(),
             updatedAt: now(),
@@ -67,7 +82,7 @@ const writeLocalJson = (key, value) => {
 };
 class BrowserEntityRepository {
     async loadSessions() {
-        return readLocalJson(STORAGE_KEYS.sessions, createDefaultSnapshot().sessions);
+        return readLocalJson(STORAGE_KEYS.sessions, createDefaultSnapshot().sessions).map(normalizeSessionRecord);
     }
     async saveSessions(records) {
         writeLocalJson(STORAGE_KEYS.sessions, records);
@@ -133,6 +148,9 @@ class TauriSqliteRepository {
                 const DatabaseModule = await import("@tauri-apps/plugin-sql");
                 const db = await DatabaseModule.default.load("sqlite:notesmith.db");
                 await Promise.all(sqliteBootstrapStatements.map((statement) => db.execute(statement)));
+                await db.execute("ALTER TABLE sessions ADD COLUMN detail_level INTEGER NOT NULL DEFAULT 3").catch(() => { });
+                await db.execute("ALTER TABLE sessions ADD COLUMN custom_field_values TEXT NOT NULL DEFAULT '{}'").catch(() => { });
+                await db.execute("ALTER TABLE sessions ADD COLUMN excluded_section_ids TEXT NOT NULL DEFAULT '[]'").catch(() => { });
                 return db;
             })();
         }
@@ -141,7 +159,7 @@ class TauriSqliteRepository {
     async loadSessions() {
         const db = await this.getDb();
         const rows = await db.select("SELECT * FROM sessions ORDER BY updated_at DESC");
-        return rows.map((row) => ({
+        return rows.map((row) => normalizeSessionRecord({
             id: row.id,
             templateId: row.template_id,
             title: row.title,
@@ -150,9 +168,12 @@ class TauriSqliteRepository {
             startTime: row.start_time,
             endTime: row.end_time,
             quickHighlights: row.quick_highlights,
+            detailLevel: row.detail_level,
             manualNotes: row.manual_notes,
             liveTranscript: row.live_transcript,
             uploadedTranscript: row.uploaded_transcript,
+            customFieldValues: row.custom_field_values ? JSON.parse(row.custom_field_values) : {},
+            excludedSectionIds: row.excluded_section_ids ? JSON.parse(row.excluded_section_ids) : [],
             output: row.output_text,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
@@ -163,9 +184,9 @@ class TauriSqliteRepository {
         await db.execute("DELETE FROM sessions");
         await Promise.all(records.map((record) => db.execute(`INSERT INTO sessions (
             id, template_id, title, participant_text, session_date, start_time, end_time,
-            quick_highlights, manual_notes, live_transcript, uploaded_transcript, output_text,
+            quick_highlights, detail_level, manual_notes, live_transcript, uploaded_transcript, custom_field_values, excluded_section_ids, output_text,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
             record.id,
             record.templateId,
             record.title,
@@ -174,9 +195,12 @@ class TauriSqliteRepository {
             record.startTime,
             record.endTime,
             record.quickHighlights,
+            normalizeDetailLevel(record.detailLevel),
             record.manualNotes,
             record.liveTranscript,
             record.uploadedTranscript,
+            JSON.stringify(record.customFieldValues),
+            JSON.stringify(record.excludedSectionIds),
             record.output,
             record.createdAt,
             record.updatedAt,
@@ -278,9 +302,12 @@ export const createSessionRecord = (templateId) => {
         startTime: isoTime,
         endTime: isoTime,
         quickHighlights: "",
+        detailLevel: 3,
         manualNotes: "",
         liveTranscript: "",
         uploadedTranscript: "",
+        customFieldValues: {},
+        excludedSectionIds: [],
         output: "",
         createdAt: now(),
         updatedAt: now(),

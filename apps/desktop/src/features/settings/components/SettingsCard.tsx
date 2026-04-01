@@ -1,6 +1,12 @@
-import { useMemo, useState } from "react";
-import type { LocalAppSettings } from "@notesmith/domain";
+import { useState } from "react";
+import type { LocalAppSettings, PromptBlock } from "@notesmith/domain";
 import { BUILTIN_TEMPLATES } from "@notesmith/domain";
+import {
+  DEFAULT_GENERATION_RULES,
+  DEFAULT_GENERATION_SYSTEM_PROMPT,
+  DEFAULT_REVISION_RULES,
+  DEFAULT_TRANSLATION_RULES,
+} from "@notesmith/prompts";
 
 interface SettingsCardProps {
   settings: LocalAppSettings;
@@ -12,7 +18,22 @@ export const SettingsCard = ({ settings, onChange, onImportLegacy }: SettingsCar
   const [participantDraft, setParticipantDraft] = useState("");
   const [abbrShort, setAbbrShort] = useState("");
   const [abbrFull, setAbbrFull] = useState("");
-  const templateOptions = useMemo(() => BUILTIN_TEMPLATES, []);
+  const [extraBlockLabel, setExtraBlockLabel] = useState("");
+  const [extraBlockBody, setExtraBlockBody] = useState("");
+
+  const updatePromptProfile = (nextPromptProfile: LocalAppSettings["promptProfile"]) =>
+    onChange({
+      ...settings,
+      promptProfile: nextPromptProfile,
+    });
+
+  const updateExtraBlock = (id: string, updates: Partial<PromptBlock>) =>
+    updatePromptProfile({
+      ...settings.promptProfile,
+      extraBlocks: settings.promptProfile.extraBlocks.map((block) =>
+        block.id === id ? { ...block, ...updates } : block,
+      ),
+    });
 
   return (
     <div className="sidebar-card" id="desktop-settings-card">
@@ -73,7 +94,7 @@ export const SettingsCard = ({ settings, onChange, onImportLegacy }: SettingsCar
           value={settings.preferredDesktopTemplateId}
           onChange={(event) => onChange({ ...settings, preferredDesktopTemplateId: event.target.value })}
         >
-          {templateOptions.map((template) => (
+          {BUILTIN_TEMPLATES.map((template) => (
             <option key={template.id} value={template.id}>
               {template.name}
             </option>
@@ -205,20 +226,170 @@ export const SettingsCard = ({ settings, onChange, onImportLegacy }: SettingsCar
             id="generation-system"
             value={settings.promptProfile.generationSystem}
             onChange={(event) =>
-              onChange({
-                ...settings,
-                promptProfile: {
-                  ...settings.promptProfile,
-                  generationSystem: event.target.value,
-                },
+              updatePromptProfile({
+                ...settings.promptProfile,
+                generationSystem: event.target.value,
               })
             }
           />
         </div>
-        <button className="small-button" type="button" onClick={() => void onImportLegacy()}>
-          Import current browser app data
+        <div className="field">
+          <label htmlFor="generation-rules">Generation rules</label>
+          <textarea
+            id="generation-rules"
+            value={settings.promptProfile.generationRules}
+            onChange={(event) =>
+              updatePromptProfile({
+                ...settings.promptProfile,
+                generationRules: event.target.value,
+              })
+            }
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="revision-rules">Revision rules</label>
+          <textarea
+            id="revision-rules"
+            value={settings.promptProfile.revisionRules}
+            onChange={(event) =>
+              updatePromptProfile({
+                ...settings.promptProfile,
+                revisionRules: event.target.value,
+              })
+            }
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="translation-rules">Translation rules</label>
+          <textarea
+            id="translation-rules"
+            value={settings.promptProfile.translationRules}
+            onChange={(event) =>
+              updatePromptProfile({
+                ...settings.promptProfile,
+                translationRules: event.target.value,
+              })
+            }
+          />
+        </div>
+        <div className="inline-row">
+          <button
+            className="small-button"
+            type="button"
+            onClick={() =>
+              updatePromptProfile({
+                generationSystem: DEFAULT_GENERATION_SYSTEM_PROMPT,
+                generationRules: DEFAULT_GENERATION_RULES,
+                revisionRules: DEFAULT_REVISION_RULES,
+                translationRules: DEFAULT_TRANSLATION_RULES,
+                extraBlocks: settings.promptProfile.extraBlocks,
+              })
+            }
+          >
+            Reset prompt defaults
+          </button>
+          <button className="small-button" type="button" onClick={() => void onImportLegacy()}>
+            Import current browser app data
+          </button>
+        </div>
+        <p className="tiny-text">
+          These prompt settings stay local to this machine. Resetting defaults leaves your extra prompt blocks in place.
+        </p>
+      </div>
+      <div className="section-divider">
+        <div>
+          <h3>Extra Prompt Blocks</h3>
+          <p className="muted">Add reusable instructions that should be appended during generation when enabled.</p>
+        </div>
+        <div className="field">
+          <label htmlFor="extra-block-label">Block label</label>
+          <input
+            id="extra-block-label"
+            value={extraBlockLabel}
+            onChange={(event) => setExtraBlockLabel(event.target.value)}
+            placeholder="Example: Customer-friendly tone"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="extra-block-body">Block instructions</label>
+          <textarea
+            id="extra-block-body"
+            value={extraBlockBody}
+            onChange={(event) => setExtraBlockBody(event.target.value)}
+            placeholder="Describe the additional generation guidance to apply when this block is enabled."
+          />
+        </div>
+        <button
+          className="small-button"
+          type="button"
+          onClick={() => {
+            if (!extraBlockBody.trim()) return;
+            updatePromptProfile({
+              ...settings.promptProfile,
+              extraBlocks: [
+                ...settings.promptProfile.extraBlocks,
+                {
+                  id: crypto.randomUUID(),
+                  label: extraBlockLabel.trim() || "Extra prompt block",
+                  body: extraBlockBody.trim(),
+                  enabled: true,
+                },
+              ],
+            });
+            setExtraBlockLabel("");
+            setExtraBlockBody("");
+          }}
+        >
+          Add prompt block
         </button>
-        <p className="tiny-text">This brings over sessions, custom templates, todos, participants, abbreviations, and prompt settings from the current PWA when present.</p>
+        <div className="section-list">
+          {settings.promptProfile.extraBlocks.map((block) => (
+            <div key={block.id} className="list-item">
+              <div className="inline-row checkbox-row">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={block.enabled}
+                    onChange={(event) => updateExtraBlock(block.id, { enabled: event.target.checked })}
+                  />
+                  Enabled during generation
+                </label>
+                <button
+                  className="small-button danger-button"
+                  type="button"
+                  onClick={() =>
+                    updatePromptProfile({
+                      ...settings.promptProfile,
+                      extraBlocks: settings.promptProfile.extraBlocks.filter((entry) => entry.id !== block.id),
+                    })
+                  }
+                >
+                  Remove
+                </button>
+              </div>
+              <div className="field">
+                <label htmlFor={`prompt-block-label-${block.id}`}>Label</label>
+                <input
+                  id={`prompt-block-label-${block.id}`}
+                  value={block.label}
+                  onChange={(event) => updateExtraBlock(block.id, { label: event.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor={`prompt-block-body-${block.id}`}>Instructions</label>
+                <textarea
+                  id={`prompt-block-body-${block.id}`}
+                  value={block.body}
+                  onChange={(event) => updateExtraBlock(block.id, { body: event.target.value })}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="tiny-text">
+          This brings over sessions, custom templates, todos, participants, abbreviations, and prompt settings from the
+          current PWA when present.
+        </p>
       </div>
     </div>
   );

@@ -4,10 +4,12 @@ import { callResponsesApi } from "../client/openaiClient";
 export const reviseOutput = async ({
   currentOutput,
   instructions,
+  detailLevel,
   settings,
 }: {
   currentOutput: string;
   instructions: string;
+  detailLevel: number;
   settings: LocalAppSettings;
 }) => {
   if (!currentOutput.trim()) {
@@ -24,7 +26,13 @@ export const reviseOutput = async ({
       input: [
         {
           role: "system",
-          content: [{ type: "input_text", text: settings.promptProfile.revisionRules }],
+          content: [
+            { type: "input_text", text: settings.promptProfile.revisionRules },
+            {
+              type: "input_text",
+              text: `Keep the revision aligned to detail level ${Math.min(5, Math.max(1, Math.round(detailLevel)))}.`,
+            },
+          ],
         },
         {
           role: "user",

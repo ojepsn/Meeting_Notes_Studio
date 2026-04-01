@@ -32,6 +32,8 @@ type LegacySession = {
   rawNotes?: string;
   polishedHtml?: string;
   updatedAt?: number;
+  detailLevel?: number;
+  customFieldValues?: Record<string, string>;
 };
 
 type LegacyPromptBlock = {
@@ -134,9 +136,13 @@ const mapLegacySessions = (sessions: LegacySession[] | null): SessionRecord[] =>
         startTime: typeof session.meetingStartTime === "string" ? session.meetingStartTime : "",
         endTime: typeof session.meetingEndTime === "string" ? session.meetingEndTime : "",
         quickHighlights: Array.isArray(session.highlights) ? session.highlights.join(", ") : "",
+        detailLevel: typeof session.detailLevel === "number" ? Math.min(5, Math.max(1, Math.round(session.detailLevel))) : 3,
         manualNotes: typeof session.rawNotes === "string" ? session.rawNotes : "",
         liveTranscript: typeof session.liveTranscript === "string" ? session.liveTranscript : "",
         uploadedTranscript: typeof session.uploadedTranscript === "string" ? session.uploadedTranscript : "",
+        customFieldValues:
+          session.customFieldValues && typeof session.customFieldValues === "object" ? session.customFieldValues : {},
+        excludedSectionIds: [],
         output: typeof session.polishedHtml === "string" ? toHtmlText(session.polishedHtml) : "",
         createdAt: new Date(typeof session.updatedAt === "number" ? session.updatedAt : Date.now()).toISOString(),
         updatedAt: new Date(typeof session.updatedAt === "number" ? session.updatedAt : Date.now()).toISOString(),

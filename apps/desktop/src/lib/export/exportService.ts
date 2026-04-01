@@ -1,3 +1,24 @@
+const downloadTextFile = ({
+  content,
+  filename,
+  mimeType,
+}: {
+  content: string;
+  filename: string;
+  mimeType: string;
+}) => {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+const toFileSafeName = (title: string) =>
+  `${(title || "notesmith-output").replace(/[^\w\- ]+/g, "").trim() || "notesmith-output"}`;
+
 export const exportOutputAsText = ({
   title,
   output,
@@ -5,11 +26,37 @@ export const exportOutputAsText = ({
   title: string;
   output: string;
 }) => {
-  const blob = new Blob([output], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${(title || "notesmith-output").replace(/[^\w\- ]+/g, "").trim() || "notesmith-output"}.txt`;
-  link.click();
-  URL.revokeObjectURL(url);
+  downloadTextFile({
+    content: output,
+    filename: `${toFileSafeName(title)}.txt`,
+    mimeType: "text/plain;charset=utf-8",
+  });
+};
+
+export const exportOutputAsMarkdown = ({
+  title,
+  output,
+}: {
+  title: string;
+  output: string;
+}) => {
+  downloadTextFile({
+    content: `# ${title || "Meeting Notes"}\n\n${output}`,
+    filename: `${toFileSafeName(title)}.md`,
+    mimeType: "text/markdown;charset=utf-8",
+  });
+};
+
+export const exportOutputAsHtml = ({
+  title,
+  output,
+}: {
+  title: string;
+  output: string;
+}) => {
+  downloadTextFile({
+    content: `<!doctype html><html><head><meta charset="utf-8"><title>${title || "Meeting Notes"}</title></head><body><pre style="white-space: pre-wrap; font: 16px/1.6 Segoe UI, Arial, sans-serif;">${output.replace(/[&<>]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[character] || character))}</pre></body></html>`,
+    filename: `${toFileSafeName(title)}.html`,
+    mimeType: "text/html;charset=utf-8",
+  });
 };

@@ -208,6 +208,23 @@ select {
   flex: 0 0 auto;
 }
 
+.checkbox-row {
+  justify-content: space-between;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.checkbox-label input {
+  width: auto;
+  min-height: 0;
+}
+
 .small-button {
   border: 1px solid rgba(34, 41, 24, 0.12);
   border-radius: 14px;

@@ -10,7 +10,10 @@ export const translateOutput = async ({ currentOutput, settings, targetLanguage,
             input: [
                 {
                     role: "system",
-                    content: [{ type: "input_text", text: settings.promptProfile.translationRules }],
+                    content: [
+                        { type: "input_text", text: settings.promptProfile.translationRules },
+                        { type: "input_text", text: `Return the translated output in ${targetLanguage}.` },
+                    ],
                 },
                 {
                     role: "user",

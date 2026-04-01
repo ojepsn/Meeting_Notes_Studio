@@ -37,9 +37,12 @@ export interface SessionRecord {
   startTime: string;
   endTime: string;
   quickHighlights: string;
+  detailLevel: number;
   manualNotes: string;
   liveTranscript: string;
   uploadedTranscript: string;
+  customFieldValues: Record<string, string>;
+  excludedSectionIds: string[];
   output: string;
   createdAt: string;
   updatedAt: string;

@@ -26,6 +26,20 @@ const STORAGE_KEYS = {
 
 const now = () => new Date().toISOString();
 
+const normalizeDetailLevel = (value: number | undefined) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 3;
+  return Math.min(5, Math.max(1, Math.round(parsed)));
+};
+
+const normalizeSessionRecord = (session: SessionRecord): SessionRecord => ({
+  ...session,
+  detailLevel: normalizeDetailLevel(session.detailLevel),
+  customFieldValues:
+    session.customFieldValues && typeof session.customFieldValues === "object" ? session.customFieldValues : {},
+  excludedSectionIds: Array.isArray(session.excludedSectionIds) ? session.excludedSectionIds : [],
+});
+
 export const createDefaultSettings = (): LocalAppSettings => ({
   theme: "modern-olive",
   outputLanguage: "same",
@@ -55,9 +69,12 @@ export const createDefaultSnapshot = (): DesktopAppSnapshot => ({
       startTime: "09:00",
       endTime: "10:00",
       quickHighlights: "Release planning, blockers, client timeline",
+      detailLevel: 3,
       manualNotes: "Talked through current blockers and the April release cut.",
       liveTranscript: "",
       uploadedTranscript: "",
+      customFieldValues: {},
+      excludedSectionIds: [],
       output: "",
       createdAt: now(),
       updatedAt: now(),
@@ -103,7 +120,7 @@ const writeLocalJson = (key: string, value: unknown) => {
 
 class BrowserEntityRepository implements AppRepository {
   async loadSessions() {
-    return readLocalJson<SessionRecord[]>(STORAGE_KEYS.sessions, createDefaultSnapshot().sessions);
+    return readLocalJson<SessionRecord[]>(STORAGE_KEYS.sessions, createDefaultSnapshot().sessions).map(normalizeSessionRecord);
   }
 
   async saveSessions(records: SessionRecord[]) {
@@ -188,6 +205,9 @@ class TauriSqliteRepository implements AppRepository {
         const DatabaseModule = await import("@tauri-apps/plugin-sql");
         const db = await DatabaseModule.default.load("sqlite:notesmith.db");
         await Promise.all(sqliteBootstrapStatements.map((statement) => db.execute(statement)));
+        await db.execute("ALTER TABLE sessions ADD COLUMN detail_level INTEGER NOT NULL DEFAULT 3").catch(() => {});
+        await db.execute("ALTER TABLE sessions ADD COLUMN custom_field_values TEXT NOT NULL DEFAULT '{}'").catch(() => {});
+        await db.execute("ALTER TABLE sessions ADD COLUMN excluded_section_ids TEXT NOT NULL DEFAULT '[]'").catch(() => {});
         return db;
       })();
     }
@@ -206,15 +226,18 @@ class TauriSqliteRepository implements AppRepository {
       start_time: string;
       end_time: string;
       quick_highlights: string;
+      detail_level: number;
       manual_notes: string;
       live_transcript: string;
       uploaded_transcript: string;
+      custom_field_values: string;
+      excluded_section_ids: string;
       output_text: string;
       created_at: string;
       updated_at: string;
     }>("SELECT * FROM sessions ORDER BY updated_at DESC");
 
-    return rows.map((row) => ({
+    return rows.map((row) => normalizeSessionRecord({
       id: row.id,
       templateId: row.template_id,
       title: row.title,
@@ -223,9 +246,12 @@ class TauriSqliteRepository implements AppRepository {
       startTime: row.start_time,
       endTime: row.end_time,
       quickHighlights: row.quick_highlights,
+      detailLevel: row.detail_level,
       manualNotes: row.manual_notes,
       liveTranscript: row.live_transcript,
       uploadedTranscript: row.uploaded_transcript,
+      customFieldValues: row.custom_field_values ? (JSON.parse(row.custom_field_values) as Record<string, string>) : {},
+      excludedSectionIds: row.excluded_section_ids ? (JSON.parse(row.excluded_section_ids) as string[]) : [],
       output: row.output_text,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -240,9 +266,9 @@ class TauriSqliteRepository implements AppRepository {
         db.execute(
           `INSERT INTO sessions (
             id, template_id, title, participant_text, session_date, start_time, end_time,
-            quick_highlights, manual_notes, live_transcript, uploaded_transcript, output_text,
+            quick_highlights, detail_level, manual_notes, live_transcript, uploaded_transcript, custom_field_values, excluded_section_ids, output_text,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             record.id,
             record.templateId,
@@ -252,9 +278,12 @@ class TauriSqliteRepository implements AppRepository {
             record.startTime,
             record.endTime,
             record.quickHighlights,
+            normalizeDetailLevel(record.detailLevel),
             record.manualNotes,
             record.liveTranscript,
             record.uploadedTranscript,
+            JSON.stringify(record.customFieldValues),
+            JSON.stringify(record.excludedSectionIds),
             record.output,
             record.createdAt,
             record.updatedAt,
@@ -399,9 +428,12 @@ export const createSessionRecord = (templateId: string): SessionRecord => {
     startTime: isoTime,
     endTime: isoTime,
     quickHighlights: "",
+    detailLevel: 3,
     manualNotes: "",
     liveTranscript: "",
     uploadedTranscript: "",
+    customFieldValues: {},
+    excludedSectionIds: [],
     output: "",
     createdAt: now(),
     updatedAt: now(),
