@@ -19,4 +19,5 @@ src-tauri/target/
 apps/*/node_modules/
 apps/*/dist/
 apps/*/src-tauri/target/
+apps/*/src-tauri/keys/*
 *.tsbuildinfo
