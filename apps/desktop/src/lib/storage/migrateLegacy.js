@@ -143,7 +143,7 @@ export const loadLegacyBrowserSnapshot = () => {
                 outputLanguage: parsedSettings?.outputLanguage || "same",
                 preferredDesktopTemplateId: mapLegacyTemplateId(preferredDesktopTemplateId),
                 apiKey: "",
-                textModel: "gpt-5-mini",
+                textModel: "gpt-5.4-mini",
                 transcriptionModel: "gpt-4o-mini-transcribe",
                 savedParticipants: Array.isArray(parsedSettings?.participantDirectory) ? parsedSettings.participantDirectory.filter(Boolean) : [],
                 abbreviations: Array.isArray(parsedSettings?.abbreviationDirectory)

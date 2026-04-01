@@ -1,6 +1,8 @@
 import type { LocalAppSettings } from "@notesmith/domain";
-export declare const translateOutput: ({ currentOutput, settings, targetLanguage, }: {
+import type { AIRuntimeEvent } from "../runtime";
+export declare const translateOutput: ({ currentOutput, settings, targetLanguage, onEvent, }: {
     currentOutput: string;
     settings: LocalAppSettings;
     targetLanguage: "English" | "Swedish";
-}) => Promise<any>;
+    onEvent?: (event: AIRuntimeEvent) => void;
+}) => Promise<string>;

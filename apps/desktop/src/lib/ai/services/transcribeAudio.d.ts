@@ -1,5 +1,7 @@
 import type { LocalAppSettings } from "@notesmith/domain";
-export declare const transcribeAudio: ({ file, settings, }: {
+import type { AIRuntimeEvent } from "../runtime";
+export declare const transcribeAudio: ({ file, settings, onEvent, }: {
     file: File;
     settings: LocalAppSettings;
-}) => Promise<any>;
+    onEvent?: (event: AIRuntimeEvent) => void;
+}) => Promise<string>;

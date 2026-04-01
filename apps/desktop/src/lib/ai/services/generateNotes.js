@@ -1,4 +1,5 @@
-import { callResponsesApi } from "../client/openaiClient";
+import { formatEnabledPromptBlocks, resolvePromptProfile } from "../prompts";
+import { executeAITextOperation } from "../runtime";
 const buildTemplateSectionPrompt = (template) => template.sections
     .map((section) => `- ${section.title}: ${section.instructions}`)
     .join("\n");
@@ -21,7 +22,8 @@ const getDetailLevelInstruction = (detailLevel) => {
     };
     return `Match a ${labels[Math.min(5, Math.max(1, Math.round(detailLevel)))]} level of detail.`;
 };
-export const generateNotes = async ({ session, settings, template, attachments = [], }) => {
+export const generateNotes = async ({ session, settings, template, attachments = [], onEvent, }) => {
+    const promptProfile = resolvePromptProfile(settings.promptProfile);
     const activeSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
     const sourceText = [
         session.manualNotes.trim() ? `Manual notes:\n${session.manualNotes.trim()}` : "",
@@ -36,10 +38,7 @@ export const generateNotes = async ({ session, settings, template, attachments =
     if (!activeSections.length) {
         throw new Error("Enable at least one output section for this session before generating output.");
     }
-    const extraPromptBlocks = settings.promptProfile.extraBlocks
-        .filter((block) => block.enabled && block.body.trim())
-        .map((block) => `${block.label || "Extra prompt"}:\n${block.body}`)
-        .join("\n\n");
+    const extraPromptBlocks = formatEnabledPromptBlocks(promptProfile.profile.extraBlocks);
     const outputLanguageInstruction = settings.outputLanguage === "same"
         ? "Keep the output in the same language as the source notes."
         : `Return the final notes in ${settings.outputLanguage === "sv" ? "Swedish" : "English"}.`;
@@ -48,41 +47,19 @@ export const generateNotes = async ({ session, settings, template, attachments =
         .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt))
         .map((attachment, index) => `- Image ${index + 1}: ${attachment.caption.trim() || attachment.filename} (${attachment.filename})`)
         .join("\n");
-    const response = await callResponsesApi({
-        apiKey: settings.apiKey,
-        body: {
-            model: settings.textModel,
-            input: [
-                {
-                    role: "system",
-                    content: [
-                        { type: "input_text", text: settings.promptProfile.generationSystem },
-                        { type: "input_text", text: settings.promptProfile.generationRules },
-                        { type: "input_text", text: outputLanguageInstruction },
-                        { type: "input_text", text: getDetailLevelInstruction(session.detailLevel) },
-                    ],
-                },
-                {
-                    role: "user",
-                    content: [
-                        {
-                            type: "input_text",
-                            text: `Template: ${template.name}\nSections:\n${buildTemplateSectionPrompt({ ...template, sections: activeSections })}${template.promptInstructions?.trim()
-                                ? `\nTemplate-specific instructions:\n${template.promptInstructions.trim()}`
-                                : ""}\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${session.participantText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}${includedImagesPrompt
-                                ? `\nIncluded images for polished output:\n${includedImagesPrompt}\nReference these images where appropriate and preserve their captions.`
-                                : ""}\n\n${sourceText}${extraPromptBlocks ? `\n\nAdditional prompt blocks:\n${extraPromptBlocks}` : ""}`,
-                        },
-                    ],
-                },
-            ],
-        },
+    return executeAITextOperation({
+        settings,
+        operation: "generate-notes",
+        promptVersion: promptProfile.version,
+        systemTexts: [
+            promptProfile.profile.generationSystem,
+            promptProfile.profile.generationRules,
+            outputLanguageInstruction,
+            getDetailLevelInstruction(session.detailLevel),
+        ],
+        userText: `Template: ${template.name}\nSections:\n${buildTemplateSectionPrompt({ ...template, sections: activeSections })}${template.promptInstructions?.trim() ? `\nTemplate-specific instructions:\n${template.promptInstructions.trim()}` : ""}\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${session.participantText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}${includedImagesPrompt
+            ? `\nIncluded images for polished output:\n${includedImagesPrompt}\nReference these images where appropriate and preserve their captions.`
+            : ""}\n\n${sourceText}${extraPromptBlocks ? `\n\nAdditional prompt blocks:\n${extraPromptBlocks}` : ""}`,
+        onEvent,
     });
-    return (response.output_text ||
-        response.output
-            ?.flatMap((item) => item.content || [])
-            .map((contentItem) => contentItem.text || "")
-            .join("\n")
-            .trim() ||
-        "");
 };

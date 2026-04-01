@@ -1,7 +1,9 @@
 import type { AttachmentRecord, LocalAppSettings, SessionRecord, TemplateDefinition } from "@notesmith/domain";
-export declare const generateNotes: ({ session, settings, template, attachments, }: {
+import type { AIRuntimeEvent } from "../runtime";
+export declare const generateNotes: ({ session, settings, template, attachments, onEvent, }: {
     session: SessionRecord;
     settings: LocalAppSettings;
     template: TemplateDefinition;
     attachments?: AttachmentRecord[];
-}) => Promise<any>;
+    onEvent?: (event: AIRuntimeEvent) => void;
+}) => Promise<string>;

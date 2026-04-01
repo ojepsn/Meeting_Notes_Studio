@@ -1,10 +1,13 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
   envPrefix: ["VITE_", "TAURI_"],
+  resolve: {
+    extensions: [".ts", ".tsx", ".mjs", ".js", ".jsx", ".json"],
+  },
   build: {
     rollupOptions: {
       output: {
@@ -30,5 +33,10 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+  },
+  test: {
+    environment: "node",
+    globals: true,
+    include: ["src/**/*.test.ts"],
   },
 });

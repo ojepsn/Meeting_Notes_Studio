@@ -1,12 +1,16 @@
 import type { LocalAppSettings } from "@notesmith/domain";
-import { callTranscriptionsApi } from "../client/openaiClient";
+import { AI_PROMPT_PROFILE_VERSION } from "../prompts";
+import type { AIRuntimeEvent } from "../runtime";
+import { executeAITranscriptionOperation } from "../runtime";
 
 export const transcribeAudio = async ({
   file,
   settings,
+  onEvent,
 }: {
   file: File;
   settings: LocalAppSettings;
+  onEvent?: (event: AIRuntimeEvent) => void;
 }) => {
   const formData = new FormData();
   formData.append("file", file);
@@ -15,10 +19,11 @@ export const transcribeAudio = async ({
     formData.append("prompt", "Transcribe faithfully and clearly.");
   }
 
-  const response = await callTranscriptionsApi({
-    apiKey: settings.apiKey,
+  return executeAITranscriptionOperation({
+    settings,
     formData,
+    operation: "transcribe-audio",
+    promptVersion: AI_PROMPT_PROFILE_VERSION,
+    onEvent,
   });
-
-  return response.text || "";
 };

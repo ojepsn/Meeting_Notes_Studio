@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import type { DesktopAppSnapshot } from "@notesmith/domain";
+import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
+import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
 import {
   createAppRepository,
   createSessionRecord,
@@ -79,7 +81,19 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   repository: createAppRepository(),
   load: async () => {
     try {
-      const snapshot = await get().repository.loadSnapshot();
+      const [snapshot, aiTextCache, aiRequestHistory] = await Promise.all([
+        get().repository.loadSnapshot(),
+        get().repository.loadAITextCache(),
+        get().repository.loadAIRequestHistory(),
+      ]);
+      configureAITextCachePersistence({
+        save: (records) => get().repository.saveAITextCache(records),
+      });
+      configureAIRequestHistoryPersistence({
+        save: (records) => get().repository.saveAIRequestHistory(records),
+      });
+      hydrateAITextCache({ records: aiTextCache });
+      hydrateAIRequestHistory(aiRequestHistory);
       set({
         snapshot,
         activeSessionId: snapshot.sessions[0]?.id ?? null,

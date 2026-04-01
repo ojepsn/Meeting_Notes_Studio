@@ -6,9 +6,24 @@ import { OutputWorkspace } from "../features/output/components/OutputWorkspace";
 import { TodosCard } from "../features/todos/components/TodosCard";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
 import { generateNotes } from "../lib/ai/services/generateNotes";
+import { getAIRequestHistory, recordAIRequestHistory } from "../lib/ai/history";
+import { formatAIErrorMessage } from "../lib/ai/messages";
+import { getAIDiagnosticsItems, getAIMetricsSnapshot } from "../lib/ai/metrics";
+import {
+  buildModelPricingStatus,
+  buildTextModelOption,
+  buildTranscriptionModelOption,
+  createDefaultModelPricingSnapshot,
+  fetchLatestModelPricingSnapshot,
+  isPricingRefreshDue,
+  msUntilNextPricingCheck,
+  type AIModelPricingSnapshot,
+} from "../lib/ai/modelPricing";
 import { reviseOutput } from "../lib/ai/services/reviseOutput";
+import { createAIRuntimeStatusHandler } from "../lib/ai/status";
 import { transcribeAudio } from "../lib/ai/services/transcribeAudio";
 import { translateOutput } from "../lib/ai/services/translateOutput";
+import type { AIRuntimeEvent } from "../lib/ai/runtime";
 import { checkForDesktopUpdates } from "../lib/ai/updater";
 import { exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsText } from "../lib/export/exportService";
 import {
@@ -32,6 +47,23 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
   { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
 ];
 
+const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
+  recordAIRequestHistory(event);
+  if (event.type === "request-failure") {
+    console.error("NoteSmith AI request failed", event);
+    console.info("NoteSmith AI metrics", getAIMetricsSnapshot());
+    return;
+  }
+  if (event.type === "request-retry") {
+    console.warn("NoteSmith AI request retry", event);
+    return;
+  }
+  console.info("NoteSmith AI runtime event", event);
+  if (event.type === "request-success" || event.type === "cache-hit") {
+    console.info("NoteSmith AI metrics", getAIMetricsSnapshot());
+  }
+};
+
 export const App = () => {
   const {
     snapshot,
@@ -42,6 +74,7 @@ export const App = () => {
     load,
     setActiveSessionId,
     setActiveView,
+    repository,
     saveSession,
     createNewSession,
     deleteSession,
@@ -65,6 +98,11 @@ export const App = () => {
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
   const [updateStatusNote, setUpdateStatusNote] = useState<string | null>(null);
+  const [aiDiagnostics, setAIDiagnostics] = useState(() => getAIDiagnosticsItems());
+  const [aiRequestHistory, setAIRequestHistory] = useState(() => getAIRequestHistory());
+  const [modelPricingSnapshot, setModelPricingSnapshot] = useState<AIModelPricingSnapshot>(createDefaultModelPricingSnapshot);
+  const [modelPricingStatus, setModelPricingStatus] = useState(buildModelPricingStatus(createDefaultModelPricingSnapshot()));
+  const [isRefreshingModelPricing, setIsRefreshingModelPricing] = useState(false);
 
   useEffect(() => {
     void load();
@@ -74,6 +112,9 @@ export const App = () => {
     if (!isLoaded || loadError) {
       return;
     }
+
+    setAIDiagnostics(getAIDiagnosticsItems());
+    setAIRequestHistory(getAIRequestHistory());
 
     let cancelled = false;
 
@@ -107,6 +148,93 @@ export const App = () => {
     };
   }, [isLoaded, loadError]);
 
+  useEffect(() => {
+    if (!isLoaded || loadError) {
+      return;
+    }
+
+    let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    const refreshPricing = async (currentSnapshot: AIModelPricingSnapshot | null, forceRefresh: boolean) => {
+      const baseSnapshot = currentSnapshot || createDefaultModelPricingSnapshot();
+
+      if (!forceRefresh && !isPricingRefreshDue({ snapshot: baseSnapshot })) {
+        if (!cancelled) {
+          setModelPricingSnapshot(baseSnapshot);
+          setModelPricingStatus(buildModelPricingStatus(baseSnapshot));
+        }
+        return baseSnapshot;
+      }
+
+      try {
+        const refreshedSnapshot = await fetchLatestModelPricingSnapshot({ currentSnapshot: baseSnapshot });
+        await repository.saveAIModelPricing(refreshedSnapshot);
+        if (!cancelled) {
+          setModelPricingSnapshot(refreshedSnapshot);
+          setModelPricingStatus(buildModelPricingStatus(refreshedSnapshot));
+        }
+        return refreshedSnapshot;
+      } catch (error) {
+        if (!cancelled) {
+          setModelPricingSnapshot(baseSnapshot);
+          setModelPricingStatus(
+            `${buildModelPricingStatus(baseSnapshot)} Live refresh from OpenAI could not be completed${error instanceof Error ? `: ${error.message}` : "."}`,
+          );
+        }
+        return baseSnapshot;
+      }
+    };
+
+    const scheduleNextRefresh = () => {
+      if (timerId) {
+        clearTimeout(timerId);
+      }
+
+      timerId = setTimeout(async () => {
+        const nextSnapshot = await refreshPricing(modelPricingSnapshot, true);
+        if (!cancelled) {
+          setModelPricingSnapshot(nextSnapshot);
+          scheduleNextRefresh();
+        }
+      }, msUntilNextPricingCheck());
+    };
+
+    void (async () => {
+      const savedSnapshot = (await repository.loadAIModelPricing()) || createDefaultModelPricingSnapshot();
+      const nextSnapshot = await refreshPricing(savedSnapshot, false);
+      if (!cancelled) {
+        setModelPricingSnapshot(nextSnapshot);
+        scheduleNextRefresh();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (timerId) {
+        clearTimeout(timerId);
+      }
+    };
+  }, [isLoaded, loadError, repository]);
+
+  const handleRefreshModelPricing = async () => {
+    setIsRefreshingModelPricing(true);
+    setModelPricingStatus("Refreshing pricing from OpenAI...");
+
+    try {
+      const refreshedSnapshot = await fetchLatestModelPricingSnapshot({ currentSnapshot: modelPricingSnapshot });
+      await repository.saveAIModelPricing(refreshedSnapshot);
+      setModelPricingSnapshot(refreshedSnapshot);
+      setModelPricingStatus(buildModelPricingStatus(refreshedSnapshot));
+    } catch (error) {
+      setModelPricingStatus(
+        `${buildModelPricingStatus(modelPricingSnapshot)} Live refresh from OpenAI could not be completed${error instanceof Error ? `: ${error.message}` : "."}`,
+      );
+    } finally {
+      setIsRefreshingModelPricing(false);
+    }
+  };
+
   const activeSession = useMemo(
     () => snapshot?.sessions.find((session) => session.id === activeSessionId) ?? snapshot?.sessions[0] ?? null,
     [activeSessionId, snapshot],
@@ -126,6 +254,21 @@ export const App = () => {
       activeAttachments.filter((attachment) => attachment.kind === "image" && attachment.includeInOutput),
     [activeAttachments],
   );
+
+  const createAIRuntimeHandler = ({
+    onCacheHit,
+  }: {
+    onCacheHit?: () => void;
+  } = {}) =>
+    createAIRuntimeStatusHandler({
+      setStatus: setStatusNote,
+      logEvent: (event) => {
+        logAIRuntimeEvent(event);
+        setAIDiagnostics(getAIDiagnosticsItems());
+        setAIRequestHistory(getAIRequestHistory());
+      },
+      onCacheHit,
+    });
 
   if (!isLoaded || !snapshot || !activeSession) {
     return (
@@ -234,24 +377,35 @@ export const App = () => {
     }
 
     setIsGenerating(true);
+    let usedCache = false;
     try {
       const output = await generateNotes({
         session: activeSession,
         settings: snapshot.settings,
         template,
         attachments: activeAttachments,
+        onEvent: createAIRuntimeHandler({
+          onCacheHit: () => {
+            usedCache = true;
+          },
+        }),
       });
       await saveSession({ ...activeSession, output });
-      setStatusNote("Generated structured output with the desktop AI service.");
+      setStatusNote(
+        usedCache
+          ? "Loaded structured output from a matching local AI cache entry."
+          : "Generated structured output with the desktop AI service.",
+      );
       setActiveView("output");
     } catch (error) {
-      setStatusNote(error instanceof Error ? error.message : "Generation failed.");
+      setStatusNote(formatAIErrorMessage(error, "Generation failed."));
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleTranslate = async () => {
+    let usedCache = false;
     try {
       const targetLanguage =
         snapshot.settings.outputLanguage === "sv"
@@ -265,27 +419,46 @@ export const App = () => {
         currentOutput: activeSession.output,
         settings: snapshot.settings,
         targetLanguage,
+        onEvent: createAIRuntimeHandler({
+          onCacheHit: () => {
+            usedCache = true;
+          },
+        }),
       });
       await saveSession({ ...activeSession, output: translated });
-      setStatusNote(`Translated the current output to ${targetLanguage}.`);
+      setStatusNote(
+        usedCache
+          ? `Loaded a cached translation to ${targetLanguage}.`
+          : `Translated the current output to ${targetLanguage}.`,
+      );
     } catch (error) {
-      setStatusNote(error instanceof Error ? error.message : "Translation failed.");
+      setStatusNote(formatAIErrorMessage(error, "Translation failed."));
     }
   };
 
   const handleRevise = async (instructions: string) => {
     setIsRevising(true);
+    let usedCache = false;
     try {
       const revised = await reviseOutput({
         currentOutput: activeSession.output,
         instructions,
         detailLevel: activeSession.detailLevel,
         settings: snapshot.settings,
+        onEvent: createAIRuntimeHandler({
+          onCacheHit: () => {
+            usedCache = true;
+          },
+        }),
       });
       await saveSession({ ...activeSession, output: revised });
-      setStatusNote("Revised the current output with the desktop AI service.");
+      setStatusNote(
+        usedCache
+          ? "Loaded a cached revision for the current output."
+          : "Revised the current output with the desktop AI service.",
+      );
     } catch (error) {
-      setStatusNote(error instanceof Error ? error.message : "Revision failed.");
+      setStatusNote(formatAIErrorMessage(error, "Revision failed."));
     } finally {
       setIsRevising(false);
     }
@@ -378,12 +551,13 @@ export const App = () => {
       const transcriptText = await transcribeAudio({
         file,
         settings: snapshot.settings,
+        onEvent: createAIRuntimeHandler(),
       });
       const nextTranscript = [activeSession.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n");
       await saveSession({ ...activeSession, liveTranscript: nextTranscript });
       setStatusNote("Audio transcription complete and added to the live transcript field.");
     } catch (error) {
-      setStatusNote(error instanceof Error ? error.message : "Audio transcription failed.");
+      setStatusNote(formatAIErrorMessage(error, "Audio transcription failed."));
     } finally {
       setIsTranscribingAudio(false);
     }
@@ -464,6 +638,13 @@ export const App = () => {
             onImportLegacy={handleImportLegacy}
             onCheckForUpdates={handleCheckForUpdates}
             updateStatusNote={updateStatusNote}
+            aiDiagnostics={aiDiagnostics}
+            aiRequestHistory={aiRequestHistory}
+            textModelOptions={modelPricingSnapshot.textModels.map(buildTextModelOption)}
+            transcriptionModelOptions={modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption)}
+            modelPricingStatus={modelPricingStatus}
+            onRefreshModelPricing={() => void handleRefreshModelPricing()}
+            isRefreshingModelPricing={isRefreshingModelPricing}
           />
         );
       case "backup":

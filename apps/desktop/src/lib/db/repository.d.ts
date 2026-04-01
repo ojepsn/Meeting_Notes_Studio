@@ -1,4 +1,6 @@
 import { type AttachmentRecord, type DesktopAppSnapshot, type LocalAppSettings, type SessionRecord, type TemplateDefinition, type TodoRecord } from "@notesmith/domain";
+import type { AIRequestHistoryEntry } from "../ai/history";
+import { type AIModelPricingSnapshot } from "../ai/modelPricing";
 export declare const createDefaultSettings: () => LocalAppSettings;
 export declare const createDefaultSnapshot: () => DesktopAppSnapshot;
 export interface EntityRepository {
@@ -12,6 +14,22 @@ export interface EntityRepository {
     saveAttachments(records: AttachmentRecord[]): Promise<void>;
     loadSettings(): Promise<LocalAppSettings>;
     saveSettings(record: LocalAppSettings): Promise<void>;
+    loadAITextCache(): Promise<Array<{
+        key: string;
+        value: string;
+        createdAt: number;
+        expiresAt: number;
+    }>>;
+    saveAITextCache(records: Array<{
+        key: string;
+        value: string;
+        createdAt: number;
+        expiresAt: number;
+    }>): Promise<void>;
+    loadAIRequestHistory(): Promise<AIRequestHistoryEntry[]>;
+    saveAIRequestHistory(records: AIRequestHistoryEntry[]): Promise<void>;
+    loadAIModelPricing(): Promise<AIModelPricingSnapshot | null>;
+    saveAIModelPricing(snapshot: AIModelPricingSnapshot): Promise<void>;
 }
 export interface AppRepository extends EntityRepository {
     loadSnapshot(): Promise<DesktopAppSnapshot>;

@@ -1,31 +1,19 @@
-import { callResponsesApi } from "../client/openaiClient";
-export const translateOutput = async ({ currentOutput, settings, targetLanguage, }) => {
+import { resolvePromptProfile } from "../prompts";
+import { executeAITextOperation } from "../runtime";
+export const translateOutput = async ({ currentOutput, settings, targetLanguage, onEvent, }) => {
+    const promptProfile = resolvePromptProfile(settings.promptProfile);
     if (!currentOutput.trim()) {
         throw new Error("There is no output to translate yet.");
     }
-    const response = await callResponsesApi({
-        apiKey: settings.apiKey,
-        body: {
-            model: settings.textModel,
-            input: [
-                {
-                    role: "system",
-                    content: [
-                        { type: "input_text", text: settings.promptProfile.translationRules },
-                        { type: "input_text", text: `Return the translated output in ${targetLanguage}.` },
-                    ],
-                },
-                {
-                    role: "user",
-                    content: [
-                        {
-                            type: "input_text",
-                            text: `Translate the following output to ${targetLanguage} while preserving structure:\n\n${currentOutput}`,
-                        },
-                    ],
-                },
-            ],
-        },
+    return executeAITextOperation({
+        settings,
+        operation: "translate-output",
+        promptVersion: promptProfile.version,
+        systemTexts: [
+            promptProfile.profile.translationRules,
+            `Return the translated output in ${targetLanguage}.`,
+        ],
+        userText: `Translate the following output to ${targetLanguage} while preserving structure:\n\n${currentOutput}`,
+        onEvent,
     });
-    return response.output_text || "";
 };

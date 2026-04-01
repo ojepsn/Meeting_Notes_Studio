@@ -1,5 +1,6 @@
 import { BUILTIN_TEMPLATES, } from "@notesmith/domain";
 import { DEFAULT_GENERATION_RULES, DEFAULT_GENERATION_SYSTEM_PROMPT, DEFAULT_REVISION_RULES, DEFAULT_TRANSLATION_RULES, } from "@notesmith/prompts";
+import { normalizeAIModelPricingSnapshot, normalizeTextModelId, normalizeTranscriptionModelId, } from "../ai/modelPricing";
 import { isTauriRuntime } from "../storage/environment";
 import { sqliteBootstrapStatements } from "./schema";
 const STORAGE_KEYS = {
@@ -8,6 +9,9 @@ const STORAGE_KEYS = {
     todos: "notesmith-desktop-todos",
     attachments: "notesmith-desktop-attachments",
     settings: "notesmith-desktop-settings",
+    aiTextCache: "notesmith-desktop-ai-text-cache",
+    aiRequestHistory: "notesmith-desktop-ai-request-history",
+    aiModelPricing: "notesmith-desktop-ai-model-pricing",
 };
 const now = () => new Date().toISOString();
 const normalizeDetailLevel = (value) => {
@@ -33,7 +37,7 @@ export const createDefaultSettings = () => ({
     outputLanguage: "same",
     preferredDesktopTemplateId: "meeting",
     apiKey: "",
-    textModel: "gpt-5-mini",
+    textModel: "gpt-5.4-mini",
     transcriptionModel: "gpt-4o-mini-transcribe",
     savedParticipants: [],
     abbreviations: [],
@@ -86,6 +90,12 @@ const readLocalJson = (key, fallback) => {
 const writeLocalJson = (key, value) => {
     window.localStorage.setItem(key, JSON.stringify(value));
 };
+const normalizeSettings = (settings) => ({
+    ...createDefaultSettings(),
+    ...settings,
+    textModel: normalizeTextModelId(settings.textModel),
+    transcriptionModel: normalizeTranscriptionModelId(settings.transcriptionModel),
+});
 class BrowserEntityRepository {
     async loadSessions() {
         return readLocalJson(STORAGE_KEYS.sessions, createDefaultSnapshot().sessions).map(normalizeSessionRecord);
@@ -112,13 +122,28 @@ class BrowserEntityRepository {
         writeLocalJson(STORAGE_KEYS.attachments, records);
     }
     async loadSettings() {
-        return {
-            ...createDefaultSettings(),
-            ...readLocalJson(STORAGE_KEYS.settings, createDefaultSettings()),
-        };
+        return normalizeSettings(readLocalJson(STORAGE_KEYS.settings, createDefaultSettings()));
     }
     async saveSettings(record) {
         writeLocalJson(STORAGE_KEYS.settings, record);
+    }
+    async loadAITextCache() {
+        return readLocalJson(STORAGE_KEYS.aiTextCache, []);
+    }
+    async saveAITextCache(records) {
+        writeLocalJson(STORAGE_KEYS.aiTextCache, records);
+    }
+    async loadAIRequestHistory() {
+        return readLocalJson(STORAGE_KEYS.aiRequestHistory, []);
+    }
+    async saveAIRequestHistory(records) {
+        writeLocalJson(STORAGE_KEYS.aiRequestHistory, records);
+    }
+    async loadAIModelPricing() {
+        return normalizeAIModelPricingSnapshot(readLocalJson(STORAGE_KEYS.aiModelPricing, null));
+    }
+    async saveAIModelPricing(snapshot) {
+        writeLocalJson(STORAGE_KEYS.aiModelPricing, snapshot);
     }
     async loadSnapshot() {
         const [sessions, templates, todos, attachments, settings] = await Promise.all([
@@ -268,12 +293,45 @@ class TauriSqliteRepository {
         const db = await this.getDb();
         const rows = await db.select("SELECT value_json FROM settings_local WHERE key = ?", ["settings"]);
         return rows[0]?.value_json
-            ? { ...createDefaultSettings(), ...JSON.parse(rows[0].value_json) }
+            ? normalizeSettings(JSON.parse(rows[0].value_json))
             : createDefaultSettings();
     }
     async saveSettings(record) {
         const db = await this.getDb();
         await db.execute("INSERT OR REPLACE INTO settings_local (key, value_json) VALUES (?, ?)", ["settings", JSON.stringify(record)]);
+    }
+    async loadAITextCache() {
+        const db = await this.getDb();
+        const rows = await db.select("SELECT value_json FROM settings_local WHERE key = ?", ["ai-text-cache"]);
+        return rows[0]?.value_json
+            ? JSON.parse(rows[0].value_json)
+            : [];
+    }
+    async saveAITextCache(records) {
+        const db = await this.getDb();
+        await db.execute("INSERT OR REPLACE INTO settings_local (key, value_json) VALUES (?, ?)", ["ai-text-cache", JSON.stringify(records)]);
+    }
+    async loadAIRequestHistory() {
+        const db = await this.getDb();
+        const rows = await db.select("SELECT value_json FROM settings_local WHERE key = ?", ["ai-request-history"]);
+        return rows[0]?.value_json
+            ? JSON.parse(rows[0].value_json)
+            : [];
+    }
+    async saveAIRequestHistory(records) {
+        const db = await this.getDb();
+        await db.execute("INSERT OR REPLACE INTO settings_local (key, value_json) VALUES (?, ?)", ["ai-request-history", JSON.stringify(records)]);
+    }
+    async loadAIModelPricing() {
+        const db = await this.getDb();
+        const rows = await db.select("SELECT value_json FROM settings_local WHERE key = ?", ["ai-model-pricing"]);
+        return rows[0]?.value_json
+            ? normalizeAIModelPricingSnapshot(JSON.parse(rows[0].value_json))
+            : null;
+    }
+    async saveAIModelPricing(snapshot) {
+        const db = await this.getDb();
+        await db.execute("INSERT OR REPLACE INTO settings_local (key, value_json) VALUES (?, ?)", ["ai-model-pricing", JSON.stringify(snapshot)]);
     }
     async loadSnapshot() {
         const [sessions, templates, todos, attachments, settings] = await Promise.all([

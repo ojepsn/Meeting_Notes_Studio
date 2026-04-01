@@ -1,17 +1,22 @@
 import type { LocalAppSettings } from "@notesmith/domain";
-import { callResponsesApi } from "../client/openaiClient";
+import { resolvePromptProfile } from "../prompts";
+import type { AIRuntimeEvent } from "../runtime";
+import { executeAITextOperation } from "../runtime";
 
 export const reviseOutput = async ({
   currentOutput,
   instructions,
   detailLevel,
   settings,
+  onEvent,
 }: {
   currentOutput: string;
   instructions: string;
   detailLevel: number;
   settings: LocalAppSettings;
+  onEvent?: (event: AIRuntimeEvent) => void;
 }) => {
+  const promptProfile = resolvePromptProfile(settings.promptProfile);
   if (!currentOutput.trim()) {
     throw new Error("There is no output to revise yet.");
   }
@@ -19,33 +24,15 @@ export const reviseOutput = async ({
     throw new Error("Add revision instructions before asking for improvements.");
   }
 
-  const response = await callResponsesApi({
-    apiKey: settings.apiKey,
-    body: {
-      model: settings.textModel,
-      input: [
-        {
-          role: "system",
-          content: [
-            { type: "input_text", text: settings.promptProfile.revisionRules },
-            {
-              type: "input_text",
-              text: `Keep the revision aligned to detail level ${Math.min(5, Math.max(1, Math.round(detailLevel)))}.`,
-            },
-          ],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: `Current output:\n${currentOutput}\n\nRequested improvement:\n${instructions}`,
-            },
-          ],
-        },
-      ],
-    },
+  return executeAITextOperation({
+    settings,
+    operation: "revise-output",
+    promptVersion: promptProfile.version,
+    systemTexts: [
+      promptProfile.profile.revisionRules,
+      `Keep the revision aligned to detail level ${Math.min(5, Math.max(1, Math.round(detailLevel)))}.`,
+    ],
+    userText: `Current output:\n${currentOutput}\n\nRequested improvement:\n${instructions}`,
+    onEvent,
   });
-
-  return response.output_text || "";
 };

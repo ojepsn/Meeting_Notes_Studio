@@ -1,0 +1,8 @@
+import type { PromptBlock, PromptProfile } from "@notesmith/domain";
+export declare const AI_PROMPT_PROFILE_VERSION = "2026-04-01";
+export interface ResolvedPromptProfile {
+    profile: PromptProfile;
+    version: string;
+}
+export declare const resolvePromptProfile: (promptProfile: PromptProfile | undefined) => ResolvedPromptProfile;
+export declare const formatEnabledPromptBlocks: (blocks: PromptBlock[]) => string;

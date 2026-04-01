@@ -1,43 +1,33 @@
 import type { LocalAppSettings } from "@notesmith/domain";
-import { callResponsesApi } from "../client/openaiClient";
+import { resolvePromptProfile } from "../prompts";
+import type { AIRuntimeEvent } from "../runtime";
+import { executeAITextOperation } from "../runtime";
 
 export const translateOutput = async ({
   currentOutput,
   settings,
   targetLanguage,
+  onEvent,
 }: {
   currentOutput: string;
   settings: LocalAppSettings;
   targetLanguage: "English" | "Swedish";
+  onEvent?: (event: AIRuntimeEvent) => void;
 }) => {
+  const promptProfile = resolvePromptProfile(settings.promptProfile);
   if (!currentOutput.trim()) {
     throw new Error("There is no output to translate yet.");
   }
 
-  const response = await callResponsesApi({
-    apiKey: settings.apiKey,
-    body: {
-      model: settings.textModel,
-      input: [
-        {
-          role: "system",
-          content: [
-            { type: "input_text", text: settings.promptProfile.translationRules },
-            { type: "input_text", text: `Return the translated output in ${targetLanguage}.` },
-          ],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: `Translate the following output to ${targetLanguage} while preserving structure:\n\n${currentOutput}`,
-            },
-          ],
-        },
-      ],
-    },
+  return executeAITextOperation({
+    settings,
+    operation: "translate-output",
+    promptVersion: promptProfile.version,
+    systemTexts: [
+      promptProfile.profile.translationRules,
+      `Return the translated output in ${targetLanguage}.`,
+    ],
+    userText: `Translate the following output to ${targetLanguage} while preserving structure:\n\n${currentOutput}`,
+    onEvent,
   });
-
-  return response.output_text || "";
 };

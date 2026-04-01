@@ -21,3 +21,6 @@ apps/*/dist/
 apps/*/src-tauri/target/
 apps/*/src-tauri/keys/*
 *.tsbuildinfo
+
+# Other
+todo.txt

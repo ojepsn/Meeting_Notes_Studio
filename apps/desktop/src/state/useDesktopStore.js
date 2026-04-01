@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
+import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
 import { createAppRepository, createSessionRecord, upsertSession, upsertTemplate, upsertTodo, } from "../lib/db/repository";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 const PERSIST_DEBOUNCE_MS = 300;
@@ -38,7 +40,19 @@ export const useDesktopStore = create((set, get) => ({
     repository: createAppRepository(),
     load: async () => {
         try {
-            const snapshot = await get().repository.loadSnapshot();
+            const [snapshot, aiTextCache, aiRequestHistory] = await Promise.all([
+                get().repository.loadSnapshot(),
+                get().repository.loadAITextCache(),
+                get().repository.loadAIRequestHistory(),
+            ]);
+            configureAITextCachePersistence({
+                save: (records) => get().repository.saveAITextCache(records),
+            });
+            configureAIRequestHistoryPersistence({
+                save: (records) => get().repository.saveAIRequestHistory(records),
+            });
+            hydrateAITextCache({ records: aiTextCache });
+            hydrateAIRequestHistory(aiRequestHistory);
             set({
                 snapshot,
                 activeSessionId: snapshot.sessions[0]?.id ?? null,

@@ -1,7 +1,9 @@
 import type { LocalAppSettings } from "@notesmith/domain";
-export declare const reviseOutput: ({ currentOutput, instructions, detailLevel, settings, }: {
+import type { AIRuntimeEvent } from "../runtime";
+export declare const reviseOutput: ({ currentOutput, instructions, detailLevel, settings, onEvent, }: {
     currentOutput: string;
     instructions: string;
     detailLevel: number;
     settings: LocalAppSettings;
-}) => Promise<any>;
+    onEvent?: (event: AIRuntimeEvent) => void;
+}) => Promise<string>;

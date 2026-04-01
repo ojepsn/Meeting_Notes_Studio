@@ -7,10 +7,14 @@ import {
   DEFAULT_REVISION_RULES,
   DEFAULT_TRANSLATION_RULES,
 } from "@notesmith/prompts";
+import type { AIRequestHistoryEntry } from "../../../lib/ai/history";
+import type { AIDiagnosticsItem } from "../../../lib/ai/metrics";
+import type { SelectModelOption } from "../../../lib/ai/modelPricing";
 import { TemplatesCard } from "../../templates/components/TemplatesCard";
 
 type SettingsSection =
   | "ai"
+  | "diagnostics"
   | "themes"
   | "output"
   | "people"
@@ -25,11 +29,19 @@ interface SettingsCardProps {
   onSaveTemplate: (template: TemplateDefinition) => void;
   onImportLegacy: () => Promise<void>;
   onCheckForUpdates: () => Promise<void>;
+  onRefreshModelPricing: () => Promise<void> | void;
   updateStatusNote?: string | null;
+  aiDiagnostics: AIDiagnosticsItem[];
+  aiRequestHistory: AIRequestHistoryEntry[];
+  textModelOptions: SelectModelOption[];
+  transcriptionModelOptions: SelectModelOption[];
+  modelPricingStatus: string;
+  isRefreshingModelPricing: boolean;
 }
 
 const SETTINGS_SECTIONS: Array<{ id: SettingsSection; label: string; description: string }> = [
   { id: "ai", label: "AI Settings", description: "Models, API key, transcription" },
+  { id: "diagnostics", label: "AI Diagnostics", description: "Metrics, cache, and recent AI history" },
   { id: "themes", label: "Themes", description: "Look and feel" },
   { id: "output", label: "Output formatting", description: "Language and output defaults" },
   { id: "people", label: "People", description: "Saved people and abbreviations" },
@@ -45,7 +57,14 @@ export const SettingsCard = ({
   onSaveTemplate,
   onImportLegacy,
   onCheckForUpdates,
+  onRefreshModelPricing,
   updateStatusNote,
+  aiDiagnostics,
+  aiRequestHistory,
+  textModelOptions,
+  transcriptionModelOptions,
+  modelPricingStatus,
+  isRefreshingModelPricing,
 }: SettingsCardProps) => {
   const [activeSection, setActiveSection] = useState<SettingsSection>("ai");
   const [personDraft, setPersonDraft] = useState("");
@@ -67,6 +86,94 @@ export const SettingsCard = ({
         block.id === id ? { ...block, ...updates } : block,
       ),
     });
+
+  const selectedTextModel =
+    textModelOptions.find((option) => option.id === settings.textModel) ?? textModelOptions[0] ?? null;
+  const selectedTranscriptionModel =
+    transcriptionModelOptions.find((option) => option.id === settings.transcriptionModel) ?? transcriptionModelOptions[0] ?? null;
+
+  const renderModelCards = ({
+    title,
+    description,
+    options,
+    selectedId,
+    onSelect,
+  }: {
+    title: string;
+    description: string;
+    options: SelectModelOption[];
+    selectedId: string;
+    onSelect: (modelId: string) => void;
+  }) => (
+    <div className="model-picker-section">
+      <div className="model-picker-header">
+        <div>
+          <h4>{title}</h4>
+          <p>{description}</p>
+        </div>
+      </div>
+      <div className="model-picker-grid">
+        {options.map((option) => {
+          const isSelected = option.id === selectedId;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              className="model-option-card"
+              data-active={isSelected}
+              aria-pressed={isSelected}
+              onClick={() => onSelect(option.id)}
+            >
+              <div className="model-option-header">
+                <div>
+                  <div className="model-option-title-row">
+                    <strong>{option.label}</strong>
+                    {isSelected ? <span className="model-option-selected">Selected</span> : null}
+                  </div>
+                  <p>{option.summary}</p>
+                </div>
+                <div className="model-option-tags">
+                  {option.tags.map((tag) => (
+                    <span key={tag} className="model-option-tag">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="model-option-copy-block">
+                <span className="model-option-label">Best for</span>
+                <p>{option.recommendedFor}</p>
+              </div>
+
+              <div className="model-option-copy-block">
+                <span className="model-option-label">Recommendation</span>
+                <p>{option.recommendation}</p>
+              </div>
+
+              <div className="model-option-copy-block">
+                <span className="model-option-label">Pricing</span>
+                <ul className="model-option-list">
+                  {option.pricingLines.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="model-option-copy-block model-option-copy-block-compact">
+                <span className="model-option-label">Model details</span>
+                <ul className="model-option-list">
+                  {option.metadataLines.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   return (
     <div className="settings-shell" id="desktop-settings-card">
@@ -108,30 +215,31 @@ export const SettingsCard = ({
                 placeholder="Stored locally on this machine only"
               />
             </div>
-            <div className="field">
-              <label htmlFor="text-model">Text model</label>
-              <select
-                id="text-model"
-                value={settings.textModel}
-                onChange={(event) => onChange({ ...settings, textModel: event.target.value })}
+            {renderModelCards({
+              title: "Text models",
+              description: "Choose between the current OpenAI GPT-5.4 text models for note generation, revision, and translation.",
+              options: textModelOptions,
+              selectedId: selectedTextModel?.id || settings.textModel,
+              onSelect: (textModel) => onChange({ ...settings, textModel }),
+            })}
+            {renderModelCards({
+              title: "Transcription models",
+              description: "Choose the OpenAI transcription model that best fits your recording quality, speaker-label, and cost needs.",
+              options: transcriptionModelOptions,
+              selectedId: selectedTranscriptionModel?.id || settings.transcriptionModel,
+              onSelect: (transcriptionModel) => onChange({ ...settings, transcriptionModel }),
+            })}
+            <div className="inline-row">
+              <button
+                className="small-button inline-action"
+                type="button"
+                onClick={() => void onRefreshModelPricing()}
+                disabled={isRefreshingModelPricing}
               >
-                <option value="gpt-5-mini">GPT-5 mini</option>
-                <option value="gpt-5">GPT-5</option>
-                <option value="gpt-4.1">GPT-4.1</option>
-              </select>
+                {isRefreshingModelPricing ? "Refreshing model data..." : "Refresh pricing and recommendations"}
+              </button>
             </div>
-            <div className="field">
-              <label htmlFor="transcription-model">Transcription model</label>
-              <select
-                id="transcription-model"
-                value={settings.transcriptionModel}
-                onChange={(event) => onChange({ ...settings, transcriptionModel: event.target.value })}
-              >
-                <option value="gpt-4o-mini-transcribe">GPT-4o mini transcribe</option>
-                <option value="gpt-4o-transcribe">GPT-4o transcribe</option>
-                <option value="gpt-4o-transcribe-diarize">GPT-4o transcribe diarize</option>
-              </select>
-            </div>
+            <p className="tiny-text model-pricing-status-copy">{modelPricingStatus}</p>
           </div>
         ) : null}
 
@@ -480,6 +588,62 @@ export const SettingsCard = ({
 
         {activeSection === "templates" ? (
           <TemplatesCard templates={templates} onSave={onSaveTemplate} />
+        ) : null}
+
+        {activeSection === "diagnostics" ? (
+          <div className="sidebar-card">
+            <div>
+              <h3>AI Diagnostics</h3>
+              <p>Local visibility into request volume, cache hits, retries, failures, and recent AI activity.</p>
+            </div>
+            <div className="section-divider diagnostics-panel">
+              <div>
+                <h3>Snapshot</h3>
+                <p className="muted">Per-operation totals and a rolled-up summary for the current app state.</p>
+              </div>
+              <div className="diagnostics-grid">
+                {aiDiagnostics.map((entry) => (
+                  <div key={entry.operation} className="diagnostics-card">
+                    <strong>{entry.operation === "totals" ? "All AI requests" : entry.operation}</strong>
+                    <span className="tiny-text">{entry.requestCount} requests</span>
+                    <span className="tiny-text">{entry.successRate}% success</span>
+                    <span className="tiny-text">{entry.cacheHitCount} cache hits</span>
+                    <span className="tiny-text">{entry.retryCount} retries</span>
+                    <span className="tiny-text">{entry.averageDurationMs} ms avg success</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="section-divider diagnostics-panel">
+              <div>
+                <h3>Recent AI Request History</h3>
+                <p className="muted">Bounded local history for support and debugging. Newest entries appear first.</p>
+              </div>
+              {aiRequestHistory.length ? (
+                <div className="section-list">
+                  {aiRequestHistory.map((entry) => (
+                    <div key={entry.requestId} className="list-item diagnostics-history-item">
+                      <div className="inline-row diagnostics-history-head">
+                        <strong>{entry.operation}</strong>
+                        <span className="tiny-text">{new Date(entry.timestamp).toLocaleString()}</span>
+                      </div>
+                      <div className="diagnostics-history-meta">
+                        <span className="tiny-text">{entry.status}</span>
+                        <span className="tiny-text">{entry.durationMs} ms</span>
+                        <span className="tiny-text">{entry.retryCount} retries</span>
+                        <span className="tiny-text">{entry.cached ? "cache hit" : "live request"}</span>
+                        {entry.promptVersion ? <span className="tiny-text">prompt {entry.promptVersion}</span> : null}
+                        {entry.errorCode ? <span className="tiny-text">{entry.errorCode}</span> : null}
+                      </div>
+                      {entry.errorMessage ? <p className="tiny-text diagnostics-history-error">{entry.errorMessage}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="tiny-text">No AI request history has been recorded yet.</p>
+              )}
+            </div>
+          </div>
         ) : null}
 
         {activeSection === "other" ? (

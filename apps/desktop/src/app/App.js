@@ -7,7 +7,12 @@ import { OutputWorkspace } from "../features/output/components/OutputWorkspace";
 import { TodosCard } from "../features/todos/components/TodosCard";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
 import { generateNotes } from "../lib/ai/services/generateNotes";
+import { getAIRequestHistory, recordAIRequestHistory } from "../lib/ai/history";
+import { formatAIErrorMessage } from "../lib/ai/messages";
+import { getAIDiagnosticsItems, getAIMetricsSnapshot } from "../lib/ai/metrics";
+import { buildModelPricingStatus, buildTextModelOption, buildTranscriptionModelOption, createDefaultModelPricingSnapshot, fetchLatestModelPricingSnapshot, isPricingRefreshDue, msUntilNextPricingCheck, } from "../lib/ai/modelPricing";
 import { reviseOutput } from "../lib/ai/services/reviseOutput";
+import { createAIRuntimeStatusHandler } from "../lib/ai/status";
 import { transcribeAudio } from "../lib/ai/services/transcribeAudio";
 import { translateOutput } from "../lib/ai/services/translateOutput";
 import { checkForDesktopUpdates } from "../lib/ai/updater";
@@ -20,8 +25,24 @@ const WORKSPACE_ITEMS = [
     { id: "assistant", label: "Assistant", description: "Future AI workflows and agents", available: false },
     { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
 ];
+const logAIRuntimeEvent = (event) => {
+    recordAIRequestHistory(event);
+    if (event.type === "request-failure") {
+        console.error("NoteSmith AI request failed", event);
+        console.info("NoteSmith AI metrics", getAIMetricsSnapshot());
+        return;
+    }
+    if (event.type === "request-retry") {
+        console.warn("NoteSmith AI request retry", event);
+        return;
+    }
+    console.info("NoteSmith AI runtime event", event);
+    if (event.type === "request-success" || event.type === "cache-hit") {
+        console.info("NoteSmith AI metrics", getAIMetricsSnapshot());
+    }
+};
 export const App = () => {
-    const { snapshot, activeSessionId, activeView, isLoaded, loadError, load, setActiveSessionId, setActiveView, saveSession, createNewSession, deleteSession, saveTodo, addTodo, deleteTodo, saveSettings, saveTemplate, importLegacyBrowserData, saveAttachments, } = useDesktopStore();
+    const { snapshot, activeSessionId, activeView, isLoaded, loadError, load, setActiveSessionId, setActiveView, repository, saveSession, createNewSession, deleteSession, saveTodo, addTodo, deleteTodo, saveSettings, saveTemplate, importLegacyBrowserData, saveAttachments, } = useDesktopStore();
     const [activeWorkspace, setActiveWorkspace] = useState("notes");
     const [openPanel, setOpenPanel] = useState(null);
     const [statusNote, setStatusNote] = useState("Core desktop foundation ready for migration.");
@@ -34,6 +55,11 @@ export const App = () => {
     const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
     const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
     const [updateStatusNote, setUpdateStatusNote] = useState(null);
+    const [aiDiagnostics, setAIDiagnostics] = useState(() => getAIDiagnosticsItems());
+    const [aiRequestHistory, setAIRequestHistory] = useState(() => getAIRequestHistory());
+    const [modelPricingSnapshot, setModelPricingSnapshot] = useState(createDefaultModelPricingSnapshot);
+    const [modelPricingStatus, setModelPricingStatus] = useState(buildModelPricingStatus(createDefaultModelPricingSnapshot()));
+    const [isRefreshingModelPricing, setIsRefreshingModelPricing] = useState(false);
     useEffect(() => {
         void load();
     }, [load]);
@@ -41,6 +67,8 @@ export const App = () => {
         if (!isLoaded || loadError) {
             return;
         }
+        setAIDiagnostics(getAIDiagnosticsItems());
+        setAIRequestHistory(getAIRequestHistory());
         let cancelled = false;
         const runUpdateCheck = async () => {
             setIsCheckingForUpdates(true);
@@ -74,10 +102,94 @@ export const App = () => {
             cancelled = true;
         };
     }, [isLoaded, loadError]);
+    useEffect(() => {
+        if (!isLoaded || loadError) {
+            return;
+        }
+        let cancelled = false;
+        let timerId = null;
+        const refreshPricing = async (currentSnapshot, forceRefresh) => {
+            const baseSnapshot = currentSnapshot || createDefaultModelPricingSnapshot();
+            if (!forceRefresh && !isPricingRefreshDue({ snapshot: baseSnapshot })) {
+                if (!cancelled) {
+                    setModelPricingSnapshot(baseSnapshot);
+                    setModelPricingStatus(buildModelPricingStatus(baseSnapshot));
+                }
+                return baseSnapshot;
+            }
+            try {
+                const refreshedSnapshot = await fetchLatestModelPricingSnapshot({ currentSnapshot: baseSnapshot });
+                await repository.saveAIModelPricing(refreshedSnapshot);
+                if (!cancelled) {
+                    setModelPricingSnapshot(refreshedSnapshot);
+                    setModelPricingStatus(buildModelPricingStatus(refreshedSnapshot));
+                }
+                return refreshedSnapshot;
+            }
+            catch (error) {
+                if (!cancelled) {
+                    setModelPricingSnapshot(baseSnapshot);
+                    setModelPricingStatus(`${buildModelPricingStatus(baseSnapshot)} Live refresh from OpenAI could not be completed${error instanceof Error ? `: ${error.message}` : "."}`);
+                }
+                return baseSnapshot;
+            }
+        };
+        const scheduleNextRefresh = () => {
+            if (timerId) {
+                clearTimeout(timerId);
+            }
+            timerId = setTimeout(async () => {
+                const nextSnapshot = await refreshPricing(modelPricingSnapshot, true);
+                if (!cancelled) {
+                    setModelPricingSnapshot(nextSnapshot);
+                    scheduleNextRefresh();
+                }
+            }, msUntilNextPricingCheck());
+        };
+        void (async () => {
+            const savedSnapshot = (await repository.loadAIModelPricing()) || createDefaultModelPricingSnapshot();
+            const nextSnapshot = await refreshPricing(savedSnapshot, false);
+            if (!cancelled) {
+                setModelPricingSnapshot(nextSnapshot);
+                scheduleNextRefresh();
+            }
+        })();
+        return () => {
+            cancelled = true;
+            if (timerId) {
+                clearTimeout(timerId);
+            }
+        };
+    }, [isLoaded, loadError, repository]);
+    const handleRefreshModelPricing = async () => {
+        setIsRefreshingModelPricing(true);
+        setModelPricingStatus("Refreshing pricing from OpenAI...");
+        try {
+            const refreshedSnapshot = await fetchLatestModelPricingSnapshot({ currentSnapshot: modelPricingSnapshot });
+            await repository.saveAIModelPricing(refreshedSnapshot);
+            setModelPricingSnapshot(refreshedSnapshot);
+            setModelPricingStatus(buildModelPricingStatus(refreshedSnapshot));
+        }
+        catch (error) {
+            setModelPricingStatus(`${buildModelPricingStatus(modelPricingSnapshot)} Live refresh from OpenAI could not be completed${error instanceof Error ? `: ${error.message}` : "."}`);
+        }
+        finally {
+            setIsRefreshingModelPricing(false);
+        }
+    };
     const activeSession = useMemo(() => snapshot?.sessions.find((session) => session.id === activeSessionId) ?? snapshot?.sessions[0] ?? null, [activeSessionId, snapshot]);
     const activeTemplate = useMemo(() => snapshot?.templates.find((template) => template.id === activeSession?.templateId) ?? null, [activeSession, snapshot]);
     const activeAttachments = useMemo(() => snapshot?.attachments.filter((attachment) => attachment.sessionId === activeSession?.id) ?? [], [activeSession, snapshot]);
     const includedOutputImages = useMemo(() => activeAttachments.filter((attachment) => attachment.kind === "image" && attachment.includeInOutput), [activeAttachments]);
+    const createAIRuntimeHandler = ({ onCacheHit, } = {}) => createAIRuntimeStatusHandler({
+        setStatus: setStatusNote,
+        logEvent: (event) => {
+            logAIRuntimeEvent(event);
+            setAIDiagnostics(getAIDiagnosticsItems());
+            setAIRequestHistory(getAIRequestHistory());
+        },
+        onCacheHit,
+    });
     if (!isLoaded || !snapshot || !activeSession) {
         return (_jsxs("div", { className: "app-shell", children: [_jsx("div", { className: "topbar", children: _jsxs("div", { children: [_jsx("h1", { children: "NoteSmith Desktop" }), _jsx("p", { children: loadError || "Preparing the new local-first desktop foundation..." })] }) }), isLoaded && loadError ? (_jsx("main", { className: "workspace", children: _jsxs("div", { className: "card", children: [_jsx("div", { className: "card-header", children: _jsxs("div", { children: [_jsx("h2", { children: "Desktop startup failed" }), _jsx("p", { children: "The app could not finish loading its local services." })] }) }), _jsxs("div", { className: "stack", children: [_jsx("p", { className: "muted", children: loadError }), _jsx("p", { className: "tiny-text", children: "This is usually caused by a missing Tauri capability or a blocked plugin/database permission." })] })] }) })) : null] }));
     }
@@ -154,25 +266,34 @@ export const App = () => {
             return;
         }
         setIsGenerating(true);
+        let usedCache = false;
         try {
             const output = await generateNotes({
                 session: activeSession,
                 settings: snapshot.settings,
                 template,
                 attachments: activeAttachments,
+                onEvent: createAIRuntimeHandler({
+                    onCacheHit: () => {
+                        usedCache = true;
+                    },
+                }),
             });
             await saveSession({ ...activeSession, output });
-            setStatusNote("Generated structured output with the desktop AI service.");
+            setStatusNote(usedCache
+                ? "Loaded structured output from a matching local AI cache entry."
+                : "Generated structured output with the desktop AI service.");
             setActiveView("output");
         }
         catch (error) {
-            setStatusNote(error instanceof Error ? error.message : "Generation failed.");
+            setStatusNote(formatAIErrorMessage(error, "Generation failed."));
         }
         finally {
             setIsGenerating(false);
         }
     };
     const handleTranslate = async () => {
+        let usedCache = false;
         try {
             const targetLanguage = snapshot.settings.outputLanguage === "sv"
                 ? "Swedish"
@@ -185,28 +306,43 @@ export const App = () => {
                 currentOutput: activeSession.output,
                 settings: snapshot.settings,
                 targetLanguage,
+                onEvent: createAIRuntimeHandler({
+                    onCacheHit: () => {
+                        usedCache = true;
+                    },
+                }),
             });
             await saveSession({ ...activeSession, output: translated });
-            setStatusNote(`Translated the current output to ${targetLanguage}.`);
+            setStatusNote(usedCache
+                ? `Loaded a cached translation to ${targetLanguage}.`
+                : `Translated the current output to ${targetLanguage}.`);
         }
         catch (error) {
-            setStatusNote(error instanceof Error ? error.message : "Translation failed.");
+            setStatusNote(formatAIErrorMessage(error, "Translation failed."));
         }
     };
     const handleRevise = async (instructions) => {
         setIsRevising(true);
+        let usedCache = false;
         try {
             const revised = await reviseOutput({
                 currentOutput: activeSession.output,
                 instructions,
                 detailLevel: activeSession.detailLevel,
                 settings: snapshot.settings,
+                onEvent: createAIRuntimeHandler({
+                    onCacheHit: () => {
+                        usedCache = true;
+                    },
+                }),
             });
             await saveSession({ ...activeSession, output: revised });
-            setStatusNote("Revised the current output with the desktop AI service.");
+            setStatusNote(usedCache
+                ? "Loaded a cached revision for the current output."
+                : "Revised the current output with the desktop AI service.");
         }
         catch (error) {
-            setStatusNote(error instanceof Error ? error.message : "Revision failed.");
+            setStatusNote(formatAIErrorMessage(error, "Revision failed."));
         }
         finally {
             setIsRevising(false);
@@ -292,13 +428,14 @@ export const App = () => {
             const transcriptText = await transcribeAudio({
                 file,
                 settings: snapshot.settings,
+                onEvent: createAIRuntimeHandler(),
             });
             const nextTranscript = [activeSession.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n");
             await saveSession({ ...activeSession, liveTranscript: nextTranscript });
             setStatusNote("Audio transcription complete and added to the live transcript field.");
         }
         catch (error) {
-            setStatusNote(error instanceof Error ? error.message : "Audio transcription failed.");
+            setStatusNote(formatAIErrorMessage(error, "Audio transcription failed."));
         }
         finally {
             setIsTranscribingAudio(false);
@@ -345,7 +482,7 @@ export const App = () => {
             case "todos":
                 return (_jsx(TodosCard, { todos: snapshot.todos, onToggle: (todo) => void saveTodo(todo), onAdd: (description) => void addTodo(description), onDelete: (id) => void deleteTodo(id) }));
             case "settings":
-                return (_jsx(SettingsCard, { settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onImportLegacy: handleImportLegacy, onCheckForUpdates: handleCheckForUpdates, updateStatusNote: updateStatusNote }));
+                return (_jsx(SettingsCard, { settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onImportLegacy: handleImportLegacy, onCheckForUpdates: handleCheckForUpdates, updateStatusNote: updateStatusNote, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
             case "backup":
                 return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Back-up" }), _jsx("p", { children: "Keep backup and migration actions accessible without leaving the focused Notes workspace." })] }), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportLegacy(), children: "Import current browser data" }), _jsx("button", { className: "small-button", type: "button", onClick: handleExportSnapshot, children: "Export snapshot" })] }), _jsx("p", { className: "tiny-text", children: "This backup area stays separate from the main workspace so capture and output remain clear and uncluttered." })] }));
             default:
