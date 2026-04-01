@@ -5,11 +5,16 @@ type SelectedAttachment = {
 };
 export declare const pickTranscriptFile: () => Promise<SelectedAttachment | null>;
 export declare const pickAudioFile: () => Promise<SelectedAttachment | null>;
+export declare const pickImageFile: () => Promise<SelectedAttachment | null>;
 export declare const persistSelectedAttachment: ({ sessionId, selection, }: {
     sessionId: string;
     selection: SelectedAttachment;
 }) => Promise<string>;
 export declare const removePersistedAttachment: (filePath: string) => Promise<void>;
+export declare const createAttachmentPreviewUrl: ({ filePath, mimeType, }: {
+    filePath: string;
+    mimeType: string;
+}) => Promise<string | null>;
 export declare const fileToAttachmentRecord: ({ file, sessionId, kind, filePath, }: {
     file: File;
     sessionId: string;

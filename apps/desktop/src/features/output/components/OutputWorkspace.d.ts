@@ -1,6 +1,7 @@
-import type { SessionRecord } from "@notesmith/domain";
+import type { AttachmentRecord, SessionRecord } from "@notesmith/domain";
 interface OutputWorkspaceProps {
     session: SessionRecord;
+    attachments: AttachmentRecord[];
     onChange: (session: SessionRecord) => void;
     isGenerating: boolean;
     isRevising: boolean;
@@ -11,5 +12,5 @@ interface OutputWorkspaceProps {
     onExportMarkdown: () => void;
     onExportHtml: () => void;
 }
-export declare const OutputWorkspace: ({ session, onChange, isGenerating, isRevising, onGenerate, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const OutputWorkspace: ({ session, attachments, onChange, isGenerating, isRevising, onGenerate, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

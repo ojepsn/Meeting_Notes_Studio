@@ -21,7 +21,7 @@ const getDetailLevelInstruction = (detailLevel) => {
     };
     return `Match a ${labels[Math.min(5, Math.max(1, Math.round(detailLevel)))]} level of detail.`;
 };
-export const generateNotes = async ({ session, settings, template, }) => {
+export const generateNotes = async ({ session, settings, template, attachments = [], }) => {
     const activeSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
     const sourceText = [
         session.manualNotes.trim() ? `Manual notes:\n${session.manualNotes.trim()}` : "",
@@ -43,6 +43,11 @@ export const generateNotes = async ({ session, settings, template, }) => {
     const outputLanguageInstruction = settings.outputLanguage === "same"
         ? "Keep the output in the same language as the source notes."
         : `Return the final notes in ${settings.outputLanguage === "sv" ? "Swedish" : "English"}.`;
+    const includedImagesPrompt = attachments
+        .filter((attachment) => attachment.kind === "image" && attachment.includeInOutput)
+        .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt))
+        .map((attachment, index) => `- Image ${index + 1}: ${attachment.caption.trim() || attachment.filename} (${attachment.filename})`)
+        .join("\n");
     const response = await callResponsesApi({
         apiKey: settings.apiKey,
         body: {
@@ -64,7 +69,9 @@ export const generateNotes = async ({ session, settings, template, }) => {
                             type: "input_text",
                             text: `Template: ${template.name}\nSections:\n${buildTemplateSectionPrompt({ ...template, sections: activeSections })}${template.promptInstructions?.trim()
                                 ? `\nTemplate-specific instructions:\n${template.promptInstructions.trim()}`
-                                : ""}\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${session.participantText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}\n\n${sourceText}${extraPromptBlocks ? `\n\nAdditional prompt blocks:\n${extraPromptBlocks}` : ""}`,
+                                : ""}\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${session.participantText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}${includedImagesPrompt
+                                ? `\nIncluded images for polished output:\n${includedImagesPrompt}\nReference these images where appropriate and preserve their captions.`
+                                : ""}\n\n${sourceText}${extraPromptBlocks ? `\n\nAdditional prompt blocks:\n${extraPromptBlocks}` : ""}`,
                         },
                     ],
                 },
