@@ -50,6 +50,64 @@ const SETTINGS_SECTIONS: Array<{ id: SettingsSection; label: string; description
   { id: "other", label: "Other upcoming settings", description: "Migration, updates, future options" },
 ];
 
+type QuickModelChoice = {
+  id: string;
+  label: string;
+  description: string;
+  modelId: string;
+};
+
+const TEXT_MODEL_QUICK_CHOICES: QuickModelChoice[] = [
+  {
+    id: "recommended",
+    label: "Recommended",
+    description: "Best starting point for most high-quality note generation and revision work.",
+    modelId: "gpt-5.4",
+  },
+  {
+    id: "faster",
+    label: "Faster",
+    description: "Good day-to-day balance when speed and cost matter more than flagship quality.",
+    modelId: "gpt-5.4-mini",
+  },
+  {
+    id: "cheaper",
+    label: "Cheaper",
+    description: "Lowest-cost option for simpler formatting and lightweight transformations.",
+    modelId: "gpt-5.4-nano",
+  },
+  {
+    id: "best-quality",
+    label: "Best quality",
+    description: "Use for the hardest and most important drafting tasks when extra compute is worth it.",
+    modelId: "gpt-5.4-pro",
+  },
+];
+
+const TRANSCRIPTION_MODEL_QUICK_CHOICES: QuickModelChoice[] = [
+  {
+    id: "recommended",
+    label: "Recommended",
+    description: "Best everyday choice for routine recordings and normal desktop capture.",
+    modelId: "gpt-4o-mini-transcribe",
+  },
+  {
+    id: "higher-accuracy",
+    label: "Higher accuracy",
+    description: "Better for important recordings where transcript quality matters more than cost.",
+    modelId: "gpt-4o-transcribe",
+  },
+  {
+    id: "speaker-labels",
+    label: "Speaker labels",
+    description: "Best when identifying who said what matters in meetings and interviews.",
+    modelId: "gpt-4o-transcribe-diarize",
+  },
+];
+
+const findQuickChoiceForModel = (choices: QuickModelChoice[], modelId: string) =>
+  choices.find((choice) => choice.modelId === modelId) ?? null;
+
 export const SettingsCard = ({
   settings,
   templates,
@@ -67,6 +125,8 @@ export const SettingsCard = ({
   isRefreshingModelPricing,
 }: SettingsCardProps) => {
   const [activeSection, setActiveSection] = useState<SettingsSection>("ai");
+  const [showAdvancedTextModels, setShowAdvancedTextModels] = useState(false);
+  const [showAdvancedTranscriptionModels, setShowAdvancedTranscriptionModels] = useState(false);
   const [personDraft, setPersonDraft] = useState("");
   const [abbrShort, setAbbrShort] = useState("");
   const [abbrFull, setAbbrFull] = useState("");
@@ -91,6 +151,52 @@ export const SettingsCard = ({
     textModelOptions.find((option) => option.id === settings.textModel) ?? textModelOptions[0] ?? null;
   const selectedTranscriptionModel =
     transcriptionModelOptions.find((option) => option.id === settings.transcriptionModel) ?? transcriptionModelOptions[0] ?? null;
+  const selectedTextQuickChoice = findQuickChoiceForModel(TEXT_MODEL_QUICK_CHOICES, selectedTextModel?.id || settings.textModel);
+  const selectedTranscriptionQuickChoice = findQuickChoiceForModel(
+    TRANSCRIPTION_MODEL_QUICK_CHOICES,
+    selectedTranscriptionModel?.id || settings.transcriptionModel,
+  );
+
+  const renderQuickChoicePicker = ({
+    title,
+    description,
+    choices,
+    selectedModelId,
+    onSelect,
+  }: {
+    title: string;
+    description: string;
+    choices: QuickModelChoice[];
+    selectedModelId: string;
+    onSelect: (modelId: string) => void;
+  }) => (
+    <div className="ai-quick-choice-section">
+      <div className="model-picker-header">
+        <div>
+          <h4>{title}</h4>
+          <p>{description}</p>
+        </div>
+      </div>
+      <div className="ai-quick-choice-grid">
+        {choices.map((choice) => {
+          const isSelected = choice.modelId === selectedModelId;
+          return (
+            <button
+              key={choice.id}
+              type="button"
+              className="ai-quick-choice-card"
+              data-active={isSelected}
+              onClick={() => onSelect(choice.modelId)}
+            >
+              <strong>{choice.label}</strong>
+              <p>{choice.description}</p>
+              {isSelected ? <span className="model-option-selected">Selected</span> : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   const renderModelCards = ({
     title,
@@ -205,6 +311,29 @@ export const SettingsCard = ({
               <h3>AI Settings</h3>
               <p>These settings stay local to this machine and are never written into shared data files.</p>
             </div>
+            <div className="ai-settings-summary">
+              <div className="ai-settings-summary-grid">
+                <div className="diagnostics-card">
+                  <span className="model-option-label">Text model</span>
+                  <strong>{selectedTextModel?.label || settings.textModel}</strong>
+                  <span className="tiny-text">
+                    {selectedTextQuickChoice ? `${selectedTextQuickChoice.label} mode` : "Custom selection"}
+                  </span>
+                </div>
+                <div className="diagnostics-card">
+                  <span className="model-option-label">Transcription</span>
+                  <strong>{selectedTranscriptionModel?.label || settings.transcriptionModel}</strong>
+                  <span className="tiny-text">
+                    {selectedTranscriptionQuickChoice ? `${selectedTranscriptionQuickChoice.label} mode` : "Custom selection"}
+                  </span>
+                </div>
+                <div className="diagnostics-card">
+                  <span className="model-option-label">Model data</span>
+                  <strong>OpenAI guidance</strong>
+                  <span className="tiny-text">{modelPricingStatus}</span>
+                </div>
+              </div>
+            </div>
             <div className="field">
               <label htmlFor="api-key">API key</label>
               <input
@@ -215,20 +344,59 @@ export const SettingsCard = ({
                 placeholder="Stored locally on this machine only"
               />
             </div>
-            {renderModelCards({
-              title: "Text models",
-              description: "Choose between the current OpenAI GPT-5.4 text models for note generation, revision, and translation.",
-              options: textModelOptions,
-              selectedId: selectedTextModel?.id || settings.textModel,
+            {renderQuickChoicePicker({
+              title: "Text model quick choices",
+              description: "Start with a simple decision first. You can open the detailed model cards below when you want deeper control.",
+              choices: TEXT_MODEL_QUICK_CHOICES,
+              selectedModelId: selectedTextModel?.id || settings.textModel,
               onSelect: (textModel) => onChange({ ...settings, textModel }),
             })}
-            {renderModelCards({
-              title: "Transcription models",
-              description: "Choose the OpenAI transcription model that best fits your recording quality, speaker-label, and cost needs.",
-              options: transcriptionModelOptions,
-              selectedId: selectedTranscriptionModel?.id || settings.transcriptionModel,
+            <div className="inline-row">
+              <button
+                className="small-button inline-action"
+                type="button"
+                onClick={() => setShowAdvancedTextModels((current) => !current)}
+              >
+                {showAdvancedTextModels ? "Hide detailed text models" : "Show detailed text models"}
+              </button>
+            </div>
+            {showAdvancedTextModels
+              ? renderModelCards({
+                  title: "Detailed text models",
+                  description:
+                    "Choose between the current OpenAI GPT-5.4 text models for note generation, revision, and translation.",
+                  options: textModelOptions,
+                  selectedId: selectedTextModel?.id || settings.textModel,
+                  onSelect: (textModel) => onChange({ ...settings, textModel }),
+                })
+              : null}
+            {renderQuickChoicePicker({
+              title: "Transcription quick choices",
+              description:
+                "Pick the recording mode that matches your real task first, then open the detailed cards if you want the exact model and pricing details.",
+              choices: TRANSCRIPTION_MODEL_QUICK_CHOICES,
+              selectedModelId: selectedTranscriptionModel?.id || settings.transcriptionModel,
               onSelect: (transcriptionModel) => onChange({ ...settings, transcriptionModel }),
             })}
+            <div className="inline-row">
+              <button
+                className="small-button inline-action"
+                type="button"
+                onClick={() => setShowAdvancedTranscriptionModels((current) => !current)}
+              >
+                {showAdvancedTranscriptionModels ? "Hide detailed transcription models" : "Show detailed transcription models"}
+              </button>
+            </div>
+            {showAdvancedTranscriptionModels
+              ? renderModelCards({
+                  title: "Detailed transcription models",
+                  description:
+                    "Choose the OpenAI transcription model that best fits your recording quality, speaker-label, and cost needs.",
+                  options: transcriptionModelOptions,
+                  selectedId: selectedTranscriptionModel?.id || settings.transcriptionModel,
+                  onSelect: (transcriptionModel) => onChange({ ...settings, transcriptionModel }),
+                })
+              : null}
             <div className="inline-row">
               <button
                 className="small-button inline-action"

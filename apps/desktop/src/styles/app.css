@@ -516,6 +516,62 @@ select {
   gap: 0.25rem;
 }
 
+.ai-settings-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ai-settings-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.ai-quick-choice-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.ai-quick-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.ai-quick-choice-card {
+  border: 1px solid rgba(34, 41, 24, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.8);
+  color: #223122;
+  padding: 0.95rem 1rem;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-height: 150px;
+}
+
+.ai-quick-choice-card[data-active="true"] {
+  border-color: rgba(54, 93, 50, 0.24);
+  background:
+    linear-gradient(180deg, rgba(232, 240, 215, 0.92) 0%, rgba(247, 246, 238, 0.95) 100%),
+    rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 30px rgba(54, 93, 50, 0.1);
+}
+
+.ai-quick-choice-card strong {
+  font-size: 0.98rem;
+}
+
+.ai-quick-choice-card p {
+  margin: 0;
+  color: #445140;
+  font-size: 0.9rem;
+}
+
 .diagnostics-history-item {
   display: flex;
   flex-direction: column;
