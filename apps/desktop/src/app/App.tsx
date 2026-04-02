@@ -1146,8 +1146,14 @@ export const App = () => {
             file,
             persistedPath,
           });
-          setRecordingStatusNote(`Recorded ${RECORDING_MODE_LABELS[recordingModeForRun].toLocaleLowerCase()} into the current session. You can transcribe it next.`);
-          setStatusNote(`Recorded ${RECORDING_MODE_LABELS[recordingModeForRun].toLocaleLowerCase()} into the current session.`);
+          const recordingLabel = RECORDING_MODE_LABELS[recordingModeForRun].toLocaleLowerCase();
+          setRecordingStatusNote(`Recorded ${recordingLabel} into the current session. Transcribing now...`);
+          setStatusNote(`Recorded ${recordingLabel} into the current session. Transcribing now...`);
+          await transcribeAudioIntoSession({
+            sessionId,
+            file,
+            statusPrefix: `Recorded ${recordingLabel} into the current session.`,
+          });
         } catch (error) {
           setRecordingStatusNote(
             error instanceof Error ? error.message : "Recording finished, but saving the audio failed.",
@@ -1226,13 +1232,15 @@ export const App = () => {
     setStatusNote("Added image to the session. You can caption it and choose whether it should appear in the polished output.");
   };
 
-  const handleTranscribeAudio = async () => {
-    const file = await getAudioFileForActiveSession();
-    if (!file) {
-      setStatusNote("Record or upload audio for this session first, then transcribe it.");
-      return;
-    }
-
+  const transcribeAudioIntoSession = async ({
+    sessionId,
+    file,
+    statusPrefix,
+  }: {
+    sessionId: string;
+    file: File;
+    statusPrefix?: string;
+  }) => {
     setIsTranscribingAudio(true);
     try {
       const transcriptText = await transcribeAudio({
@@ -1240,14 +1248,35 @@ export const App = () => {
         settings: snapshot.settings,
         onEvent: createAIRuntimeHandler(),
       });
-      const nextTranscript = [activeSession.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n");
-      await saveSession({ ...activeSession, liveTranscript: nextTranscript });
-      setStatusNote("Audio transcription complete and added to the live transcript field.");
+      const latestSnapshot = await repository.loadSnapshot();
+      const targetSession = latestSnapshot.sessions.find((session) => session.id === sessionId);
+      if (!targetSession) {
+        throw new Error("The session could not be found after recording.");
+      }
+      const nextTranscript = [targetSession.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n");
+      await saveSession({ ...targetSession, liveTranscript: nextTranscript });
+      setStatusNote(
+        statusPrefix
+          ? `${statusPrefix} The transcript was added to the live transcript field.`
+          : "Audio transcription complete and added to the live transcript field.",
+      );
+      setRecordingStatusNote("Transcript added to the session.");
     } catch (error) {
-      setStatusNote(formatAIErrorMessage(error, "Audio transcription failed."));
+      const message = formatAIErrorMessage(error, "Audio transcription failed.");
+      setStatusNote(statusPrefix ? `${statusPrefix} ${message}` : message);
+      setRecordingStatusNote("Audio was saved, but transcription needs another try.");
     } finally {
       setIsTranscribingAudio(false);
     }
+  };
+
+  const handleTranscribeAudio = async () => {
+    const file = await getAudioFileForActiveSession();
+    if (!file) {
+      setStatusNote("Record or upload audio for this session first, then transcribe it.");
+      return;
+    }
+    await transcribeAudioIntoSession({ sessionId: activeSession.id, file });
   };
 
   const handleRemoveAttachment = async (attachmentId: string) => {

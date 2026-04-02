@@ -84,7 +84,8 @@ Typical fields:
 
 Default expectation:
 
-- the user can transcribe to output or transcribe and polish
+- recorded or uploaded audio can be transcribed into the live transcript
+- the user can then create output directly or polish it with AI
 
 ## Capture and Output
 
@@ -105,6 +106,8 @@ This is where rough material is collected:
 - activity
 - tags
 - time/date context
+
+For recorded audio in `Meeting note` and `Voice note`, the app saves the audio attachment first and then automatically transcribes it into the live transcript field. The manual `Transcribe audio` action is still available if you want to retry or transcribe a previously uploaded file.
 
 ### Output
 

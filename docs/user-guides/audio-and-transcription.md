@@ -32,7 +32,8 @@ Behavior:
 
 - records live microphone audio
 - saves the result as a session audio attachment
-- the saved recording can be transcribed using the normal transcription flow
+- then automatically transcribes the recording into the session transcript field
+- the manual `Transcribe audio` action is still available if the user wants to retry
 
 ### Computer audio
 
@@ -52,7 +53,8 @@ Behavior:
 - asks the user to share a window, screen, or app with audio
 - records the shared computer audio into the session
 - saves the result as a session audio attachment
-- the saved recording can be transcribed using the normal transcription flow
+- then automatically transcribes the recording into the session transcript field
+- the manual `Transcribe audio` action is still available if the user wants to retry
 - before the picker opens, the app reminds the user to choose the Zoom/Teams window or screen and enable audio sharing
 
 Important:
@@ -77,7 +79,9 @@ Behavior:
 - captures room speech through the microphone
 - captures remote voices through shared computer audio
 - mixes both sources into one saved session recording
-- saves the result as a session audio attachment for transcription
+- saves the result as a session audio attachment
+- then automatically transcribes the recording into the session transcript field
+- the manual `Transcribe audio` action is still available if the user wants to retry
 - before the picker opens, the app reminds the user to choose the Zoom/Teams window or screen and enable audio sharing
 
 This remains the most demanding recording case, but it is now treated as its own explicit recording mode rather than a side effect of microphone capture.
@@ -132,5 +136,5 @@ The product model is:
 
 1. capture audio intentionally
 2. save it as a first-class session attachment
-3. transcribe it when needed
+3. automatically transcribe recorded audio into the session transcript
 4. turn that transcript into output directly or with AI assistance

@@ -267,10 +267,18 @@ export const SessionEditor = ({
         </div>
 
         {session.captureMode !== "quick-note" ? (
-          <div className="field field-wide audio-capture-card">
+          <div className="field field-wide audio-capture-card" data-recording={isRecordingAudio}>
             <div className="audio-capture-header">
               <div>
-                <label>Audio capture</label>
+                <div className="audio-capture-heading-row">
+                  <label>Audio capture</label>
+                  {isRecordingAudio ? (
+                    <span className="recording-live-pill" aria-live="polite">
+                      <span className="recording-live-dot" />
+                      Recording now
+                    </span>
+                  ) : null}
+                </div>
                 <p className="muted">
                   {session.captureMode === "meeting-note"
                     ? "Record the meeting directly here or upload audio later."
@@ -285,6 +293,18 @@ export const SessionEditor = ({
                 {isRecordingAudio ? "Stop recording" : "Start recording"}
               </button>
             </div>
+            {isRecordingAudio ? (
+              <div className="recording-active-banner" aria-live="polite">
+                <strong>Recording in progress</strong>
+                <span>
+                  {recordingMode === "microphone"
+                    ? "The microphone is currently being captured into this session."
+                    : recordingMode === "system-audio"
+                      ? "Shared computer audio is currently being captured into this session."
+                      : "Microphone and shared computer audio are both being captured into this session."}
+                </span>
+              </div>
+            ) : null}
             <div className="recording-mode-grid">
               {(Object.keys(RECORDING_MODE_META) as RecordingMode[]).map((mode) => {
                 const meta = RECORDING_MODE_META[mode];

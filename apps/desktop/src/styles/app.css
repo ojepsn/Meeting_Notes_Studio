@@ -709,6 +709,11 @@ select {
   box-shadow: 0 14px 30px var(--app-shadow);
 }
 
+.audio-capture-card[data-recording="true"] {
+  border-color: color-mix(in srgb, var(--app-danger) 55%, var(--app-accent) 45%);
+  box-shadow: 0 18px 38px color-mix(in srgb, var(--app-danger-border) 55%, var(--app-shadow) 45%);
+}
+
 .audio-capture-header {
   display: flex;
   justify-content: space-between;
@@ -721,8 +726,55 @@ select {
   margin-bottom: 0.2rem;
 }
 
+.audio-capture-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
 .audio-capture-header p {
   margin: 0;
+}
+
+.recording-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  background: color-mix(in srgb, var(--app-danger-border) 55%, white 45%);
+  color: var(--app-danger);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.recording-live-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent 55%);
+  animation: recording-pulse 1.4s ease-out infinite;
+}
+
+.recording-active-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  border: 1px solid color-mix(in srgb, var(--app-danger) 32%, var(--app-accent-border) 68%);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--app-danger-border) 42%, white 58%);
+  padding: 0.8rem 0.95rem;
+}
+
+.recording-active-banner strong {
+  color: var(--app-danger);
+}
+
+.recording-active-banner span {
+  color: var(--app-text);
+  font-size: 0.88rem;
 }
 
 .metadata-triplet {
@@ -1562,6 +1614,21 @@ select {
   margin: 0;
   color: var(--app-muted);
   font-size: 0.9rem;
+}
+
+@keyframes recording-pulse {
+  0% {
+    transform: scale(0.92);
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 42%, transparent 58%);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0.55rem color-mix(in srgb, currentColor 0%, transparent 100%);
+  }
+  100% {
+    transform: scale(0.92);
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent 100%);
+  }
 }
 
 .theme-mode-grid,
