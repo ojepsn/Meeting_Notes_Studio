@@ -53,12 +53,9 @@ Current:
 
 - upload audio
 - microphone recording
+- computer-audio recording
+- hybrid microphone + computer-audio recording
 - audio transcription
-
-Planned next:
-
-- computer-audio capture
-- hybrid microphone + computer-audio capture
 
 ## Images
 

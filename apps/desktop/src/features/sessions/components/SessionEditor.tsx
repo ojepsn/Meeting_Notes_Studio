@@ -1,5 +1,6 @@
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
 import { PeoplePicker } from "../../../components/PeoplePicker";
+import type { RecordingMode } from "../../../lib/files/recording";
 import {
   DEFAULT_TEMPLATE_BY_CAPTURE_MODE,
   getTemplatesForCaptureMode,
@@ -16,7 +17,7 @@ interface SessionEditorProps {
   savedPeople: string[];
   suggestedPeople: string[];
   isTranscribingAudio: boolean;
-  recordingMode: "microphone" | "system-audio" | "hybrid";
+  recordingMode: RecordingMode;
   isRecordingAudio: boolean;
   recordingStatusNote?: string | null;
   onChange: (session: SessionRecord) => void;
@@ -24,7 +25,7 @@ interface SessionEditorProps {
   onImportAudio: () => void;
   onImportImage: () => void;
   onTranscribeAudio: () => void;
-  onChangeRecordingMode: (mode: "microphone" | "system-audio" | "hybrid") => void;
+  onChangeRecordingMode: (mode: RecordingMode) => void;
   onStartRecording: () => void;
   onStopRecording: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
@@ -32,27 +33,23 @@ interface SessionEditorProps {
 }
 
 const RECORDING_MODE_META: Record<
-  "microphone" | "system-audio" | "hybrid",
+  RecordingMode,
   {
     label: string;
     description: string;
-    availability: "available" | "coming-soon";
   }
 > = {
   microphone: {
     label: "Microphone",
     description: "Best for dictation and people speaking in the room.",
-    availability: "available",
   },
   "system-audio": {
     label: "Computer audio",
-    description: "Best for Zoom, Teams, webinars, and speaker playback. Planned next.",
-    availability: "coming-soon",
+    description: "Best for Zoom, Teams, webinars, and speaker playback shared from this computer.",
   },
   hybrid: {
     label: "Microphone + computer audio",
-    description: "Best for hybrid meetings with room voices and remote participants. Planned after system audio.",
-    availability: "coming-soon",
+    description: "Best for hybrid meetings with room voices and remote participants together.",
   },
 };
 
@@ -443,7 +440,7 @@ export const SessionEditor = ({
                 Choose the capture source that matches the meeting. Microphone recording is available now; computer-audio and hybrid capture are scaffolded next so the workflow does not need to change later.
               </p>
               <div className="recording-mode-grid">
-                {(Object.keys(RECORDING_MODE_META) as Array<"microphone" | "system-audio" | "hybrid">).map((mode) => {
+                {(Object.keys(RECORDING_MODE_META) as RecordingMode[]).map((mode) => {
                   const meta = RECORDING_MODE_META[mode];
                   return (
                     <button
@@ -451,14 +448,10 @@ export const SessionEditor = ({
                       type="button"
                       className="recording-mode-card"
                       data-active={recordingMode === mode}
-                      disabled={meta.availability !== "available"}
                       onClick={() => onChangeRecordingMode(mode)}
                     >
                       <strong>{meta.label}</strong>
                       <p>{meta.description}</p>
-                      <span className="tiny-text">
-                        {meta.availability === "available" ? "Available now" : "Coming next"}
-                      </span>
                     </button>
                   );
                 })}
@@ -475,7 +468,9 @@ export const SessionEditor = ({
                   {recordingStatusNote ||
                     (recordingMode === "microphone"
                       ? "Microphone mode records spoken audio directly into this session."
-                      : "This recording mode is scaffolded and will be enabled in the next recording phase.")}
+                      : recordingMode === "system-audio"
+                        ? "Choose a shared window, screen, or app and enable audio sharing when prompted."
+                        : "Capture room speech from the microphone and remote voices from shared computer audio together.")}
                 </span>
               </div>
             </div>

@@ -39,10 +39,16 @@ import {
   readTranscriptFile,
   removePersistedAttachment,
 } from "../lib/files/attachmentStore";
+import {
+  buildRecordingFilename,
+  getSupportedRecordingMimeType,
+  getSystemAudioDisplayOptions,
+  RECORDING_MODE_LABELS,
+  type RecordingMode,
+} from "../lib/files/recording";
 
 type AppWorkspace = "notes" | "tasks" | "calendar" | "assistant" | "files";
 type OverlayPanel = "new-note" | "people-review" | "sessions" | "todos" | "backup" | "settings" | "more" | null;
-type RecordingMode = "microphone" | "system-audio" | "hybrid";
 type CommandAction = {
   id: string;
   label: string;
@@ -50,37 +56,6 @@ type CommandAction = {
   keywords: string[];
   shortcut?: string;
   action: () => void;
-};
-
-const RECORDING_MODE_LABELS: Record<RecordingMode, string> = {
-  microphone: "Microphone",
-  "system-audio": "Computer audio",
-  hybrid: "Microphone + computer audio",
-};
-
-const buildRecordingFilename = ({
-  sessionTitle,
-  captureMode,
-}: {
-  sessionTitle: string;
-  captureMode: CaptureMode;
-}) => {
-  const safeTitle = (sessionTitle.trim() || captureMode)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48) || "recording";
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  return `${safeTitle}-${timestamp}.webm`;
-};
-
-const getSupportedRecordingMimeType = () => {
-  if (typeof MediaRecorder === "undefined") {
-    return "";
-  }
-
-  const candidates = ["audio/webm;codecs=opus", "audio/webm"];
-  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "";
 };
 
 const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: string; available: boolean }> = [
@@ -187,6 +162,8 @@ export const App = () => {
   const [selectedSuggestedPeople, setSelectedSuggestedPeople] = useState<string[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const captureSourceStreamsRef = useRef<MediaStream[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const recordingSessionIdRef = useRef<string | null>(null);
 
@@ -200,6 +177,8 @@ export const App = () => {
         mediaRecorderRef.current.stop();
       }
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      captureSourceStreamsRef.current.forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
+      audioContextRef.current?.close().catch(() => {});
     };
   }, []);
 
@@ -523,6 +502,34 @@ export const App = () => {
       return loadPersistedAttachmentFile(activeAudioAttachment);
     }
     return null;
+  };
+
+  const cleanupRecordingResources = () => {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+    captureSourceStreamsRef.current.forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
+    captureSourceStreamsRef.current = [];
+    audioContextRef.current?.close().catch(() => {});
+    audioContextRef.current = null;
+  };
+
+  const createMixedRecorderStream = async (streams: MediaStream[]) => {
+    const streamsWithAudio = streams.filter((stream) => stream.getAudioTracks().length > 0);
+    if (!streamsWithAudio.length) {
+      throw new Error("No audio tracks were available to record.");
+    }
+
+    const audioContext = new AudioContext();
+    const destination = audioContext.createMediaStreamDestination();
+
+    streamsWithAudio.forEach((stream) => {
+      const audioOnlyStream = new MediaStream(stream.getAudioTracks());
+      const source = audioContext.createMediaStreamSource(audioOnlyStream);
+      source.connect(destination);
+    });
+
+    audioContextRef.current = audioContext;
+    return destination.stream;
   };
 
   const persistAudioAttachmentForSession = async ({
@@ -919,32 +926,71 @@ export const App = () => {
       return;
     }
     const recordingSession = activeSession;
+    const recordingModeForRun = recordingMode;
 
-    if (recordingMode !== "microphone") {
-      setRecordingStatusNote(
-        `${RECORDING_MODE_LABELS[recordingMode]} capture is planned next. Use Microphone now, or upload audio in the meantime.`,
-      );
-      return;
-    }
-
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      setRecordingStatusNote("This desktop runtime does not support live microphone recording yet.");
+    if (
+      (recordingModeForRun === "microphone" && !navigator.mediaDevices?.getUserMedia) ||
+      ((recordingModeForRun === "system-audio" || recordingModeForRun === "hybrid") && !navigator.mediaDevices?.getDisplayMedia) ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setRecordingStatusNote(`${RECORDING_MODE_LABELS[recordingModeForRun]} recording is not supported in this runtime yet.`);
       return;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      cleanupRecordingResources();
+
+      let recorderStream: MediaStream;
+      const captureStreams: MediaStream[] = [];
+
+      if (recordingModeForRun === "microphone") {
+        const microphoneStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+        captureStreams.push(microphoneStream);
+        recorderStream = microphoneStream;
+      } else if (recordingModeForRun === "system-audio") {
+        setRecordingStatusNote("Next, choose the Zoom/Teams window or screen and make sure audio sharing is enabled.");
+        const displayStream = await navigator.mediaDevices.getDisplayMedia(getSystemAudioDisplayOptions());
+        if (!displayStream.getAudioTracks().length) {
+          displayStream.getTracks().forEach((track) => track.stop());
+          throw new Error("No computer audio was shared. Start again and enable audio sharing in the capture picker.");
+        }
+        captureStreams.push(displayStream);
+        recorderStream = await createMixedRecorderStream([displayStream]);
+      } else {
+        setRecordingStatusNote("Next, choose the Zoom/Teams window or screen and make sure audio sharing is enabled. Your microphone will be captured too.");
+        const [microphoneStream, displayStream] = await Promise.all([
+          navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          }),
+          navigator.mediaDevices.getDisplayMedia(getSystemAudioDisplayOptions()),
+        ]);
+
+        if (!displayStream.getAudioTracks().length) {
+          microphoneStream.getTracks().forEach((track) => track.stop());
+          displayStream.getTracks().forEach((track) => track.stop());
+          throw new Error("No computer audio was shared. Start again and enable audio sharing in the capture picker.");
+        }
+
+        captureStreams.push(microphoneStream, displayStream);
+        recorderStream = await createMixedRecorderStream([microphoneStream, displayStream]);
+      }
 
       const mimeType = getSupportedRecordingMimeType();
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const recorder = mimeType ? new MediaRecorder(recorderStream, { mimeType }) : new MediaRecorder(recorderStream);
       recordingChunksRef.current = [];
       recordingSessionIdRef.current = recordingSession.id;
+      mediaStreamRef.current = recorderStream;
+      captureSourceStreamsRef.current = captureStreams;
 
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
@@ -958,8 +1004,7 @@ export const App = () => {
         recordingChunksRef.current = [];
         recordingSessionIdRef.current = null;
 
-        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-        mediaStreamRef.current = null;
+        cleanupRecordingResources();
         mediaRecorderRef.current = null;
         setIsRecordingAudio(false);
 
@@ -979,8 +1024,8 @@ export const App = () => {
             file,
             persistedPath,
           });
-          setRecordingStatusNote("Recorded microphone audio into the current session. You can transcribe it next.");
-          setStatusNote("Recorded microphone audio into the current session.");
+          setRecordingStatusNote(`Recorded ${RECORDING_MODE_LABELS[recordingModeForRun].toLocaleLowerCase()} into the current session. You can transcribe it next.`);
+          setStatusNote(`Recorded ${RECORDING_MODE_LABELS[recordingModeForRun].toLocaleLowerCase()} into the current session.`);
         } catch (error) {
           setRecordingStatusNote(
             error instanceof Error ? error.message : "Recording finished, but saving the audio failed.",
@@ -989,20 +1034,35 @@ export const App = () => {
       };
 
       recorder.onerror = () => {
-        setRecordingStatusNote("Microphone recording hit an error and could not continue.");
+        setRecordingStatusNote(`${RECORDING_MODE_LABELS[recordingModeForRun]} recording hit an error and could not continue.`);
       };
 
-      mediaStreamRef.current = stream;
       mediaRecorderRef.current = recorder;
+
+      captureStreams.forEach((stream) => {
+        stream.getTracks().forEach((track) => {
+          track.addEventListener(
+            "ended",
+            () => {
+              if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+                mediaRecorderRef.current.stop();
+                setRecordingStatusNote(`${RECORDING_MODE_LABELS[recordingModeForRun]} capture ended.`);
+              }
+            },
+            { once: true },
+          );
+        });
+      });
+
       recorder.start();
       setIsRecordingAudio(true);
-      setRecordingStatusNote("Recording from microphone...");
-      setStatusNote("Recording from microphone...");
+      setRecordingStatusNote(`Recording from ${RECORDING_MODE_LABELS[recordingModeForRun].toLocaleLowerCase()}...`);
+      setStatusNote(`Recording from ${RECORDING_MODE_LABELS[recordingModeForRun].toLocaleLowerCase()}...`);
     } catch (error) {
       setRecordingStatusNote(
         error instanceof Error
-          ? `Could not start microphone recording: ${error.message}`
-          : "Could not start microphone recording.",
+          ? `Could not start ${RECORDING_MODE_LABELS[recordingModeForRun].toLocaleLowerCase()} recording: ${error.message}`
+          : `Could not start ${RECORDING_MODE_LABELS[recordingModeForRun].toLocaleLowerCase()} recording.`,
       );
     }
   };
@@ -1235,9 +1295,9 @@ export const App = () => {
           id: "record-audio",
           label: isRecordingAudio ? "Stop recording" : "Start microphone recording",
           description: isRecordingAudio
-            ? "Stop the current microphone recording and attach it to this session."
-            : "Record microphone audio directly into the current session.",
-          keywords: ["record microphone dictation audio meeting"],
+            ? "Stop the current recording and attach it to this session."
+            : "Record audio directly into the current session using the selected capture mode.",
+          keywords: ["record microphone system audio hybrid dictation audio meeting"],
           action: () => void (isRecordingAudio ? handleStopRecording() : handleStartRecording()),
           shortcut: "Capture",
         },

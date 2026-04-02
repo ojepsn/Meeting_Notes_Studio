@@ -1,3 +1,4 @@
+import type { RecordingMode } from "../../../lib/files/recording";
 import { type AttachmentRecord, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 interface SessionEditorProps {
     session: SessionRecord;
@@ -6,7 +7,7 @@ interface SessionEditorProps {
     savedPeople: string[];
     suggestedPeople: string[];
     isTranscribingAudio: boolean;
-    recordingMode: "microphone" | "system-audio" | "hybrid";
+    recordingMode: RecordingMode;
     isRecordingAudio: boolean;
     recordingStatusNote?: string | null;
     onChange: (session: SessionRecord) => void;
@@ -14,7 +15,7 @@ interface SessionEditorProps {
     onImportAudio: () => void;
     onImportImage: () => void;
     onTranscribeAudio: () => void;
-    onChangeRecordingMode: (mode: "microphone" | "system-audio" | "hybrid") => void;
+    onChangeRecordingMode: (mode: RecordingMode) => void;
     onStartRecording: () => void;
     onStopRecording: () => void;
     onRemoveAttachment: (attachmentId: string) => void;
