@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { LocalAppSettings, PromptBlock, TemplateDefinition } from "@notesmith/domain";
 import { BUILTIN_TEMPLATES } from "@notesmith/domain";
 import {
@@ -12,7 +12,7 @@ import type { AIDiagnosticsItem } from "../../../lib/ai/metrics";
 import type { SelectModelOption } from "../../../lib/ai/modelPricing";
 import { TemplatesCard } from "../../templates/components/TemplatesCard";
 
-type SettingsSection =
+export type SettingsSection =
   | "ai"
   | "diagnostics"
   | "themes"
@@ -25,6 +25,7 @@ type SettingsSection =
 interface SettingsCardProps {
   settings: LocalAppSettings;
   templates: TemplateDefinition[];
+  initialSection?: SettingsSection;
   onChange: (settings: LocalAppSettings) => void;
   onSaveTemplate: (template: TemplateDefinition) => void;
   onImportLegacy: () => Promise<void>;
@@ -161,6 +162,26 @@ const DESKTOP_THEMES: ThemeDefinition[] = [
       dark: ["#1c1b17", "#2a2923", "#a8b57a"],
     },
   },
+  {
+    id: "nordic-teal",
+    label: "Nordic Teal",
+    description: "A crisp contemporary theme with cool neutrals and teal accents for a modern technical feel.",
+    bestFor: "Best for modern, technical, efficient work",
+    swatches: {
+      light: ["#f4f8f9", "#e1ebee", "#2d8c92"],
+      dark: ["#0f171c", "#17242c", "#4ab8bf"],
+    },
+  },
+  {
+    id: "copper-ink",
+    label: "Copper Ink",
+    description: "A warmer executive-style theme with editorial contrast and muted copper emphasis.",
+    bestFor: "Best for premium, focused, editorial-style work",
+    swatches: {
+      light: ["#f8f3ea", "#e7ddd0", "#9a6546"],
+      dark: ["#13100d", "#211a15", "#d09a6b"],
+    },
+  },
 ];
 
 const THEME_MODE_OPTIONS: Array<{ id: ThemeMode; label: string; description: string }> = [
@@ -184,6 +205,7 @@ const buildThemeValue = (familyId: string, mode: ThemeMode) => `${familyId}-${mo
 export const SettingsCard = ({
   settings,
   templates,
+  initialSection = "ai",
   onChange,
   onSaveTemplate,
   onImportLegacy,
@@ -197,7 +219,7 @@ export const SettingsCard = ({
   modelPricingStatus,
   isRefreshingModelPricing,
 }: SettingsCardProps) => {
-  const [activeSection, setActiveSection] = useState<SettingsSection>("ai");
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
   const [showAdvancedTextModels, setShowAdvancedTextModels] = useState(false);
   const [showAdvancedTranscriptionModels, setShowAdvancedTranscriptionModels] = useState(false);
   const [personDraft, setPersonDraft] = useState("");
@@ -205,6 +227,12 @@ export const SettingsCard = ({
   const [abbrFull, setAbbrFull] = useState("");
   const [extraBlockLabel, setExtraBlockLabel] = useState("");
   const [extraBlockBody, setExtraBlockBody] = useState("");
+
+  useEffect(() => {
+    if (initialSection && SETTINGS_SECTIONS.some((section) => section.id === initialSection)) {
+      setActiveSection(initialSection);
+    }
+  }, [initialSection]);
 
   const updatePromptProfile = (nextPromptProfile: LocalAppSettings["promptProfile"]) =>
     onChange({

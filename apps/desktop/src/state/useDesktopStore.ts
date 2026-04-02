@@ -12,6 +12,7 @@ import {
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 
 type DesktopView = "capture" | "output";
+type SaveState = "saved" | "saving" | "error";
 const PERSIST_DEBOUNCE_MS = 300;
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -24,8 +25,10 @@ const logPersistError = (error: unknown) => {
 const scheduleSnapshotPersist = (
   repository: ReturnType<typeof createAppRepository>,
   snapshot: DesktopAppSnapshot,
+  setState: (partial: Partial<DesktopState>) => void,
 ) => {
   pendingSnapshot = snapshot;
+  setState({ saveState: "saving" });
   if (persistTimer) {
     clearTimeout(persistTimer);
   }
@@ -34,26 +37,51 @@ const scheduleSnapshotPersist = (
     pendingSnapshot = null;
     persistTimer = null;
     if (!snapshotToPersist) return;
-    void repository.saveSnapshot(snapshotToPersist).catch(logPersistError);
+    void repository
+      .saveSnapshot(snapshotToPersist)
+      .then(() => {
+        setState({
+          saveState: "saved",
+          lastSavedAt: new Date().toISOString(),
+        });
+      })
+      .catch((error) => {
+        logPersistError(error);
+        setState({ saveState: "error" });
+      });
   }, PERSIST_DEBOUNCE_MS);
 };
 
 const flushSnapshotPersist = async (
   repository: ReturnType<typeof createAppRepository>,
   snapshot: DesktopAppSnapshot,
+  setState: (partial: Partial<DesktopState>) => void,
 ) => {
   pendingSnapshot = null;
   if (persistTimer) {
     clearTimeout(persistTimer);
     persistTimer = null;
   }
-  await repository.saveSnapshot(snapshot);
+  setState({ saveState: "saving" });
+  try {
+    await repository.saveSnapshot(snapshot);
+    setState({
+      saveState: "saved",
+      lastSavedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    logPersistError(error);
+    setState({ saveState: "error" });
+    throw error;
+  }
 };
 
 interface DesktopState {
   snapshot: DesktopAppSnapshot | null;
   activeSessionId: string | null;
   activeView: DesktopView;
+  saveState: SaveState;
+  lastSavedAt: string | null;
   isLoaded: boolean;
   loadError: string | null;
   repository: ReturnType<typeof createAppRepository>;
@@ -76,6 +104,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   snapshot: null,
   activeSessionId: null,
   activeView: "capture",
+  saveState: "saved",
+  lastSavedAt: null,
   isLoaded: false,
   loadError: null,
   repository: createAppRepository(),
@@ -99,6 +129,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         activeSessionId: snapshot.sessions[0]?.id ?? null,
         isLoaded: true,
         loadError: null,
+        saveState: "saved",
+        lastSavedAt: new Date().toISOString(),
       });
     } catch (error) {
       set({
@@ -122,7 +154,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       }),
     };
     set({ snapshot: nextSnapshot, activeSessionId: payload.id });
-    scheduleSnapshotPersist(get().repository, nextSnapshot);
+    scheduleSnapshotPersist(get().repository, nextSnapshot, set);
   },
   createNewSession: async (templateId = get().snapshot?.settings.preferredDesktopTemplateId ?? "meeting") => {
     const snapshot = get().snapshot;
@@ -133,7 +165,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       sessions: [nextSession, ...snapshot.sessions],
     };
     set({ snapshot: nextSnapshot, activeSessionId: nextSession.id, activeView: "capture" });
-    await flushSnapshotPersist(get().repository, nextSnapshot);
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
   },
   deleteSession: async (id) => {
     const snapshot = get().snapshot;
@@ -149,7 +181,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       activeSessionId: remainingSessions[0]?.id ?? null,
       activeView: get().activeView,
     });
-    await flushSnapshotPersist(get().repository, nextSnapshot);
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
   },
   saveTodo: async (todo) => {
     const snapshot = get().snapshot;
@@ -159,7 +191,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       todos: upsertTodo(snapshot.todos, todo),
     };
     set({ snapshot: nextSnapshot });
-    scheduleSnapshotPersist(get().repository, nextSnapshot);
+    scheduleSnapshotPersist(get().repository, nextSnapshot, set);
   },
   addTodo: async (description) => {
     const snapshot = get().snapshot;
@@ -179,21 +211,21 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       ],
     };
     set({ snapshot: nextSnapshot });
-    await flushSnapshotPersist(get().repository, nextSnapshot);
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
   },
   deleteTodo: async (id) => {
     const snapshot = get().snapshot;
     if (!snapshot) return;
     const nextSnapshot = { ...snapshot, todos: snapshot.todos.filter((todo) => todo.id !== id) };
     set({ snapshot: nextSnapshot });
-    await flushSnapshotPersist(get().repository, nextSnapshot);
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
   },
   saveSettings: async (settings) => {
     const snapshot = get().snapshot;
     if (!snapshot) return;
     const nextSnapshot = { ...snapshot, settings };
     set({ snapshot: nextSnapshot });
-    scheduleSnapshotPersist(get().repository, nextSnapshot);
+    scheduleSnapshotPersist(get().repository, nextSnapshot, set);
   },
   saveTemplate: async (template) => {
     const snapshot = get().snapshot;
@@ -203,14 +235,14 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       templates: upsertTemplate(snapshot.templates, template),
     };
     set({ snapshot: nextSnapshot });
-    scheduleSnapshotPersist(get().repository, nextSnapshot);
+    scheduleSnapshotPersist(get().repository, nextSnapshot, set);
   },
   saveAttachments: async (attachments) => {
     const snapshot = get().snapshot;
     if (!snapshot) return;
     const nextSnapshot = { ...snapshot, attachments };
     set({ snapshot: nextSnapshot });
-    scheduleSnapshotPersist(get().repository, nextSnapshot);
+    scheduleSnapshotPersist(get().repository, nextSnapshot, set);
   },
   importLegacyBrowserData: async () => {
     const migrated = loadLegacyBrowserSnapshot();
@@ -222,7 +254,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       activeSessionId: migrated.sessions[0]?.id ?? null,
       activeView: "capture",
     });
-    await flushSnapshotPersist(get().repository, migrated);
+    await flushSnapshotPersist(get().repository, migrated, set);
     return "imported";
   },
 }));

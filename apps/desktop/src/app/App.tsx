@@ -5,6 +5,7 @@ import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar
 import { OutputWorkspace } from "../features/output/components/OutputWorkspace";
 import { TodosCard } from "../features/todos/components/TodosCard";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
+import type { SettingsSection } from "../features/settings/components/SettingsCard";
 import { generateNotes } from "../lib/ai/services/generateNotes";
 import { getAIRequestHistory, recordAIRequestHistory } from "../lib/ai/history";
 import { formatAIErrorMessage } from "../lib/ai/messages";
@@ -37,7 +38,15 @@ import {
 } from "../lib/files/attachmentStore";
 
 type AppWorkspace = "notes" | "tasks" | "calendar" | "assistant" | "files";
-type OverlayPanel = "sessions" | "todos" | "backup" | "settings" | null;
+type OverlayPanel = "sessions" | "todos" | "backup" | "settings" | "more" | null;
+type CommandAction = {
+  id: string;
+  label: string;
+  description: string;
+  keywords: string[];
+  shortcut?: string;
+  action: () => void;
+};
 
 const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: string; available: boolean }> = [
   { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
@@ -69,6 +78,8 @@ export const App = () => {
     snapshot,
     activeSessionId,
     activeView,
+    saveState,
+    lastSavedAt,
     isLoaded,
     loadError,
     load,
@@ -88,6 +99,9 @@ export const App = () => {
   } = useDesktopStore();
   const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("notes");
   const [openPanel, setOpenPanel] = useState<OverlayPanel>(null);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState("");
   const [statusNote, setStatusNote] = useState("Core desktop foundation ready for migration.");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRevising, setIsRevising] = useState(false);
@@ -254,6 +268,27 @@ export const App = () => {
       activeAttachments.filter((attachment) => attachment.kind === "image" && attachment.includeInOutput),
     [activeAttachments],
   );
+  const selectedTextModelOption = modelPricingSnapshot.textModels
+    .map(buildTextModelOption)
+    .find((option) => option.id === snapshot?.settings.textModel);
+  const selectedTranscriptionModelOption = modelPricingSnapshot.transcriptionModels
+    .map(buildTranscriptionModelOption)
+    .find((option) => option.id === snapshot?.settings.transcriptionModel);
+  const aiActivityLabel = isGenerating
+    ? "Generating notes"
+    : isRevising
+      ? "Revising output"
+      : isTranscribingAudio
+        ? "Transcribing audio"
+        : "AI idle";
+  const saveStatusLabel =
+    saveState === "saving"
+      ? "Saving..."
+      : saveState === "error"
+        ? "Save issue"
+        : lastSavedAt
+          ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+          : "Saved locally";
 
   const createAIRuntimeHandler = ({
     onCacheHit,
@@ -593,16 +628,213 @@ export const App = () => {
     );
   };
 
+  const openSettingsSection = (section: SettingsSection) => {
+    setSettingsSection(section);
+    setOpenPanel("settings");
+  };
+
   const handleWorkspaceSelection = (workspaceId: AppWorkspace, available: boolean) => {
-    if (!available) {
-      setStatusNote(`${WORKSPACE_ITEMS.find((item) => item.id === workspaceId)?.label ?? "Workspace"} will arrive in a later desktop phase.`);
-      return;
-    }
     setActiveWorkspace(workspaceId);
+    if (!available) {
+      setStatusNote(`${WORKSPACE_ITEMS.find((item) => item.id === workspaceId)?.label ?? "Workspace"} is planned next. The shell already keeps its place so the app can grow without changing navigation patterns.`);
+    }
   };
 
   const openOverlay = (panel: OverlayPanel) => setOpenPanel(panel);
   const closeOverlay = () => setOpenPanel(null);
+  const openCommandPalette = () => {
+    setCommandQuery("");
+    setIsCommandPaletteOpen(true);
+  };
+  const closeCommandPalette = () => setIsCommandPaletteOpen(false);
+
+  const commandActions = useMemo<CommandAction[]>(
+    () => [
+      {
+        id: "new-session",
+        label: "New session",
+        description: "Create a fresh notes session.",
+        keywords: ["create session note capture"],
+        shortcut: "Ctrl/Cmd+N",
+        action: () => void createNewSession(),
+      },
+      {
+        id: "capture-view",
+        label: "Go to Capture view",
+        description: "Focus the note-taking workspace.",
+        keywords: ["capture notes input"],
+        shortcut: "Alt+1",
+        action: () => setActiveView("capture"),
+      },
+      {
+        id: "output-view",
+        label: "Go to Output view",
+        description: "Focus the polished notes workspace.",
+        keywords: ["output polished generate"],
+        shortcut: "Alt+2",
+        action: () => setActiveView("output"),
+      },
+      {
+        id: "all-sessions",
+        label: "Open All Sessions",
+        description: "Browse and reopen previous sessions.",
+        keywords: ["sessions history recent"],
+        shortcut: "Ctrl/Cmd+Shift+S",
+        action: () => openOverlay("sessions"),
+      },
+      {
+        id: "todos",
+        label: "Open To-dos",
+        description: "See personal follow-ups captured from notes.",
+        keywords: ["todo tasks follow up"],
+        action: () => openOverlay("todos"),
+      },
+      {
+        id: "backup",
+        label: "Open Back-up",
+        description: "Import or export desktop data snapshots.",
+        keywords: ["backup export import snapshot"],
+        action: () => openOverlay("backup"),
+      },
+      {
+        id: "settings-ai",
+        label: "Open AI Settings",
+        description: "Review API key, models, prompts, and AI visibility.",
+        keywords: ["settings ai models prompts"],
+        shortcut: "Ctrl/Cmd+,",
+        action: () => openSettingsSection("ai"),
+      },
+      {
+        id: "settings-themes",
+        label: "Open Theme Settings",
+        description: "Switch theme family and light/dark mode.",
+        keywords: ["theme appearance dark light"],
+        action: () => openSettingsSection("themes"),
+      },
+      {
+        id: "settings-people",
+        label: "Open People Settings",
+        description: "Manage saved people and abbreviations.",
+        keywords: ["people participants abbreviations"],
+        action: () => openSettingsSection("people"),
+      },
+      {
+        id: "settings-templates",
+        label: "Open Template Settings",
+        description: "Edit built-in and custom note structures.",
+        keywords: ["templates sections note structures"],
+        action: () => openSettingsSection("templates"),
+      },
+      {
+        id: "generate-output",
+        label: "Generate output",
+        description: "Create structured polished notes from the current session.",
+        keywords: ["generate polish ai"],
+        shortcut: "Ctrl/Cmd+Enter",
+        action: () => void handleGenerate(),
+      },
+      {
+        id: "translate-output",
+        label: "Translate output",
+        description: "Translate the current polished output.",
+        keywords: ["translate swedish english"],
+        action: () => void handleTranslate(),
+      },
+      {
+        id: "upload-transcript",
+        label: "Upload transcript",
+        description: "Import a transcript file into the current session.",
+        keywords: ["transcript import upload"],
+        action: () => void handleImportTranscript(),
+      },
+      {
+        id: "upload-audio",
+        label: "Upload audio",
+        description: "Attach audio to the current session.",
+        keywords: ["audio upload recording"],
+        action: () => void handleImportAudio(),
+      },
+      {
+        id: "upload-image",
+        label: "Upload image",
+        description: "Attach an image and optionally include it in output.",
+        keywords: ["image attachment picture"],
+        action: () => void handleImportImage(),
+      },
+      ...snapshot.sessions.slice(0, 8).map((session) => ({
+        id: `session-${session.id}`,
+        label: `Open session: ${session.title || "Untitled session"}`,
+        description: session.date || "Recent session",
+        keywords: [session.title, session.participantText, session.date].filter(Boolean) as string[],
+        action: () => {
+          setActiveSessionId(session.id);
+          setActiveView("capture");
+        },
+      })),
+    ],
+    [createNewSession, snapshot.sessions, setActiveView, setActiveSessionId, activeSession.id],
+  );
+
+  const filteredCommandActions = useMemo(() => {
+    const query = commandQuery.trim().toLowerCase();
+    if (!query) return commandActions;
+    return commandActions.filter((command) =>
+      [command.label, command.description, ...command.keywords].join(" ").toLowerCase().includes(query),
+    );
+  }, [commandActions, commandQuery]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isPrimary = event.ctrlKey || event.metaKey;
+      if (isPrimary && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        openCommandPalette();
+        return;
+      }
+      if (isPrimary && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        void createNewSession();
+        return;
+      }
+      if (isPrimary && event.key === ",") {
+        event.preventDefault();
+        openSettingsSection("ai");
+        return;
+      }
+      if (isPrimary && event.shiftKey && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        openOverlay("sessions");
+        return;
+      }
+      if (isPrimary && event.key === "Enter") {
+        event.preventDefault();
+        void handleGenerate();
+        return;
+      }
+      if (event.altKey && event.key === "1") {
+        event.preventDefault();
+        setActiveView("capture");
+        return;
+      }
+      if (event.altKey && event.key === "2") {
+        event.preventDefault();
+        setActiveView("output");
+        return;
+      }
+      if (event.key === "Escape") {
+        if (isCommandPaletteOpen) {
+          closeCommandPalette();
+          return;
+        }
+        if (openPanel) {
+          closeOverlay();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [createNewSession, isCommandPaletteOpen, openPanel, snapshot.sessions]);
 
   const renderOverlayContent = () => {
     switch (openPanel) {
@@ -631,6 +863,7 @@ export const App = () => {
       case "settings":
         return (
           <SettingsCard
+            initialSection={settingsSection}
             settings={snapshot.settings}
             templates={snapshot.templates}
             onChange={(settings) => void saveSettings(settings)}
@@ -646,6 +879,26 @@ export const App = () => {
             onRefreshModelPricing={() => void handleRefreshModelPricing()}
             isRefreshingModelPricing={isRefreshingModelPricing}
           />
+        );
+      case "more":
+        return (
+          <div className="sidebar-card overlay-card">
+            <div>
+              <h3>More tools</h3>
+              <p>Secondary utilities stay grouped here so the main workspace remains calm and obvious.</p>
+            </div>
+            <div className="stack">
+              <button className="small-button" type="button" onClick={() => setOpenPanel("todos")}>
+                Open To-dos
+              </button>
+              <button className="small-button" type="button" onClick={() => setOpenPanel("backup")}>
+                Open Back-up
+              </button>
+              <button className="small-button" type="button" onClick={() => openSettingsSection("other")}>
+                Open Other settings
+              </button>
+            </div>
+          </div>
         );
       case "backup":
         return (
@@ -698,65 +951,80 @@ export const App = () => {
 
       <div className="workspace-shell">
         <header className="topbar app-header">
-          <div>
-            <h1>Notes workspace</h1>
+          <div className="topbar-copy">
+            <div className="topbar-eyebrow">Focused workspace</div>
+            <h1>{activeWorkspace === "notes" ? "Notes workspace" : `${WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}`}</h1>
             <p>{statusNote}</p>
+            <div className="topbar-status-strip">
+              <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
+              <span className="status-chip">{aiActivityLabel}</span>
+              <span className="status-chip">{snapshot.settings.apiKey ? "AI key local-only" : "Add API key"}</span>
+              {isCheckingForUpdates ? <span className="status-chip">Checking updates...</span> : null}
+            </div>
           </div>
-          <div className="topbar-actions">
-            {availableUpdateVersion ? (
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => void handleInstallUpdate()}
-                disabled={isInstallingUpdate}
-              >
-                {isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}`}
+          <div className="topbar-actions topbar-actions-split">
+            {activeWorkspace === "notes" ? (
+              <button className="primary-button" type="button" onClick={() => void createNewSession()}>
+                + New Session
               </button>
-            ) : (
-              <button
-                className="shell-button"
-                type="button"
-                onClick={() => void handleCheckForUpdates()}
-                disabled={isCheckingForUpdates}
-              >
-                {isCheckingForUpdates ? "Checking updates..." : "Check for updates"}
+            ) : null}
+            <div className="topbar-secondary-cluster">
+              <button className="shell-button" type="button" onClick={openCommandPalette}>
+                Command palette
               </button>
-            )}
-            <button className="shell-button" type="button" onClick={() => openOverlay("sessions")}>
-              All Sessions
-            </button>
-            <button className="shell-button" type="button" onClick={() => openOverlay("todos")}>
-              To-dos
-            </button>
-            <button className="shell-button" type="button" onClick={() => openOverlay("backup")}>
-              Back-up
-            </button>
-            <button className="shell-button" type="button" onClick={() => openOverlay("settings")}>
-              Settings
-            </button>
+              <button className="shell-button" type="button" onClick={() => openOverlay("sessions")}>
+                All Sessions
+              </button>
+              <button className="shell-button" type="button" onClick={() => openSettingsSection("ai")}>
+                Settings
+              </button>
+              <button className="shell-button" type="button" onClick={() => openOverlay("more")}>
+                More
+              </button>
+            </div>
           </div>
         </header>
+
+        {availableUpdateVersion ? (
+          <div className="workspace-alert-bar">
+            <span>Desktop update {availableUpdateVersion} is available from GitHub Releases.</span>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => void handleInstallUpdate()}
+              disabled={isInstallingUpdate}
+            >
+              {isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}`}
+            </button>
+          </div>
+        ) : null}
 
         <main className="notes-shell">
           <section className="workspace-canvas">
             <div className="workspace-header card">
               <div className="card-header">
                 <div>
-                  <h2>{activeView === "capture" ? "Capture" : "Output"}</h2>
-                  <p>
-                    Keep the current task in the center. Use the side rail to switch workspaces and overlays for secondary tools.
-                  </p>
+                  <h2>
+                    {activeWorkspace === "notes"
+                      ? activeView === "capture"
+                        ? "Capture"
+                        : "Output"
+                      : WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}
+                  </h2>
+                  <p>{activeWorkspace === "notes"
+                    ? activeView === "capture"
+                      ? "Capture rough notes first. Secondary tools stay in the inspector or overlays so the center canvas stays simple."
+                      : "Shape and export polished notes here. AI and export controls stay nearby without crowding the document."
+                    : "This workspace placeholder already follows the same shell structure so the product can grow without changing how navigation works."}</p>
                 </div>
                 <div className="page-actions">
-                  <button className="primary-button" type="button" onClick={() => void createNewSession()}>
-                    + New Session
-                  </button>
                   <div className="view-switch">
                     <button
                       className="segment-button"
                       data-active={activeView === "capture"}
                       type="button"
                       onClick={() => setActiveView("capture")}
+                      disabled={activeWorkspace !== "notes"}
                     >
                       Capture
                     </button>
@@ -765,15 +1033,29 @@ export const App = () => {
                       data-active={activeView === "output"}
                       type="button"
                       onClick={() => setActiveView("output")}
+                      disabled={activeWorkspace !== "notes"}
                     >
                       Output
                     </button>
                   </div>
                 </div>
               </div>
+              <div className="workspace-guide-row">
+                <span className="tiny-text">Shortcuts: Ctrl/Cmd+K command palette, Ctrl/Cmd+N new session, Alt+1/2 switch views, Ctrl/Cmd+Enter generate.</span>
+              </div>
             </div>
 
-            {activeView === "capture" ? (
+            {activeWorkspace !== "notes" ? (
+              <div className="card empty-state-card">
+                <h2>Coming next</h2>
+                <p>{WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.description || "This workspace is planned for a later phase."}</p>
+                <ol className="empty-state-steps">
+                  <li>Return to Notes from the left rail whenever you want to work now.</li>
+                  <li>Use Ctrl/Cmd+K to reach settings, sessions, and future actions quickly.</li>
+                  <li>This workspace will use the same center-canvas plus right-inspector pattern when it ships.</li>
+                </ol>
+              </div>
+            ) : activeView === "capture" ? (
               <SessionEditor
                 session={activeSession}
                 templates={snapshot.templates}
@@ -808,7 +1090,7 @@ export const App = () => {
             <div className="sidebar-card">
               <div>
                 <h3>Current session</h3>
-                <p>Context stays visible here while the main canvas stays focused on capture or output.</p>
+                <p>Keep just enough context visible while the center canvas stays focused.</p>
               </div>
               <div className="section-list">
                 <div className="list-item">
@@ -834,14 +1116,40 @@ export const App = () => {
 
             <div className="sidebar-card">
               <div>
+                <h3>AI visibility</h3>
+                <p>
+                  AI should feel inspectable and predictable, not hidden behind a single button.
+                </p>
+              </div>
+              <div className="section-list">
+                <div className="list-item">
+                  <strong>{selectedTextModelOption?.label || snapshot.settings.textModel}</strong>
+                  <span className="muted">Text model for generation, revision, and translation</span>
+                </div>
+                <div className="list-item">
+                  <strong>{selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel}</strong>
+                  <span className="muted">Transcription model</span>
+                </div>
+                <div className="list-item">
+                  <strong>{snapshot.settings.apiKey ? "Stored locally on this machine" : "No API key set yet"}</strong>
+                  <span className="muted">AI settings stay local and are never written into shared desktop data.</span>
+                </div>
+              </div>
+              <button className="small-button" type="button" onClick={() => openSettingsSection("ai")}>
+                Open AI settings
+              </button>
+            </div>
+
+            <div className="sidebar-card">
+              <div>
                 <h3>{activeView === "capture" ? "Capture tools" : "Output tools"}</h3>
                 <p>
                   {activeView === "capture"
-                    ? "Keep import and transcription actions close at hand without burying the main note fields."
-                    : "Keep generation and export actions visible while the output stays front and center."}
+                    ? "Primary note fields stay in the center. Imports and transcription stay here."
+                    : "Primary output stays in the center. AI and export actions stay here."}
                 </p>
               </div>
-              {activeView === "capture" ? (
+              {activeWorkspace === "notes" && activeView === "capture" ? (
                 <div className="sidebar-actions">
                   <button className="small-button" type="button" onClick={() => void handleImportImage()}>
                     Upload image
@@ -856,7 +1164,7 @@ export const App = () => {
                     Upload transcript
                   </button>
                 </div>
-              ) : (
+              ) : activeWorkspace === "notes" ? (
                 <div className="sidebar-actions">
                   <button className="primary-button" type="button" onClick={() => void handleGenerate()} disabled={isGenerating}>
                     {isGenerating ? "Generating..." : "Generate"}
@@ -864,23 +1172,32 @@ export const App = () => {
                   <button className="small-button" type="button" onClick={() => void handleTranslate()}>
                     Translate
                   </button>
-                  <button className="small-button" type="button" onClick={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}>
-                    Export markdown
-                  </button>
+                  <details className="inspector-disclosure">
+                    <summary>More output actions</summary>
+                    <div className="stack">
+                      <button className="small-button" type="button" onClick={() => exportOutputAsText({ title: activeSession.title, output: activeSession.output })}>
+                        Export text
+                      </button>
+                      <button className="small-button" type="button" onClick={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}>
+                        Export markdown
+                      </button>
+                      <button className="small-button" type="button" onClick={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output })}>
+                        Export HTML
+                      </button>
+                    </div>
+                  </details>
                 </div>
+              ) : (
+                <p className="tiny-text">This inspector area will hold the primary tools for this workspace once it is implemented.</p>
               )}
-              <p className="tiny-text">
-                {activeView === "capture"
-                  ? "Secondary tools stay here or in overlays so the main capture workflow remains simple."
-                  : "Export and revise from here while keeping the output document itself uncluttered."}
-              </p>
             </div>
 
             <div className="sidebar-card">
               <div>
-                <h3>Quick status</h3>
-                <p>Small passive information belongs in the inspector, not inline with the main workspace buttons.</p>
+                <h3>System status</h3>
+                <p>Small passive information belongs in the inspector, not mixed with primary actions.</p>
               </div>
+              <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
               <span className="status-chip">{activeAttachments.length} attachment{activeAttachments.length === 1 ? "" : "s"}</span>
               <span className="status-chip">
                 {activeTemplate?.sections.length ?? 0} output section{(activeTemplate?.sections.length ?? 0) === 1 ? "" : "s"}
@@ -890,6 +1207,57 @@ export const App = () => {
           </aside>
         </main>
       </div>
+
+      {isCommandPaletteOpen ? (
+        <div className="overlay-backdrop" role="presentation" onClick={closeCommandPalette}>
+          <div className="overlay-surface command-palette-surface" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="overlay-header">
+              <div>
+                <strong>Command palette</strong>
+                <p className="tiny-text">Search sessions, settings, tools, and future workspaces. Keyboard first by design.</p>
+              </div>
+              <button className="small-button" type="button" onClick={closeCommandPalette}>
+                Close
+              </button>
+            </div>
+            <div className="field">
+              <label htmlFor="command-query">Search actions</label>
+              <input
+                id="command-query"
+                autoFocus
+                value={commandQuery}
+                onChange={(event) => setCommandQuery(event.target.value)}
+                placeholder="Try: sessions, AI settings, translate, themes, upload image"
+              />
+            </div>
+            <div className="command-palette-list">
+              {filteredCommandActions.slice(0, 14).map((command) => (
+                <button
+                  key={command.id}
+                  type="button"
+                  className="command-palette-item"
+                  onClick={() => {
+                    closeCommandPalette();
+                    command.action();
+                  }}
+                >
+                  <div>
+                    <strong>{command.label}</strong>
+                    <p>{command.description}</p>
+                  </div>
+                  {command.shortcut ? <span className="tiny-text">{command.shortcut}</span> : null}
+                </button>
+              ))}
+              {!filteredCommandActions.length ? (
+                <div className="list-item">
+                  <strong>No matching actions</strong>
+                  <span className="muted">Try searching by workspace, setting, or action name.</span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {openPanel ? (
         <div className="overlay-backdrop" role="presentation" onClick={closeOverlay}>
@@ -908,6 +1276,8 @@ export const App = () => {
                         ? "To-dos"
                         : openPanel === "backup"
                           ? "Back-up"
+                          : openPanel === "more"
+                            ? "More tools"
                           : "Settings"}
                 </strong>
                 <p className="tiny-text">Secondary tools are kept in overlays so each workspace stays focused.</p>

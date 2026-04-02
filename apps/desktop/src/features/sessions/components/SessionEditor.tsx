@@ -52,15 +52,32 @@ export const SessionEditor = ({
     })) ?? [];
   const imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
   const otherAttachments = attachments.filter((attachment) => attachment.kind !== "image");
+  const hasCaptureContent = Boolean(
+    session.manualNotes.trim() ||
+      session.quickHighlights.trim() ||
+      session.liveTranscript.trim() ||
+      session.uploadedTranscript.trim() ||
+      attachments.length,
+  );
 
   return (
     <div className="card">
       <div className="card-header">
         <div>
           <h2>Capture</h2>
-          <p>Sessions stay local-first, but this UI is already shaped for the future Tauri + SQLite architecture.</p>
+          <p>Capture stays simple: rough notes first, supporting tools second, advanced controls only when you need them.</p>
         </div>
       </div>
+      {!hasCaptureContent ? (
+        <div className="empty-state-card compact-empty-state">
+          <h3>Quick start</h3>
+          <ol className="empty-state-steps">
+            <li>Choose the right template for the note you want to create.</li>
+            <li>Write rough notes in Manual notes, or import transcript/audio/image material from the right-side tools.</li>
+            <li>Switch to Output when you are ready to generate polished notes.</li>
+          </ol>
+        </div>
+      ) : null}
       <div className="form-grid">
         <div className="field field-wide">
           <label htmlFor="template-select">Template</label>
@@ -185,20 +202,6 @@ export const SessionEditor = ({
             )}
           </div>
         ))}
-        <div className="field">
-          <label htmlFor="detail-level">Detail level</label>
-          <select
-            id="detail-level"
-            value={String(session.detailLevel)}
-            onChange={(event) => update("detailLevel", Number(event.target.value))}
-          >
-            {Object.entries(DETAIL_LEVEL_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {value} - {label}
-              </option>
-            ))}
-          </select>
-        </div>
         <div className="field field-wide">
           <label htmlFor="live-transcript">Live transcript</label>
           <textarea
@@ -208,33 +211,52 @@ export const SessionEditor = ({
             placeholder="Recorded transcript text will land here."
           />
         </div>
-        {enabledSections.length ? (
-          <div className="field field-wide">
-            <label>Output sections for this session</label>
-            <div className="section-list">
-              {enabledSections.map((section) => (
-                <label key={section.id} className="list-item checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={section.checked}
-                    onChange={(event) =>
-                      update(
-                        "excludedSectionIds",
-                        event.target.checked
-                          ? session.excludedSectionIds.filter((id) => id !== section.id)
-                          : Array.from(new Set([...session.excludedSectionIds, section.id])),
-                      )
-                    }
-                  />
-                  <span>
-                    <strong>{section.title}</strong>
-                    <span className="muted">{section.instructions}</span>
-                  </span>
-                </label>
-              ))}
+        <details className="field field-wide workspace-disclosure">
+          <summary>Advanced output controls</summary>
+          <div className="workspace-disclosure-body form-grid">
+            <div className="field">
+              <label htmlFor="detail-level">Detail level</label>
+              <select
+                id="detail-level"
+                value={String(session.detailLevel)}
+                onChange={(event) => update("detailLevel", Number(event.target.value))}
+              >
+                {Object.entries(DETAIL_LEVEL_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {value} - {label}
+                  </option>
+                ))}
+              </select>
             </div>
+            {enabledSections.length ? (
+              <div className="field field-wide">
+                <label>Output sections for this session</label>
+                <div className="section-list">
+                  {enabledSections.map((section) => (
+                    <label key={section.id} className="list-item checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={section.checked}
+                        onChange={(event) =>
+                          update(
+                            "excludedSectionIds",
+                            event.target.checked
+                              ? session.excludedSectionIds.filter((id) => id !== section.id)
+                              : Array.from(new Set([...session.excludedSectionIds, section.id])),
+                          )
+                        }
+                      />
+                      <span>
+                        <strong>{section.title}</strong>
+                        <span className="muted">{section.instructions}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </details>
         <div className="page-actions field-wide">
           <button className="small-button" type="button" onClick={onImportImage}>
             Upload image

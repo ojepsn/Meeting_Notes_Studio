@@ -30,16 +30,18 @@ export const OutputWorkspace = ({
   onExportHtml,
 }: OutputWorkspaceProps) => {
   const [revisionInstructions, setRevisionInstructions] = useState("");
+  const [showAdvancedRefinement, setShowAdvancedRefinement] = useState(false);
   const includedImages = attachments
     .filter((attachment) => attachment.kind === "image" && attachment.includeInOutput)
     .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt));
+  const hasOutput = Boolean(session.output.trim());
 
   return (
     <div className="card">
       <div className="card-header">
         <div>
           <h2>Output</h2>
-          <p>This view is ready for the richer AI generation pipeline and later background jobs.</p>
+          <p>Use Output when you want polished notes, translation, revision, and exports. The document stays central; advanced actions stay secondary.</p>
         </div>
         <div className="page-actions">
           <button className="primary-button" type="button" onClick={onGenerate}>
@@ -48,29 +50,21 @@ export const OutputWorkspace = ({
           <button className="shell-button" type="button" onClick={onTranslate}>
             Translate
           </button>
-          <button
-            className="shell-button"
-            type="button"
-            onClick={() => {
-              onRevise(revisionInstructions);
-              if (revisionInstructions.trim()) {
-                setRevisionInstructions("");
-              }
-            }}
-          >
-            {isRevising ? "Revising..." : "Revise"}
-          </button>
-          <button className="shell-button" type="button" onClick={onExportText}>
-            Export text
-          </button>
-          <button className="shell-button" type="button" onClick={onExportMarkdown}>
-            Export markdown
-          </button>
-          <button className="shell-button" type="button" onClick={onExportHtml}>
-            Export HTML
+          <button className="shell-button" type="button" onClick={() => setShowAdvancedRefinement((current) => !current)}>
+            {showAdvancedRefinement ? "Hide advanced actions" : "Show advanced actions"}
           </button>
         </div>
       </div>
+      {!hasOutput ? (
+        <div className="empty-state-card compact-empty-state">
+          <h3>Ready to generate</h3>
+          <ol className="empty-state-steps">
+            <li>Go back to Capture if you want to add rough notes, transcript text, or images first.</li>
+            <li>Click Generate to turn the current session material into structured professional notes.</li>
+            <li>Use Translate, Revise, and Export after the first polished draft appears here.</li>
+          </ol>
+        </div>
+      ) : null}
       <div className="field field-wide">
         <label htmlFor="session-output">Polished output</label>
         <textarea
@@ -98,15 +92,42 @@ export const OutputWorkspace = ({
           </div>
         </div>
       ) : null}
-      <div className="field field-wide">
-        <label htmlFor="revision-instructions">Revision instructions</label>
-        <textarea
-          id="revision-instructions"
-          value={revisionInstructions}
-          onChange={(event) => setRevisionInstructions(event.target.value)}
-          placeholder="Example: Make the summary more concise, keep action owners explicit, and translate jargon into clearer client language."
-        />
-      </div>
+      {showAdvancedRefinement ? (
+        <div className="stack">
+          <div className="field field-wide">
+            <label htmlFor="revision-instructions">Revision instructions</label>
+            <textarea
+              id="revision-instructions"
+              value={revisionInstructions}
+              onChange={(event) => setRevisionInstructions(event.target.value)}
+              placeholder="Example: Make the summary more concise, keep action owners explicit, and translate jargon into clearer client language."
+            />
+          </div>
+          <div className="page-actions">
+            <button
+              className="shell-button"
+              type="button"
+              onClick={() => {
+                onRevise(revisionInstructions);
+                if (revisionInstructions.trim()) {
+                  setRevisionInstructions("");
+                }
+              }}
+            >
+              {isRevising ? "Revising..." : "Revise with instructions"}
+            </button>
+            <button className="shell-button" type="button" onClick={onExportText}>
+              Export text
+            </button>
+            <button className="shell-button" type="button" onClick={onExportMarkdown}>
+              Export markdown
+            </button>
+            <button className="shell-button" type="button" onClick={onExportHtml}>
+              Export HTML
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
