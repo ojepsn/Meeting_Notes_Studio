@@ -10,6 +10,10 @@ export declare const persistSelectedAttachment: ({ sessionId, selection, }: {
     sessionId: string;
     selection: SelectedAttachment;
 }) => Promise<string>;
+export declare const persistGeneratedAttachment: ({ sessionId, file, }: {
+    sessionId: string;
+    file: File;
+}) => Promise<string>;
 export declare const removePersistedAttachment: (filePath: string) => Promise<void>;
 export declare const createAttachmentPreviewUrl: ({ filePath, mimeType, }: {
     filePath: string;

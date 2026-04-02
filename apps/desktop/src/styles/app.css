@@ -1193,6 +1193,25 @@ select {
   background: var(--app-surface-soft);
 }
 
+.prompt-actions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--app-surface-soft);
+  padding: 0.9rem 1rem;
+}
+
+.prompt-actions-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
 .workspace-disclosure,
 .inspector-disclosure {
   border: 1px solid var(--app-border);
@@ -1391,6 +1410,43 @@ select {
   padding: 0.1rem 0.35rem;
   font: inherit;
   font-size: 0.78rem;
+}
+
+.recording-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.recording-mode-card {
+  border: 1px solid var(--app-border);
+  border-radius: 20px;
+  background: var(--app-surface-soft);
+  color: var(--app-text);
+  cursor: pointer;
+  text-align: left;
+  padding: 0.95rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.recording-mode-card[data-active="true"] {
+  border-color: var(--app-accent-strong-border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 72%, white 28%) 0%, var(--app-surface) 100%),
+    var(--app-surface);
+}
+
+.recording-mode-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.recording-mode-card p {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 0.9rem;
 }
 
 .theme-mode-grid,

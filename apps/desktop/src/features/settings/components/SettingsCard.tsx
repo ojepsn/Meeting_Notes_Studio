@@ -264,6 +264,16 @@ export const SettingsCard = ({
 
   const updateThemeFamily = (familyId: string) => onChange({ ...settings, theme: buildThemeValue(familyId, selectedTheme.mode) });
   const updateThemeMode = (mode: ThemeMode) => onChange({ ...settings, theme: buildThemeValue(selectedTheme.familyId, mode) });
+  const loadLatestRecommendedPrompts = () =>
+    updatePromptProfile({
+      meetingMinutesSystem: DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
+      meetingMinutesRules: DEFAULT_MEETING_MINUTES_RULES,
+      personalNotesSystem: DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
+      personalNotesRules: DEFAULT_PERSONAL_NOTES_RULES,
+      revisionRules: DEFAULT_REVISION_RULES,
+      translationRules: DEFAULT_TRANSLATION_RULES,
+      extraBlocks: settings.promptProfile.extraBlocks,
+    });
 
   const renderQuickChoicePicker = ({
     title,
@@ -855,27 +865,19 @@ export const SettingsCard = ({
                 </div>
               </div>
             </details>
-            <div className="inline-row">
-              <button
-                className="small-button"
-                type="button"
-                onClick={() =>
-                  updatePromptProfile({
-                    meetingMinutesSystem: DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
-                    meetingMinutesRules: DEFAULT_MEETING_MINUTES_RULES,
-                    personalNotesSystem: DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
-                    personalNotesRules: DEFAULT_PERSONAL_NOTES_RULES,
-                    revisionRules: DEFAULT_REVISION_RULES,
-                    translationRules: DEFAULT_TRANSLATION_RULES,
-                    extraBlocks: settings.promptProfile.extraBlocks,
-                  })
-                }
-              >
-                Reset prompt defaults
-              </button>
+            <div className="prompt-actions-row">
+              <div className="prompt-actions-copy">
+                <strong>Built-in recommendations</strong>
+                <p className="tiny-text">Load the latest recommended built-in prompt families for meeting minutes, personal notes, revision, and translation. Your reusable extra prompt blocks stay in place.</p>
+              </div>
+              <div className="inline-row">
+                <button className="small-button" type="button" onClick={loadLatestRecommendedPrompts}>
+                  Load latest recommended prompts
+                </button>
+              </div>
             </div>
             <p className="tiny-text">
-              Resetting defaults leaves your extra prompt blocks in place.
+              Use this when the app's built-in prompt families have improved and you want to reload them explicitly.
             </p>
             <div className="section-divider">
               <div>

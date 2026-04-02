@@ -139,6 +139,25 @@ export const persistSelectedAttachment = async ({
   });
 };
 
+export const persistGeneratedAttachment = async ({
+  sessionId,
+  file,
+}: {
+  sessionId: string;
+  file: File;
+}) => {
+  if (!isTauriRuntime()) {
+    return "";
+  }
+
+  const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+  return invoke<string>("write_bytes_into_app_data", {
+    sessionId,
+    filename: file.name,
+    bytes,
+  });
+};
+
 export const removePersistedAttachment = async (filePath: string) => {
   if (!isTauriRuntime() || !filePath) {
     return;

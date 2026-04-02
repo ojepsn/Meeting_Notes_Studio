@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE, type CaptureMode } from "@notesmith/domain";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
@@ -34,6 +34,7 @@ import {
   pickAudioFile,
   pickImageFile,
   pickTranscriptFile,
+  persistGeneratedAttachment,
   persistSelectedAttachment,
   readTranscriptFile,
   removePersistedAttachment,
@@ -41,6 +42,7 @@ import {
 
 type AppWorkspace = "notes" | "tasks" | "calendar" | "assistant" | "files";
 type OverlayPanel = "new-note" | "people-review" | "sessions" | "todos" | "backup" | "settings" | "more" | null;
+type RecordingMode = "microphone" | "system-audio" | "hybrid";
 type CommandAction = {
   id: string;
   label: string;
@@ -48,6 +50,37 @@ type CommandAction = {
   keywords: string[];
   shortcut?: string;
   action: () => void;
+};
+
+const RECORDING_MODE_LABELS: Record<RecordingMode, string> = {
+  microphone: "Microphone",
+  "system-audio": "Computer audio",
+  hybrid: "Microphone + computer audio",
+};
+
+const buildRecordingFilename = ({
+  sessionTitle,
+  captureMode,
+}: {
+  sessionTitle: string;
+  captureMode: CaptureMode;
+}) => {
+  const safeTitle = (sessionTitle.trim() || captureMode)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "recording";
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `${safeTitle}-${timestamp}.webm`;
+};
+
+const getSupportedRecordingMimeType = () => {
+  if (typeof MediaRecorder === "undefined") {
+    return "";
+  }
+
+  const candidates = ["audio/webm;codecs=opus", "audio/webm"];
+  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "";
 };
 
 const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: string; available: boolean }> = [
@@ -137,6 +170,9 @@ export const App = () => {
   const [isRevising, setIsRevising] = useState(false);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [pendingAudioBySession, setPendingAudioBySession] = useState<Record<string, File | undefined>>({});
+  const [recordingMode, setRecordingMode] = useState<RecordingMode>("microphone");
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [recordingStatusNote, setRecordingStatusNote] = useState<string | null>(null);
   const [availableUpdateVersion, setAvailableUpdateVersion] = useState<string | null>(null);
   const [installUpdate, setInstallUpdate] = useState<null | (() => Promise<void>)>(null);
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
@@ -149,10 +185,23 @@ export const App = () => {
   const [isRefreshingModelPricing, setIsRefreshingModelPricing] = useState(false);
   const [suggestedPeopleToAdd, setSuggestedPeopleToAdd] = useState<string[]>([]);
   const [selectedSuggestedPeople, setSelectedSuggestedPeople] = useState<string[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingSessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
 
   useEffect(() => {
     if (!isLoaded || loadError) {
@@ -474,6 +523,38 @@ export const App = () => {
       return loadPersistedAttachmentFile(activeAudioAttachment);
     }
     return null;
+  };
+
+  const persistAudioAttachmentForSession = async ({
+    sessionId,
+    file,
+    persistedPath,
+  }: {
+    sessionId: string;
+    file: File;
+    persistedPath: string;
+  }) => {
+    const latestSnapshot = await repository.loadSnapshot();
+    const existingAudioAttachments = latestSnapshot.attachments.filter(
+      (entry) => entry.sessionId === sessionId && entry.kind === "audio",
+    );
+
+    await saveAttachments([
+      ...latestSnapshot.attachments.filter((entry) => !(entry.sessionId === sessionId && entry.kind === "audio")),
+      fileToAttachmentRecord({
+        file,
+        sessionId,
+        kind: "audio",
+        filePath: persistedPath,
+      }),
+    ]);
+
+    await Promise.all(
+      existingAudioAttachments
+        .map((attachment) => attachment.filePath)
+        .filter(Boolean)
+        .map((filePath) => removePersistedAttachment(filePath)),
+    );
   };
 
   const outputActionConfig = (() => {
@@ -824,19 +905,117 @@ export const App = () => {
     });
 
     setPendingAudioBySession((current) => ({ ...current, [activeSession.id]: selection.file }));
-    await saveAttachments([
-      ...snapshot.attachments.filter(
-        (entry) =>
-          !(entry.sessionId === activeSession.id && entry.kind === "audio" && entry.filename === selection.file.name),
-      ),
-      fileToAttachmentRecord({
-        file: selection.file,
-        sessionId: activeSession.id,
-        kind: "audio",
-        filePath: persistedPath,
-      }),
-    ]);
+    await persistAudioAttachmentForSession({
+      sessionId: activeSession.id,
+      file: selection.file,
+      persistedPath,
+    });
     setStatusNote("Uploaded audio into the desktop session. You can transcribe it into the live transcript next.");
+    setRecordingStatusNote("Audio file attached to the current session.");
+  };
+
+  const handleStartRecording = async () => {
+    if (!activeSession) {
+      return;
+    }
+    const recordingSession = activeSession;
+
+    if (recordingMode !== "microphone") {
+      setRecordingStatusNote(
+        `${RECORDING_MODE_LABELS[recordingMode]} capture is planned next. Use Microphone now, or upload audio in the meantime.`,
+      );
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setRecordingStatusNote("This desktop runtime does not support live microphone recording yet.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      const mimeType = getSupportedRecordingMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      recordingChunksRef.current = [];
+      recordingSessionIdRef.current = recordingSession.id;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const sessionId = recordingSessionIdRef.current;
+        const chunks = [...recordingChunksRef.current];
+        recordingChunksRef.current = [];
+        recordingSessionIdRef.current = null;
+
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+        mediaRecorderRef.current = null;
+        setIsRecordingAudio(false);
+
+        if (!sessionId || !chunks.length) {
+          setRecordingStatusNote("Recording stopped, but no audio was captured.");
+          return;
+        }
+
+        try {
+          const file = new File(chunks, buildRecordingFilename({ sessionTitle: recordingSession.title, captureMode: recordingSession.captureMode }), {
+            type: mimeType || "audio/webm",
+          });
+          const persistedPath = await persistGeneratedAttachment({ sessionId, file });
+          setPendingAudioBySession((current) => ({ ...current, [sessionId]: file }));
+          await persistAudioAttachmentForSession({
+            sessionId,
+            file,
+            persistedPath,
+          });
+          setRecordingStatusNote("Recorded microphone audio into the current session. You can transcribe it next.");
+          setStatusNote("Recorded microphone audio into the current session.");
+        } catch (error) {
+          setRecordingStatusNote(
+            error instanceof Error ? error.message : "Recording finished, but saving the audio failed.",
+          );
+        }
+      };
+
+      recorder.onerror = () => {
+        setRecordingStatusNote("Microphone recording hit an error and could not continue.");
+      };
+
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecordingAudio(true);
+      setRecordingStatusNote("Recording from microphone...");
+      setStatusNote("Recording from microphone...");
+    } catch (error) {
+      setRecordingStatusNote(
+        error instanceof Error
+          ? `Could not start microphone recording: ${error.message}`
+          : "Could not start microphone recording.",
+      );
+    }
+  };
+
+  const handleStopRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") {
+      setRecordingStatusNote("No active recording is currently running.");
+      return;
+    }
+
+    recorder.stop();
+    setRecordingStatusNote("Finishing recording and saving the audio...");
   };
 
   const handleImportImage = async () => {
@@ -866,9 +1045,9 @@ export const App = () => {
   };
 
   const handleTranscribeAudio = async () => {
-    const file = pendingAudioBySession[activeSession.id];
+    const file = await getAudioFileForActiveSession();
     if (!file) {
-      setStatusNote("Upload audio for this session first, then transcribe it.");
+      setStatusNote("Record or upload audio for this session first, then transcribe it.");
       return;
     }
 
@@ -1045,13 +1224,23 @@ export const App = () => {
         keywords: ["transcript import upload"],
         action: () => void handleImportTranscript(),
       },
-      {
-        id: "upload-audio",
-        label: "Upload audio",
-        description: "Attach audio to the current session.",
-        keywords: ["audio upload recording"],
-        action: () => void handleImportAudio(),
-      },
+        {
+          id: "upload-audio",
+          label: "Upload audio",
+          description: "Attach audio to the current session.",
+          keywords: ["audio upload recording"],
+          action: () => void handleImportAudio(),
+        },
+        {
+          id: "record-audio",
+          label: isRecordingAudio ? "Stop recording" : "Start microphone recording",
+          description: isRecordingAudio
+            ? "Stop the current microphone recording and attach it to this session."
+            : "Record microphone audio directly into the current session.",
+          keywords: ["record microphone dictation audio meeting"],
+          action: () => void (isRecordingAudio ? handleStopRecording() : handleStartRecording()),
+          shortcut: "Capture",
+        },
       {
         id: "upload-image",
         label: "Upload image",
@@ -1396,10 +1585,16 @@ export const App = () => {
                 savedPeople={snapshot.settings.savedParticipants}
                 suggestedPeople={suggestedPeople}
                 isTranscribingAudio={isTranscribingAudio}
+                recordingMode={recordingMode}
+                isRecordingAudio={isRecordingAudio}
+                recordingStatusNote={recordingStatusNote}
                 onChange={(session) => void saveSession(session)}
                 onImportImage={() => void handleImportImage()}
                 onImportAudio={() => void handleImportAudio()}
                 onTranscribeAudio={() => void handleTranscribeAudio()}
+                onChangeRecordingMode={setRecordingMode}
+                onStartRecording={() => void handleStartRecording()}
+                onStopRecording={() => void handleStopRecording()}
                 onImportTranscript={() => void handleImportTranscript()}
                 onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
                 onUpdateAttachment={(attachment) => void handleUpdateAttachment(attachment)}
@@ -1503,6 +1698,9 @@ export const App = () => {
                   </button>
                   {activeCaptureMode !== "quick-note" ? (
                     <>
+                      <button className="small-button" type="button" onClick={() => void (isRecordingAudio ? handleStopRecording() : handleStartRecording())}>
+                        {isRecordingAudio ? "Stop recording" : "Record audio"}
+                      </button>
                       <button className="small-button" type="button" onClick={() => void handleImportAudio()}>
                         Upload audio
                       </button>

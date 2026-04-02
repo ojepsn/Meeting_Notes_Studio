@@ -16,14 +16,45 @@ interface SessionEditorProps {
   savedPeople: string[];
   suggestedPeople: string[];
   isTranscribingAudio: boolean;
+  recordingMode: "microphone" | "system-audio" | "hybrid";
+  isRecordingAudio: boolean;
+  recordingStatusNote?: string | null;
   onChange: (session: SessionRecord) => void;
   onImportTranscript: () => void;
   onImportAudio: () => void;
   onImportImage: () => void;
   onTranscribeAudio: () => void;
+  onChangeRecordingMode: (mode: "microphone" | "system-audio" | "hybrid") => void;
+  onStartRecording: () => void;
+  onStopRecording: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
   onUpdateAttachment: (attachment: AttachmentRecord) => void;
 }
+
+const RECORDING_MODE_META: Record<
+  "microphone" | "system-audio" | "hybrid",
+  {
+    label: string;
+    description: string;
+    availability: "available" | "coming-soon";
+  }
+> = {
+  microphone: {
+    label: "Microphone",
+    description: "Best for dictation and people speaking in the room.",
+    availability: "available",
+  },
+  "system-audio": {
+    label: "Computer audio",
+    description: "Best for Zoom, Teams, webinars, and speaker playback. Planned next.",
+    availability: "coming-soon",
+  },
+  hybrid: {
+    label: "Microphone + computer audio",
+    description: "Best for hybrid meetings with room voices and remote participants. Planned after system audio.",
+    availability: "coming-soon",
+  },
+};
 
 const DETAIL_LEVEL_LABELS: Record<number, string> = {
   1: "Minimal",
@@ -69,11 +100,17 @@ export const SessionEditor = ({
   savedPeople,
   suggestedPeople,
   isTranscribingAudio,
+  recordingMode,
+  isRecordingAudio,
+  recordingStatusNote,
   onChange,
   onImportTranscript,
   onImportAudio,
   onImportImage,
   onTranscribeAudio,
+  onChangeRecordingMode,
+  onStartRecording,
+  onStopRecording,
   onRemoveAttachment,
   onUpdateAttachment,
 }: SessionEditorProps) => {
@@ -397,6 +434,53 @@ export const SessionEditor = ({
             ) : null}
           </div>
         </details>
+
+        {session.captureMode !== "quick-note" ? (
+          <details className="field field-wide workspace-disclosure">
+            <summary>Record audio</summary>
+            <div className="workspace-disclosure-body stack">
+              <p className="tiny-text">
+                Choose the capture source that matches the meeting. Microphone recording is available now; computer-audio and hybrid capture are scaffolded next so the workflow does not need to change later.
+              </p>
+              <div className="recording-mode-grid">
+                {(Object.keys(RECORDING_MODE_META) as Array<"microphone" | "system-audio" | "hybrid">).map((mode) => {
+                  const meta = RECORDING_MODE_META[mode];
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      className="recording-mode-card"
+                      data-active={recordingMode === mode}
+                      disabled={meta.availability !== "available"}
+                      onClick={() => onChangeRecordingMode(mode)}
+                    >
+                      <strong>{meta.label}</strong>
+                      <p>{meta.description}</p>
+                      <span className="tiny-text">
+                        {meta.availability === "available" ? "Available now" : "Coming next"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="inline-row">
+                <button
+                  className="small-button inline-action"
+                  type="button"
+                  onClick={isRecordingAudio ? onStopRecording : onStartRecording}
+                >
+                  {isRecordingAudio ? "Stop recording" : "Start recording"}
+                </button>
+                <span className="tiny-text">
+                  {recordingStatusNote ||
+                    (recordingMode === "microphone"
+                      ? "Microphone mode records spoken audio directly into this session."
+                      : "This recording mode is scaffolded and will be enabled in the next recording phase.")}
+                </span>
+              </div>
+            </div>
+          </details>
+        ) : null}
 
         <div className="page-actions field-wide">
           <button className="small-button" type="button" onClick={onImportImage}>

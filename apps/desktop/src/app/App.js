@@ -1,5 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE } from "@notesmith/domain";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
@@ -18,7 +18,28 @@ import { transcribeAudio } from "../lib/ai/services/transcribeAudio";
 import { translateOutput } from "../lib/ai/services/translateOutput";
 import { checkForDesktopUpdates } from "../lib/ai/updater";
 import { exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsText } from "../lib/export/exportService";
-import { fileToAttachmentRecord, loadPersistedAttachmentFile, pickAudioFile, pickImageFile, pickTranscriptFile, persistSelectedAttachment, readTranscriptFile, removePersistedAttachment, } from "../lib/files/attachmentStore";
+import { fileToAttachmentRecord, loadPersistedAttachmentFile, pickAudioFile, pickImageFile, pickTranscriptFile, persistGeneratedAttachment, persistSelectedAttachment, readTranscriptFile, removePersistedAttachment, } from "../lib/files/attachmentStore";
+const RECORDING_MODE_LABELS = {
+    microphone: "Microphone",
+    "system-audio": "Computer audio",
+    hybrid: "Microphone + computer audio",
+};
+const buildRecordingFilename = ({ sessionTitle, captureMode, }) => {
+    const safeTitle = (sessionTitle.trim() || captureMode)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/gi, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 48) || "recording";
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    return `${safeTitle}-${timestamp}.webm`;
+};
+const getSupportedRecordingMimeType = () => {
+    if (typeof MediaRecorder === "undefined") {
+        return "";
+    }
+    const candidates = ["audio/webm;codecs=opus", "audio/webm"];
+    return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "";
+};
 const WORKSPACE_ITEMS = [
     { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
     { id: "tasks", label: "Tasks", description: "Personal follow-up management", available: false },
@@ -73,6 +94,9 @@ export const App = () => {
     const [isRevising, setIsRevising] = useState(false);
     const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
     const [pendingAudioBySession, setPendingAudioBySession] = useState({});
+    const [recordingMode, setRecordingMode] = useState("microphone");
+    const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+    const [recordingStatusNote, setRecordingStatusNote] = useState(null);
     const [availableUpdateVersion, setAvailableUpdateVersion] = useState(null);
     const [installUpdate, setInstallUpdate] = useState(null);
     const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
@@ -85,9 +109,21 @@ export const App = () => {
     const [isRefreshingModelPricing, setIsRefreshingModelPricing] = useState(false);
     const [suggestedPeopleToAdd, setSuggestedPeopleToAdd] = useState([]);
     const [selectedSuggestedPeople, setSelectedSuggestedPeople] = useState([]);
+    const mediaRecorderRef = useRef(null);
+    const mediaStreamRef = useRef(null);
+    const recordingChunksRef = useRef([]);
+    const recordingSessionIdRef = useRef(null);
     useEffect(() => {
         void load();
     }, [load]);
+    useEffect(() => {
+        return () => {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+                mediaRecorderRef.current.stop();
+            }
+            mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+        };
+    }, []);
     useEffect(() => {
         if (!isLoaded || loadError) {
             return;
@@ -348,6 +384,23 @@ export const App = () => {
             return loadPersistedAttachmentFile(activeAudioAttachment);
         }
         return null;
+    };
+    const persistAudioAttachmentForSession = async ({ sessionId, file, persistedPath, }) => {
+        const latestSnapshot = await repository.loadSnapshot();
+        const existingAudioAttachments = latestSnapshot.attachments.filter((entry) => entry.sessionId === sessionId && entry.kind === "audio");
+        await saveAttachments([
+            ...latestSnapshot.attachments.filter((entry) => !(entry.sessionId === sessionId && entry.kind === "audio")),
+            fileToAttachmentRecord({
+                file,
+                sessionId,
+                kind: "audio",
+                filePath: persistedPath,
+            }),
+        ]);
+        await Promise.all(existingAudioAttachments
+            .map((attachment) => attachment.filePath)
+            .filter(Boolean)
+            .map((filePath) => removePersistedAttachment(filePath)));
     };
     const outputActionConfig = (() => {
         if (activeCaptureMode === "meeting-note") {
@@ -651,16 +704,99 @@ export const App = () => {
             selection,
         });
         setPendingAudioBySession((current) => ({ ...current, [activeSession.id]: selection.file }));
-        await saveAttachments([
-            ...snapshot.attachments.filter((entry) => !(entry.sessionId === activeSession.id && entry.kind === "audio" && entry.filename === selection.file.name)),
-            fileToAttachmentRecord({
-                file: selection.file,
-                sessionId: activeSession.id,
-                kind: "audio",
-                filePath: persistedPath,
-            }),
-        ]);
+        await persistAudioAttachmentForSession({
+            sessionId: activeSession.id,
+            file: selection.file,
+            persistedPath,
+        });
         setStatusNote("Uploaded audio into the desktop session. You can transcribe it into the live transcript next.");
+        setRecordingStatusNote("Audio file attached to the current session.");
+    };
+    const handleStartRecording = async () => {
+        if (!activeSession) {
+            return;
+        }
+        const recordingSession = activeSession;
+        if (recordingMode !== "microphone") {
+            setRecordingStatusNote(`${RECORDING_MODE_LABELS[recordingMode]} capture is planned next. Use Microphone now, or upload audio in the meantime.`);
+            return;
+        }
+        if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+            setRecordingStatusNote("This desktop runtime does not support live microphone recording yet.");
+            return;
+        }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                },
+            });
+            const mimeType = getSupportedRecordingMimeType();
+            const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+            recordingChunksRef.current = [];
+            recordingSessionIdRef.current = recordingSession.id;
+            recorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                    recordingChunksRef.current.push(event.data);
+                }
+            };
+            recorder.onstop = async () => {
+                const sessionId = recordingSessionIdRef.current;
+                const chunks = [...recordingChunksRef.current];
+                recordingChunksRef.current = [];
+                recordingSessionIdRef.current = null;
+                mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+                mediaStreamRef.current = null;
+                mediaRecorderRef.current = null;
+                setIsRecordingAudio(false);
+                if (!sessionId || !chunks.length) {
+                    setRecordingStatusNote("Recording stopped, but no audio was captured.");
+                    return;
+                }
+                try {
+                    const file = new File(chunks, buildRecordingFilename({ sessionTitle: recordingSession.title, captureMode: recordingSession.captureMode }), {
+                        type: mimeType || "audio/webm",
+                    });
+                    const persistedPath = await persistGeneratedAttachment({ sessionId, file });
+                    setPendingAudioBySession((current) => ({ ...current, [sessionId]: file }));
+                    await persistAudioAttachmentForSession({
+                        sessionId,
+                        file,
+                        persistedPath,
+                    });
+                    setRecordingStatusNote("Recorded microphone audio into the current session. You can transcribe it next.");
+                    setStatusNote("Recorded microphone audio into the current session.");
+                }
+                catch (error) {
+                    setRecordingStatusNote(error instanceof Error ? error.message : "Recording finished, but saving the audio failed.");
+                }
+            };
+            recorder.onerror = () => {
+                setRecordingStatusNote("Microphone recording hit an error and could not continue.");
+            };
+            mediaStreamRef.current = stream;
+            mediaRecorderRef.current = recorder;
+            recorder.start();
+            setIsRecordingAudio(true);
+            setRecordingStatusNote("Recording from microphone...");
+            setStatusNote("Recording from microphone...");
+        }
+        catch (error) {
+            setRecordingStatusNote(error instanceof Error
+                ? `Could not start microphone recording: ${error.message}`
+                : "Could not start microphone recording.");
+        }
+    };
+    const handleStopRecording = () => {
+        const recorder = mediaRecorderRef.current;
+        if (!recorder || recorder.state === "inactive") {
+            setRecordingStatusNote("No active recording is currently running.");
+            return;
+        }
+        recorder.stop();
+        setRecordingStatusNote("Finishing recording and saving the audio...");
     };
     const handleImportImage = async () => {
         const selection = await pickImageFile();
@@ -686,9 +822,9 @@ export const App = () => {
         setStatusNote("Added image to the session. You can caption it and choose whether it should appear in the polished output.");
     };
     const handleTranscribeAudio = async () => {
-        const file = pendingAudioBySession[activeSession.id];
+        const file = await getAudioFileForActiveSession();
         if (!file) {
-            setStatusNote("Upload audio for this session first, then transcribe it.");
+            setStatusNote("Record or upload audio for this session first, then transcribe it.");
             return;
         }
         setIsTranscribingAudio(true);
@@ -862,6 +998,16 @@ export const App = () => {
             action: () => void handleImportAudio(),
         },
         {
+            id: "record-audio",
+            label: isRecordingAudio ? "Stop recording" : "Start microphone recording",
+            description: isRecordingAudio
+                ? "Stop the current microphone recording and attach it to this session."
+                : "Record microphone audio directly into the current session.",
+            keywords: ["record microphone dictation audio meeting"],
+            action: () => void (isRecordingAudio ? handleStopRecording() : handleStartRecording()),
+            shortcut: "Capture",
+        },
+        {
             id: "upload-image",
             label: "Upload image",
             description: "Attach an image and optionally include it in output.",
@@ -933,13 +1079,13 @@ export const App = () => {
                                                                     ? activeView === "capture"
                                                                         ? `${CAPTURE_MODE_UI[activeCaptureMode].description} Secondary tools stay in the inspector or overlays so the center canvas stays calm.`
                                                                         : "Shape and export polished notes here. AI and export controls stay nearby without crowding the document."
-                                                                    : "This workspace placeholder already follows the same shell structure so the product can grow without changing how navigation works." })] }), _jsx("div", { className: "page-actions", children: _jsxs("div", { className: "view-switch", children: [_jsx("button", { className: "segment-button", "data-active": activeView === "capture", type: "button", onClick: () => setActiveView("capture"), disabled: activeWorkspace !== "notes", children: "Capture" }), _jsx("button", { className: "segment-button", "data-active": activeView === "output", type: "button", onClick: () => setActiveView("output"), disabled: activeWorkspace !== "notes", children: "Output" })] }) })] }), _jsx("div", { className: "workspace-guide-row", children: _jsx("span", { className: "tiny-text", children: "Shortcuts: Ctrl/Cmd+K command palette, Ctrl/Cmd+N new session, Alt+1/2 switch views, Ctrl/Cmd+Enter primary output action." }) })] }), activeWorkspace !== "notes" ? (_jsxs("div", { className: "card empty-state-card", children: [_jsx("h2", { children: "Coming next" }), _jsx("p", { children: WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.description || "This workspace is planned for a later phase." }), _jsxs("ol", { className: "empty-state-steps", children: [_jsx("li", { children: "Return to Notes from the left rail whenever you want to work now." }), _jsx("li", { children: "Use Ctrl/Cmd+K to reach settings, sessions, and future actions quickly." }), _jsx("li", { children: "This workspace will use the same center-canvas plus right-inspector pattern when it ships." })] })] })) : activeView === "capture" ? (_jsx(SessionEditor, { session: activeSession, templates: snapshot.templates, attachments: activeAttachments, savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, isTranscribingAudio: isTranscribingAudio, onChange: (session) => void saveSession(session), onImportImage: () => void handleImportImage(), onImportAudio: () => void handleImportAudio(), onTranscribeAudio: () => void handleTranscribeAudio(), onImportTranscript: () => void handleImportTranscript(), onRemoveAttachment: (attachmentId) => void handleRemoveAttachment(attachmentId), onUpdateAttachment: (attachment) => void handleUpdateAttachment(attachment) })) : (_jsx(OutputWorkspace, { session: activeSession, attachments: activeAttachments, onChange: (session) => void saveSession(session), isPrimaryActionRunning: outputActionConfig.isPrimaryRunning, isSecondaryActionRunning: outputActionConfig.isSecondaryRunning, isRevising: isRevising, onPrimaryAction: outputActionConfig.onPrimary, onSecondaryAction: outputActionConfig.onSecondary, onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onExportText: () => exportOutputAsText({ title: activeSession.title, output: activeSession.output }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output }), onExportHtml: () => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output }), primaryActionLabel: outputActionConfig.primaryLabel, secondaryActionLabel: outputActionConfig.secondaryLabel, emptyStatePrimaryLabel: outputActionConfig.emptyStatePrimaryLabel, emptyStateSecondaryLabel: outputActionConfig.emptyStateSecondaryLabel }))] }), _jsxs("aside", { className: "workspace-inspector stack", children: [_jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Current session" }), _jsx("p", { children: "Keep just enough context visible while the center canvas stays focused." })] }), _jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.title || "Untitled session" }), _jsxs("span", { className: "muted", children: [CAPTURE_MODE_UI[activeCaptureMode].label, " \u00B7 ", activeTemplate?.name ?? "No template selected"] })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.date || "No date set" }), _jsxs("span", { className: "muted", children: [activeSession.startTime || "--:--", " to ", activeSession.endTime || "--:--"] })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.participantText || (activeCaptureMode === "meeting-note" ? "No people yet" : "Optional people context") }), _jsx("span", { className: "muted", children: "People" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: includedOutputImages.length }), _jsx("span", { className: "muted", children: "Images staged for polished output" })] })] })] }), _jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "AI visibility" }), _jsx("p", { children: "AI should feel inspectable and predictable, not hidden behind a single button." })] }), _jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: selectedTextModelOption?.label || snapshot.settings.textModel }), _jsx("span", { className: "muted", children: "Text model for generation, revision, and translation" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel }), _jsx("span", { className: "muted", children: "Transcription model" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: snapshot.settings.apiKey ? "Stored locally on this machine" : "No API key set yet" }), _jsx("span", { className: "muted", children: "AI settings stay local and are never written into shared desktop data." })] })] }), _jsx("button", { className: "small-button", type: "button", onClick: () => openSettingsSection("ai"), children: "Open AI settings" })] }), _jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: activeView === "capture" ? "Capture tools" : "Output tools" }), _jsx("p", { children: activeView === "capture"
+                                                                    : "This workspace placeholder already follows the same shell structure so the product can grow without changing how navigation works." })] }), _jsx("div", { className: "page-actions", children: _jsxs("div", { className: "view-switch", children: [_jsx("button", { className: "segment-button", "data-active": activeView === "capture", type: "button", onClick: () => setActiveView("capture"), disabled: activeWorkspace !== "notes", children: "Capture" }), _jsx("button", { className: "segment-button", "data-active": activeView === "output", type: "button", onClick: () => setActiveView("output"), disabled: activeWorkspace !== "notes", children: "Output" })] }) })] }), _jsx("div", { className: "workspace-guide-row", children: _jsx("span", { className: "tiny-text", children: "Shortcuts: Ctrl/Cmd+K command palette, Ctrl/Cmd+N new session, Alt+1/2 switch views, Ctrl/Cmd+Enter primary output action." }) })] }), activeWorkspace !== "notes" ? (_jsxs("div", { className: "card empty-state-card", children: [_jsx("h2", { children: "Coming next" }), _jsx("p", { children: WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.description || "This workspace is planned for a later phase." }), _jsxs("ol", { className: "empty-state-steps", children: [_jsx("li", { children: "Return to Notes from the left rail whenever you want to work now." }), _jsx("li", { children: "Use Ctrl/Cmd+K to reach settings, sessions, and future actions quickly." }), _jsx("li", { children: "This workspace will use the same center-canvas plus right-inspector pattern when it ships." })] })] })) : activeView === "capture" ? (_jsx(SessionEditor, { session: activeSession, templates: snapshot.templates, attachments: activeAttachments, savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, isTranscribingAudio: isTranscribingAudio, recordingMode: recordingMode, isRecordingAudio: isRecordingAudio, recordingStatusNote: recordingStatusNote, onChange: (session) => void saveSession(session), onImportImage: () => void handleImportImage(), onImportAudio: () => void handleImportAudio(), onTranscribeAudio: () => void handleTranscribeAudio(), onChangeRecordingMode: setRecordingMode, onStartRecording: () => void handleStartRecording(), onStopRecording: () => void handleStopRecording(), onImportTranscript: () => void handleImportTranscript(), onRemoveAttachment: (attachmentId) => void handleRemoveAttachment(attachmentId), onUpdateAttachment: (attachment) => void handleUpdateAttachment(attachment) })) : (_jsx(OutputWorkspace, { session: activeSession, attachments: activeAttachments, onChange: (session) => void saveSession(session), isPrimaryActionRunning: outputActionConfig.isPrimaryRunning, isSecondaryActionRunning: outputActionConfig.isSecondaryRunning, isRevising: isRevising, onPrimaryAction: outputActionConfig.onPrimary, onSecondaryAction: outputActionConfig.onSecondary, onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onExportText: () => exportOutputAsText({ title: activeSession.title, output: activeSession.output }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output }), onExportHtml: () => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output }), primaryActionLabel: outputActionConfig.primaryLabel, secondaryActionLabel: outputActionConfig.secondaryLabel, emptyStatePrimaryLabel: outputActionConfig.emptyStatePrimaryLabel, emptyStateSecondaryLabel: outputActionConfig.emptyStateSecondaryLabel }))] }), _jsxs("aside", { className: "workspace-inspector stack", children: [_jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Current session" }), _jsx("p", { children: "Keep just enough context visible while the center canvas stays focused." })] }), _jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.title || "Untitled session" }), _jsxs("span", { className: "muted", children: [CAPTURE_MODE_UI[activeCaptureMode].label, " \u00B7 ", activeTemplate?.name ?? "No template selected"] })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.date || "No date set" }), _jsxs("span", { className: "muted", children: [activeSession.startTime || "--:--", " to ", activeSession.endTime || "--:--"] })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.participantText || (activeCaptureMode === "meeting-note" ? "No people yet" : "Optional people context") }), _jsx("span", { className: "muted", children: "People" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: includedOutputImages.length }), _jsx("span", { className: "muted", children: "Images staged for polished output" })] })] })] }), _jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "AI visibility" }), _jsx("p", { children: "AI should feel inspectable and predictable, not hidden behind a single button." })] }), _jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: selectedTextModelOption?.label || snapshot.settings.textModel }), _jsx("span", { className: "muted", children: "Text model for generation, revision, and translation" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel }), _jsx("span", { className: "muted", children: "Transcription model" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: snapshot.settings.apiKey ? "Stored locally on this machine" : "No API key set yet" }), _jsx("span", { className: "muted", children: "AI settings stay local and are never written into shared desktop data." })] })] }), _jsx("button", { className: "small-button", type: "button", onClick: () => openSettingsSection("ai"), children: "Open AI settings" })] }), _jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: activeView === "capture" ? "Capture tools" : "Output tools" }), _jsx("p", { children: activeView === "capture"
                                                             ? activeCaptureMode === "meeting-note"
                                                                 ? "Meeting imports, transcript tools, and supporting media stay here."
                                                                 : activeCaptureMode === "voice-note"
                                                                     ? "Voice capture, transcription, and audio-first actions stay here."
                                                                     : "Quick note capture stays minimal in the center; supporting imports stay here."
-                                                            : "Primary output stays in the center. AI and export actions stay here." })] }), activeWorkspace === "notes" && activeView === "capture" ? (_jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportImage(), children: "Upload image" }), activeCaptureMode !== "quick-note" ? (_jsxs(_Fragment, { children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportAudio(), children: "Upload audio" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleTranscribeAudio(), children: isTranscribingAudio ? "Transcribing..." : "Transcribe audio" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportTranscript(), children: "Upload transcript" })] })) : (_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportTranscript(), children: "Upload note text" }))] })) : activeWorkspace === "notes" ? (_jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: outputActionConfig.onPrimary, disabled: outputActionConfig.isPrimaryRunning, children: outputActionConfig.isPrimaryRunning ? `${outputActionConfig.primaryLabel}...` : outputActionConfig.primaryLabel }), outputActionConfig.secondaryLabel && outputActionConfig.onSecondary ? (_jsx("button", { className: "small-button", type: "button", onClick: outputActionConfig.onSecondary, disabled: outputActionConfig.isSecondaryRunning, children: outputActionConfig.isSecondaryRunning ? `${outputActionConfig.secondaryLabel}...` : outputActionConfig.secondaryLabel })) : null, _jsx("button", { className: "small-button", type: "button", onClick: () => void handleTranslate(), children: "Translate" }), _jsxs("details", { className: "inspector-disclosure", children: [_jsx("summary", { children: "More output actions" }), _jsxs("div", { className: "stack", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => exportOutputAsText({ title: activeSession.title, output: activeSession.output }), children: "Export text" }), _jsx("button", { className: "small-button", type: "button", onClick: () => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output }), children: "Export markdown" }), _jsx("button", { className: "small-button", type: "button", onClick: () => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output }), children: "Export HTML" })] })] })] })) : (_jsx("p", { className: "tiny-text", children: "This inspector area will hold the primary tools for this workspace once it is implemented." }))] }), _jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "System status" }), _jsx("p", { children: "Small passive information belongs in the inspector, not mixed with primary actions." })] }), _jsx("span", { className: `status-chip status-chip-${saveState}`, children: saveStatusLabel }), _jsxs("span", { className: "status-chip", children: [activeAttachments.length, " attachment", activeAttachments.length === 1 ? "" : "s"] }), _jsxs("span", { className: "status-chip", children: [activeTemplate?.sections.length ?? 0, " output section", (activeTemplate?.sections.length ?? 0) === 1 ? "" : "s"] }), updateStatusNote ? _jsx("p", { className: "tiny-text", children: updateStatusNote }) : null] })] })] })] }), isCommandPaletteOpen ? (_jsx("div", { className: "overlay-backdrop", role: "presentation", onClick: closeCommandPalette, children: _jsxs("div", { className: "overlay-surface command-palette-surface", role: "dialog", "aria-modal": "true", onClick: (event) => event.stopPropagation(), children: [_jsxs("div", { className: "overlay-header", children: [_jsxs("div", { children: [_jsx("strong", { children: "Command palette" }), _jsx("p", { className: "tiny-text", children: "Search sessions, settings, tools, and future workspaces. Keyboard first by design." })] }), _jsx("button", { className: "small-button", type: "button", onClick: closeCommandPalette, children: "Close" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "command-query", children: "Search actions" }), _jsx("input", { id: "command-query", autoFocus: true, value: commandQuery, onChange: (event) => setCommandQuery(event.target.value), placeholder: "Try: sessions, AI settings, translate, themes, upload image" })] }), _jsxs("div", { className: "command-palette-list", children: [filteredCommandActions.slice(0, 14).map((command) => (_jsxs("button", { type: "button", className: "command-palette-item", onClick: () => {
+                                                            : "Primary output stays in the center. AI and export actions stay here." })] }), activeWorkspace === "notes" && activeView === "capture" ? (_jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportImage(), children: "Upload image" }), activeCaptureMode !== "quick-note" ? (_jsxs(_Fragment, { children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void (isRecordingAudio ? handleStopRecording() : handleStartRecording()), children: isRecordingAudio ? "Stop recording" : "Record audio" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportAudio(), children: "Upload audio" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleTranscribeAudio(), children: isTranscribingAudio ? "Transcribing..." : "Transcribe audio" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportTranscript(), children: "Upload transcript" })] })) : (_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportTranscript(), children: "Upload note text" }))] })) : activeWorkspace === "notes" ? (_jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: outputActionConfig.onPrimary, disabled: outputActionConfig.isPrimaryRunning, children: outputActionConfig.isPrimaryRunning ? `${outputActionConfig.primaryLabel}...` : outputActionConfig.primaryLabel }), outputActionConfig.secondaryLabel && outputActionConfig.onSecondary ? (_jsx("button", { className: "small-button", type: "button", onClick: outputActionConfig.onSecondary, disabled: outputActionConfig.isSecondaryRunning, children: outputActionConfig.isSecondaryRunning ? `${outputActionConfig.secondaryLabel}...` : outputActionConfig.secondaryLabel })) : null, _jsx("button", { className: "small-button", type: "button", onClick: () => void handleTranslate(), children: "Translate" }), _jsxs("details", { className: "inspector-disclosure", children: [_jsx("summary", { children: "More output actions" }), _jsxs("div", { className: "stack", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => exportOutputAsText({ title: activeSession.title, output: activeSession.output }), children: "Export text" }), _jsx("button", { className: "small-button", type: "button", onClick: () => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output }), children: "Export markdown" }), _jsx("button", { className: "small-button", type: "button", onClick: () => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output }), children: "Export HTML" })] })] })] })) : (_jsx("p", { className: "tiny-text", children: "This inspector area will hold the primary tools for this workspace once it is implemented." }))] }), _jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "System status" }), _jsx("p", { children: "Small passive information belongs in the inspector, not mixed with primary actions." })] }), _jsx("span", { className: `status-chip status-chip-${saveState}`, children: saveStatusLabel }), _jsxs("span", { className: "status-chip", children: [activeAttachments.length, " attachment", activeAttachments.length === 1 ? "" : "s"] }), _jsxs("span", { className: "status-chip", children: [activeTemplate?.sections.length ?? 0, " output section", (activeTemplate?.sections.length ?? 0) === 1 ? "" : "s"] }), updateStatusNote ? _jsx("p", { className: "tiny-text", children: updateStatusNote }) : null] })] })] })] }), isCommandPaletteOpen ? (_jsx("div", { className: "overlay-backdrop", role: "presentation", onClick: closeCommandPalette, children: _jsxs("div", { className: "overlay-surface command-palette-surface", role: "dialog", "aria-modal": "true", onClick: (event) => event.stopPropagation(), children: [_jsxs("div", { className: "overlay-header", children: [_jsxs("div", { children: [_jsx("strong", { children: "Command palette" }), _jsx("p", { className: "tiny-text", children: "Search sessions, settings, tools, and future workspaces. Keyboard first by design." })] }), _jsx("button", { className: "small-button", type: "button", onClick: closeCommandPalette, children: "Close" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "command-query", children: "Search actions" }), _jsx("input", { id: "command-query", autoFocus: true, value: commandQuery, onChange: (event) => setCommandQuery(event.target.value), placeholder: "Try: sessions, AI settings, translate, themes, upload image" })] }), _jsxs("div", { className: "command-palette-list", children: [filteredCommandActions.slice(0, 14).map((command) => (_jsxs("button", { type: "button", className: "command-palette-item", onClick: () => {
                                         closeCommandPalette();
                                         command.action();
                                     }, children: [_jsxs("div", { children: [_jsx("strong", { children: command.label }), _jsx("p", { children: command.description })] }), command.shortcut ? _jsx("span", { className: "tiny-text", children: command.shortcut }) : null] }, command.id))), !filteredCommandActions.length ? (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "No matching actions" }), _jsx("span", { className: "muted", children: "Try searching by workspace, setting, or action name." })] })) : null] })] }) })) : null, openPanel ? (_jsx("div", { className: "overlay-backdrop", role: "presentation", onClick: closeOverlay, children: _jsxs("div", { className: "overlay-surface", role: "dialog", "aria-modal": "true", onClick: (event) => event.stopPropagation(), children: [_jsxs("div", { className: "overlay-header", children: [_jsxs("div", { children: [_jsx("strong", { children: openPanel === "sessions"

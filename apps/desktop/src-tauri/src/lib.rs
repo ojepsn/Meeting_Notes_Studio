@@ -63,6 +63,44 @@ fn copy_file_into_app_data(
 }
 
 #[tauri::command]
+fn write_bytes_into_app_data(
+    app: tauri::AppHandle,
+    session_id: String,
+    filename: String,
+    bytes: Vec<u8>,
+) -> Result<String, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+
+    let extension = Path::new(&filename)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or("");
+    let stem = Path::new(&filename)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("attachment");
+    let safe_name = sanitize_filename(stem);
+    let persisted_name = if extension.is_empty() {
+        format!("{}-{}", safe_name, session_id)
+    } else {
+        format!("{}-{}.{}", safe_name, session_id, extension)
+    };
+
+    let destination: PathBuf = app_data_dir
+        .join("attachments")
+        .join(&session_id)
+        .join(persisted_name);
+
+    ensure_parent_dir(&destination)?;
+    fs::write(&destination, bytes).map_err(|error| error.to_string())?;
+
+    Ok(destination.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn delete_persisted_file(path: String) -> Result<(), String> {
     match fs::remove_file(path) {
         Ok(_) => Ok(()),
@@ -80,6 +118,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_file_bytes,
             copy_file_into_app_data,
+            write_bytes_into_app_data,
             delete_persisted_file
         ])
         .run(tauri::generate_context!())
