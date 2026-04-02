@@ -47,7 +47,7 @@ const SETTINGS_SECTIONS: Array<{ id: SettingsSection; label: string; description
   { id: "diagnostics", label: "AI Diagnostics", description: "Metrics, cache, and recent AI history" },
   { id: "themes", label: "Themes", description: "Look and feel" },
   { id: "output", label: "Output formatting", description: "Language and output defaults" },
-  { id: "people", label: "People", description: "Saved people and abbreviations" },
+  { id: "people", label: "People & labels", description: "Saved people, labels, and abbreviations" },
   { id: "prompts", label: "Prompts", description: "Generation and revision instructions" },
   { id: "templates", label: "Templates for meetings/notes", description: "Built-in and custom note structures" },
   { id: "other", label: "Other upcoming settings", description: "Migration, updates, future options" },
@@ -225,6 +225,9 @@ export const SettingsCard = ({
   const [showAdvancedTextModels, setShowAdvancedTextModels] = useState(false);
   const [showAdvancedTranscriptionModels, setShowAdvancedTranscriptionModels] = useState(false);
   const [personDraft, setPersonDraft] = useState("");
+  const [projectDraft, setProjectDraft] = useState("");
+  const [departmentDraft, setDepartmentDraft] = useState("");
+  const [tagDraft, setTagDraft] = useState("");
   const [abbrShort, setAbbrShort] = useState("");
   const [abbrFull, setAbbrFull] = useState("");
   const [extraBlockLabel, setExtraBlockLabel] = useState("");
@@ -642,8 +645,8 @@ export const SettingsCard = ({
         {activeSection === "people" ? (
           <div className="sidebar-card">
             <div>
-              <h3>People</h3>
-              <p>Keep frequent people and shorthand in one place so note capture stays fast and consistent.</p>
+              <h3>People & labels</h3>
+              <p>Keep reusable People, Projects, Departments, Tags, and shorthand in one place so capture stays fast while filtering stays structured.</p>
             </div>
             <div className="section-divider">
               <div className="inline-row">
@@ -684,6 +687,153 @@ export const SettingsCard = ({
                           onChange({
                             ...settings,
                             savedParticipants: settings.savedParticipants.filter((entry) => entry !== participant),
+                          })
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="section-divider">
+              <div className="inline-row">
+                <div className="field">
+                  <label htmlFor="project-draft">Saved projects</label>
+                  <input
+                    id="project-draft"
+                    value={projectDraft}
+                    onChange={(event) => setProjectDraft(event.target.value)}
+                    placeholder="Add project"
+                  />
+                </div>
+                <button
+                  className="small-button inline-action"
+                  type="button"
+                  onClick={() => {
+                    const nextValue = projectDraft.trim();
+                    if (!nextValue) return;
+                    onChange({
+                      ...settings,
+                      savedProjects: Array.from(new Set([...settings.savedProjects, nextValue])).sort(),
+                    });
+                    setProjectDraft("");
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+              <div className="section-list">
+                {settings.savedProjects.map((project) => (
+                  <div key={project} className="list-item">
+                    <strong>{project}</strong>
+                    <div className="list-item-actions">
+                      <button
+                        className="small-button danger-button"
+                        type="button"
+                        onClick={() =>
+                          onChange({
+                            ...settings,
+                            savedProjects: settings.savedProjects.filter((entry) => entry !== project),
+                          })
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="section-divider">
+              <div className="inline-row">
+                <div className="field">
+                  <label htmlFor="department-draft">Saved departments</label>
+                  <input
+                    id="department-draft"
+                    value={departmentDraft}
+                    onChange={(event) => setDepartmentDraft(event.target.value)}
+                    placeholder="Add department"
+                  />
+                </div>
+                <button
+                  className="small-button inline-action"
+                  type="button"
+                  onClick={() => {
+                    const nextValue = departmentDraft.trim();
+                    if (!nextValue) return;
+                    onChange({
+                      ...settings,
+                      savedDepartments: Array.from(new Set([...settings.savedDepartments, nextValue])).sort(),
+                    });
+                    setDepartmentDraft("");
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+              <div className="section-list">
+                {settings.savedDepartments.map((department) => (
+                  <div key={department} className="list-item">
+                    <strong>{department}</strong>
+                    <div className="list-item-actions">
+                      <button
+                        className="small-button danger-button"
+                        type="button"
+                        onClick={() =>
+                          onChange({
+                            ...settings,
+                            savedDepartments: settings.savedDepartments.filter((entry) => entry !== department),
+                          })
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="section-divider">
+              <div className="inline-row">
+                <div className="field">
+                  <label htmlFor="tag-draft">Saved tags</label>
+                  <input
+                    id="tag-draft"
+                    value={tagDraft}
+                    onChange={(event) => setTagDraft(event.target.value)}
+                    placeholder="Add tag"
+                  />
+                </div>
+                <button
+                  className="small-button inline-action"
+                  type="button"
+                  onClick={() => {
+                    const nextValue = tagDraft.trim();
+                    if (!nextValue) return;
+                    onChange({
+                      ...settings,
+                      savedTags: Array.from(new Set([...settings.savedTags, nextValue])).sort(),
+                    });
+                    setTagDraft("");
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+              <div className="section-list">
+                {settings.savedTags.map((tag) => (
+                  <div key={tag} className="list-item">
+                    <strong>{tag}</strong>
+                    <div className="list-item-actions">
+                      <button
+                        className="small-button danger-button"
+                        type="button"
+                        onClick={() =>
+                          onChange({
+                            ...settings,
+                            savedTags: settings.savedTags.filter((entry) => entry !== tag),
                           })
                         }
                       >

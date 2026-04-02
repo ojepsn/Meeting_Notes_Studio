@@ -22,7 +22,7 @@ export const SessionsSidebar = ({
     const query = filter.trim().toLowerCase();
     if (!query) return sessions;
     return sessions.filter((session) =>
-      [session.title, session.date, session.participantText, session.manualNotes, session.liveTranscript]
+      [session.title, session.date, session.participantText, session.project, session.department, session.tagsText, session.manualNotes, session.liveTranscript]
         .join(" ")
         .toLowerCase()
         .includes(query),
@@ -46,7 +46,7 @@ export const SessionsSidebar = ({
           id="session-filter-desktop"
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
-          placeholder="Search title, notes, transcript, participants"
+          placeholder="Search title, notes, transcript, people, project, tags"
         />
       </div>
       <div className="session-list">
@@ -66,7 +66,9 @@ export const SessionsSidebar = ({
               <strong>
                 {session.date || "No date"} {session.title || "Untitled session"}
               </strong>
-              <span className="muted">{session.participantText || "No participants yet"}</span>
+              <span className="muted">
+                {[session.participantText, session.project, session.department, session.tagsText].filter(Boolean).join(" · ") || "No metadata yet"}
+              </span>
             </button>
             <div className="list-item-actions">
               <button className="small-button" type="button" onClick={() => onSelect(session.id)}>

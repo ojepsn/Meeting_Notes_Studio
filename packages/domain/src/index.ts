@@ -36,6 +36,9 @@ export interface SessionRecord {
   templateId: string;
   title: string;
   participantText: string;
+  project: string;
+  department: string;
+  tagsText: string;
   date: string;
   startTime: string;
   endTime: string;
@@ -99,6 +102,9 @@ export interface LocalAppSettings {
   textModel: string;
   transcriptionModel: string;
   savedParticipants: string[];
+  savedProjects: string[];
+  savedDepartments: string[];
+  savedTags: string[];
   abbreviations: Array<{ id: string; shortForm: string; fullForm: string }>;
   promptProfile: PromptProfile;
 }

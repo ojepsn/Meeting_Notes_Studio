@@ -46,6 +46,7 @@ import {
   RECORDING_MODE_LABELS,
   type RecordingMode,
 } from "../lib/files/recording";
+import { parseTokenList } from "../components/peoplePickerUtils";
 
 type AppWorkspace = "notes" | "tasks" | "calendar" | "assistant" | "files";
 type OverlayPanel = "new-note" | "people-review" | "sessions" | "todos" | "backup" | "settings" | "more" | null;
@@ -140,7 +141,7 @@ export const App = () => {
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
-  const [statusNote, setStatusNote] = useState("Core desktop foundation ready for migration.");
+  const [statusNote, setStatusNote] = useState("Ready.");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRevising, setIsRevising] = useState(false);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
@@ -309,42 +310,33 @@ export const App = () => {
     }
   };
 
-  const parsePeopleFromSession = (participantText: string) =>
-    Array.from(
-      new Map(
-        participantText
-          .split(/[\n,;]+/)
-          .map((entry) => entry.trim())
-          .filter(Boolean)
-          .map((entry) => [entry.toLocaleLowerCase(), entry] as const),
-      ).values(),
-    );
+  const parsePeopleFromSession = (participantText: string) => parseTokenList(participantText);
 
-  const suggestedPeople = useMemo(() => {
-    if (!snapshot) {
-      return [];
-    }
-
-    const savedPeopleLookup = new Map(
-      snapshot.settings.savedParticipants
+  const rankSavedValues = (
+    sessions: (typeof snapshot extends null ? never : NonNullable<typeof snapshot>["sessions"]),
+    savedValues: string[],
+    collectEntries: (session: NonNullable<typeof snapshot>["sessions"][number]) => string[],
+  ) => {
+    const savedLookup = new Map(
+      savedValues
         .map((entry) => entry.trim())
         .filter(Boolean)
         .map((entry) => [entry.toLocaleLowerCase(), entry] as const),
     );
-    const peopleStats = new Map<string, { name: string; count: number; lastSeen: number }>();
+    const stats = new Map<string, { name: string; count: number; lastSeen: number }>();
 
-    snapshot.sessions.forEach((session) => {
+    sessions.forEach((session) => {
       const lastSeen = Date.parse(session.updatedAt || session.createdAt || "") || 0;
-      parsePeopleFromSession(session.participantText).forEach((person) => {
-        const key = person.toLocaleLowerCase();
-        const existing = peopleStats.get(key);
-        const canonicalName = savedPeopleLookup.get(key) ?? person;
+      collectEntries(session).forEach((entry) => {
+        const key = entry.toLocaleLowerCase();
+        const existing = stats.get(key);
+        const canonicalName = savedLookup.get(key) ?? entry;
         if (existing) {
           existing.count += 1;
           existing.lastSeen = Math.max(existing.lastSeen, lastSeen);
           existing.name = canonicalName;
         } else {
-          peopleStats.set(key, {
+          stats.set(key, {
             name: canonicalName,
             count: 1,
             lastSeen,
@@ -353,16 +345,16 @@ export const App = () => {
       });
     });
 
-    const rankedSavedPeople = snapshot.settings.savedParticipants
+    const rankedSaved = savedValues
       .map((entry) => entry.trim())
       .filter(Boolean)
       .map((entry) => {
         const key = entry.toLocaleLowerCase();
-        const stats = peopleStats.get(key);
+        const entryStats = stats.get(key);
         return {
           name: entry,
-          count: stats?.count ?? 0,
-          lastSeen: stats?.lastSeen ?? 0,
+          count: entryStats?.count ?? 0,
+          lastSeen: entryStats?.lastSeen ?? 0,
         };
       })
       .sort((left, right) => {
@@ -375,10 +367,39 @@ export const App = () => {
         return left.name.localeCompare(right.name);
       });
 
-    const prioritized = rankedSavedPeople.filter((entry) => entry.count > 0).map((entry) => entry.name);
-    const fallback = rankedSavedPeople.map((entry) => entry.name);
+    const prioritized = rankedSaved.filter((entry) => entry.count > 0).map((entry) => entry.name);
+    const fallback = rankedSaved.map((entry) => entry.name);
 
     return Array.from(new Set([...prioritized, ...fallback])).slice(0, 6);
+  };
+
+  const suggestedPeople = useMemo(() => {
+    if (!snapshot) {
+      return [];
+    }
+
+    return rankSavedValues(snapshot.sessions, snapshot.settings.savedParticipants, (session) => parsePeopleFromSession(session.participantText));
+  }, [snapshot]);
+
+  const suggestedProjects = useMemo(() => {
+    if (!snapshot) {
+      return [];
+    }
+    return rankSavedValues(snapshot.sessions, snapshot.settings.savedProjects, (session) => (session.project ? [session.project] : []));
+  }, [snapshot]);
+
+  const suggestedDepartments = useMemo(() => {
+    if (!snapshot) {
+      return [];
+    }
+    return rankSavedValues(snapshot.sessions, snapshot.settings.savedDepartments, (session) => (session.department ? [session.department] : []));
+  }, [snapshot]);
+
+  const suggestedTags = useMemo(() => {
+    if (!snapshot) {
+      return [];
+    }
+    return rankSavedValues(snapshot.sessions, snapshot.settings.savedTags, (session) => parseTokenList(session.tagsText));
   }, [snapshot]);
 
   const activeSession = useMemo(
@@ -455,6 +476,9 @@ export const App = () => {
         ? [session.startTime.trim(), session.endTime.trim()].filter(Boolean).join(" - ")
         : session.startTime.trim();
     const people = session.participantText.trim();
+    const project = session.project.trim();
+    const department = session.department.trim();
+    const tags = session.tagsText.trim();
     const highlights = session.quickHighlights.trim();
     const manualNotes = session.manualNotes.trim();
     const transcript = [session.liveTranscript.trim(), session.uploadedTranscript.trim()].filter(Boolean).join("\n\n");
@@ -462,8 +486,15 @@ export const App = () => {
     if (title) {
       segments.push(title);
     }
-    if (date || time || people) {
-      const metaLines = [date, time, people ? `People: ${people}` : ""].filter(Boolean);
+    if (date || time || people || project || department || tags) {
+      const metaLines = [
+        date,
+        time,
+        people ? `People: ${people}` : "",
+        project ? `Project: ${project}` : "",
+        department ? `Department: ${department}` : "",
+        tags ? `Tags: ${tags}` : "",
+      ].filter(Boolean);
       if (metaLines.length) {
         segments.push(metaLines.join("\n"));
       }
@@ -1312,7 +1343,7 @@ export const App = () => {
         id: `session-${session.id}`,
         label: `Open session: ${session.title || "Untitled session"}`,
         description: session.date || "Recent session",
-        keywords: [session.title, session.participantText, session.date].filter(Boolean) as string[],
+        keywords: [session.title, session.participantText, session.project, session.department, session.tagsText, session.date].filter(Boolean) as string[],
         action: () => {
           setActiveSessionId(session.id);
           setActiveView("capture");
@@ -1644,6 +1675,12 @@ export const App = () => {
                 attachments={activeAttachments}
                 savedPeople={snapshot.settings.savedParticipants}
                 suggestedPeople={suggestedPeople}
+                savedProjects={snapshot.settings.savedProjects}
+                suggestedProjects={suggestedProjects}
+                savedDepartments={snapshot.settings.savedDepartments}
+                suggestedDepartments={suggestedDepartments}
+                savedTags={snapshot.settings.savedTags}
+                suggestedTags={suggestedTags}
                 isTranscribingAudio={isTranscribingAudio}
                 recordingMode={recordingMode}
                 isRecordingAudio={isRecordingAudio}
@@ -1686,7 +1723,6 @@ export const App = () => {
             <div className="sidebar-card">
               <div>
                 <h3>Current session</h3>
-                <p>Keep just enough context visible while the center canvas stays focused.</p>
               </div>
               <div className="section-list">
                 <div className="list-item">
@@ -1705,6 +1741,24 @@ export const App = () => {
                   <strong>{activeSession.participantText || (activeCaptureMode === "meeting-note" ? "No people yet" : "Optional people context")}</strong>
                   <span className="muted">People</span>
                 </div>
+                {activeSession.project ? (
+                  <div className="list-item">
+                    <strong>{activeSession.project}</strong>
+                    <span className="muted">Project</span>
+                  </div>
+                ) : null}
+                {activeSession.department ? (
+                  <div className="list-item">
+                    <strong>{activeSession.department}</strong>
+                    <span className="muted">Department</span>
+                  </div>
+                ) : null}
+                {activeSession.tagsText ? (
+                  <div className="list-item">
+                    <strong>{activeSession.tagsText}</strong>
+                    <span className="muted">Tags</span>
+                  </div>
+                ) : null}
                 <div className="list-item">
                   <strong>{includedOutputImages.length}</strong>
                   <span className="muted">Images staged for polished output</span>
@@ -1715,9 +1769,6 @@ export const App = () => {
             <div className="sidebar-card">
               <div>
                 <h3>AI visibility</h3>
-                <p>
-                  AI should feel inspectable and predictable, not hidden behind a single button.
-                </p>
               </div>
               <div className="section-list">
                 <div className="list-item">
@@ -1729,8 +1780,7 @@ export const App = () => {
                   <span className="muted">Transcription model</span>
                 </div>
                 <div className="list-item">
-                  <strong>{snapshot.settings.apiKey ? "Stored locally on this machine" : "No API key set yet"}</strong>
-                  <span className="muted">AI settings stay local and are never written into shared desktop data.</span>
+                  <strong>{snapshot.settings.apiKey ? "API key configured" : "No API key set yet"}</strong>
                 </div>
               </div>
               <button className="small-button" type="button" onClick={() => openSettingsSection("ai")}>
@@ -1813,7 +1863,6 @@ export const App = () => {
             <div className="sidebar-card">
               <div>
                 <h3>System status</h3>
-                <p>Small passive information belongs in the inspector, not mixed with primary actions.</p>
               </div>
               <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
               <span className="status-chip">{activeAttachments.length} attachment{activeAttachments.length === 1 ? "" : "s"}</span>

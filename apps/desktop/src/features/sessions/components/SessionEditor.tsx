@@ -1,5 +1,6 @@
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
 import { PeoplePicker } from "../../../components/PeoplePicker";
+import { TokenPicker } from "../../../components/TokenPicker";
 import type { RecordingMode } from "../../../lib/files/recording";
 import {
   DEFAULT_TEMPLATE_BY_CAPTURE_MODE,
@@ -16,6 +17,12 @@ interface SessionEditorProps {
   attachments: AttachmentRecord[];
   savedPeople: string[];
   suggestedPeople: string[];
+  savedProjects: string[];
+  suggestedProjects: string[];
+  savedDepartments: string[];
+  suggestedDepartments: string[];
+  savedTags: string[];
+  suggestedTags: string[];
   isTranscribingAudio: boolean;
   recordingMode: RecordingMode;
   isRecordingAudio: boolean;
@@ -96,6 +103,12 @@ export const SessionEditor = ({
   attachments,
   savedPeople,
   suggestedPeople,
+  savedProjects,
+  suggestedProjects,
+  savedDepartments,
+  suggestedDepartments,
+  savedTags,
+  suggestedTags,
   isTranscribingAudio,
   recordingMode,
   isRecordingAudio,
@@ -187,9 +200,6 @@ export const SessionEditor = ({
       <div className="card-header">
         <div>
           <h2>Capture</h2>
-          <p>
-            One Notes workspace, three clear capture modes. The mode decides the workflow; the template shapes the structure inside it.
-          </p>
         </div>
       </div>
 
@@ -237,30 +247,74 @@ export const SessionEditor = ({
         </div>
 
         {showMeetingMeta ? (
-          <>
-            <div className="field">
-              <label htmlFor="session-date">Date</label>
-              <input id="session-date" type="date" value={session.date} onChange={(event) => update("date", event.target.value)} />
+          <details className="field field-wide workspace-disclosure">
+            <summary>Meeting details</summary>
+            <div className="workspace-disclosure-body form-grid">
+              <div className="field">
+                <label htmlFor="session-date">Date</label>
+                <input id="session-date" type="date" value={session.date} onChange={(event) => update("date", event.target.value)} />
+              </div>
+              <div className="field">
+                <label htmlFor="session-participants">People</label>
+                <PeoplePicker
+                  value={session.participantText}
+                  savedPeople={savedPeople}
+                  suggestedPeople={suggestedPeople}
+                  onChange={(value) => update("participantText", value)}
+                  placeholder="Search or add people"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="session-project">Project</label>
+                <TokenPicker
+                  value={session.project}
+                  savedOptions={savedProjects}
+                  suggestedOptions={suggestedProjects}
+                  placeholder="Search or add project"
+                  helperText="Use Project for work you expect to sort and revisit often."
+                  suggestionSummary="Recent projects"
+                  suggestionBadgeText="From saved Projects"
+                  mode="single"
+                  onChange={(value) => update("project", value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="session-department">Department</label>
+                <TokenPicker
+                  value={session.department}
+                  savedOptions={savedDepartments}
+                  suggestedOptions={suggestedDepartments}
+                  placeholder="Search or add department"
+                  helperText="Use Department for the main business area behind this note."
+                  suggestionSummary="Recent departments"
+                  suggestionBadgeText="From saved Departments"
+                  mode="single"
+                  onChange={(value) => update("department", value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="session-start">Start time</label>
+                <input id="session-start" type="time" value={session.startTime} onChange={(event) => update("startTime", event.target.value)} />
+              </div>
+              <div className="field">
+                <label htmlFor="session-end">End time</label>
+                <input id="session-end" type="time" value={session.endTime} onChange={(event) => update("endTime", event.target.value)} />
+              </div>
+              <div className="field field-wide">
+                <label htmlFor="session-tags">Tags</label>
+                <TokenPicker
+                  value={session.tagsText}
+                  savedOptions={savedTags}
+                  suggestedOptions={suggestedTags}
+                  placeholder="Add tags like q2-planning, budget, hiring"
+                  helperText="Use Tags for flexible cross-cutting labels when Project or Department alone is not enough."
+                  suggestionSummary="Recent tags"
+                  suggestionBadgeText="From saved Tags"
+                  onChange={(value) => update("tagsText", value)}
+                />
+              </div>
             </div>
-            <div className="field">
-              <label htmlFor="session-participants">People</label>
-              <PeoplePicker
-                value={session.participantText}
-                savedPeople={savedPeople}
-                suggestedPeople={suggestedPeople}
-                onChange={(value) => update("participantText", value)}
-                placeholder="Search or add people"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="session-start">Start time</label>
-              <input id="session-start" type="time" value={session.startTime} onChange={(event) => update("startTime", event.target.value)} />
-            </div>
-            <div className="field">
-              <label htmlFor="session-end">End time</label>
-              <input id="session-end" type="time" value={session.endTime} onChange={(event) => update("endTime", event.target.value)} />
-            </div>
-          </>
+          </details>
         ) : (
           <details className="field field-wide workspace-disclosure">
             <summary>Optional note details</summary>
@@ -281,6 +335,46 @@ export const SessionEditor = ({
                   suggestedPeople={suggestedPeople}
                   onChange={(value) => update("participantText", value)}
                   placeholder="Search or add optional context"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="session-project">Project</label>
+                <TokenPicker
+                  value={session.project}
+                  savedOptions={savedProjects}
+                  suggestedOptions={suggestedProjects}
+                  placeholder="Search or add project"
+                  helperText="Optional, but useful when you want to group related notes later."
+                  suggestionSummary="Recent projects"
+                  suggestionBadgeText="From saved Projects"
+                  mode="single"
+                  onChange={(value) => update("project", value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="session-department">Department</label>
+                <TokenPicker
+                  value={session.department}
+                  savedOptions={savedDepartments}
+                  suggestedOptions={suggestedDepartments}
+                  placeholder="Search or add department"
+                  suggestionSummary="Recent departments"
+                  suggestionBadgeText="From saved Departments"
+                  mode="single"
+                  onChange={(value) => update("department", value)}
+                />
+              </div>
+              <div className="field field-wide">
+                <label htmlFor="session-tags">Tags</label>
+                <TokenPicker
+                  value={session.tagsText}
+                  savedOptions={savedTags}
+                  suggestedOptions={suggestedTags}
+                  placeholder="Add tags like q2-planning, budget, hiring"
+                  helperText="Use Tags for flexible labels that cut across projects, departments, and note types."
+                  suggestionSummary="Recent tags"
+                  suggestionBadgeText="From saved Tags"
+                  onChange={(value) => update("tagsText", value)}
                 />
               </div>
             </div>

@@ -9,6 +9,9 @@ const settings = {
     textModel: "gpt-5-mini",
     transcriptionModel: "gpt-4o-mini-transcribe",
     savedParticipants: [],
+    savedProjects: [],
+    savedDepartments: [],
+    savedTags: [],
     abbreviations: [],
     promptProfile: {
         meetingMinutesSystem: "Meeting system",

@@ -8,7 +8,7 @@ const SETTINGS_SECTIONS = [
     { id: "diagnostics", label: "AI Diagnostics", description: "Metrics, cache, and recent AI history" },
     { id: "themes", label: "Themes", description: "Look and feel" },
     { id: "output", label: "Output formatting", description: "Language and output defaults" },
-    { id: "people", label: "People", description: "Saved people and abbreviations" },
+    { id: "people", label: "People & labels", description: "Saved people, labels, and abbreviations" },
     { id: "prompts", label: "Prompts", description: "Generation and revision instructions" },
     { id: "templates", label: "Templates for meetings/notes", description: "Built-in and custom note structures" },
     { id: "other", label: "Other upcoming settings", description: "Migration, updates, future options" },
@@ -142,6 +142,9 @@ export const SettingsCard = ({ settings, templates, initialSection = "ai", onCha
     const [showAdvancedTextModels, setShowAdvancedTextModels] = useState(false);
     const [showAdvancedTranscriptionModels, setShowAdvancedTranscriptionModels] = useState(false);
     const [personDraft, setPersonDraft] = useState("");
+    const [projectDraft, setProjectDraft] = useState("");
+    const [departmentDraft, setDepartmentDraft] = useState("");
+    const [tagDraft, setTagDraft] = useState("");
     const [abbrShort, setAbbrShort] = useState("");
     const [abbrFull, setAbbrFull] = useState("");
     const [extraBlockLabel, setExtraBlockLabel] = useState("");
@@ -222,7 +225,7 @@ export const SettingsCard = ({ settings, templates, initialSection = "ai", onCha
                                 }) })] })) : null, activeSection === "output" ? (_jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Output formatting" }), _jsx("p", { children: "These defaults shape how generated notes should read and which template should open by default." })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "desktop-default-template", children: "Default desktop template" }), _jsx("select", { id: "desktop-default-template", value: settings.preferredDesktopTemplateId, onChange: (event) => onChange({ ...settings, preferredDesktopTemplateId: event.target.value }), children: BUILTIN_TEMPLATES.map((template) => (_jsx("option", { value: template.id, children: template.name }, template.id))) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "output-language", children: "Output language" }), _jsxs("select", { id: "output-language", value: settings.outputLanguage, onChange: (event) => onChange({
                                             ...settings,
                                             outputLanguage: event.target.value,
-                                        }), children: [_jsx("option", { value: "same", children: "Same as source" }), _jsx("option", { value: "sv", children: "Swedish" }), _jsx("option", { value: "en", children: "English" })] })] })] })) : null, activeSection === "people" ? (_jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "People" }), _jsx("p", { children: "Keep frequent people and shorthand in one place so note capture stays fast and consistent." })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "person-draft", children: "Saved people" }), _jsx("input", { id: "person-draft", value: personDraft, onChange: (event) => setPersonDraft(event.target.value), placeholder: "Add person" })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => {
+                                        }), children: [_jsx("option", { value: "same", children: "Same as source" }), _jsx("option", { value: "sv", children: "Swedish" }), _jsx("option", { value: "en", children: "English" })] })] })] })) : null, activeSection === "people" ? (_jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "People & labels" }), _jsx("p", { children: "Keep reusable People, Projects, Departments, Tags, and shorthand in one place so capture stays fast while filtering stays structured." })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "person-draft", children: "Saved people" }), _jsx("input", { id: "person-draft", value: personDraft, onChange: (event) => setPersonDraft(event.target.value), placeholder: "Add person" })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => {
                                                     const nextValue = personDraft.trim();
                                                     if (!nextValue)
                                                         return;
@@ -234,7 +237,43 @@ export const SettingsCard = ({ settings, templates, initialSection = "ai", onCha
                                                 }, children: "Add" })] }), _jsx("div", { className: "section-list", children: settings.savedParticipants.map((participant) => (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: participant }), _jsx("div", { className: "list-item-actions", children: _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onChange({
                                                             ...settings,
                                                             savedParticipants: settings.savedParticipants.filter((entry) => entry !== participant),
-                                                        }), children: "Remove" }) })] }, participant))) })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "abbr-short", children: "Abbreviation" }), _jsx("input", { id: "abbr-short", value: abbrShort, onChange: (event) => setAbbrShort(event.target.value), placeholder: "e.g. FYI" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "abbr-full", children: "Full wording" }), _jsx("input", { id: "abbr-full", value: abbrFull, onChange: (event) => setAbbrFull(event.target.value), placeholder: "For your information" })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => {
+                                                        }), children: "Remove" }) })] }, participant))) })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "project-draft", children: "Saved projects" }), _jsx("input", { id: "project-draft", value: projectDraft, onChange: (event) => setProjectDraft(event.target.value), placeholder: "Add project" })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => {
+                                                    const nextValue = projectDraft.trim();
+                                                    if (!nextValue)
+                                                        return;
+                                                    onChange({
+                                                        ...settings,
+                                                        savedProjects: Array.from(new Set([...settings.savedProjects, nextValue])).sort(),
+                                                    });
+                                                    setProjectDraft("");
+                                                }, children: "Add" })] }), _jsx("div", { className: "section-list", children: settings.savedProjects.map((project) => (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: project }), _jsx("div", { className: "list-item-actions", children: _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onChange({
+                                                            ...settings,
+                                                            savedProjects: settings.savedProjects.filter((entry) => entry !== project),
+                                                        }), children: "Remove" }) })] }, project))) })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "department-draft", children: "Saved departments" }), _jsx("input", { id: "department-draft", value: departmentDraft, onChange: (event) => setDepartmentDraft(event.target.value), placeholder: "Add department" })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => {
+                                                    const nextValue = departmentDraft.trim();
+                                                    if (!nextValue)
+                                                        return;
+                                                    onChange({
+                                                        ...settings,
+                                                        savedDepartments: Array.from(new Set([...settings.savedDepartments, nextValue])).sort(),
+                                                    });
+                                                    setDepartmentDraft("");
+                                                }, children: "Add" })] }), _jsx("div", { className: "section-list", children: settings.savedDepartments.map((department) => (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: department }), _jsx("div", { className: "list-item-actions", children: _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onChange({
+                                                            ...settings,
+                                                            savedDepartments: settings.savedDepartments.filter((entry) => entry !== department),
+                                                        }), children: "Remove" }) })] }, department))) })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "tag-draft", children: "Saved tags" }), _jsx("input", { id: "tag-draft", value: tagDraft, onChange: (event) => setTagDraft(event.target.value), placeholder: "Add tag" })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => {
+                                                    const nextValue = tagDraft.trim();
+                                                    if (!nextValue)
+                                                        return;
+                                                    onChange({
+                                                        ...settings,
+                                                        savedTags: Array.from(new Set([...settings.savedTags, nextValue])).sort(),
+                                                    });
+                                                    setTagDraft("");
+                                                }, children: "Add" })] }), _jsx("div", { className: "section-list", children: settings.savedTags.map((tag) => (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: tag }), _jsx("div", { className: "list-item-actions", children: _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onChange({
+                                                            ...settings,
+                                                            savedTags: settings.savedTags.filter((entry) => entry !== tag),
+                                                        }), children: "Remove" }) })] }, tag))) })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "abbr-short", children: "Abbreviation" }), _jsx("input", { id: "abbr-short", value: abbrShort, onChange: (event) => setAbbrShort(event.target.value), placeholder: "e.g. FYI" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "abbr-full", children: "Full wording" }), _jsx("input", { id: "abbr-full", value: abbrFull, onChange: (event) => setAbbrFull(event.target.value), placeholder: "For your information" })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => {
                                                     if (!abbrShort.trim() || !abbrFull.trim())
                                                         return;
                                                     onChange({

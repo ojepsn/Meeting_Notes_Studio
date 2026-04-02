@@ -50,6 +50,9 @@ const normalizeSessionRecord = (session: SessionRecord): SessionRecord => ({
   ...session,
   captureMode:
     session.captureMode === "quick-note" || session.captureMode === "voice-note" ? session.captureMode : "meeting-note",
+  project: typeof session.project === "string" ? session.project : "",
+  department: typeof session.department === "string" ? session.department : "",
+  tagsText: typeof session.tagsText === "string" ? session.tagsText : "",
   detailLevel: normalizeDetailLevel(session.detailLevel),
   customFieldValues:
     session.customFieldValues && typeof session.customFieldValues === "object" ? session.customFieldValues : {},
@@ -76,6 +79,9 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   textModel: "gpt-5.4-mini",
   transcriptionModel: "gpt-4o-mini-transcribe",
   savedParticipants: [],
+  savedProjects: [],
+  savedDepartments: [],
+  savedTags: [],
   abbreviations: [],
   promptProfile: {
     meetingMinutesSystem: DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
@@ -124,6 +130,9 @@ export const createDefaultSnapshot = (): DesktopAppSnapshot => ({
       templateId: "meeting",
       title: "2026-03-30 Weekly team sync",
       participantText: "Anna, Marcus, Ola",
+      project: "Alpha",
+      department: "Product",
+      tagsText: "release, weekly-sync",
       date: "2026-03-30",
       startTime: "09:00",
       endTime: "10:00",
@@ -303,6 +312,9 @@ class TauriSqliteRepository implements AppRepository {
         await db.execute("ALTER TABLE sessions ADD COLUMN custom_field_values TEXT NOT NULL DEFAULT '{}'").catch(() => {});
         await db.execute("ALTER TABLE sessions ADD COLUMN excluded_section_ids TEXT NOT NULL DEFAULT '[]'").catch(() => {});
         await db.execute("ALTER TABLE sessions ADD COLUMN capture_mode TEXT NOT NULL DEFAULT 'meeting-note'").catch(() => {});
+        await db.execute("ALTER TABLE sessions ADD COLUMN project TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE sessions ADD COLUMN department TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE sessions ADD COLUMN tags_text TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE attachments ADD COLUMN caption TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE attachments ADD COLUMN include_in_output INTEGER NOT NULL DEFAULT 0").catch(() => {});
         await db.execute("ALTER TABLE attachments ADD COLUMN output_position INTEGER NOT NULL DEFAULT 0").catch(() => {});
@@ -320,6 +332,9 @@ class TauriSqliteRepository implements AppRepository {
       template_id: string;
       title: string;
       participant_text: string;
+      project: string;
+      department: string;
+      tags_text: string;
       session_date: string;
       start_time: string;
       end_time: string;
@@ -342,6 +357,9 @@ class TauriSqliteRepository implements AppRepository {
       templateId: row.template_id,
       title: row.title,
       participantText: row.participant_text,
+      project: row.project,
+      department: row.department,
+      tagsText: row.tags_text,
       date: row.session_date,
       startTime: row.start_time,
       endTime: row.end_time,
@@ -365,15 +383,18 @@ class TauriSqliteRepository implements AppRepository {
       records.map((record) =>
         db.execute(
           `INSERT INTO sessions (
-            id, template_id, title, participant_text, session_date, start_time, end_time,
+            id, template_id, title, participant_text, project, department, tags_text, session_date, start_time, end_time,
             quick_highlights, detail_level, capture_mode, manual_notes, live_transcript, uploaded_transcript, custom_field_values, excluded_section_ids, output_text,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
           [
             record.id,
             record.templateId,
             record.title,
             record.participantText,
+            record.project,
+            record.department,
+            record.tagsText,
             record.date,
             record.startTime,
             record.endTime,
@@ -593,6 +614,9 @@ export const createSessionRecord = (
     templateId: templateId || DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode],
     title: "",
     participantText: "",
+    project: "",
+    department: "",
+    tagsText: "",
     date: isoDate,
     startTime: isoTime,
     endTime: isoTime,

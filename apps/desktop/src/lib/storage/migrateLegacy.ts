@@ -157,6 +157,9 @@ const mapLegacySessions = (sessions: LegacySession[] | null): SessionRecord[] =>
         captureMode: inferCaptureModeFromTemplateId(mapLegacyTemplateId(session.template)),
         title: typeof session.title === "string" ? session.title : "",
         participantText: typeof session.participants === "string" ? session.participants : "",
+        project: "",
+        department: "",
+        tagsText: "",
         date: typeof session.meetingDate === "string" ? session.meetingDate : "",
         startTime: typeof session.meetingStartTime === "string" ? session.meetingStartTime : "",
         endTime: typeof session.meetingEndTime === "string" ? session.meetingEndTime : "",
@@ -265,6 +268,9 @@ export const loadLegacyBrowserSnapshot = (): DesktopAppSnapshot | null => {
         textModel: "gpt-5.4-mini",
         transcriptionModel: "gpt-4o-mini-transcribe",
         savedParticipants: Array.isArray(parsedSettings?.participantDirectory) ? parsedSettings.participantDirectory.filter(Boolean) : [],
+        savedProjects: [],
+        savedDepartments: [],
+        savedTags: [],
         abbreviations: Array.isArray(parsedSettings?.abbreviationDirectory)
           ? parsedSettings.abbreviationDirectory
               .map((entry) => ({

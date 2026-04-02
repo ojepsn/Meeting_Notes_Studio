@@ -60,18 +60,21 @@ Includes:
 
 - output language
 
-## People
+## People & Labels
 
 Purpose:
 
-- keep reusable people/context data in one place
+- keep reusable people and classification values in one place
 
 Includes:
 
 - saved people
+- saved projects
+- saved departments
+- saved tags
 - abbreviations
 
-The `People` data is used by session capture and suggestion flows.
+These saved values are used by session capture and suggestion flows.
 
 ## Prompts
 

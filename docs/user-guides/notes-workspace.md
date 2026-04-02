@@ -26,10 +26,14 @@ Use this for:
 Typical fields:
 
 - title
-- people
-- date
-- start time
-- end time
+- expandable meeting details:
+  - people
+  - project
+  - department
+  - tags
+  - date
+  - start time
+  - end time
 - manual notes
 - transcript
 - highlights
@@ -51,7 +55,7 @@ Typical fields:
 
 - title
 - main note body
-- optional date/time/people details
+- optional date/time/people/project/department/tag details
 
 Default expectation:
 
@@ -89,6 +93,9 @@ This is where rough material is collected:
 - images
 - audio
 - people
+- project
+- department
+- tags
 - time/date context
 
 ### Output
@@ -121,7 +128,27 @@ The `People` field supports:
 
 - search
 - typeahead selection
-- recent/frequent suggested people
+- recent/frequent suggested people behind an expandable disclosure
 - adding new people into the session
 
 After generation, the app can suggest saving newly seen people into the shared `People` database if they are not already stored.
+
+## Project, Department, and Tags
+
+The Notes workspace also supports lightweight classification metadata:
+
+- `Project`
+- `Department`
+- `Tags`
+
+Best-practice usage in the app:
+
+- use `Project` for recurring work streams you want to sort and revisit often
+- use `Department` for the main business area behind the note
+- use `Tags` for flexible cross-cutting labels such as initiatives, activities, themes, or temporary tracking labels
+
+These fields use the same modern picker pattern as `People`:
+
+- type to search saved values inline
+- click recent/frequent suggestions from an expandable mini-card
+- add new values directly from the input
