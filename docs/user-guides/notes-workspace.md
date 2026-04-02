@@ -27,6 +27,7 @@ Typical fields:
 
 - title
 - private toggle
+- top-level audio capture
 - expandable meeting details:
   - people
   - domain
@@ -76,9 +77,10 @@ Typical fields:
 
 - title
 - private toggle
+- top-level audio capture
 - dictation/transcript field
 - optional written note
-- optional audio recording/upload
+- audio recording/upload
 
 Default expectation:
 
@@ -92,6 +94,7 @@ Each session has two workspace views:
 
 This is where rough material is collected:
 
+- top-level audio capture for meeting and voice sessions
 - typed notes
 - transcript text
 - images
@@ -146,6 +149,7 @@ The `People` field supports:
 - typeahead selection
 - recent/frequent suggested people behind an expandable disclosure
 - adding new people into the session
+- Enter, comma, and semicolon as quick add actions
 
 After generation, the app can suggest saving newly seen people into the shared `People` database if they are not already stored.
 
@@ -192,3 +196,4 @@ These fields use the same modern picker pattern as `People`:
 - type to search saved values inline
 - click recent/frequent suggestions from an expandable mini-card
 - add new values directly from the input
+- save newly used values for reuse after Output is created

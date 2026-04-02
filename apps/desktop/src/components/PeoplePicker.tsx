@@ -20,7 +20,6 @@ export const PeoplePicker = ({
     savedOptions={savedPeople}
     suggestedOptions={suggestedPeople}
     placeholder={placeholder}
-    helperText="Type to search saved People. Press Enter, comma, or semicolon to add a name. New names stay in this note and can be saved to People after output is generated."
     suggestionSummary="Recent people"
     suggestionBadgeText="From saved People"
     onChange={onChange}

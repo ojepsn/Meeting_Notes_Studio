@@ -1,3 +1,3 @@
 import { jsx as _jsx } from "react/jsx-runtime";
 import { TokenPicker } from "./TokenPicker";
-export const PeoplePicker = ({ value, savedPeople, suggestedPeople, placeholder = "Search or add people", onChange, }) => (_jsx(TokenPicker, { value: value, savedOptions: savedPeople, suggestedOptions: suggestedPeople, placeholder: placeholder, helperText: "Type to search saved People. Press Enter, comma, or semicolon to add a name. New names stay in this note and can be saved to People after output is generated.", suggestionSummary: "Recent people", suggestionBadgeText: "From saved People", onChange: onChange }));
+export const PeoplePicker = ({ value, savedPeople, suggestedPeople, placeholder = "Search or add people", onChange, }) => (_jsx(TokenPicker, { value: value, savedOptions: savedPeople, suggestedOptions: suggestedPeople, placeholder: placeholder, suggestionSummary: "Recent people", suggestionBadgeText: "From saved People", onChange: onChange }));

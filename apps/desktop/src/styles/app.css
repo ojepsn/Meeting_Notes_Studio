@@ -696,6 +696,35 @@ select {
   margin: 0;
 }
 
+.audio-capture-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 62%, white 38%) 0%, var(--app-surface) 100%),
+    var(--app-surface);
+  padding: 1rem 1.05rem;
+  box-shadow: 0 14px 30px var(--app-shadow);
+}
+
+.audio-capture-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.audio-capture-header label {
+  margin-bottom: 0.2rem;
+}
+
+.audio-capture-header p {
+  margin: 0;
+}
+
 .metadata-triplet {
   min-width: 0;
 }
@@ -1507,7 +1536,7 @@ select {
 .recording-mode-card {
   border: 1px solid var(--app-border);
   border-radius: 20px;
-  background: var(--app-surface-soft);
+  background: color-mix(in srgb, var(--app-surface-soft) 86%, white 14%);
   color: var(--app-text);
   cursor: pointer;
   text-align: left;

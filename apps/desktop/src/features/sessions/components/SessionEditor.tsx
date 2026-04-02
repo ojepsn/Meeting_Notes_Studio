@@ -224,30 +224,30 @@ export const SessionEditor = ({
       <div className="form-grid">
         <div className="capture-top-row field field-wide">
           <div className="field capture-template-field">
-          <label htmlFor="template-select">Template</label>
-          <select id="template-select" value={activeTemplate?.id ?? ""} onChange={(event) => handleTemplateChange(event.target.value)}>
-            {primaryTemplateOptions.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name}
-              </option>
-            ))}
-          </select>
+            <label htmlFor="template-select">Template</label>
+            <select id="template-select" value={activeTemplate?.id ?? ""} onChange={(event) => handleTemplateChange(event.target.value)}>
+              {primaryTemplateOptions.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="field capture-title-field">
-          <label htmlFor="session-title">Title</label>
-          <input
-            id="session-title"
-            value={session.title}
-            onChange={(event) => update("title", event.target.value)}
-            placeholder={
-              session.captureMode === "meeting-note"
-                ? "Weekly project meeting"
-                : session.captureMode === "voice-note"
-                  ? "Voice memo"
-                  : "Quick note title"
-            }
-          />
+            <label htmlFor="session-title">Title</label>
+            <input
+              id="session-title"
+              value={session.title}
+              onChange={(event) => update("title", event.target.value)}
+              placeholder={
+                session.captureMode === "meeting-note"
+                  ? "Weekly project meeting"
+                  : session.captureMode === "voice-note"
+                    ? "Voice memo"
+                    : "Quick note title"
+              }
+            />
           </div>
 
           <div className="field capture-private-field">
@@ -263,9 +263,55 @@ export const SessionEditor = ({
                 Private
               </label>
             </div>
-            <span className="tiny-text">Hide from public-only views.</span>
           </div>
         </div>
+
+        {session.captureMode !== "quick-note" ? (
+          <div className="field field-wide audio-capture-card">
+            <div className="audio-capture-header">
+              <div>
+                <label>Audio capture</label>
+                <p className="muted">
+                  {session.captureMode === "meeting-note"
+                    ? "Record the meeting directly here or upload audio later."
+                    : "Start with recording if this note begins as a spoken memo."}
+                </p>
+              </div>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={isRecordingAudio ? onStopRecording : onStartRecording}
+              >
+                {isRecordingAudio ? "Stop recording" : "Start recording"}
+              </button>
+            </div>
+            <div className="recording-mode-grid">
+              {(Object.keys(RECORDING_MODE_META) as RecordingMode[]).map((mode) => {
+                const meta = RECORDING_MODE_META[mode];
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    className="recording-mode-card"
+                    data-active={recordingMode === mode}
+                    onClick={() => onChangeRecordingMode(mode)}
+                  >
+                    <strong>{meta.label}</strong>
+                    <p>{meta.description}</p>
+                  </button>
+                );
+              })}
+            </div>
+            <span className="tiny-text">
+              {recordingStatusNote ||
+                (recordingMode === "microphone"
+                  ? "Microphone mode records spoken audio directly into this session."
+                  : recordingMode === "system-audio"
+                    ? "Choose a shared window, screen, or app and enable audio sharing when prompted."
+                    : "Capture room speech from the microphone and remote voices from shared computer audio together.")}
+            </span>
+          </div>
+        ) : null}
 
         {showMeetingMeta ? (
           <details className="field field-wide workspace-disclosure">
@@ -294,7 +340,6 @@ export const SessionEditor = ({
                       savedOptions={savedDomains}
                       suggestedOptions={suggestedDomains}
                       placeholder="Search or add domain"
-                      helperText="Use Domain for the top-level business area behind this note. New values stay in this note and can be saved for reuse after Output is created."
                       suggestionSummary="Recent domains"
                       suggestionBadgeText="From saved Domains"
                       mode="single"
@@ -308,7 +353,6 @@ export const SessionEditor = ({
                       savedOptions={savedProjects}
                       suggestedOptions={suggestedProjects}
                       placeholder="Search or add project"
-                      helperText="Use Project for work you expect to sort and revisit often. New values stay in this note and can be saved for reuse after Output is created."
                       suggestionSummary="Recent projects"
                       suggestionBadgeText="From saved Projects"
                       mode="single"
@@ -322,7 +366,6 @@ export const SessionEditor = ({
                       savedOptions={savedActivities}
                       suggestedOptions={suggestedActivities}
                       placeholder="Search or add activity"
-                      helperText="Use Activity for the concrete stream of work inside the project or domain. New values stay in this note and can be saved for reuse after Output is created."
                       suggestionSummary="Recent activities"
                       suggestionBadgeText="From saved Activities"
                       mode="single"
@@ -346,7 +389,6 @@ export const SessionEditor = ({
                   savedOptions={savedTags}
                   suggestedOptions={suggestedTags}
                   placeholder="Add tags like q2-planning, budget, hiring"
-                  helperText="Use Tags for flexible cross-cutting labels when Domain, Project, and Activity alone are not enough."
                   suggestionSummary="Recent tags"
                   suggestionBadgeText="From saved Tags"
                   onChange={(value) => update("tagsText", value)}
@@ -398,7 +440,6 @@ export const SessionEditor = ({
                       savedOptions={savedProjects}
                       suggestedOptions={suggestedProjects}
                       placeholder="Search or add project"
-                      helperText="Optional, but useful when you want to group related notes later."
                       suggestionSummary="Recent projects"
                       suggestionBadgeText="From saved Projects"
                       mode="single"
@@ -427,7 +468,6 @@ export const SessionEditor = ({
                   savedOptions={savedTags}
                   suggestedOptions={suggestedTags}
                   placeholder="Add tags like q2-planning, budget, hiring"
-                  helperText="Use Tags for flexible labels that cut across domains, projects, activities, and note types."
                   suggestionSummary="Recent tags"
                   suggestionBadgeText="From saved Tags"
                   onChange={(value) => update("tagsText", value)}
@@ -581,51 +621,6 @@ export const SessionEditor = ({
             ) : null}
           </div>
         </details>
-
-        {session.captureMode !== "quick-note" ? (
-          <details className="field field-wide workspace-disclosure">
-            <summary>Record audio</summary>
-            <div className="workspace-disclosure-body stack">
-              <p className="tiny-text">
-                Choose the capture source that matches the meeting. Microphone recording is available now; computer-audio and hybrid capture are scaffolded next so the workflow does not need to change later.
-              </p>
-              <div className="recording-mode-grid">
-                {(Object.keys(RECORDING_MODE_META) as RecordingMode[]).map((mode) => {
-                  const meta = RECORDING_MODE_META[mode];
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      className="recording-mode-card"
-                      data-active={recordingMode === mode}
-                      onClick={() => onChangeRecordingMode(mode)}
-                    >
-                      <strong>{meta.label}</strong>
-                      <p>{meta.description}</p>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="inline-row">
-                <button
-                  className="small-button inline-action"
-                  type="button"
-                  onClick={isRecordingAudio ? onStopRecording : onStartRecording}
-                >
-                  {isRecordingAudio ? "Stop recording" : "Start recording"}
-                </button>
-                <span className="tiny-text">
-                  {recordingStatusNote ||
-                    (recordingMode === "microphone"
-                      ? "Microphone mode records spoken audio directly into this session."
-                      : recordingMode === "system-audio"
-                        ? "Choose a shared window, screen, or app and enable audio sharing when prompted."
-                        : "Capture room speech from the microphone and remote voices from shared computer audio together.")}
-                </span>
-              </div>
-            </div>
-          </details>
-        ) : null}
 
         <div className="page-actions field-wide">
           <button className="small-button" type="button" onClick={onImportImage}>
