@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE } from "@notesmith/domain";
+import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCaptureMode } from "@notesmith/domain";
 import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
 import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
 import { createAppRepository, createSessionRecord, upsertSession, upsertTemplate, upsertTodo, } from "../lib/db/repository";
@@ -119,9 +119,15 @@ export const useDesktopStore = create((set, get) => ({
         if (!snapshot)
             return;
         const captureMode = options?.captureMode ?? "meeting-note";
-        const fallbackTemplateId = captureMode === "meeting-note"
-            ? get().snapshot?.settings.preferredDesktopTemplateId ?? DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode]
-            : DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode];
+        const matchingTemplates = getTemplatesForCaptureMode(snapshot.templates, captureMode);
+        const preferredMeetingTemplateId = captureMode === "meeting-note" &&
+            matchingTemplates.some((template) => template.id === snapshot.settings.preferredDesktopTemplateId)
+            ? snapshot.settings.preferredDesktopTemplateId
+            : null;
+        const fallbackTemplateId = preferredMeetingTemplateId ??
+            matchingTemplates.find((template) => template.id === DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode])?.id ??
+            matchingTemplates[0]?.id ??
+            DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode];
         const nextSession = createSessionRecord(options?.templateId ?? fallbackTemplateId, captureMode);
         const nextSnapshot = {
             ...snapshot,
@@ -205,6 +211,21 @@ export const useDesktopStore = create((set, get) => ({
         };
         set({ snapshot: nextSnapshot });
         scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    resetTemplates: async () => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const nextSnapshot = {
+            ...snapshot,
+            templates: BUILTIN_TEMPLATES,
+            settings: {
+                ...snapshot.settings,
+                preferredDesktopTemplateId: "meeting",
+            },
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
     },
     saveAttachments: async (attachments) => {
         const snapshot = get().snapshot;

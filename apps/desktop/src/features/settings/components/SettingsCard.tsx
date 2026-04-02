@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { LocalAppSettings, PromptBlock, TemplateDefinition } from "@notesmith/domain";
-import { BUILTIN_TEMPLATES } from "@notesmith/domain";
+import { getTemplatesForCaptureMode } from "@notesmith/domain";
+import type { DesktopStorageInfo } from "../../../lib/storage/desktopStorage";
 import {
   DEFAULT_MEETING_MINUTES_RULES,
   DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
@@ -30,10 +31,16 @@ interface SettingsCardProps {
   initialSection?: SettingsSection;
   onChange: (settings: LocalAppSettings) => void;
   onSaveTemplate: (template: TemplateDefinition) => void;
+  onResetTemplates: () => Promise<void>;
   onImportLegacy: () => Promise<void>;
   onCheckForUpdates: () => Promise<void>;
+  onOpenDataFolder: () => Promise<void>;
+  onOpenDatabaseFolder: () => Promise<void>;
+  onExportBackup: () => Promise<void>;
+  onCreateLocalBackup: () => Promise<void>;
   onRefreshModelPricing: () => Promise<void> | void;
   updateStatusNote?: string | null;
+  storageInfo: DesktopStorageInfo | null;
   aiDiagnostics: AIDiagnosticsItem[];
   aiRequestHistory: AIRequestHistoryEntry[];
   textModelOptions: SelectModelOption[];
@@ -210,10 +217,16 @@ export const SettingsCard = ({
   initialSection = "ai",
   onChange,
   onSaveTemplate,
+  onResetTemplates,
   onImportLegacy,
   onCheckForUpdates,
+  onOpenDataFolder,
+  onOpenDatabaseFolder,
+  onExportBackup,
+  onCreateLocalBackup,
   onRefreshModelPricing,
   updateStatusNote,
+  storageInfo,
   aiDiagnostics,
   aiRequestHistory,
   textModelOptions,
@@ -265,6 +278,7 @@ export const SettingsCard = ({
   );
   const selectedTheme = parseThemeValue(settings.theme);
   const selectedThemeDefinition = DESKTOP_THEMES.find((theme) => theme.id === selectedTheme.familyId) ?? DESKTOP_THEMES[0];
+  const meetingTemplateOptions = getTemplatesForCaptureMode(templates, "meeting-note");
 
   const updateThemeFamily = (familyId: string) => onChange({ ...settings, theme: buildThemeValue(familyId, selectedTheme.mode) });
   const updateThemeMode = (mode: ThemeMode) => onChange({ ...settings, theme: buildThemeValue(selectedTheme.familyId, mode) });
@@ -616,7 +630,7 @@ export const SettingsCard = ({
                 value={settings.preferredDesktopTemplateId}
                 onChange={(event) => onChange({ ...settings, preferredDesktopTemplateId: event.target.value })}
               >
-                {BUILTIN_TEMPLATES.map((template) => (
+                {meetingTemplateOptions.map((template) => (
                   <option key={template.id} value={template.id}>
                     {template.name}
                   </option>
@@ -1174,7 +1188,7 @@ export const SettingsCard = ({
         ) : null}
 
         {activeSection === "templates" ? (
-          <TemplatesCard templates={templates} onSave={onSaveTemplate} />
+          <TemplatesCard templates={templates} onSave={onSaveTemplate} onResetTemplates={onResetTemplates} />
         ) : null}
 
         {activeSection === "diagnostics" ? (
@@ -1246,10 +1260,44 @@ export const SettingsCard = ({
               <button className="small-button" type="button" onClick={() => void onImportLegacy()}>
                 Import current browser app data
               </button>
+              <button className="small-button" type="button" onClick={() => void onExportBackup()}>
+                Export backup file
+              </button>
+              <button className="small-button" type="button" onClick={() => void onCreateLocalBackup()}>
+                Create local safety backup
+              </button>
+              <button className="small-button" type="button" onClick={() => void onOpenDataFolder()}>
+                Open data folder
+              </button>
+              <button className="small-button" type="button" onClick={() => void onOpenDatabaseFolder()}>
+                Open database folder
+              </button>
             </div>
+            {storageInfo ? (
+              <div className="section-list">
+                <div className="list-item">
+                  <strong>Data folder</strong>
+                  <span className="muted">{storageInfo.appDataDir}</span>
+                </div>
+                <div className="list-item">
+                  <strong>Database path</strong>
+                  <span className="muted">{storageInfo.databasePath}</span>
+                </div>
+                <div className="list-item">
+                  <strong>Attachments folder</strong>
+                  <span className="muted">{storageInfo.attachmentsDir}</span>
+                </div>
+                <div className="list-item">
+                  <strong>Local backups folder</strong>
+                  <span className="muted">{storageInfo.backupsDir}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="tiny-text">Storage paths are shown here when running inside the installed Tauri desktop app.</p>
+            )}
             {updateStatusNote ? <p className="tiny-text">{updateStatusNote}</p> : null}
             <p className="tiny-text">
-              This is also the right place for upcoming settings that should exist, but not compete with the primary workspace.
+              For uninstall/reinstall safety, export a backup file to a folder outside AppData before removing the app.
             </p>
           </div>
         ) : null}

@@ -658,6 +658,44 @@ select {
   grid-column: 1 / -1;
 }
 
+.capture-top-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(380px, 4fr) minmax(150px, 0.9fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.capture-top-row .field {
+  min-width: 0;
+}
+
+.capture-private-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.compact-private-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 52px;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 18px;
+  background: var(--app-input);
+}
+
+.compact-private-toggle input {
+  width: auto;
+  min-height: 0;
+  margin: 0;
+}
+
+.compact-private-toggle .checkbox-label {
+  margin: 0;
+}
+
 .metadata-triplet {
   min-width: 0;
 }
@@ -680,11 +718,27 @@ select {
   gap: 0.75rem;
 }
 
+.session-list-compact {
+  gap: 0.5rem;
+  max-height: 560px;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
 .list-item {
   border: 1px solid var(--app-border);
   border-radius: 18px;
   padding: 0.9rem 1rem;
   background: var(--app-surface-soft);
+}
+
+.compact-session-item {
+  padding: 0.65rem 0.8rem;
+}
+
+.compact-session-item .muted {
+  margin-top: 0.15rem;
+  font-size: 0.82rem;
 }
 
 .list-item strong {
@@ -793,6 +847,24 @@ select {
 .checkbox-label input {
   width: auto;
   min-height: 0;
+}
+
+.session-privacy-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.session-privacy-toggle > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.session-visibility-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .small-button {
@@ -1565,6 +1637,10 @@ select {
   }
 
   .model-picker-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .capture-top-row {
     grid-template-columns: 1fr;
   }
 

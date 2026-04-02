@@ -26,7 +26,9 @@ Planned:
 ### Shared note concepts
 
 - sessions
+- private flag
 - templates
+- templates are scoped to one capture category each
 - people
 - domain
 - project

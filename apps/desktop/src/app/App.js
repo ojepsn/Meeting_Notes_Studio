@@ -1,6 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE } from "@notesmith/domain";
+import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCaptureMode } from "@notesmith/domain";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
@@ -20,6 +20,8 @@ import { checkForDesktopUpdates } from "../lib/ai/updater";
 import { exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsText } from "../lib/export/exportService";
 import { fileToAttachmentRecord, loadPersistedAttachmentFile, pickAudioFile, pickImageFile, pickTranscriptFile, persistGeneratedAttachment, persistSelectedAttachment, readTranscriptFile, removePersistedAttachment, } from "../lib/files/attachmentStore";
 import { buildRecordingFilename, getSupportedRecordingMimeType, getSystemAudioDisplayOptions, RECORDING_MODE_LABELS, } from "../lib/files/recording";
+import { createLocalSnapshotBackup, exportSnapshotBackup, getDesktopStorageInfo, openDesktopPath, } from "../lib/storage/desktopStorage";
+import { buildMetadataReview, EMPTY_METADATA_REVIEW } from "../lib/metadata/review";
 import { parseTokenList } from "../components/peoplePickerUtils";
 const WORKSPACE_ITEMS = [
     { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
@@ -64,7 +66,7 @@ const logAIRuntimeEvent = (event) => {
     }
 };
 export const App = () => {
-    const { snapshot, activeSessionId, activeView, saveState, lastSavedAt, isLoaded, loadError, load, setActiveSessionId, setActiveView, repository, saveSession, createNewSession, deleteSession, saveTodo, addTodo, deleteTodo, saveSettings, saveTemplate, importLegacyBrowserData, saveAttachments, } = useDesktopStore();
+    const { snapshot, activeSessionId, activeView, saveState, lastSavedAt, isLoaded, loadError, load, setActiveSessionId, setActiveView, repository, saveSession, createNewSession, deleteSession, saveTodo, addTodo, deleteTodo, saveSettings, saveTemplate, resetTemplates, importLegacyBrowserData, saveAttachments, } = useDesktopStore();
     const [activeWorkspace, setActiveWorkspace] = useState("notes");
     const [openPanel, setOpenPanel] = useState(null);
     const [settingsSection, setSettingsSection] = useState("ai");
@@ -83,13 +85,14 @@ export const App = () => {
     const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
     const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
     const [updateStatusNote, setUpdateStatusNote] = useState(null);
+    const [storageInfo, setStorageInfo] = useState(null);
     const [aiDiagnostics, setAIDiagnostics] = useState(() => getAIDiagnosticsItems());
     const [aiRequestHistory, setAIRequestHistory] = useState(() => getAIRequestHistory());
     const [modelPricingSnapshot, setModelPricingSnapshot] = useState(createDefaultModelPricingSnapshot);
     const [modelPricingStatus, setModelPricingStatus] = useState(buildModelPricingStatus(createDefaultModelPricingSnapshot()));
     const [isRefreshingModelPricing, setIsRefreshingModelPricing] = useState(false);
-    const [suggestedPeopleToAdd, setSuggestedPeopleToAdd] = useState([]);
-    const [selectedSuggestedPeople, setSelectedSuggestedPeople] = useState([]);
+    const [metadataSuggestions, setMetadataSuggestions] = useState(EMPTY_METADATA_REVIEW);
+    const [selectedMetadataSuggestions, setSelectedMetadataSuggestions] = useState(EMPTY_METADATA_REVIEW);
     const mediaRecorderRef = useRef(null);
     const mediaStreamRef = useRef(null);
     const captureSourceStreamsRef = useRef([]);
@@ -144,6 +147,21 @@ export const App = () => {
             }
         };
         void runUpdateCheck();
+        return () => {
+            cancelled = true;
+        };
+    }, [isLoaded, loadError]);
+    useEffect(() => {
+        if (!isLoaded || loadError) {
+            return;
+        }
+        let cancelled = false;
+        void (async () => {
+            const info = await getDesktopStorageInfo();
+            if (!cancelled) {
+                setStorageInfo(info);
+            }
+        })();
         return () => {
             cancelled = true;
         };
@@ -306,11 +324,14 @@ export const App = () => {
         return rankSavedValues(snapshot.sessions, snapshot.settings.savedTags, (session) => parseTokenList(session.tagsText));
     }, [snapshot]);
     const activeSession = useMemo(() => snapshot?.sessions.find((session) => session.id === activeSessionId) ?? snapshot?.sessions[0] ?? null, [activeSessionId, snapshot]);
-    const activeTemplate = useMemo(() => snapshot?.templates.find((template) => template.id === activeSession?.templateId) ?? null, [activeSession, snapshot]);
+    const activeTemplate = useMemo(() => activeSession && snapshot
+        ? getTemplatesForCaptureMode(snapshot.templates, activeSession.captureMode).find((template) => template.id === activeSession.templateId) ??
+            getTemplatesForCaptureMode(snapshot.templates, activeSession.captureMode)[0] ??
+            null
+        : null, [activeSession, snapshot]);
     const activeCaptureMode = activeSession?.captureMode ?? "meeting-note";
     const activeAttachments = useMemo(() => snapshot?.attachments.filter((attachment) => attachment.sessionId === activeSession?.id) ?? [], [activeSession, snapshot]);
     const activeAudioAttachment = useMemo(() => activeAttachments.find((attachment) => attachment.kind === "audio") ?? null, [activeAttachments]);
-    const includedOutputImages = useMemo(() => activeAttachments.filter((attachment) => attachment.kind === "image" && attachment.includeInOutput), [activeAttachments]);
     const selectedTextModelOption = modelPricingSnapshot.textModels
         .map(buildTextModelOption)
         .find((option) => option.id === snapshot?.settings.textModel);
@@ -340,6 +361,16 @@ export const App = () => {
         },
         onCacheHit,
     });
+    const openMetadataReviewIfNeeded = (session) => {
+        const nextReview = buildMetadataReview(session, snapshot?.settings ?? null);
+        const hasSuggestions = Object.values(nextReview).some((values) => values.length);
+        if (!hasSuggestions) {
+            return;
+        }
+        setMetadataSuggestions(nextReview);
+        setSelectedMetadataSuggestions(nextReview);
+        setOpenPanel("metadata-review");
+    };
     const buildRawOutput = (session = activeSession) => {
         if (!session) {
             return "";
@@ -490,15 +521,57 @@ export const App = () => {
             ? "Imported current browser app data into the new desktop foundation."
             : "No current browser app data was found to import.");
     };
-    const handleExportSnapshot = () => {
-        const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `notesmith-desktop-snapshot-${new Date().toISOString().slice(0, 10)}.json`;
-        link.click();
-        URL.revokeObjectURL(url);
-        setStatusNote("Exported a local desktop snapshot.");
+    const handleExportSnapshot = async () => {
+        try {
+            const result = await exportSnapshotBackup(snapshot);
+            if (!result) {
+                setStatusNote("Backup export was cancelled.");
+                return;
+            }
+            setStatusNote(`Exported a desktop backup file to ${result.path}.`);
+        }
+        catch (error) {
+            setStatusNote(error instanceof Error ? error.message : "Could not export the desktop backup file.");
+        }
+    };
+    const handleCreateLocalBackup = async () => {
+        try {
+            const backupPath = await createLocalSnapshotBackup(snapshot);
+            if (!backupPath) {
+                setStatusNote("Local backup creation is only available in the installed desktop app.");
+                return;
+            }
+            setStatusNote(`Created a local safety backup at ${backupPath}.`);
+        }
+        catch (error) {
+            setStatusNote(error instanceof Error ? error.message : "Could not create the local safety backup.");
+        }
+    };
+    const handleOpenDataFolder = async () => {
+        if (!storageInfo) {
+            setStatusNote("The desktop data folder is only available in the installed app.");
+            return;
+        }
+        try {
+            await openDesktopPath(storageInfo.appDataDir);
+            setStatusNote("Opened the desktop data folder.");
+        }
+        catch (error) {
+            setStatusNote(error instanceof Error ? error.message : "Could not open the desktop data folder.");
+        }
+    };
+    const handleOpenDatabaseFolder = async () => {
+        if (!storageInfo) {
+            setStatusNote("The desktop database folder is only available in the installed app.");
+            return;
+        }
+        try {
+            await openDesktopPath(storageInfo.appConfigDir);
+            setStatusNote("Opened the desktop database folder.");
+        }
+        catch (error) {
+            setStatusNote(error instanceof Error ? error.message : "Could not open the desktop database folder.");
+        }
     };
     const handleCheckForUpdates = async () => {
         setIsCheckingForUpdates(true);
@@ -550,8 +623,12 @@ export const App = () => {
             setIsInstallingUpdate(false);
         }
     };
+    const handleResetTemplates = async () => {
+        await resetTemplates();
+        setStatusNote("Restored the default built-in templates.");
+    };
     const handleGenerate = async () => {
-        const template = snapshot.templates.find((entry) => entry.id === activeSession.templateId);
+        const template = activeTemplate;
         if (!template) {
             setStatusNote("The selected template could not be found.");
             return;
@@ -598,13 +675,7 @@ export const App = () => {
             setStatusNote(usedCache
                 ? "Loaded structured output from a matching local AI cache entry."
                 : "Generated structured output with the desktop AI service.");
-            const knownPeople = new Set(snapshot.settings.savedParticipants.map((entry) => entry.trim().toLocaleLowerCase()));
-            const newPeople = parsePeopleFromSession(activeSession.participantText).filter((entry) => !knownPeople.has(entry.toLocaleLowerCase()));
-            if (newPeople.length) {
-                setSuggestedPeopleToAdd(newPeople);
-                setSelectedSuggestedPeople(newPeople);
-                setOpenPanel("people-review");
-            }
+            openMetadataReviewIfNeeded(sessionForGeneration);
             setActiveView("output");
         }
         catch (error) {
@@ -635,6 +706,7 @@ export const App = () => {
                 const rawOutput = buildRawOutput(nextSession);
                 await saveSession({ ...nextSession, output: rawOutput });
                 setStatusNote("Transcribed the voice note into Output without AI polishing.");
+                openMetadataReviewIfNeeded(nextSession);
                 setActiveView("output");
             }
             catch (error) {
@@ -654,6 +726,7 @@ export const App = () => {
         setStatusNote(activeCaptureMode === "voice-note"
             ? "Created Output from the current voice note without AI polishing."
             : "Created Output from the current note without AI polishing.");
+        openMetadataReviewIfNeeded(activeSession);
         setActiveView("output");
     };
     const handleTranslate = async () => {
@@ -1129,38 +1202,61 @@ export const App = () => {
                     }, onCreate: () => openOverlay("new-note"), onDelete: (id) => void deleteSession(id) }));
             case "new-note":
                 return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Choose note type" }), _jsx("p", { children: "Pick the workflow first. Templates then refine the structure inside that mode." })] }), _jsx("div", { className: "capture-mode-switch overlay-mode-switch", children: Object.keys(CAPTURE_MODE_UI).map((captureMode) => (_jsxs("button", { type: "button", className: "capture-mode-card", onClick: () => void handleCreateSessionFromMode(captureMode), children: [_jsx("strong", { children: CAPTURE_MODE_UI[captureMode].label }), _jsx("span", { children: CAPTURE_MODE_UI[captureMode].description })] }, captureMode))) })] }));
-            case "people-review":
-                return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Save new people to People?" }), _jsx("p", { children: "These names were used in this note but are not yet saved in the People database. Save the ones you want available for future search and quick selection." })] }), _jsx("div", { className: "section-list", children: suggestedPeopleToAdd.map((person) => (_jsxs("label", { className: "list-item checkbox-label", children: [_jsx("input", { type: "checkbox", checked: selectedSuggestedPeople.includes(person), onChange: (event) => setSelectedSuggestedPeople((current) => event.target.checked ? Array.from(new Set([...current, person])) : current.filter((entry) => entry !== person)) }), _jsxs("span", { children: [_jsx("strong", { children: person }), _jsx("span", { className: "muted", children: "Currently only in this note. Save it to reuse in future notes." })] })] }, person))) }), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: () => {
-                                        if (selectedSuggestedPeople.length) {
-                                            void saveSettings({
-                                                ...snapshot.settings,
-                                                savedParticipants: Array.from(new Set([...snapshot.settings.savedParticipants, ...selectedSuggestedPeople])).sort(),
-                                            });
-                                            setStatusNote(selectedSuggestedPeople.length === 1
-                                                ? `Added ${selectedSuggestedPeople[0]} to People.`
-                                                : `Added ${selectedSuggestedPeople.length} people to People.`);
+            case "metadata-review":
+                return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Save new reusable values?" }), _jsx("p", { children: "These values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future search and quick selection." })] }), [
+                            { key: "people", label: "People", helper: "Save these names to reuse in future notes." },
+                            { key: "domains", label: "Domains", helper: "Save these top-level business areas for future notes." },
+                            { key: "projects", label: "Projects", helper: "Save these projects to reuse in future notes." },
+                            { key: "activities", label: "Activities", helper: "Save these activities to reuse in future notes." },
+                        ].map((section) => metadataSuggestions[section.key].length ? (_jsxs("div", { className: "section-divider", children: [_jsx("strong", { children: section.label }), _jsx("div", { className: "section-list", children: metadataSuggestions[section.key].map((value) => (_jsxs("label", { className: "list-item checkbox-label", children: [_jsx("input", { type: "checkbox", checked: selectedMetadataSuggestions[section.key].includes(value), onChange: (event) => setSelectedMetadataSuggestions((current) => ({
+                                                    ...current,
+                                                    [section.key]: event.target.checked
+                                                        ? Array.from(new Set([...current[section.key], value]))
+                                                        : current[section.key].filter((entry) => entry !== value),
+                                                })) }), _jsxs("span", { children: [_jsx("strong", { children: value }), _jsx("span", { className: "muted", children: section.helper })] })] }, `${section.key}-${value}`))) })] }, section.key)) : null), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: () => {
+                                        const nextSettings = { ...snapshot.settings };
+                                        if (selectedMetadataSuggestions.people.length) {
+                                            nextSettings.savedParticipants = Array.from(new Set([...nextSettings.savedParticipants, ...selectedMetadataSuggestions.people])).sort();
                                         }
-                                        setSuggestedPeopleToAdd([]);
-                                        setSelectedSuggestedPeople([]);
+                                        if (selectedMetadataSuggestions.domains.length) {
+                                            nextSettings.savedDomains = Array.from(new Set([...nextSettings.savedDomains, ...selectedMetadataSuggestions.domains])).sort();
+                                        }
+                                        if (selectedMetadataSuggestions.projects.length) {
+                                            nextSettings.savedProjects = Array.from(new Set([...nextSettings.savedProjects, ...selectedMetadataSuggestions.projects])).sort();
+                                        }
+                                        if (selectedMetadataSuggestions.activities.length) {
+                                            nextSettings.savedActivities = Array.from(new Set([...nextSettings.savedActivities, ...selectedMetadataSuggestions.activities])).sort();
+                                        }
+                                        const totalAdded = Object.values(selectedMetadataSuggestions).reduce((sum, values) => sum + values.length, 0);
+                                        if (totalAdded) {
+                                            void saveSettings({
+                                                ...nextSettings,
+                                            });
+                                            setStatusNote(totalAdded === 1
+                                                ? "Added 1 reusable value."
+                                                : `Added ${totalAdded} reusable values.`);
+                                        }
+                                        setMetadataSuggestions(EMPTY_METADATA_REVIEW);
+                                        setSelectedMetadataSuggestions(EMPTY_METADATA_REVIEW);
                                         closeOverlay();
-                                    }, children: "Save selected to People" }), _jsx("button", { className: "small-button", type: "button", onClick: () => setSelectedSuggestedPeople(suggestedPeopleToAdd), children: "Select all" }), _jsx("button", { className: "small-button", type: "button", onClick: () => {
-                                        setSuggestedPeopleToAdd([]);
-                                        setSelectedSuggestedPeople([]);
+                                    }, children: "Save selected" }), _jsx("button", { className: "small-button", type: "button", onClick: () => setSelectedMetadataSuggestions(metadataSuggestions), children: "Select all" }), _jsx("button", { className: "small-button", type: "button", onClick: () => {
+                                        setMetadataSuggestions(EMPTY_METADATA_REVIEW);
+                                        setSelectedMetadataSuggestions(EMPTY_METADATA_REVIEW);
                                         closeOverlay();
                                     }, children: "Not now" })] })] }));
             case "todos":
                 return (_jsx(TodosCard, { todos: snapshot.todos, onToggle: (todo) => void saveTodo(todo), onAdd: (description) => void addTodo(description), onDelete: (id) => void deleteTodo(id) }));
             case "settings":
-                return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onImportLegacy: handleImportLegacy, onCheckForUpdates: handleCheckForUpdates, updateStatusNote: updateStatusNote, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
+                return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onResetTemplates: handleResetTemplates, onImportLegacy: handleImportLegacy, onCheckForUpdates: handleCheckForUpdates, onOpenDataFolder: handleOpenDataFolder, onOpenDatabaseFolder: handleOpenDatabaseFolder, onExportBackup: handleExportSnapshot, onCreateLocalBackup: handleCreateLocalBackup, updateStatusNote: updateStatusNote, storageInfo: storageInfo, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
             case "more":
                 return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "More tools" }), _jsx("p", { children: "Secondary utilities stay grouped here so the main workspace remains calm and obvious." })] }), _jsxs("div", { className: "stack", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => setOpenPanel("todos"), children: "Open To-dos" }), _jsx("button", { className: "small-button", type: "button", onClick: () => setOpenPanel("backup"), children: "Open Back-up" }), _jsx("button", { className: "small-button", type: "button", onClick: () => openSettingsSection("other"), children: "Open Other settings" })] })] }));
             case "backup":
-                return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Back-up" }), _jsx("p", { children: "Keep backup and migration actions accessible without leaving the focused Notes workspace." })] }), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportLegacy(), children: "Import current browser data" }), _jsx("button", { className: "small-button", type: "button", onClick: handleExportSnapshot, children: "Export snapshot" })] }), _jsx("p", { className: "tiny-text", children: "This backup area stays separate from the main workspace so capture and output remain clear and uncluttered." })] }));
+                return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Back-up" }), _jsx("p", { children: "Keep backup and migration actions accessible without leaving the focused Notes workspace." })] }), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportLegacy(), children: "Import current browser data" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleExportSnapshot(), children: "Export backup file" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleCreateLocalBackup(), children: "Create local safety backup" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleOpenDataFolder(), children: "Open data folder" })] }), storageInfo ? (_jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Database path" }), _jsx("span", { className: "muted", children: storageInfo.databasePath })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Backups folder" }), _jsx("span", { className: "muted", children: storageInfo.backupsDir })] })] })) : null, _jsx("p", { className: "tiny-text", children: "Export a backup file to a folder outside AppData before uninstalling the app." })] }));
             default:
                 return null;
         }
     };
-    return (_jsxs("div", { className: "app-shell desktop-shell", "data-theme": snapshot.settings.theme, children: [_jsxs("aside", { className: "workspace-rail", children: [_jsxs("div", { className: "workspace-rail-brand", children: [_jsx("strong", { children: "NoteSmith" }), _jsx("span", { className: "tiny-text", children: "Desktop" })] }), _jsx("nav", { className: "workspace-nav", children: WORKSPACE_ITEMS.map((item) => (_jsxs("button", { type: "button", className: "workspace-nav-button", "data-active": activeWorkspace === item.id, "data-available": item.available, onClick: () => handleWorkspaceSelection(item.id, item.available), children: [_jsx("span", { children: item.label }), _jsx("small", { children: item.available ? item.description : "Coming later" })] }, item.id))) })] }), _jsxs("div", { className: "workspace-shell", children: [_jsxs("header", { className: "topbar app-header", children: [_jsxs("div", { className: "topbar-copy", children: [_jsx("div", { className: "topbar-eyebrow", children: "Focused workspace" }), _jsx("h1", { children: activeWorkspace === "notes" ? "Notes workspace" : `${WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}` }), _jsx("p", { children: statusNote }), _jsxs("div", { className: "topbar-status-strip", children: [_jsx("span", { className: `status-chip status-chip-${saveState}`, children: saveStatusLabel }), _jsx("span", { className: "status-chip", children: aiActivityLabel }), _jsx("span", { className: "status-chip", children: snapshot.settings.apiKey ? "AI key local-only" : "Add API key" }), isCheckingForUpdates ? _jsx("span", { className: "status-chip", children: "Checking updates..." }) : null] })] }), _jsxs("div", { className: "topbar-actions topbar-actions-split", children: [activeWorkspace === "notes" ? (_jsx("button", { className: "primary-button", type: "button", onClick: () => openOverlay("new-note"), children: "New note" })) : null, _jsxs("div", { className: "topbar-secondary-cluster", children: [_jsx("button", { className: "shell-button", type: "button", onClick: openCommandPalette, children: "Command palette" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => openOverlay("sessions"), children: "All Sessions" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => openSettingsSection("ai"), children: "Settings" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => openOverlay("more"), children: "More" })] })] })] }), availableUpdateVersion ? (_jsxs("div", { className: "workspace-alert-bar", children: [_jsxs("span", { children: ["Desktop update ", availableUpdateVersion, " is available from GitHub Releases."] }), _jsx("button", { className: "primary-button", type: "button", onClick: () => void handleInstallUpdate(), disabled: isInstallingUpdate, children: isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}` })] })) : null, _jsxs("main", { className: "notes-shell", children: [_jsxs("section", { className: "workspace-canvas", children: [_jsxs("div", { className: "workspace-header card", children: [_jsxs("div", { className: "card-header", children: [_jsxs("div", { children: [_jsx("h2", { children: activeWorkspace === "notes"
+    return (_jsxs("div", { className: "app-shell desktop-shell", "data-theme": snapshot.settings.theme, children: [_jsxs("aside", { className: "workspace-rail", children: [_jsxs("div", { className: "workspace-rail-brand", children: [_jsx("strong", { children: "NoteSmith" }), _jsx("span", { className: "tiny-text", children: "Desktop" })] }), _jsx("nav", { className: "workspace-nav", children: WORKSPACE_ITEMS.map((item) => (_jsxs("button", { type: "button", className: "workspace-nav-button", "data-active": activeWorkspace === item.id, "data-available": item.available, onClick: () => handleWorkspaceSelection(item.id, item.available), children: [_jsx("span", { children: item.label }), _jsx("small", { children: item.available ? item.description : "Coming later" })] }, item.id))) })] }), _jsxs("div", { className: "workspace-shell", children: [_jsxs("header", { className: "topbar app-header", children: [_jsxs("div", { className: "topbar-copy", children: [_jsx("div", { className: "topbar-eyebrow", children: "Focused workspace" }), _jsx("h1", { children: activeWorkspace === "notes" ? "Notes workspace" : `${WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}` }), _jsx("p", { children: statusNote }), _jsxs("div", { className: "topbar-status-strip", children: [_jsx("span", { className: `status-chip status-chip-${saveState}`, children: saveStatusLabel }), _jsx("span", { className: "status-chip", children: aiActivityLabel }), _jsx("span", { className: "status-chip", children: selectedTextModelOption?.label || snapshot.settings.textModel }), _jsx("span", { className: "status-chip", children: selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel }), isCheckingForUpdates ? _jsx("span", { className: "status-chip", children: "Checking updates..." }) : null] })] }), _jsxs("div", { className: "topbar-actions topbar-actions-split", children: [activeWorkspace === "notes" ? (_jsx("button", { className: "primary-button", type: "button", onClick: () => openOverlay("new-note"), children: "New note" })) : null, _jsxs("div", { className: "topbar-secondary-cluster", children: [_jsx("button", { className: "shell-button", type: "button", onClick: openCommandPalette, children: "Command palette" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => openOverlay("sessions"), children: "All Sessions" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => openSettingsSection("ai"), children: "Settings" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => openOverlay("more"), children: "More" })] })] })] }), availableUpdateVersion ? (_jsxs("div", { className: "workspace-alert-bar", children: [_jsxs("span", { children: ["Desktop update ", availableUpdateVersion, " is available from GitHub Releases."] }), _jsx("button", { className: "primary-button", type: "button", onClick: () => void handleInstallUpdate(), disabled: isInstallingUpdate, children: isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}` })] })) : null, _jsxs("main", { className: "notes-shell", children: [_jsxs("section", { className: "workspace-canvas", children: [_jsxs("div", { className: "workspace-header card", children: [_jsxs("div", { className: "card-header", children: [_jsxs("div", { children: [_jsx("h2", { children: activeWorkspace === "notes"
                                                                     ? activeView === "capture"
                                                                         ? CAPTURE_MODE_UI[activeCaptureMode].label
                                                                         : `${CAPTURE_MODE_UI[activeCaptureMode].label} output`
@@ -1168,7 +1264,7 @@ export const App = () => {
                                                                     ? activeView === "capture"
                                                                         ? `${CAPTURE_MODE_UI[activeCaptureMode].description} Secondary tools stay in the inspector or overlays so the center canvas stays calm.`
                                                                         : "Shape and export polished notes here. AI and export controls stay nearby without crowding the document."
-                                                                    : "This workspace placeholder already follows the same shell structure so the product can grow without changing how navigation works." })] }), _jsx("div", { className: "page-actions", children: _jsxs("div", { className: "view-switch", children: [_jsx("button", { className: "segment-button", "data-active": activeView === "capture", type: "button", onClick: () => setActiveView("capture"), disabled: activeWorkspace !== "notes", children: "Capture" }), _jsx("button", { className: "segment-button", "data-active": activeView === "output", type: "button", onClick: () => setActiveView("output"), disabled: activeWorkspace !== "notes", children: "Output" })] }) })] }), _jsx("div", { className: "workspace-guide-row", children: _jsx("span", { className: "tiny-text", children: "Shortcuts: Ctrl/Cmd+K command palette, Ctrl/Cmd+N new session, Alt+1/2 switch views, Ctrl/Cmd+Enter primary output action." }) })] }), activeWorkspace !== "notes" ? (_jsxs("div", { className: "card empty-state-card", children: [_jsx("h2", { children: "Coming next" }), _jsx("p", { children: WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.description || "This workspace is planned for a later phase." }), _jsxs("ol", { className: "empty-state-steps", children: [_jsx("li", { children: "Return to Notes from the left rail whenever you want to work now." }), _jsx("li", { children: "Use Ctrl/Cmd+K to reach settings, sessions, and future actions quickly." }), _jsx("li", { children: "This workspace will use the same center-canvas plus right-inspector pattern when it ships." })] })] })) : activeView === "capture" ? (_jsx(SessionEditor, { session: activeSession, templates: snapshot.templates, attachments: activeAttachments, savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isTranscribingAudio: isTranscribingAudio, recordingMode: recordingMode, isRecordingAudio: isRecordingAudio, recordingStatusNote: recordingStatusNote, onChange: (session) => void saveSession(session), onImportImage: () => void handleImportImage(), onImportAudio: () => void handleImportAudio(), onTranscribeAudio: () => void handleTranscribeAudio(), onChangeRecordingMode: setRecordingMode, onStartRecording: () => void handleStartRecording(), onStopRecording: () => void handleStopRecording(), onImportTranscript: () => void handleImportTranscript(), onRemoveAttachment: (attachmentId) => void handleRemoveAttachment(attachmentId), onUpdateAttachment: (attachment) => void handleUpdateAttachment(attachment) })) : (_jsx(OutputWorkspace, { session: activeSession, attachments: activeAttachments, onChange: (session) => void saveSession(session), isPrimaryActionRunning: outputActionConfig.isPrimaryRunning, isSecondaryActionRunning: outputActionConfig.isSecondaryRunning, isRevising: isRevising, onPrimaryAction: outputActionConfig.onPrimary, onSecondaryAction: outputActionConfig.onSecondary, onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onExportText: () => exportOutputAsText({ title: activeSession.title, output: activeSession.output }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output }), onExportHtml: () => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output }), primaryActionLabel: outputActionConfig.primaryLabel, secondaryActionLabel: outputActionConfig.secondaryLabel, emptyStatePrimaryLabel: outputActionConfig.emptyStatePrimaryLabel, emptyStateSecondaryLabel: outputActionConfig.emptyStateSecondaryLabel }))] }), _jsxs("aside", { className: "workspace-inspector stack", children: [_jsxs("div", { className: "sidebar-card", children: [_jsx("div", { children: _jsx("h3", { children: "Current session" }) }), _jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.title || "Untitled session" }), _jsxs("span", { className: "muted", children: [CAPTURE_MODE_UI[activeCaptureMode].label, " \u00B7 ", activeTemplate?.name ?? "No template selected"] })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.date || "No date set" }), _jsxs("span", { className: "muted", children: [activeSession.startTime || "--:--", " to ", activeSession.endTime || "--:--"] })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.participantText || (activeCaptureMode === "meeting-note" ? "No people yet" : "Optional people context") }), _jsx("span", { className: "muted", children: "People" })] }), activeSession.project ? (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.project }), _jsx("span", { className: "muted", children: "Project" })] })) : null, activeSession.domain ? (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.domain }), _jsx("span", { className: "muted", children: "Domain" })] })) : null, activeSession.activity ? (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.activity }), _jsx("span", { className: "muted", children: "Activity" })] })) : null, activeSession.tagsText ? (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: activeSession.tagsText }), _jsx("span", { className: "muted", children: "Tags" })] })) : null, _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: includedOutputImages.length }), _jsx("span", { className: "muted", children: "Images staged for polished output" })] })] })] }), _jsxs("div", { className: "sidebar-card", children: [_jsx("div", { children: _jsx("h3", { children: "AI visibility" }) }), _jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: selectedTextModelOption?.label || snapshot.settings.textModel }), _jsx("span", { className: "muted", children: "Text model for generation, revision, and translation" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel }), _jsx("span", { className: "muted", children: "Transcription model" })] }), _jsx("div", { className: "list-item", children: _jsx("strong", { children: snapshot.settings.apiKey ? "API key configured" : "No API key set yet" }) })] }), _jsx("button", { className: "small-button", type: "button", onClick: () => openSettingsSection("ai"), children: "Open AI settings" })] }), _jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: activeView === "capture" ? "Capture tools" : "Output tools" }), _jsx("p", { children: activeView === "capture"
+                                                                    : "This workspace placeholder already follows the same shell structure so the product can grow without changing how navigation works." })] }), _jsx("div", { className: "page-actions", children: _jsxs("div", { className: "view-switch", children: [_jsx("button", { className: "segment-button", "data-active": activeView === "capture", type: "button", onClick: () => setActiveView("capture"), disabled: activeWorkspace !== "notes", children: "Capture" }), _jsx("button", { className: "segment-button", "data-active": activeView === "output", type: "button", onClick: () => setActiveView("output"), disabled: activeWorkspace !== "notes", children: "Output" })] }) })] }), _jsx("div", { className: "workspace-guide-row", children: _jsx("span", { className: "tiny-text", children: "Shortcuts: Ctrl/Cmd+K command palette, Ctrl/Cmd+N new session, Alt+1/2 switch views, Ctrl/Cmd+Enter primary output action." }) })] }), activeWorkspace !== "notes" ? (_jsxs("div", { className: "card empty-state-card", children: [_jsx("h2", { children: "Coming next" }), _jsx("p", { children: WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.description || "This workspace is planned for a later phase." }), _jsxs("ol", { className: "empty-state-steps", children: [_jsx("li", { children: "Return to Notes from the left rail whenever you want to work now." }), _jsx("li", { children: "Use Ctrl/Cmd+K to reach settings, sessions, and future actions quickly." }), _jsx("li", { children: "This workspace will use the same center-canvas plus right-inspector pattern when it ships." })] })] })) : activeView === "capture" ? (_jsx(SessionEditor, { session: activeSession, templates: snapshot.templates, attachments: activeAttachments, savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isTranscribingAudio: isTranscribingAudio, recordingMode: recordingMode, isRecordingAudio: isRecordingAudio, recordingStatusNote: recordingStatusNote, onChange: (session) => void saveSession(session), onImportImage: () => void handleImportImage(), onImportAudio: () => void handleImportAudio(), onTranscribeAudio: () => void handleTranscribeAudio(), onChangeRecordingMode: setRecordingMode, onStartRecording: () => void handleStartRecording(), onStopRecording: () => void handleStopRecording(), onImportTranscript: () => void handleImportTranscript(), onRemoveAttachment: (attachmentId) => void handleRemoveAttachment(attachmentId), onUpdateAttachment: (attachment) => void handleUpdateAttachment(attachment) })) : (_jsx(OutputWorkspace, { session: activeSession, attachments: activeAttachments, onChange: (session) => void saveSession(session), savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isPrimaryActionRunning: outputActionConfig.isPrimaryRunning, isSecondaryActionRunning: outputActionConfig.isSecondaryRunning, isRevising: isRevising, onPrimaryAction: outputActionConfig.onPrimary, onSecondaryAction: outputActionConfig.onSecondary, onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onExportText: () => exportOutputAsText({ title: activeSession.title, output: activeSession.output }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output }), onExportHtml: () => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output }), primaryActionLabel: outputActionConfig.primaryLabel, secondaryActionLabel: outputActionConfig.secondaryLabel, emptyStatePrimaryLabel: outputActionConfig.emptyStatePrimaryLabel, emptyStateSecondaryLabel: outputActionConfig.emptyStateSecondaryLabel }))] }), _jsxs("aside", { className: "workspace-inspector stack", children: [_jsx(SessionsSidebar, { sessions: snapshot.sessions, activeSessionId: activeSession.id, onSelect: (id) => setActiveSessionId(id), onCreate: () => openOverlay("new-note"), onDelete: (id) => void deleteSession(id), compact: true, title: "Sessions" }), _jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: activeView === "capture" ? "Capture tools" : "Output tools" }), _jsx("p", { children: activeView === "capture"
                                                             ? activeCaptureMode === "meeting-note"
                                                                 ? "Meeting imports, transcript tools, and supporting media stay here."
                                                                 : activeCaptureMode === "voice-note"
@@ -1181,7 +1277,7 @@ export const App = () => {
                                                 ? "All Sessions"
                                                 : openPanel === "new-note"
                                                     ? "New note"
-                                                    : openPanel === "people-review"
+                                                    : openPanel === "metadata-review"
                                                         ? "People"
                                                         : openPanel === "todos"
                                                             ? "To-dos"

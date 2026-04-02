@@ -51,6 +51,18 @@ const inferCaptureModeFromTemplateId = (templateId) => {
         return "voice-note";
     return "meeting-note";
 };
+const inferCaptureModeFromLegacyTemplate = (template) => {
+    const label = typeof template.label === "string" ? template.label.toLowerCase() : "";
+    const instructions = typeof template.templateInstructions === "string" ? template.templateInstructions.toLowerCase() : "";
+    const combined = `${label} ${instructions}`;
+    if (combined.includes("voice") || combined.includes("dictat") || combined.includes("memo")) {
+        return "voice-note";
+    }
+    if (template.fields?.participants || template.fields?.meetingStartTime || template.fields?.meetingEndTime) {
+        return "meeting-note";
+    }
+    return "quick-note";
+};
 const mapLegacyThemeFamily = (legacyTheme) => {
     switch (legacyTheme) {
         case "classic-blue":
@@ -69,6 +81,7 @@ const mapLegacySessions = (sessions) => Array.isArray(sessions)
         templateId: mapLegacyTemplateId(session.template),
         captureMode: inferCaptureModeFromTemplateId(mapLegacyTemplateId(session.template)),
         title: typeof session.title === "string" ? session.title : "",
+        isPrivate: false,
         participantText: typeof session.participants === "string" ? session.participants : "",
         project: "",
         domain: "",
@@ -112,7 +125,7 @@ const mapLegacyTemplates = (customTemplates) => {
             id: typeof template.id === "string" && template.id.trim() ? template.id : crypto.randomUUID(),
             name: typeof template.label === "string" && template.label.trim() ? template.label.trim() : "Custom template",
             kind: "custom",
-            captureModes: ["meeting-note", "quick-note", "voice-note"],
+            captureModes: [inferCaptureModeFromLegacyTemplate(template)],
             promptInstructions: typeof template.templateInstructions === "string" ? template.templateInstructions : "",
             fields: [
                 { id: crypto.randomUUID(), key: "title", label: "Title", type: "text", enabled: template.fields?.title !== false, required: false, position: 1 },

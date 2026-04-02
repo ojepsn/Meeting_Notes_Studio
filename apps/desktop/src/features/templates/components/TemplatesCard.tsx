@@ -1,16 +1,39 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CaptureMode, TemplateDefinition, TemplateField, TemplateFieldType, TemplateSection } from "@notesmith/domain";
+import {
+  getPrimaryCaptureMode,
+  type CaptureMode,
+  type TemplateDefinition,
+  type TemplateField,
+  type TemplateFieldType,
+  type TemplateSection,
+} from "@notesmith/domain";
 
 interface TemplatesCardProps {
   templates: TemplateDefinition[];
   onSave: (template: TemplateDefinition) => void;
+  onResetTemplates: () => Promise<void>;
 }
 
 const FIELD_TYPES: TemplateFieldType[] = ["text", "number", "date", "time", "textarea"];
-const CAPTURE_MODE_OPTIONS: Array<{ id: CaptureMode; label: string }> = [
-  { id: "meeting-note", label: "Meeting note" },
-  { id: "quick-note", label: "Quick note" },
-  { id: "voice-note", label: "Voice note" },
+const CAPTURE_MODE_OPTIONS: Array<{ id: CaptureMode; label: string; description: string; createLabel: string }> = [
+  {
+    id: "meeting-note",
+    label: "Meeting note",
+    description: "Templates for meetings, calls, interviews, and structured minutes.",
+    createLabel: "New meeting template",
+  },
+  {
+    id: "quick-note",
+    label: "Quick note",
+    description: "Templates for typed notes, short writeups, and lightweight capture.",
+    createLabel: "New note template",
+  },
+  {
+    id: "voice-note",
+    label: "Voice note",
+    description: "Templates for dictation, voice memos, and audio-first notes.",
+    createLabel: "New voice template",
+  },
 ];
 
 const createBlankField = (position: number): TemplateField => ({
@@ -31,11 +54,16 @@ const createBlankSection = (position: number): TemplateSection => ({
   position,
 });
 
-const createDraftTemplate = (): TemplateDefinition => ({
+const createDraftTemplate = (captureMode: CaptureMode): TemplateDefinition => ({
   id: `custom-${crypto.randomUUID()}`,
-  name: "New custom template",
+  name:
+    captureMode === "meeting-note"
+      ? "New meeting template"
+      : captureMode === "voice-note"
+        ? "New voice template"
+        : "New note template",
   kind: "custom",
-  captureModes: ["meeting-note", "quick-note", "voice-note"],
+  captureModes: [captureMode],
   fields: [createBlankField(1)],
   sections: [createBlankSection(1)],
   promptInstructions: "",
@@ -57,29 +85,46 @@ const normalizeSections = (sections: TemplateSection[]) =>
     position: index + 1,
   }));
 
-export const TemplatesCard = ({ templates, onSave }: TemplatesCardProps) => {
-  const editableTemplates = useMemo(() => templates.filter((template) => template.kind === "custom"), [templates]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(editableTemplates[0]?.id ?? null);
-  const [draft, setDraft] = useState<TemplateDefinition | null>(editableTemplates[0] ?? null);
+export const TemplatesCard = ({ templates, onSave, onResetTemplates }: TemplatesCardProps) => {
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(templates[0]?.id ?? null);
+  const [draft, setDraft] = useState<TemplateDefinition | null>(templates[0] ?? null);
 
   useEffect(() => {
-    if (!editableTemplates.length && (!draft || draft.id !== selectedTemplateId)) {
+    if (!templates.length && (!draft || draft.id !== selectedTemplateId)) {
       setSelectedTemplateId(null);
       setDraft(null);
       return;
     }
 
-    if (draft && draft.id === selectedTemplateId && !editableTemplates.some((template) => template.id === draft.id)) {
+    if (draft && draft.id === selectedTemplateId && !templates.some((template) => template.id === draft.id)) {
       return;
     }
 
     const selected =
-      editableTemplates.find((template) => template.id === selectedTemplateId) ??
-      editableTemplates.find((template) => template.id === draft?.id) ??
-      editableTemplates[0];
-    setSelectedTemplateId(selected.id);
-    setDraft(selected);
-  }, [draft, editableTemplates, selectedTemplateId]);
+      templates.find((template) => template.id === selectedTemplateId) ??
+      templates.find((template) => template.id === draft?.id) ??
+      templates[0];
+
+    if (selected) {
+      setSelectedTemplateId(selected.id);
+      setDraft(selected);
+    }
+  }, [draft, selectedTemplateId, templates]);
+
+  const draftCategory = draft ? getPrimaryCaptureMode(draft) : "meeting-note";
+
+  const groupedTemplates = useMemo(
+    () =>
+      CAPTURE_MODE_OPTIONS.map((mode) => ({
+        ...mode,
+        templates: templates.filter((template) => getPrimaryCaptureMode(template) === mode.id),
+      })),
+    [templates],
+  );
+
+  const editableTemplatesForDraftCategory = templates.filter(
+    (template) => getPrimaryCaptureMode(template) === draftCategory,
+  );
 
   const updateDraft = (nextDraft: TemplateDefinition | null) => {
     setDraft(nextDraft);
@@ -88,49 +133,86 @@ export const TemplatesCard = ({ templates, onSave }: TemplatesCardProps) => {
     }
   };
 
+  const startDraftForCategory = (captureMode: CaptureMode) => {
+    updateDraft(createDraftTemplate(captureMode));
+  };
+
   return (
     <div className="sidebar-card">
       <div>
         <h3>Templates</h3>
-        <p>The desktop rebuild keeps templates as first-class domain objects, ready for sync later.</p>
+        <p>Create templates under the top-level note type where they belong. Each template then appears only in that session category.</p>
       </div>
-      <div className="section-list">
-        {templates.map((template) => (
-          <div key={template.id} className="list-item">
-            <strong>{template.name}</strong>
-            <span className="muted">
-              {template.kind === "builtin" ? "Built-in" : "Custom"} · {template.fields.length} fields ·{" "}
-              {template.sections.length} output sections
-            </span>
+
+      <div className="stack">
+        {groupedTemplates.map((category) => (
+          <div key={category.id} className="section-divider">
+            <div className="inline-row">
+              <div>
+                <strong>{category.label}</strong>
+                <p className="muted">{category.description}</p>
+              </div>
+              <button
+                className="small-button inline-action"
+                type="button"
+                onClick={() => startDraftForCategory(category.id)}
+              >
+                {category.createLabel}
+              </button>
+            </div>
+            <div className="section-list">
+              {category.templates.map((template) => (
+                <div key={template.id} className="list-item">
+                  <strong>{template.name}</strong>
+                  <span className="muted">
+                    {template.kind === "builtin" ? "Built-in" : "Custom"} · {template.fields.length} fields · {template.sections.length} output sections
+                  </span>
+                  <div className="list-item-actions">
+                    <button
+                      className="small-button"
+                      type="button"
+                      onClick={() => updateDraft(template)}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
+
       <div className="section-divider">
         <div className="inline-row">
           <div className="field">
-            <label htmlFor="template-editor-select">Custom template editor</label>
+            <label htmlFor="template-editor-select">Template editor</label>
             <select
               id="template-editor-select"
               value={selectedTemplateId ?? ""}
               onChange={(event) => {
-                const nextTemplate = editableTemplates.find((template) => template.id === event.target.value) ?? null;
+                const nextTemplate = templates.find((template) => template.id === event.target.value) ?? null;
                 updateDraft(nextTemplate);
               }}
             >
-              {!editableTemplates.length ? <option value="">No custom templates yet</option> : null}
-              {editableTemplates.map((template) => (
+              {!editableTemplatesForDraftCategory.length ? <option value="">No templates in this category yet</option> : null}
+              {editableTemplatesForDraftCategory.map((template) => (
                 <option key={template.id} value={template.id}>
-                  {template.name}
+                  {template.name} {template.kind === "builtin" ? "(Built-in)" : "(Custom)"}
                 </option>
               ))}
             </select>
           </div>
-          <button className="small-button inline-action" type="button" onClick={() => updateDraft(createDraftTemplate())}>
-            New custom template
+          <button className="small-button inline-action" type="button" onClick={() => startDraftForCategory(draftCategory)}>
+            New in this category
+          </button>
+          <button className="small-button inline-action" type="button" onClick={() => void onResetTemplates()}>
+            Restore default templates
           </button>
         </div>
+
         {!draft ? (
-          <p className="tiny-text">Create a custom template to define your own fields, output sections, and AI guidance.</p>
+          <p className="tiny-text">Choose a category above to create a template, or edit any built-in or custom template from its category list.</p>
         ) : (
           <>
             <div className="field">
@@ -142,6 +224,7 @@ export const TemplatesCard = ({ templates, onSave }: TemplatesCardProps) => {
                 placeholder="Client update"
               />
             </div>
+
             <div className="field">
               <label htmlFor="template-prompt-instructions">Template-specific AI instructions</label>
               <textarea
@@ -151,29 +234,30 @@ export const TemplatesCard = ({ templates, onSave }: TemplatesCardProps) => {
                 placeholder="Describe the tone, structure, or priorities this template should enforce during generation."
               />
             </div>
+
             <div className="field">
-              <label>Capture modes</label>
-              <div className="inline-row wrap-row">
+              <label>Top-level category</label>
+              <div className="capture-mode-switch">
                 {CAPTURE_MODE_OPTIONS.map((mode) => (
-                  <label key={mode.id} className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={draft.captureModes.includes(mode.id)}
-                      onChange={(event) => {
-                        const nextCaptureModes = event.target.checked
-                          ? Array.from(new Set([...draft.captureModes, mode.id]))
-                          : draft.captureModes.filter((entry) => entry !== mode.id);
-                        setDraft({
-                          ...draft,
-                          captureModes: nextCaptureModes.length ? nextCaptureModes : [mode.id],
-                        });
-                      }}
-                    />
-                    {mode.label}
-                  </label>
+                  <button
+                    key={mode.id}
+                    type="button"
+                    className="capture-mode-card"
+                    data-active={getPrimaryCaptureMode(draft) === mode.id}
+                    onClick={() =>
+                      setDraft({
+                        ...draft,
+                        captureModes: [mode.id],
+                      })
+                    }
+                  >
+                    <strong>{mode.label}</strong>
+                    <span>This template will only appear inside {mode.label.toLowerCase()}.</span>
+                  </button>
                 ))}
               </div>
             </div>
+
             <div className="section-divider">
               <div className="inline-row">
                 <div>
@@ -291,6 +375,7 @@ export const TemplatesCard = ({ templates, onSave }: TemplatesCardProps) => {
                 ))}
               </div>
             </div>
+
             <div className="section-divider">
               <div className="inline-row">
                 <div>
@@ -372,6 +457,7 @@ export const TemplatesCard = ({ templates, onSave }: TemplatesCardProps) => {
                 ))}
               </div>
             </div>
+
             <div className="inline-row">
               <button
                 className="primary-button inline-action"
@@ -379,8 +465,8 @@ export const TemplatesCard = ({ templates, onSave }: TemplatesCardProps) => {
                 onClick={() =>
                   onSave({
                     ...draft,
-                    kind: "custom",
                     name: draft.name.trim() || "New custom template",
+                    captureModes: [getPrimaryCaptureMode(draft)],
                     promptInstructions: draft.promptInstructions?.trim() || "",
                     fields: normalizeFields(draft.fields),
                     sections: normalizeSections(draft.sections),

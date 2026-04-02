@@ -3,6 +3,16 @@ interface OutputWorkspaceProps {
     session: SessionRecord;
     attachments: AttachmentRecord[];
     onChange: (session: SessionRecord) => void;
+    savedPeople: string[];
+    suggestedPeople: string[];
+    savedProjects: string[];
+    suggestedProjects: string[];
+    savedDomains: string[];
+    suggestedDomains: string[];
+    savedActivities: string[];
+    suggestedActivities: string[];
+    savedTags: string[];
+    suggestedTags: string[];
     isPrimaryActionRunning: boolean;
     isSecondaryActionRunning: boolean;
     isRevising: boolean;
@@ -18,5 +28,5 @@ interface OutputWorkspaceProps {
     emptyStatePrimaryLabel?: string;
     emptyStateSecondaryLabel?: string | null;
 }
-export declare const OutputWorkspace: ({ session, attachments, onChange, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const OutputWorkspace: ({ session, attachments, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

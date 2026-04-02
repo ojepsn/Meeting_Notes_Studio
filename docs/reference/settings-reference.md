@@ -76,6 +76,7 @@ Includes:
 - abbreviations
 
 These saved values are used by session capture and suggestion flows.
+New People, Domains, Projects, and Activities can be entered directly in notes, then saved here for future reuse after Output is created.
 
 ## Prompts
 
@@ -103,7 +104,11 @@ Templates define:
 - capture fields
 - output sections
 - template-specific instructions
-- capture-mode compatibility
+- one top-level category: `Meeting note`, `Quick note`, or `Voice note`
+
+Templates only appear inside their own top-level category.
+In Settings, users create new templates from inside the relevant category, such as meeting templates under `Meeting note` or voice templates under `Voice note`.
+Built-in templates are editable, and the app also provides a `Restore default templates` action to return the template library to the shipped defaults.
 
 ## Other Upcoming Settings
 
@@ -115,3 +120,11 @@ Currently includes:
 
 - check for updates
 - import current browser app data
+- export backup file
+- create local safety backup
+- open data folder
+- open database folder
+- exact storage paths for:
+  - database
+  - attachments
+  - local backups

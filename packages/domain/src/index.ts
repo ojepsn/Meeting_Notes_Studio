@@ -35,6 +35,7 @@ export interface SessionRecord {
   captureMode: CaptureMode;
   templateId: string;
   title: string;
+  isPrivate: boolean;
   participantText: string;
   project: string;
   domain: string;
@@ -125,6 +126,14 @@ export const DEFAULT_TEMPLATE_BY_CAPTURE_MODE: Record<CaptureMode, string> = {
   "voice-note": "voice-memo",
 };
 
+export const getPrimaryCaptureMode = (template: Pick<TemplateDefinition, "captureModes">): CaptureMode => {
+  const captureModes = template.captureModes ?? [];
+  if (captureModes.includes("meeting-note")) return "meeting-note";
+  if (captureModes.includes("quick-note")) return "quick-note";
+  if (captureModes.includes("voice-note")) return "voice-note";
+  return "meeting-note";
+};
+
 export const getTemplatesForCaptureMode = (
   templates: TemplateDefinition[],
   captureMode: CaptureMode,
@@ -154,7 +163,7 @@ export const BUILTIN_TEMPLATES: TemplateDefinition[] = [
     id: "personal-note",
     name: "Personal Note",
     kind: "builtin",
-    captureModes: ["quick-note", "voice-note"],
+    captureModes: ["quick-note"],
     fields: [
       { id: "note-title", key: "title", label: "Note title", type: "text", enabled: true, required: false, position: 1 },
       { id: "note-date", key: "date", label: "Date", type: "date", enabled: true, required: false, position: 2 }
@@ -167,7 +176,7 @@ export const BUILTIN_TEMPLATES: TemplateDefinition[] = [
     id: "one-on-one",
     name: "1:1 / Phone call",
     kind: "builtin",
-    captureModes: ["meeting-note"],
+    captureModes: ["quick-note"],
     fields: [
       { id: "call-title", key: "title", label: "Title", type: "text", enabled: true, required: false, position: 1 },
       { id: "call-participant", key: "participants", label: "Participant", type: "text", enabled: true, required: false, position: 2 },

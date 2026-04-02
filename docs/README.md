@@ -35,6 +35,7 @@ It is intentionally split by audience and task:
 ## Development
 
 - [Local development](./development/local-development.md)
+- [Desktop storage and backups](./development/desktop-storage-and-backups.md)
 - [Testing strategy](./development/testing-strategy.md)
 - [Desktop release automation](./desktop-release-automation.md)
 

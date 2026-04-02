@@ -26,6 +26,7 @@ Use this for:
 Typical fields:
 
 - title
+- private toggle
 - expandable meeting details:
   - people
   - domain
@@ -55,6 +56,7 @@ Use this for:
 Typical fields:
 
 - title
+- private toggle
 - main note body
 - optional date/time/people/domain/project/activity/tag details
 
@@ -73,6 +75,7 @@ Use this for:
 Typical fields:
 
 - title
+- private toggle
 - dictation/transcript field
 - optional written note
 - optional audio recording/upload
@@ -104,6 +107,7 @@ This is where rough material is collected:
 
 This is where the session's document is shaped:
 
+- title and note details can still be edited here
 - direct output creation
 - AI polishing
 - translation
@@ -121,6 +125,16 @@ Examples:
 - personal note
 - voice memo
 
+Each template belongs to one top-level category only, so a meeting template cannot appear inside `Quick note` or `Voice note`, and vice versa.
+
+New templates are created in Settings inside the matching category:
+
+- meeting templates under `Meeting note`
+- note templates under `Quick note`
+- voice templates under `Voice note`
+
+Both built-in and custom templates can be edited in Settings. If needed, the built-in template set can be restored to the shipped defaults.
+
 The capture mode defines the workflow.
 The template defines the structure inside that workflow.
 
@@ -134,6 +148,28 @@ The `People` field supports:
 - adding new people into the session
 
 After generation, the app can suggest saving newly seen people into the shared `People` database if they are not already stored.
+
+`Domain`, `Project`, and `Activity` follow the same pattern:
+
+- search and typeahead from saved values
+- recent/frequent suggestions
+- free entry for new values
+- prompt to save new values into the reusable app lists after Output is created
+
+## Private Notes
+
+Each session can be marked as `Private` in both `Capture` and `Output`.
+
+This is useful when:
+
+- the note should stay out of normal public-facing session lists
+- you want to separate sensitive personal or confidential notes from ordinary work notes
+
+In `All Sessions`, you can filter:
+
+- public notes
+- private notes
+- or both together
 
 ## Domain, Project, Activity, and Tags
 

@@ -1,4 +1,4 @@
-import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, } from "@notesmith/domain";
+import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getPrimaryCaptureMode, } from "@notesmith/domain";
 import { DEFAULT_MEETING_MINUTES_RULES, DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT, DEFAULT_PERSONAL_NOTES_RULES, DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT, DEFAULT_REVISION_RULES, DEFAULT_TRANSLATION_RULES, } from "@notesmith/prompts";
 import { normalizeAIModelPricingSnapshot, normalizeTextModelId, normalizeTranscriptionModelId, } from "../ai/modelPricing";
 import { isTauriRuntime } from "../storage/environment";
@@ -23,6 +23,7 @@ const normalizeDetailLevel = (value) => {
 const normalizeSessionRecord = (session) => ({
     ...session,
     captureMode: session.captureMode === "quick-note" || session.captureMode === "voice-note" ? session.captureMode : "meeting-note",
+    isPrivate: Boolean(session.isPrivate),
     project: typeof session.project === "string" ? session.project : "",
     domain: typeof session.domain === "string" ? session.domain : "",
     activity: typeof session.activity === "string" ? session.activity : "",
@@ -38,8 +39,10 @@ const normalizeAttachmentRecord = (attachment) => ({
     outputPosition: Number.isFinite(Number(attachment.outputPosition)) ? Number(attachment.outputPosition) : 0,
 });
 const normalizeTemplateRecord = (template) => ({
+    ...(BUILTIN_TEMPLATES.find((entry) => entry.id === template.id) ?? {}),
     ...template,
-    captureModes: Array.isArray(template.captureModes) && template.captureModes.length ? template.captureModes : ["meeting-note", "quick-note", "voice-note"],
+    kind: (BUILTIN_TEMPLATES.find((entry) => entry.id === template.id)?.kind ?? template.kind),
+    captureModes: [getPrimaryCaptureMode(BUILTIN_TEMPLATES.find((entry) => entry.id === template.id) ?? template)],
 });
 export const createDefaultSettings = () => ({
     theme: "fluent-slate-light",
@@ -90,6 +93,7 @@ export const createDefaultSnapshot = () => ({
             captureMode: "meeting-note",
             templateId: "meeting",
             title: "2026-03-30 Weekly team sync",
+            isPrivate: false,
             participantText: "Anna, Marcus, Ola",
             project: "Alpha",
             domain: "Product",
@@ -223,6 +227,7 @@ class TauriSqliteRepository {
                 await db.execute("ALTER TABLE sessions ADD COLUMN custom_field_values TEXT NOT NULL DEFAULT '{}'").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN excluded_section_ids TEXT NOT NULL DEFAULT '[]'").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN capture_mode TEXT NOT NULL DEFAULT 'meeting-note'").catch(() => { });
+                await db.execute("ALTER TABLE sessions ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN project TEXT NOT NULL DEFAULT ''").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN domain TEXT NOT NULL DEFAULT ''").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN activity TEXT NOT NULL DEFAULT ''").catch(() => { });
@@ -243,6 +248,7 @@ class TauriSqliteRepository {
             captureMode: row.capture_mode === "quick-note" || row.capture_mode === "voice-note" ? row.capture_mode : "meeting-note",
             templateId: row.template_id,
             title: row.title,
+            isPrivate: Boolean(row.is_private),
             participantText: row.participant_text,
             project: row.project,
             domain: row.domain,
@@ -267,13 +273,14 @@ class TauriSqliteRepository {
         const db = await this.getDb();
         await db.execute("DELETE FROM sessions");
         await Promise.all(records.map((record) => db.execute(`INSERT INTO sessions (
-            id, template_id, title, participant_text, project, domain, activity, tags_text, session_date, start_time, end_time,
+            id, template_id, title, is_private, participant_text, project, domain, activity, tags_text, session_date, start_time, end_time,
             quick_highlights, detail_level, capture_mode, manual_notes, live_transcript, uploaded_transcript, custom_field_values, excluded_section_ids, output_text,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
             record.id,
             record.templateId,
             record.title,
+            record.isPrivate ? 1 : 0,
             record.participantText,
             record.project,
             record.domain,
@@ -424,6 +431,7 @@ export const createSessionRecord = (templateId, captureMode = "meeting-note") =>
         captureMode,
         templateId: templateId || DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode],
         title: "",
+        isPrivate: false,
         participantText: "",
         project: "",
         domain: "",

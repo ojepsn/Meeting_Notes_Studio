@@ -1,10 +1,26 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useEffect, useMemo, useState } from "react";
+import { getPrimaryCaptureMode, } from "@notesmith/domain";
 const FIELD_TYPES = ["text", "number", "date", "time", "textarea"];
 const CAPTURE_MODE_OPTIONS = [
-    { id: "meeting-note", label: "Meeting note" },
-    { id: "quick-note", label: "Quick note" },
-    { id: "voice-note", label: "Voice note" },
+    {
+        id: "meeting-note",
+        label: "Meeting note",
+        description: "Templates for meetings, calls, interviews, and structured minutes.",
+        createLabel: "New meeting template",
+    },
+    {
+        id: "quick-note",
+        label: "Quick note",
+        description: "Templates for typed notes, short writeups, and lightweight capture.",
+        createLabel: "New note template",
+    },
+    {
+        id: "voice-note",
+        label: "Voice note",
+        description: "Templates for dictation, voice memos, and audio-first notes.",
+        createLabel: "New voice template",
+    },
 ];
 const createBlankField = (position) => ({
     id: crypto.randomUUID(),
@@ -22,11 +38,15 @@ const createBlankSection = (position) => ({
     enabledByDefault: true,
     position,
 });
-const createDraftTemplate = () => ({
+const createDraftTemplate = (captureMode) => ({
     id: `custom-${crypto.randomUUID()}`,
-    name: "New custom template",
+    name: captureMode === "meeting-note"
+        ? "New meeting template"
+        : captureMode === "voice-note"
+            ? "New voice template"
+            : "New note template",
     kind: "custom",
-    captureModes: ["meeting-note", "quick-note", "voice-note"],
+    captureModes: [captureMode],
     fields: [createBlankField(1)],
     sections: [createBlankSection(1)],
     promptInstructions: "",
@@ -43,43 +63,48 @@ const normalizeSections = (sections) => sections.map((section, index) => ({
     instructions: section.instructions.trim() || "Describe what this section should cover.",
     position: index + 1,
 }));
-export const TemplatesCard = ({ templates, onSave }) => {
-    const editableTemplates = useMemo(() => templates.filter((template) => template.kind === "custom"), [templates]);
-    const [selectedTemplateId, setSelectedTemplateId] = useState(editableTemplates[0]?.id ?? null);
-    const [draft, setDraft] = useState(editableTemplates[0] ?? null);
+export const TemplatesCard = ({ templates, onSave, onResetTemplates }) => {
+    const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id ?? null);
+    const [draft, setDraft] = useState(templates[0] ?? null);
     useEffect(() => {
-        if (!editableTemplates.length && (!draft || draft.id !== selectedTemplateId)) {
+        if (!templates.length && (!draft || draft.id !== selectedTemplateId)) {
             setSelectedTemplateId(null);
             setDraft(null);
             return;
         }
-        if (draft && draft.id === selectedTemplateId && !editableTemplates.some((template) => template.id === draft.id)) {
+        if (draft && draft.id === selectedTemplateId && !templates.some((template) => template.id === draft.id)) {
             return;
         }
-        const selected = editableTemplates.find((template) => template.id === selectedTemplateId) ??
-            editableTemplates.find((template) => template.id === draft?.id) ??
-            editableTemplates[0];
-        setSelectedTemplateId(selected.id);
-        setDraft(selected);
-    }, [draft, editableTemplates, selectedTemplateId]);
+        const selected = templates.find((template) => template.id === selectedTemplateId) ??
+            templates.find((template) => template.id === draft?.id) ??
+            templates[0];
+        if (selected) {
+            setSelectedTemplateId(selected.id);
+            setDraft(selected);
+        }
+    }, [draft, selectedTemplateId, templates]);
+    const draftCategory = draft ? getPrimaryCaptureMode(draft) : "meeting-note";
+    const groupedTemplates = useMemo(() => CAPTURE_MODE_OPTIONS.map((mode) => ({
+        ...mode,
+        templates: templates.filter((template) => getPrimaryCaptureMode(template) === mode.id),
+    })), [templates]);
+    const editableTemplatesForDraftCategory = templates.filter((template) => getPrimaryCaptureMode(template) === draftCategory);
     const updateDraft = (nextDraft) => {
         setDraft(nextDraft);
         if (nextDraft) {
             setSelectedTemplateId(nextDraft.id);
         }
     };
-    return (_jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Templates" }), _jsx("p", { children: "The desktop rebuild keeps templates as first-class domain objects, ready for sync later." })] }), _jsx("div", { className: "section-list", children: templates.map((template) => (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: template.name }), _jsxs("span", { className: "muted", children: [template.kind === "builtin" ? "Built-in" : "Custom", " \u00B7 ", template.fields.length, " fields \u00B7", " ", template.sections.length, " output sections"] })] }, template.id))) }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "template-editor-select", children: "Custom template editor" }), _jsxs("select", { id: "template-editor-select", value: selectedTemplateId ?? "", onChange: (event) => {
-                                            const nextTemplate = editableTemplates.find((template) => template.id === event.target.value) ?? null;
+    const startDraftForCategory = (captureMode) => {
+        updateDraft(createDraftTemplate(captureMode));
+    };
+    return (_jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Templates" }), _jsx("p", { children: "Create templates under the top-level note type where they belong. Each template then appears only in that session category." })] }), _jsx("div", { className: "stack", children: groupedTemplates.map((category) => (_jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "inline-row", children: [_jsxs("div", { children: [_jsx("strong", { children: category.label }), _jsx("p", { className: "muted", children: category.description })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => startDraftForCategory(category.id), children: category.createLabel })] }), _jsx("div", { className: "section-list", children: category.templates.map((template) => (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: template.name }), _jsxs("span", { className: "muted", children: [template.kind === "builtin" ? "Built-in" : "Custom", " \u00B7 ", template.fields.length, " fields \u00B7 ", template.sections.length, " output sections"] }), _jsx("div", { className: "list-item-actions", children: _jsx("button", { className: "small-button", type: "button", onClick: () => updateDraft(template), children: "Edit" }) })] }, template.id))) })] }, category.id))) }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "template-editor-select", children: "Template editor" }), _jsxs("select", { id: "template-editor-select", value: selectedTemplateId ?? "", onChange: (event) => {
+                                            const nextTemplate = templates.find((template) => template.id === event.target.value) ?? null;
                                             updateDraft(nextTemplate);
-                                        }, children: [!editableTemplates.length ? _jsx("option", { value: "", children: "No custom templates yet" }) : null, editableTemplates.map((template) => (_jsx("option", { value: template.id, children: template.name }, template.id)))] })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => updateDraft(createDraftTemplate()), children: "New custom template" })] }), !draft ? (_jsx("p", { className: "tiny-text", children: "Create a custom template to define your own fields, output sections, and AI guidance." })) : (_jsxs(_Fragment, { children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "template-name", children: "Template name" }), _jsx("input", { id: "template-name", value: draft.name, onChange: (event) => setDraft({ ...draft, name: event.target.value }), placeholder: "Client update" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "template-prompt-instructions", children: "Template-specific AI instructions" }), _jsx("textarea", { id: "template-prompt-instructions", value: draft.promptInstructions ?? "", onChange: (event) => setDraft({ ...draft, promptInstructions: event.target.value }), placeholder: "Describe the tone, structure, or priorities this template should enforce during generation." })] }), _jsxs("div", { className: "field", children: [_jsx("label", { children: "Capture modes" }), _jsx("div", { className: "inline-row wrap-row", children: CAPTURE_MODE_OPTIONS.map((mode) => (_jsxs("label", { className: "checkbox-label", children: [_jsx("input", { type: "checkbox", checked: draft.captureModes.includes(mode.id), onChange: (event) => {
-                                                        const nextCaptureModes = event.target.checked
-                                                            ? Array.from(new Set([...draft.captureModes, mode.id]))
-                                                            : draft.captureModes.filter((entry) => entry !== mode.id);
-                                                        setDraft({
-                                                            ...draft,
-                                                            captureModes: nextCaptureModes.length ? nextCaptureModes : [mode.id],
-                                                        });
-                                                    } }), mode.label] }, mode.id))) })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "inline-row", children: [_jsxs("div", { children: [_jsx("strong", { children: "Input fields" }), _jsx("p", { className: "muted", children: "Choose the extra fields this template expects during note capture." })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => setDraft({ ...draft, fields: [...draft.fields, createBlankField(draft.fields.length + 1)] }), children: "Add field" })] }), _jsx("div", { className: "section-list", children: draft.fields.map((field) => (_jsxs("div", { className: "list-item", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: `field-label-${field.id}`, children: "Field label" }), _jsx("input", { id: `field-label-${field.id}`, value: field.label, onChange: (event) => setDraft({
+                                        }, children: [!editableTemplatesForDraftCategory.length ? _jsx("option", { value: "", children: "No templates in this category yet" }) : null, editableTemplatesForDraftCategory.map((template) => (_jsxs("option", { value: template.id, children: [template.name, " ", template.kind === "builtin" ? "(Built-in)" : "(Custom)"] }, template.id)))] })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => startDraftForCategory(draftCategory), children: "New in this category" }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => void onResetTemplates(), children: "Restore default templates" })] }), !draft ? (_jsx("p", { className: "tiny-text", children: "Choose a category above to create a template, or edit any built-in or custom template from its category list." })) : (_jsxs(_Fragment, { children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "template-name", children: "Template name" }), _jsx("input", { id: "template-name", value: draft.name, onChange: (event) => setDraft({ ...draft, name: event.target.value }), placeholder: "Client update" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "template-prompt-instructions", children: "Template-specific AI instructions" }), _jsx("textarea", { id: "template-prompt-instructions", value: draft.promptInstructions ?? "", onChange: (event) => setDraft({ ...draft, promptInstructions: event.target.value }), placeholder: "Describe the tone, structure, or priorities this template should enforce during generation." })] }), _jsxs("div", { className: "field", children: [_jsx("label", { children: "Top-level category" }), _jsx("div", { className: "capture-mode-switch", children: CAPTURE_MODE_OPTIONS.map((mode) => (_jsxs("button", { type: "button", className: "capture-mode-card", "data-active": getPrimaryCaptureMode(draft) === mode.id, onClick: () => setDraft({
+                                                ...draft,
+                                                captureModes: [mode.id],
+                                            }), children: [_jsx("strong", { children: mode.label }), _jsxs("span", { children: ["This template will only appear inside ", mode.label.toLowerCase(), "."] })] }, mode.id))) })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "inline-row", children: [_jsxs("div", { children: [_jsx("strong", { children: "Input fields" }), _jsx("p", { className: "muted", children: "Choose the extra fields this template expects during note capture." })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => setDraft({ ...draft, fields: [...draft.fields, createBlankField(draft.fields.length + 1)] }), children: "Add field" })] }), _jsx("div", { className: "section-list", children: draft.fields.map((field) => (_jsxs("div", { className: "list-item", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: `field-label-${field.id}`, children: "Field label" }), _jsx("input", { id: `field-label-${field.id}`, value: field.label, onChange: (event) => setDraft({
                                                                 ...draft,
                                                                 fields: draft.fields.map((entry) => entry.id === field.id ? { ...entry, label: event.target.value } : entry),
                                                             }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: `field-key-${field.id}`, children: "Field key" }), _jsx("input", { id: `field-key-${field.id}`, value: field.key, onChange: (event) => setDraft({
@@ -111,8 +136,8 @@ export const TemplatesCard = ({ templates, onSave }) => {
                                                                 sections: draft.sections.filter((entry) => entry.id !== section.id),
                                                             }), disabled: draft.sections.length === 1, children: "Remove" })] })] }, section.id))) })] }), _jsx("div", { className: "inline-row", children: _jsx("button", { className: "primary-button inline-action", type: "button", onClick: () => onSave({
                                         ...draft,
-                                        kind: "custom",
                                         name: draft.name.trim() || "New custom template",
+                                        captureModes: [getPrimaryCaptureMode(draft)],
                                         promptInstructions: draft.promptInstructions?.trim() || "",
                                         fields: normalizeFields(draft.fields),
                                         sections: normalizeSections(draft.sections),

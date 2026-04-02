@@ -134,7 +134,6 @@ export const SessionEditor = ({
   const availableTemplates = getTemplatesForCaptureMode(templates, session.captureMode);
   const activeTemplate =
     availableTemplates.find((template) => template.id === session.templateId) ??
-    templates.find((template) => template.id === session.templateId) ??
     availableTemplates[0] ??
     templates[0];
   const customFields =
@@ -223,18 +222,19 @@ export const SessionEditor = ({
       </div>
 
       <div className="form-grid">
-        <div className="field field-wide">
+        <div className="capture-top-row field field-wide">
+          <div className="field capture-template-field">
           <label htmlFor="template-select">Template</label>
-          <select id="template-select" value={session.templateId} onChange={(event) => handleTemplateChange(event.target.value)}>
+          <select id="template-select" value={activeTemplate?.id ?? ""} onChange={(event) => handleTemplateChange(event.target.value)}>
             {primaryTemplateOptions.map((template) => (
               <option key={template.id} value={template.id}>
                 {template.name}
               </option>
             ))}
           </select>
-        </div>
+          </div>
 
-        <div className="field field-wide">
+          <div className="field capture-title-field">
           <label htmlFor="session-title">Title</label>
           <input
             id="session-title"
@@ -248,6 +248,23 @@ export const SessionEditor = ({
                   : "Quick note title"
             }
           />
+          </div>
+
+          <div className="field capture-private-field">
+            <span>Private</span>
+            <div className="compact-private-toggle">
+              <input
+                id="session-private"
+                type="checkbox"
+                checked={session.isPrivate}
+                onChange={(event) => update("isPrivate", event.target.checked)}
+              />
+              <label htmlFor="session-private" className="checkbox-label">
+                Private
+              </label>
+            </div>
+            <span className="tiny-text">Hide from public-only views.</span>
+          </div>
         </div>
 
         {showMeetingMeta ? (
@@ -277,7 +294,7 @@ export const SessionEditor = ({
                       savedOptions={savedDomains}
                       suggestedOptions={suggestedDomains}
                       placeholder="Search or add domain"
-                      helperText="Use Domain for the top-level business area behind this note."
+                      helperText="Use Domain for the top-level business area behind this note. New values stay in this note and can be saved for reuse after Output is created."
                       suggestionSummary="Recent domains"
                       suggestionBadgeText="From saved Domains"
                       mode="single"
@@ -291,7 +308,7 @@ export const SessionEditor = ({
                       savedOptions={savedProjects}
                       suggestedOptions={suggestedProjects}
                       placeholder="Search or add project"
-                      helperText="Use Project for work you expect to sort and revisit often."
+                      helperText="Use Project for work you expect to sort and revisit often. New values stay in this note and can be saved for reuse after Output is created."
                       suggestionSummary="Recent projects"
                       suggestionBadgeText="From saved Projects"
                       mode="single"
@@ -305,7 +322,7 @@ export const SessionEditor = ({
                       savedOptions={savedActivities}
                       suggestedOptions={suggestedActivities}
                       placeholder="Search or add activity"
-                      helperText="Use Activity for the concrete stream of work inside the project or domain."
+                      helperText="Use Activity for the concrete stream of work inside the project or domain. New values stay in this note and can be saved for reuse after Output is created."
                       suggestionSummary="Recent activities"
                       suggestionBadgeText="From saved Activities"
                       mode="single"

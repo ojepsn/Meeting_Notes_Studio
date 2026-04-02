@@ -25,6 +25,7 @@ interface DesktopState {
     deleteTodo: (id: string) => Promise<void>;
     saveSettings: (settings: DesktopAppSnapshot["settings"]) => Promise<void>;
     saveTemplate: (template: DesktopAppSnapshot["templates"][number]) => Promise<void>;
+    resetTemplates: () => Promise<void>;
     importLegacyBrowserData: () => Promise<"imported" | "missing">;
     saveAttachments: (attachments: DesktopAppSnapshot["attachments"]) => Promise<void>;
 }

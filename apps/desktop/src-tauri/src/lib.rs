@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use tauri::Manager;
 
 fn sanitize_filename(filename: &str) -> String {
@@ -63,6 +64,64 @@ fn copy_file_into_app_data(
 }
 
 #[tauri::command]
+fn write_bytes_to_path(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    let destination = PathBuf::from(path);
+    ensure_parent_dir(&destination)?;
+    fs::write(destination, bytes).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn write_backup_snapshot(
+    app: tauri::AppHandle,
+    filename: String,
+    bytes: Vec<u8>,
+) -> Result<String, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+
+    let destination = app_data_dir.join("backups").join(filename);
+    ensure_parent_dir(&destination)?;
+    fs::write(&destination, bytes).map_err(|error| error.to_string())?;
+
+    Ok(destination.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn open_path_in_file_manager(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(path)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(path)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[allow(unreachable_code)]
+    Err("Opening the data folder is not supported on this platform.".to_string())
+}
+
+#[tauri::command]
 fn write_bytes_into_app_data(
     app: tauri::AppHandle,
     session_id: String,
@@ -119,7 +178,10 @@ pub fn run() {
             read_file_bytes,
             copy_file_into_app_data,
             write_bytes_into_app_data,
-            delete_persisted_file
+            write_bytes_to_path,
+            write_backup_snapshot,
+            delete_persisted_file,
+            open_path_in_file_manager
         ])
         .run(tauri::generate_context!())
         .expect("error while running NoteSmith desktop");

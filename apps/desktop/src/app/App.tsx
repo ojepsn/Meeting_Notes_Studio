@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE, type CaptureMode } from "@notesmith/domain";
+import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCaptureMode, type CaptureMode } from "@notesmith/domain";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
@@ -46,10 +46,18 @@ import {
   RECORDING_MODE_LABELS,
   type RecordingMode,
 } from "../lib/files/recording";
+import {
+  createLocalSnapshotBackup,
+  exportSnapshotBackup,
+  getDesktopStorageInfo,
+  openDesktopPath,
+  type DesktopStorageInfo,
+} from "../lib/storage/desktopStorage";
+import { buildMetadataReview, EMPTY_METADATA_REVIEW, type MetadataReviewState } from "../lib/metadata/review";
 import { parseTokenList } from "../components/peoplePickerUtils";
 
 type AppWorkspace = "notes" | "tasks" | "calendar" | "assistant" | "files";
-type OverlayPanel = "new-note" | "people-review" | "sessions" | "todos" | "backup" | "settings" | "more" | null;
+type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "todos" | "backup" | "settings" | "more" | null;
 type CommandAction = {
   id: string;
   label: string;
@@ -95,6 +103,7 @@ const CAPTURE_MODE_UI: Record<
   },
 };
 
+
 const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
   recordAIRequestHistory(event);
   if (event.type === "request-failure") {
@@ -133,6 +142,7 @@ export const App = () => {
     deleteTodo,
     saveSettings,
     saveTemplate,
+    resetTemplates,
     importLegacyBrowserData,
     saveAttachments,
   } = useDesktopStore();
@@ -154,13 +164,14 @@ export const App = () => {
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
   const [updateStatusNote, setUpdateStatusNote] = useState<string | null>(null);
+  const [storageInfo, setStorageInfo] = useState<DesktopStorageInfo | null>(null);
   const [aiDiagnostics, setAIDiagnostics] = useState(() => getAIDiagnosticsItems());
   const [aiRequestHistory, setAIRequestHistory] = useState(() => getAIRequestHistory());
   const [modelPricingSnapshot, setModelPricingSnapshot] = useState<AIModelPricingSnapshot>(createDefaultModelPricingSnapshot);
   const [modelPricingStatus, setModelPricingStatus] = useState(buildModelPricingStatus(createDefaultModelPricingSnapshot()));
   const [isRefreshingModelPricing, setIsRefreshingModelPricing] = useState(false);
-  const [suggestedPeopleToAdd, setSuggestedPeopleToAdd] = useState<string[]>([]);
-  const [selectedSuggestedPeople, setSelectedSuggestedPeople] = useState<string[]>([]);
+  const [metadataSuggestions, setMetadataSuggestions] = useState<MetadataReviewState>(EMPTY_METADATA_REVIEW);
+  const [selectedMetadataSuggestions, setSelectedMetadataSuggestions] = useState<MetadataReviewState>(EMPTY_METADATA_REVIEW);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const captureSourceStreamsRef = useRef<MediaStream[]>([]);
@@ -217,6 +228,24 @@ export const App = () => {
     };
 
     void runUpdateCheck();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, loadError]);
+
+  useEffect(() => {
+    if (!isLoaded || loadError) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const info = await getDesktopStorageInfo();
+      if (!cancelled) {
+        setStorageInfo(info);
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -415,7 +444,14 @@ export const App = () => {
   );
 
   const activeTemplate = useMemo(
-    () => snapshot?.templates.find((template) => template.id === activeSession?.templateId) ?? null,
+    () =>
+      activeSession && snapshot
+        ? getTemplatesForCaptureMode(snapshot.templates, activeSession.captureMode).find(
+            (template) => template.id === activeSession.templateId,
+          ) ??
+          getTemplatesForCaptureMode(snapshot.templates, activeSession.captureMode)[0] ??
+          null
+        : null,
     [activeSession, snapshot],
   );
   const activeCaptureMode: CaptureMode = activeSession?.captureMode ?? "meeting-note";
@@ -426,11 +462,6 @@ export const App = () => {
   );
   const activeAudioAttachment = useMemo(
     () => activeAttachments.find((attachment) => attachment.kind === "audio") ?? null,
-    [activeAttachments],
-  );
-  const includedOutputImages = useMemo(
-    () =>
-      activeAttachments.filter((attachment) => attachment.kind === "image" && attachment.includeInOutput),
     [activeAttachments],
   );
   const selectedTextModelOption = modelPricingSnapshot.textModels
@@ -469,6 +500,17 @@ export const App = () => {
       },
       onCacheHit,
     });
+
+  const openMetadataReviewIfNeeded = (session: typeof activeSession) => {
+    const nextReview = buildMetadataReview(session, snapshot?.settings ?? null);
+    const hasSuggestions = Object.values(nextReview).some((values) => values.length);
+    if (!hasSuggestions) {
+      return;
+    }
+    setMetadataSuggestions(nextReview);
+    setSelectedMetadataSuggestions(nextReview);
+    setOpenPanel("metadata-review");
+  };
 
   const buildRawOutput = (session = activeSession) => {
     if (!session) {
@@ -683,15 +725,56 @@ export const App = () => {
     );
   };
 
-  const handleExportSnapshot = () => {
-    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `notesmith-desktop-snapshot-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setStatusNote("Exported a local desktop snapshot.");
+  const handleExportSnapshot = async () => {
+    try {
+      const result = await exportSnapshotBackup(snapshot);
+      if (!result) {
+        setStatusNote("Backup export was cancelled.");
+        return;
+      }
+      setStatusNote(`Exported a desktop backup file to ${result.path}.`);
+    } catch (error) {
+      setStatusNote(error instanceof Error ? error.message : "Could not export the desktop backup file.");
+    }
+  };
+
+  const handleCreateLocalBackup = async () => {
+    try {
+      const backupPath = await createLocalSnapshotBackup(snapshot);
+      if (!backupPath) {
+        setStatusNote("Local backup creation is only available in the installed desktop app.");
+        return;
+      }
+      setStatusNote(`Created a local safety backup at ${backupPath}.`);
+    } catch (error) {
+      setStatusNote(error instanceof Error ? error.message : "Could not create the local safety backup.");
+    }
+  };
+
+  const handleOpenDataFolder = async () => {
+    if (!storageInfo) {
+      setStatusNote("The desktop data folder is only available in the installed app.");
+      return;
+    }
+    try {
+      await openDesktopPath(storageInfo.appDataDir);
+      setStatusNote("Opened the desktop data folder.");
+    } catch (error) {
+      setStatusNote(error instanceof Error ? error.message : "Could not open the desktop data folder.");
+    }
+  };
+
+  const handleOpenDatabaseFolder = async () => {
+    if (!storageInfo) {
+      setStatusNote("The desktop database folder is only available in the installed app.");
+      return;
+    }
+    try {
+      await openDesktopPath(storageInfo.appConfigDir);
+      setStatusNote("Opened the desktop database folder.");
+    } catch (error) {
+      setStatusNote(error instanceof Error ? error.message : "Could not open the desktop database folder.");
+    }
   };
 
   const handleCheckForUpdates = async () => {
@@ -742,8 +825,13 @@ export const App = () => {
     }
   };
 
+  const handleResetTemplates = async () => {
+    await resetTemplates();
+    setStatusNote("Restored the default built-in templates.");
+  };
+
   const handleGenerate = async () => {
-    const template = snapshot.templates.find((entry) => entry.id === activeSession.templateId);
+    const template = activeTemplate;
     if (!template) {
       setStatusNote("The selected template could not be found.");
       return;
@@ -795,15 +883,7 @@ export const App = () => {
           ? "Loaded structured output from a matching local AI cache entry."
           : "Generated structured output with the desktop AI service.",
       );
-      const knownPeople = new Set(snapshot.settings.savedParticipants.map((entry) => entry.trim().toLocaleLowerCase()));
-      const newPeople = parsePeopleFromSession(activeSession.participantText).filter(
-        (entry) => !knownPeople.has(entry.toLocaleLowerCase()),
-      );
-      if (newPeople.length) {
-        setSuggestedPeopleToAdd(newPeople);
-        setSelectedSuggestedPeople(newPeople);
-        setOpenPanel("people-review");
-      }
+      openMetadataReviewIfNeeded(sessionForGeneration);
       setActiveView("output");
     } catch (error) {
       setStatusNote(formatAIErrorMessage(error, "Generation failed."));
@@ -834,6 +914,7 @@ export const App = () => {
         const rawOutput = buildRawOutput(nextSession);
         await saveSession({ ...nextSession, output: rawOutput });
         setStatusNote("Transcribed the voice note into Output without AI polishing.");
+        openMetadataReviewIfNeeded(nextSession);
         setActiveView("output");
       } catch (error) {
         setStatusNote(formatAIErrorMessage(error, "Audio transcription failed."));
@@ -855,6 +936,7 @@ export const App = () => {
         ? "Created Output from the current voice note without AI polishing."
         : "Created Output from the current note without AI polishing.",
     );
+    openMetadataReviewIfNeeded(activeSession);
     setActiveView("output");
   };
 
@@ -1405,66 +1487,111 @@ export const App = () => {
             </div>
           </div>
         );
-      case "people-review":
+      case "metadata-review":
         return (
           <div className="sidebar-card overlay-card">
             <div>
-              <h3>Save new people to People?</h3>
+              <h3>Save new reusable values?</h3>
               <p>
-                These names were used in this note but are not yet saved in the People database. Save the ones you want available for future search and quick selection.
+                These values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future search and quick selection.
               </p>
             </div>
-            <div className="section-list">
-              {suggestedPeopleToAdd.map((person) => (
-                <label key={person} className="list-item checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={selectedSuggestedPeople.includes(person)}
-                    onChange={(event) =>
-                      setSelectedSuggestedPeople((current) =>
-                        event.target.checked ? Array.from(new Set([...current, person])) : current.filter((entry) => entry !== person),
-                      )
-                    }
-                  />
-                  <span>
-                    <strong>{person}</strong>
-                    <span className="muted">Currently only in this note. Save it to reuse in future notes.</span>
-                  </span>
-                </label>
-              ))}
-            </div>
+            {([
+              { key: "people", label: "People", helper: "Save these names to reuse in future notes." },
+              { key: "domains", label: "Domains", helper: "Save these top-level business areas for future notes." },
+              { key: "projects", label: "Projects", helper: "Save these projects to reuse in future notes." },
+              { key: "activities", label: "Activities", helper: "Save these activities to reuse in future notes." },
+            ] as const).map((section) =>
+              metadataSuggestions[section.key].length ? (
+                <div key={section.key} className="section-divider">
+                  <strong>{section.label}</strong>
+                  <div className="section-list">
+                    {metadataSuggestions[section.key].map((value) => (
+                      <label key={`${section.key}-${value}`} className="list-item checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={selectedMetadataSuggestions[section.key].includes(value)}
+                          onChange={(event) =>
+                            setSelectedMetadataSuggestions((current) => ({
+                              ...current,
+                              [section.key]: event.target.checked
+                                ? Array.from(new Set([...current[section.key], value]))
+                                : current[section.key].filter((entry) => entry !== value),
+                            }))
+                          }
+                        />
+                        <span>
+                          <strong>{value}</strong>
+                          <span className="muted">{section.helper}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : null,
+            )}
             <div className="sidebar-actions">
               <button
                 className="primary-button"
                 type="button"
                 onClick={() => {
-                  if (selectedSuggestedPeople.length) {
+                  const nextSettings = { ...snapshot.settings };
+                  if (selectedMetadataSuggestions.people.length) {
+                    nextSettings.savedParticipants = Array.from(
+                      new Set([...nextSettings.savedParticipants, ...selectedMetadataSuggestions.people]),
+                    ).sort();
+                  }
+                  if (selectedMetadataSuggestions.domains.length) {
+                    nextSettings.savedDomains = Array.from(
+                      new Set([...nextSettings.savedDomains, ...selectedMetadataSuggestions.domains]),
+                    ).sort();
+                  }
+                  if (selectedMetadataSuggestions.projects.length) {
+                    nextSettings.savedProjects = Array.from(
+                      new Set([...nextSettings.savedProjects, ...selectedMetadataSuggestions.projects]),
+                    ).sort();
+                  }
+                  if (selectedMetadataSuggestions.activities.length) {
+                    nextSettings.savedActivities = Array.from(
+                      new Set([...nextSettings.savedActivities, ...selectedMetadataSuggestions.activities]),
+                    ).sort();
+                  }
+
+                  const totalAdded = Object.values(selectedMetadataSuggestions).reduce(
+                    (sum, values) => sum + values.length,
+                    0,
+                  );
+
+                  if (totalAdded) {
                     void saveSettings({
-                      ...snapshot.settings,
-                      savedParticipants: Array.from(new Set([...snapshot.settings.savedParticipants, ...selectedSuggestedPeople])).sort(),
+                      ...nextSettings,
                     });
                     setStatusNote(
-                      selectedSuggestedPeople.length === 1
-                        ? `Added ${selectedSuggestedPeople[0]} to People.`
-                        : `Added ${selectedSuggestedPeople.length} people to People.`,
+                      totalAdded === 1
+                        ? "Added 1 reusable value."
+                        : `Added ${totalAdded} reusable values.`,
                     );
                   }
-                  setSuggestedPeopleToAdd([]);
-                  setSelectedSuggestedPeople([]);
+                  setMetadataSuggestions(EMPTY_METADATA_REVIEW);
+                  setSelectedMetadataSuggestions(EMPTY_METADATA_REVIEW);
                   closeOverlay();
                 }}
               >
-                Save selected to People
+                Save selected
               </button>
-              <button className="small-button" type="button" onClick={() => setSelectedSuggestedPeople(suggestedPeopleToAdd)}>
+              <button
+                className="small-button"
+                type="button"
+                onClick={() => setSelectedMetadataSuggestions(metadataSuggestions)}
+              >
                 Select all
               </button>
               <button
                 className="small-button"
                 type="button"
                 onClick={() => {
-                  setSuggestedPeopleToAdd([]);
-                  setSelectedSuggestedPeople([]);
+                  setMetadataSuggestions(EMPTY_METADATA_REVIEW);
+                  setSelectedMetadataSuggestions(EMPTY_METADATA_REVIEW);
                   closeOverlay();
                 }}
               >
@@ -1490,9 +1617,15 @@ export const App = () => {
             templates={snapshot.templates}
             onChange={(settings) => void saveSettings(settings)}
             onSaveTemplate={(template) => void saveTemplate(template)}
+            onResetTemplates={handleResetTemplates}
             onImportLegacy={handleImportLegacy}
             onCheckForUpdates={handleCheckForUpdates}
+            onOpenDataFolder={handleOpenDataFolder}
+            onOpenDatabaseFolder={handleOpenDatabaseFolder}
+            onExportBackup={handleExportSnapshot}
+            onCreateLocalBackup={handleCreateLocalBackup}
             updateStatusNote={updateStatusNote}
+            storageInfo={storageInfo}
             aiDiagnostics={aiDiagnostics}
             aiRequestHistory={aiRequestHistory}
             textModelOptions={modelPricingSnapshot.textModels.map(buildTextModelOption)}
@@ -1533,13 +1666,29 @@ export const App = () => {
               <button className="small-button" type="button" onClick={() => void handleImportLegacy()}>
                 Import current browser data
               </button>
-              <button className="small-button" type="button" onClick={handleExportSnapshot}>
-                Export snapshot
+              <button className="small-button" type="button" onClick={() => void handleExportSnapshot()}>
+                Export backup file
+              </button>
+              <button className="small-button" type="button" onClick={() => void handleCreateLocalBackup()}>
+                Create local safety backup
+              </button>
+              <button className="small-button" type="button" onClick={() => void handleOpenDataFolder()}>
+                Open data folder
               </button>
             </div>
-            <p className="tiny-text">
-              This backup area stays separate from the main workspace so capture and output remain clear and uncluttered.
-            </p>
+            {storageInfo ? (
+              <div className="section-list">
+                <div className="list-item">
+                  <strong>Database path</strong>
+                  <span className="muted">{storageInfo.databasePath}</span>
+                </div>
+                <div className="list-item">
+                  <strong>Backups folder</strong>
+                  <span className="muted">{storageInfo.backupsDir}</span>
+                </div>
+              </div>
+            ) : null}
+            <p className="tiny-text">Export a backup file to a folder outside AppData before uninstalling the app.</p>
           </div>
         );
       default:
@@ -1580,7 +1729,8 @@ export const App = () => {
             <div className="topbar-status-strip">
               <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
               <span className="status-chip">{aiActivityLabel}</span>
-              <span className="status-chip">{snapshot.settings.apiKey ? "AI key local-only" : "Add API key"}</span>
+              <span className="status-chip">{selectedTextModelOption?.label || snapshot.settings.textModel}</span>
+              <span className="status-chip">{selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel}</span>
               {isCheckingForUpdates ? <span className="status-chip">Checking updates...</span> : null}
             </div>
           </div>
@@ -1712,6 +1862,16 @@ export const App = () => {
                 session={activeSession}
                 attachments={activeAttachments}
                 onChange={(session) => void saveSession(session)}
+                savedPeople={snapshot.settings.savedParticipants}
+                suggestedPeople={suggestedPeople}
+                savedProjects={snapshot.settings.savedProjects}
+                suggestedProjects={suggestedProjects}
+                savedDomains={snapshot.settings.savedDomains}
+                suggestedDomains={suggestedDomains}
+                savedActivities={snapshot.settings.savedActivities}
+                suggestedActivities={suggestedActivities}
+                savedTags={snapshot.settings.savedTags}
+                suggestedTags={suggestedTags}
                 isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
                 isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
                 isRevising={isRevising}
@@ -1731,79 +1891,15 @@ export const App = () => {
           </section>
 
           <aside className="workspace-inspector stack">
-            <div className="sidebar-card">
-              <div>
-                <h3>Current session</h3>
-              </div>
-              <div className="section-list">
-                <div className="list-item">
-                  <strong>{activeSession.title || "Untitled session"}</strong>
-                  <span className="muted">
-                    {CAPTURE_MODE_UI[activeCaptureMode].label} · {activeTemplate?.name ?? "No template selected"}
-                  </span>
-                </div>
-                <div className="list-item">
-                  <strong>{activeSession.date || "No date set"}</strong>
-                  <span className="muted">
-                    {activeSession.startTime || "--:--"} to {activeSession.endTime || "--:--"}
-                  </span>
-                </div>
-                <div className="list-item">
-                  <strong>{activeSession.participantText || (activeCaptureMode === "meeting-note" ? "No people yet" : "Optional people context")}</strong>
-                  <span className="muted">People</span>
-                </div>
-                {activeSession.project ? (
-                  <div className="list-item">
-                    <strong>{activeSession.project}</strong>
-                    <span className="muted">Project</span>
-                  </div>
-                ) : null}
-                {activeSession.domain ? (
-                  <div className="list-item">
-                    <strong>{activeSession.domain}</strong>
-                    <span className="muted">Domain</span>
-                  </div>
-                ) : null}
-                {activeSession.activity ? (
-                  <div className="list-item">
-                    <strong>{activeSession.activity}</strong>
-                    <span className="muted">Activity</span>
-                  </div>
-                ) : null}
-                {activeSession.tagsText ? (
-                  <div className="list-item">
-                    <strong>{activeSession.tagsText}</strong>
-                    <span className="muted">Tags</span>
-                  </div>
-                ) : null}
-                <div className="list-item">
-                  <strong>{includedOutputImages.length}</strong>
-                  <span className="muted">Images staged for polished output</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="sidebar-card">
-              <div>
-                <h3>AI visibility</h3>
-              </div>
-              <div className="section-list">
-                <div className="list-item">
-                  <strong>{selectedTextModelOption?.label || snapshot.settings.textModel}</strong>
-                  <span className="muted">Text model for generation, revision, and translation</span>
-                </div>
-                <div className="list-item">
-                  <strong>{selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel}</strong>
-                  <span className="muted">Transcription model</span>
-                </div>
-                <div className="list-item">
-                  <strong>{snapshot.settings.apiKey ? "API key configured" : "No API key set yet"}</strong>
-                </div>
-              </div>
-              <button className="small-button" type="button" onClick={() => openSettingsSection("ai")}>
-                Open AI settings
-              </button>
-            </div>
+            <SessionsSidebar
+              sessions={snapshot.sessions}
+              activeSessionId={activeSession.id}
+              onSelect={(id) => setActiveSessionId(id)}
+              onCreate={() => openOverlay("new-note")}
+              onDelete={(id) => void deleteSession(id)}
+              compact
+              title="Sessions"
+            />
 
             <div className="sidebar-card">
               <div>
@@ -1958,7 +2054,7 @@ export const App = () => {
                     ? "All Sessions"
                     : openPanel === "new-note"
                       ? "New note"
-                    : openPanel === "people-review"
+                    : openPanel === "metadata-review"
                       ? "People"
                     : openPanel === "todos"
                         ? "To-dos"
@@ -1981,3 +2077,4 @@ export const App = () => {
     </div>
   );
 };
+
