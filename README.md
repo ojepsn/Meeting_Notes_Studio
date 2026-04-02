@@ -2,6 +2,12 @@
 
 Professional note capture, AI polishing, export, and PWA installability in a single browser app.
 
+## Documentation
+
+For the structured product, reference, architecture, and development docs, start here:
+
+- [Documentation home](./docs/README.md)
+
 ## Overview
 
 NoteSmith helps users capture rough business notes, combine manual writing with live transcript text, and turn that material into structured, professional output. It works as a static web app, supports installation as a PWA, and stores sessions locally in the browser.
