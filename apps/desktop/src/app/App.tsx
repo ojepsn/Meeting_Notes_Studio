@@ -30,6 +30,7 @@ import { checkForDesktopUpdates } from "../lib/ai/updater";
 import { exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsText } from "../lib/export/exportService";
 import {
   fileToAttachmentRecord,
+  loadPersistedAttachmentFile,
   pickAudioFile,
   pickImageFile,
   pickTranscriptFile,
@@ -62,27 +63,26 @@ const CAPTURE_MODE_UI: Record<
   {
     label: string;
     description: string;
-    generateLabel: string;
-    outputActionLabel: string;
+    primaryOutputLabel: string;
+    secondaryOutputLabel?: string;
   }
 > = {
   "meeting-note": {
     label: "Meeting note",
     description: "Best for meetings, calls, and structured minutes.",
-    generateLabel: "Generate meeting notes",
-    outputActionLabel: "Generate meeting notes",
+    primaryOutputLabel: "Generate meeting notes",
   },
   "quick-note": {
     label: "Quick note",
     description: "Best for fast typed notes with minimal setup.",
-    generateLabel: "Polish note",
-    outputActionLabel: "Polish note",
+    primaryOutputLabel: "Create output",
+    secondaryOutputLabel: "Polish with AI",
   },
   "voice-note": {
     label: "Voice note",
     description: "Best for spoken capture, dictation, and audio-first notes.",
-    generateLabel: "Transcribe and polish",
-    outputActionLabel: "Transcribe and polish",
+    primaryOutputLabel: "Create output",
+    secondaryOutputLabel: "Polish with AI",
   },
 };
 
@@ -347,11 +347,10 @@ export const App = () => {
         return left.name.localeCompare(right.name);
       });
 
-    const prioritized = rankedSavedPeople.filter((entry) => entry.count > 0).slice(0, 6).map((entry) => entry.name);
-    if (prioritized.length) {
-      return prioritized;
-    }
-    return rankedSavedPeople.slice(0, 6).map((entry) => entry.name);
+    const prioritized = rankedSavedPeople.filter((entry) => entry.count > 0).map((entry) => entry.name);
+    const fallback = rankedSavedPeople.map((entry) => entry.name);
+
+    return Array.from(new Set([...prioritized, ...fallback])).slice(0, 6);
   }, [snapshot]);
 
   const activeSession = useMemo(
@@ -368,6 +367,10 @@ export const App = () => {
   const activeAttachments = useMemo(
     () => snapshot?.attachments.filter((attachment) => attachment.sessionId === activeSession?.id) ?? [],
     [activeSession, snapshot],
+  );
+  const activeAudioAttachment = useMemo(
+    () => activeAttachments.find((attachment) => attachment.kind === "audio") ?? null,
+    [activeAttachments],
   );
   const includedOutputImages = useMemo(
     () =>
@@ -410,6 +413,107 @@ export const App = () => {
       },
       onCacheHit,
     });
+
+  const buildRawOutput = (session = activeSession) => {
+    if (!session) {
+      return "";
+    }
+
+    const segments: string[] = [];
+    const title = session.title.trim();
+    const date = session.date.trim();
+    const time =
+      session.captureMode === "meeting-note"
+        ? [session.startTime.trim(), session.endTime.trim()].filter(Boolean).join(" - ")
+        : session.startTime.trim();
+    const people = session.participantText.trim();
+    const highlights = session.quickHighlights.trim();
+    const manualNotes = session.manualNotes.trim();
+    const transcript = [session.liveTranscript.trim(), session.uploadedTranscript.trim()].filter(Boolean).join("\n\n");
+
+    if (title) {
+      segments.push(title);
+    }
+    if (date || time || people) {
+      const metaLines = [date, time, people ? `People: ${people}` : ""].filter(Boolean);
+      if (metaLines.length) {
+        segments.push(metaLines.join("\n"));
+      }
+    }
+    if (highlights) {
+      segments.push(`Highlights\n${highlights}`);
+    }
+    if (manualNotes) {
+      segments.push(session.captureMode === "quick-note" ? manualNotes : `Notes\n${manualNotes}`);
+    }
+    if (transcript) {
+      segments.push(session.captureMode === "voice-note" ? transcript : `Transcript\n${transcript}`);
+    }
+
+    return segments.join("\n\n").trim();
+  };
+
+  const hasTranscriptText = Boolean(activeSession?.liveTranscript.trim() || activeSession?.uploadedTranscript.trim());
+  const hasWrittenCapture = Boolean(activeSession?.manualNotes.trim() || activeSession?.quickHighlights.trim());
+  const hasAnyTextCapture = hasTranscriptText || hasWrittenCapture;
+  const hasAudioOnlyVoiceCapture =
+    activeCaptureMode === "voice-note" &&
+    !hasAnyTextCapture &&
+    Boolean(activeAudioAttachment || (activeSession ? pendingAudioBySession[activeSession.id] : undefined));
+
+  const getAudioFileForActiveSession = async () => {
+    if (!activeSession) {
+      return null;
+    }
+
+    const pendingAudio = pendingAudioBySession[activeSession.id];
+    if (pendingAudio) {
+      return pendingAudio;
+    }
+    if (activeAudioAttachment) {
+      return loadPersistedAttachmentFile(activeAudioAttachment);
+    }
+    return null;
+  };
+
+  const outputActionConfig = (() => {
+    if (activeCaptureMode === "meeting-note") {
+      return {
+        primaryLabel: "Generate meeting notes",
+        secondaryLabel: null as string | null,
+        onPrimary: () => void handleGenerate(),
+        onSecondary: undefined as (() => void) | undefined,
+        isPrimaryRunning: isGenerating,
+        isSecondaryRunning: false,
+        emptyStatePrimaryLabel: "Generate meeting notes",
+        emptyStateSecondaryLabel: null as string | null,
+      };
+    }
+
+    if (activeCaptureMode === "voice-note" && hasAudioOnlyVoiceCapture) {
+      return {
+        primaryLabel: "Transcribe to output",
+        secondaryLabel: "Transcribe and polish",
+        onPrimary: () => void handleCreateOutput(),
+        onSecondary: () => void handleGenerate(),
+        isPrimaryRunning: isTranscribingAudio,
+        isSecondaryRunning: isGenerating || isTranscribingAudio,
+        emptyStatePrimaryLabel: "Transcribe to output",
+        emptyStateSecondaryLabel: "Transcribe and polish",
+      };
+    }
+
+    return {
+      primaryLabel: "Create output",
+      secondaryLabel: "Polish with AI",
+      onPrimary: () => void handleCreateOutput(),
+      onSecondary: () => void handleGenerate(),
+      isPrimaryRunning: false,
+      isSecondaryRunning: isGenerating,
+      emptyStatePrimaryLabel: "Create output",
+      emptyStateSecondaryLabel: "Polish with AI",
+    };
+  })();
 
   if (!isLoaded || !snapshot || !activeSession) {
     return (
@@ -520,8 +624,34 @@ export const App = () => {
     setIsGenerating(true);
     let usedCache = false;
     try {
+      let sessionForGeneration = activeSession;
+
+      if (activeCaptureMode === "voice-note" && !hasTranscriptText && (activeAudioAttachment || pendingAudioBySession[activeSession.id])) {
+        const audioFile = await getAudioFileForActiveSession();
+        if (!audioFile) {
+          setStatusNote("No audio file was available to transcribe for this voice note.");
+          return;
+        }
+
+        setIsTranscribingAudio(true);
+        try {
+          const transcriptText = await transcribeAudio({
+            file: audioFile,
+            settings: snapshot.settings,
+            onEvent: createAIRuntimeHandler(),
+          });
+          sessionForGeneration = {
+            ...activeSession,
+            liveTranscript: [activeSession.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n"),
+          };
+          await saveSession(sessionForGeneration);
+        } finally {
+          setIsTranscribingAudio(false);
+        }
+      }
+
       const output = await generateNotes({
-        session: activeSession,
+        session: sessionForGeneration,
         settings: snapshot.settings,
         template,
         attachments: activeAttachments,
@@ -531,7 +661,7 @@ export const App = () => {
           },
         }),
       });
-      await saveSession({ ...activeSession, output });
+      await saveSession({ ...sessionForGeneration, output });
       setStatusNote(
         usedCache
           ? "Loaded structured output from a matching local AI cache entry."
@@ -552,6 +682,52 @@ export const App = () => {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleCreateOutput = async () => {
+    if (hasAudioOnlyVoiceCapture) {
+      const audioFile = await getAudioFileForActiveSession();
+      if (!audioFile) {
+        setStatusNote("No audio file was available to transcribe for this voice note.");
+        return;
+      }
+
+      setIsTranscribingAudio(true);
+      try {
+        const transcriptText = await transcribeAudio({
+          file: audioFile,
+          settings: snapshot.settings,
+          onEvent: createAIRuntimeHandler(),
+        });
+        const nextSession = {
+          ...activeSession,
+          liveTranscript: [activeSession.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n"),
+        };
+        const rawOutput = buildRawOutput(nextSession);
+        await saveSession({ ...nextSession, output: rawOutput });
+        setStatusNote("Transcribed the voice note into Output without AI polishing.");
+        setActiveView("output");
+      } catch (error) {
+        setStatusNote(formatAIErrorMessage(error, "Audio transcription failed."));
+      } finally {
+        setIsTranscribingAudio(false);
+      }
+      return;
+    }
+
+    const rawOutput = buildRawOutput(activeSession);
+    if (!rawOutput) {
+      setStatusNote("There is no captured note content to create Output from yet.");
+      return;
+    }
+
+    await saveSession({ ...activeSession, output: rawOutput });
+    setStatusNote(
+      activeCaptureMode === "voice-note"
+        ? "Created Output from the current voice note without AI polishing."
+        : "Created Output from the current note without AI polishing.",
+    );
+    setActiveView("output");
   };
 
   const handleTranslate = async () => {
@@ -849,11 +1025,11 @@ export const App = () => {
       },
       {
         id: "generate-output",
-        label: CAPTURE_MODE_UI[activeCaptureMode].generateLabel,
-        description: "Create polished output from the current session.",
+        label: outputActionConfig.primaryLabel,
+        description: "Run the primary Output action for the current session.",
         keywords: ["generate polish ai"],
         shortcut: "Ctrl/Cmd+Enter",
-        action: () => void handleGenerate(),
+        action: outputActionConfig.onPrimary,
       },
       {
         id: "translate-output",
@@ -1198,7 +1374,7 @@ export const App = () => {
                 </div>
               </div>
               <div className="workspace-guide-row">
-                <span className="tiny-text">Shortcuts: Ctrl/Cmd+K command palette, Ctrl/Cmd+N new session, Alt+1/2 switch views, Ctrl/Cmd+Enter generate.</span>
+                <span className="tiny-text">Shortcuts: Ctrl/Cmd+K command palette, Ctrl/Cmd+N new session, Alt+1/2 switch views, Ctrl/Cmd+Enter primary output action.</span>
               </div>
             </div>
 
@@ -1233,16 +1409,20 @@ export const App = () => {
                 session={activeSession}
                 attachments={activeAttachments}
                 onChange={(session) => void saveSession(session)}
-                isGenerating={isGenerating}
+                isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
+                isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
                 isRevising={isRevising}
-                onGenerate={() => void handleGenerate()}
+                onPrimaryAction={outputActionConfig.onPrimary}
+                onSecondaryAction={outputActionConfig.onSecondary}
                 onTranslate={() => void handleTranslate()}
                 onRevise={(instructions) => void handleRevise(instructions)}
                 onExportText={() => exportOutputAsText({ title: activeSession.title, output: activeSession.output })}
                 onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}
                 onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output })}
-                primaryActionLabel={CAPTURE_MODE_UI[activeCaptureMode].generateLabel}
-                emptyStateLabel={CAPTURE_MODE_UI[activeCaptureMode].outputActionLabel}
+                primaryActionLabel={outputActionConfig.primaryLabel}
+                secondaryActionLabel={outputActionConfig.secondaryLabel}
+                emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
+                emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
               />
             )}
           </section>
@@ -1341,9 +1521,14 @@ export const App = () => {
                 </div>
               ) : activeWorkspace === "notes" ? (
                 <div className="sidebar-actions">
-                  <button className="primary-button" type="button" onClick={() => void handleGenerate()} disabled={isGenerating}>
-                    {isGenerating ? `${CAPTURE_MODE_UI[activeCaptureMode].generateLabel}...` : CAPTURE_MODE_UI[activeCaptureMode].generateLabel}
+                  <button className="primary-button" type="button" onClick={outputActionConfig.onPrimary} disabled={outputActionConfig.isPrimaryRunning}>
+                    {outputActionConfig.isPrimaryRunning ? `${outputActionConfig.primaryLabel}...` : outputActionConfig.primaryLabel}
                   </button>
+                  {outputActionConfig.secondaryLabel && outputActionConfig.onSecondary ? (
+                    <button className="small-button" type="button" onClick={outputActionConfig.onSecondary} disabled={outputActionConfig.isSecondaryRunning}>
+                      {outputActionConfig.isSecondaryRunning ? `${outputActionConfig.secondaryLabel}...` : outputActionConfig.secondaryLabel}
+                    </button>
+                  ) : null}
                   <button className="small-button" type="button" onClick={() => void handleTranslate()}>
                     Translate
                   </button>

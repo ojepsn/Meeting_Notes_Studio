@@ -6,32 +6,40 @@ interface OutputWorkspaceProps {
   session: SessionRecord;
   attachments: AttachmentRecord[];
   onChange: (session: SessionRecord) => void;
-  isGenerating: boolean;
+  isPrimaryActionRunning: boolean;
+  isSecondaryActionRunning: boolean;
   isRevising: boolean;
-  onGenerate: () => void;
+  onPrimaryAction: () => void;
+  onSecondaryAction?: () => void;
   onTranslate: () => void;
   onRevise: (instructions: string) => void;
   onExportText: () => void;
   onExportMarkdown: () => void;
   onExportHtml: () => void;
   primaryActionLabel?: string;
-  emptyStateLabel?: string;
+  secondaryActionLabel?: string | null;
+  emptyStatePrimaryLabel?: string;
+  emptyStateSecondaryLabel?: string | null;
 }
 
 export const OutputWorkspace = ({
   session,
   attachments,
   onChange,
-  isGenerating,
+  isPrimaryActionRunning,
+  isSecondaryActionRunning,
   isRevising,
-  onGenerate,
+  onPrimaryAction,
+  onSecondaryAction,
   onTranslate,
   onRevise,
   onExportText,
   onExportMarkdown,
   onExportHtml,
   primaryActionLabel = "Generate",
-  emptyStateLabel = "Generate polished notes",
+  secondaryActionLabel = null,
+  emptyStatePrimaryLabel = "Generate polished notes",
+  emptyStateSecondaryLabel = null,
 }: OutputWorkspaceProps) => {
   const [revisionInstructions, setRevisionInstructions] = useState("");
   const [showAdvancedRefinement, setShowAdvancedRefinement] = useState(false);
@@ -48,9 +56,14 @@ export const OutputWorkspace = ({
           <p>Use Output when you want polished notes, translation, revision, and exports. The document stays central; advanced actions stay secondary.</p>
         </div>
         <div className="page-actions">
-          <button className="primary-button" type="button" onClick={onGenerate}>
-            {isGenerating ? `${primaryActionLabel}...` : primaryActionLabel}
+          <button className="primary-button" type="button" onClick={onPrimaryAction}>
+            {isPrimaryActionRunning ? `${primaryActionLabel}...` : primaryActionLabel}
           </button>
+          {secondaryActionLabel && onSecondaryAction ? (
+            <button className="shell-button" type="button" onClick={onSecondaryAction}>
+              {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
+            </button>
+          ) : null}
           <button className="shell-button" type="button" onClick={onTranslate}>
             Translate
           </button>
@@ -64,7 +77,8 @@ export const OutputWorkspace = ({
           <h3>Ready to generate</h3>
           <ol className="empty-state-steps">
             <li>Go back to Capture if you want to add rough notes, transcript text, or images first.</li>
-            <li>Click {emptyStateLabel} to turn the current session material into a polished document.</li>
+            <li>Click {emptyStatePrimaryLabel} to create the first Output draft for this session.</li>
+            {emptyStateSecondaryLabel ? <li>Or click {emptyStateSecondaryLabel} if you want the alternate output path instead.</li> : null}
             <li>Use Translate, Revise, and Export after the first polished draft appears here.</li>
           </ol>
         </div>

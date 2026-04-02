@@ -167,6 +167,23 @@ export const createAttachmentPreviewUrl = async ({
   return null;
 };
 
+export const loadPersistedAttachmentFile = async (attachment: AttachmentRecord) => {
+  if (!attachment.filePath) {
+    return null;
+  }
+
+  if (isTauriRuntime()) {
+    const bytes = await invoke<number[]>("read_file_bytes", { path: attachment.filePath });
+    return createFileFromBytes({
+      bytes,
+      filename: attachment.filename,
+      mimeType: attachment.mimeType || "application/octet-stream",
+    });
+  }
+
+  return null;
+};
+
 export const fileToAttachmentRecord = ({
   file,
   sessionId,

@@ -3,16 +3,20 @@ interface OutputWorkspaceProps {
     session: SessionRecord;
     attachments: AttachmentRecord[];
     onChange: (session: SessionRecord) => void;
-    isGenerating: boolean;
+    isPrimaryActionRunning: boolean;
+    isSecondaryActionRunning: boolean;
     isRevising: boolean;
-    onGenerate: () => void;
+    onPrimaryAction: () => void;
+    onSecondaryAction?: () => void;
     onTranslate: () => void;
     onRevise: (instructions: string) => void;
     onExportText: () => void;
     onExportMarkdown: () => void;
     onExportHtml: () => void;
     primaryActionLabel?: string;
-    emptyStateLabel?: string;
+    secondaryActionLabel?: string | null;
+    emptyStatePrimaryLabel?: string;
+    emptyStateSecondaryLabel?: string | null;
 }
-export declare const OutputWorkspace: ({ session, attachments, onChange, isGenerating, isRevising, onGenerate, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, primaryActionLabel, emptyStateLabel, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const OutputWorkspace: ({ session, attachments, onChange, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

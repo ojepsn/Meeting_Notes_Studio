@@ -236,6 +236,10 @@ export const SessionEditor = ({
                 <input id="session-date" type="date" value={session.date} onChange={(event) => update("date", event.target.value)} />
               </div>
               <div className="field">
+                <label htmlFor="session-time">Time</label>
+                <input id="session-time" type="time" value={session.startTime} onChange={(event) => update("startTime", event.target.value)} />
+              </div>
+              <div className="field">
                 <label htmlFor="session-participants">People</label>
                 <PeoplePicker
                   value={session.participantText}

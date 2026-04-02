@@ -15,6 +15,7 @@ export declare const createAttachmentPreviewUrl: ({ filePath, mimeType, }: {
     filePath: string;
     mimeType: string;
 }) => Promise<string | null>;
+export declare const loadPersistedAttachmentFile: (attachment: AttachmentRecord) => Promise<File | null>;
 export declare const fileToAttachmentRecord: ({ file, sessionId, kind, filePath, }: {
     file: File;
     sessionId: string;
