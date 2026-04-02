@@ -58,7 +58,7 @@ const normalizeAttachmentRecord = (attachment: AttachmentRecord): AttachmentReco
 });
 
 export const createDefaultSettings = (): LocalAppSettings => ({
-  theme: "modern-olive",
+  theme: "fluent-slate-light",
   outputLanguage: "same",
   preferredDesktopTemplateId: "meeting",
   apiKey: "",

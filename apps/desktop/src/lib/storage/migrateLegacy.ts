@@ -125,6 +125,19 @@ const mapLegacyTemplateId = (legacyId?: string) => {
   return legacyId || "meeting";
 };
 
+const mapLegacyThemeFamily = (legacyTheme?: string) => {
+  switch (legacyTheme) {
+    case "classic-blue":
+      return "atlas-blue-light";
+    case "graphite-forest":
+      return "graphite-forest-light";
+    case "modern-olive":
+      return "stone-olive-light";
+    default:
+      return "fluent-slate-light";
+  }
+};
+
 const mapLegacySessions = (sessions: LegacySession[] | null): SessionRecord[] =>
   Array.isArray(sessions)
     ? sessions.map((session) => ({
@@ -232,7 +245,7 @@ export const loadLegacyBrowserSnapshot = (): DesktopAppSnapshot | null => {
       todos: mapLegacyTodos(parsedSettings?.todoItems),
       attachments: [],
       settings: {
-        theme: parsedSettings?.themeFamily || "modern-olive",
+        theme: mapLegacyThemeFamily(parsedSettings?.themeFamily),
         outputLanguage: parsedSettings?.outputLanguage || "same",
         preferredDesktopTemplateId: mapLegacyTemplateId(preferredDesktopTemplateId),
         apiKey: "",

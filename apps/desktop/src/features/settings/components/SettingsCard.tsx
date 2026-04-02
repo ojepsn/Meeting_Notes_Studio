@@ -108,6 +108,79 @@ const TRANSCRIPTION_MODEL_QUICK_CHOICES: QuickModelChoice[] = [
 const findQuickChoiceForModel = (choices: QuickModelChoice[], modelId: string) =>
   choices.find((choice) => choice.modelId === modelId) ?? null;
 
+type ThemeMode = "light" | "dark";
+type ThemeDefinition = {
+  id: string;
+  label: string;
+  description: string;
+  bestFor: string;
+  swatches: {
+    light: [string, string, string];
+    dark: [string, string, string];
+  };
+};
+
+const DESKTOP_THEMES: ThemeDefinition[] = [
+  {
+    id: "fluent-slate",
+    label: "Fluent Slate",
+    description: "A calm professional default with restrained blue accents and quiet neutral surfaces.",
+    bestFor: "Best all-round business default",
+    swatches: {
+      light: ["#f7f8fb", "#e8edf5", "#4f77cc"],
+      dark: ["#151a22", "#202633", "#7fa4ff"],
+    },
+  },
+  {
+    id: "atlas-blue",
+    label: "Atlas Blue",
+    description: "A familiar enterprise look with crisp structure, clarity, and dependable blue emphasis.",
+    bestFor: "Best for classic enterprise feel",
+    swatches: {
+      light: ["#f7f9fc", "#e3ebf7", "#2d62c9"],
+      dark: ["#121826", "#1c2740", "#6e9eff"],
+    },
+  },
+  {
+    id: "graphite-forest",
+    label: "Graphite Forest",
+    description: "A low-fatigue theme for long sessions, with deep neutrals and muted green focus accents.",
+    bestFor: "Best for long focused work",
+    swatches: {
+      light: ["#f5f5f1", "#e6e7df", "#4f755a"],
+      dark: ["#171a18", "#232824", "#87b092"],
+    },
+  },
+  {
+    id: "stone-olive",
+    label: "Stone Olive",
+    description: "A warmer premium theme with stone neutrals and olive accents that still feels serious and productive.",
+    bestFor: "Best for a distinctive premium desktop feel",
+    swatches: {
+      light: ["#f7f5ef", "#ebe6d7", "#6a7440"],
+      dark: ["#1c1b17", "#2a2923", "#a8b57a"],
+    },
+  },
+];
+
+const THEME_MODE_OPTIONS: Array<{ id: ThemeMode; label: string; description: string }> = [
+  { id: "light", label: "Light", description: "Bright neutral workspace for daytime and high-clarity work." },
+  { id: "dark", label: "Dark", description: "Lower-glare workspace for late sessions and visual calm." },
+];
+
+const parseThemeValue = (value: string) => {
+  const match = value.match(/^(.*?)-(light|dark)$/);
+  if (!match) {
+    return { familyId: "fluent-slate", mode: "light" as ThemeMode };
+  }
+  return {
+    familyId: match[1],
+    mode: match[2] as ThemeMode,
+  };
+};
+
+const buildThemeValue = (familyId: string, mode: ThemeMode) => `${familyId}-${mode}`;
+
 export const SettingsCard = ({
   settings,
   templates,
@@ -156,6 +229,11 @@ export const SettingsCard = ({
     TRANSCRIPTION_MODEL_QUICK_CHOICES,
     selectedTranscriptionModel?.id || settings.transcriptionModel,
   );
+  const selectedTheme = parseThemeValue(settings.theme);
+  const selectedThemeDefinition = DESKTOP_THEMES.find((theme) => theme.id === selectedTheme.familyId) ?? DESKTOP_THEMES[0];
+
+  const updateThemeFamily = (familyId: string) => onChange({ ...settings, theme: buildThemeValue(familyId, selectedTheme.mode) });
+  const updateThemeMode = (mode: ThemeMode) => onChange({ ...settings, theme: buildThemeValue(selectedTheme.familyId, mode) });
 
   const renderQuickChoicePicker = ({
     title,
@@ -415,19 +493,68 @@ export const SettingsCard = ({
           <div className="sidebar-card">
             <div>
               <h3>Themes</h3>
-              <p>Theme stays separate from shared settings because it is a local UI preference.</p>
+              <p>Choose a curated desktop theme family, then switch between light and dark without losing the overall visual identity.</p>
             </div>
-            <div className="field">
-              <label htmlFor="theme-select">Theme</label>
-              <select
-                id="theme-select"
-                value={settings.theme}
-                onChange={(event) => onChange({ ...settings, theme: event.target.value })}
-              >
-                <option value="modern-olive">Modern Olive</option>
-                <option value="classic-blue">Classic Blue</option>
-                <option value="graphite-forest">Graphite Forest</option>
-              </select>
+            <div className="ai-settings-summary-grid">
+              <div className="diagnostics-card">
+                <span className="model-option-label">Current family</span>
+                <strong>{selectedThemeDefinition.label}</strong>
+                <span className="tiny-text">{selectedThemeDefinition.bestFor}</span>
+              </div>
+              <div className="diagnostics-card">
+                <span className="model-option-label">Current mode</span>
+                <strong>{selectedTheme.mode === "light" ? "Light" : "Dark"}</strong>
+                <span className="tiny-text">Theme stays local to this machine as a UI preference.</span>
+              </div>
+            </div>
+            <div className="theme-mode-grid">
+              {THEME_MODE_OPTIONS.map((option) => {
+                const isSelected = selectedTheme.mode === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className="theme-mode-card"
+                    data-active={isSelected}
+                    onClick={() => updateThemeMode(option.id)}
+                  >
+                    <strong>{option.label}</strong>
+                    <p>{option.description}</p>
+                    {isSelected ? <span className="model-option-selected">Selected</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="theme-preview-grid">
+              {DESKTOP_THEMES.map((theme) => {
+                const isSelected = theme.id === selectedTheme.familyId;
+                const swatches = selectedTheme.mode === "dark" ? theme.swatches.dark : theme.swatches.light;
+                return (
+                  <button
+                    key={theme.id}
+                    type="button"
+                    className="theme-preview-card"
+                    data-active={isSelected}
+                    onClick={() => updateThemeFamily(theme.id)}
+                  >
+                    <div className="theme-preview-surface">
+                      <div className="theme-preview-swatch-row">
+                        {swatches.map((swatch) => (
+                          <span key={swatch} className="theme-preview-swatch" style={{ background: swatch }} />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="theme-preview-copy">
+                      <div className="theme-preview-title-row">
+                        <strong>{theme.label}</strong>
+                        {isSelected ? <span className="model-option-selected">Selected</span> : null}
+                      </div>
+                      <p>{theme.description}</p>
+                      <span className="tiny-text">{theme.bestFor}</span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         ) : null}

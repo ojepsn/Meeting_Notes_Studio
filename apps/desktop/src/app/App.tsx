@@ -673,7 +673,7 @@ export const App = () => {
   };
 
   return (
-    <div className="app-shell desktop-shell">
+    <div className="app-shell desktop-shell" data-theme={snapshot.settings.theme}>
       <aside className="workspace-rail">
         <div className="workspace-rail-brand">
           <strong>NoteSmith</strong>
