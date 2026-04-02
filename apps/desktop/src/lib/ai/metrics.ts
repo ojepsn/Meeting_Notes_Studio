@@ -49,6 +49,16 @@ const createSnapshot = (): AIMetricsSnapshot => ({
 
 let metricsSnapshot = createSnapshot();
 
+const cloneSnapshot = (snapshot: AIMetricsSnapshot): AIMetricsSnapshot => ({
+  totals: { ...snapshot.totals },
+  operations: {
+    "generate-notes": { ...snapshot.operations["generate-notes"] },
+    "revise-output": { ...snapshot.operations["revise-output"] },
+    "translate-output": { ...snapshot.operations["translate-output"] },
+    "transcribe-audio": { ...snapshot.operations["transcribe-audio"] },
+  },
+});
+
 const updateAverage = (metrics: OperationMetrics) => {
   metrics.averageDurationMs = metrics.successCount
     ? Math.round((metrics.totalDurationMs / metrics.successCount) * 100) / 100
@@ -64,7 +74,7 @@ export const resetAIMetrics = () => {
   metricsSnapshot = createSnapshot();
 };
 
-export const getAIMetricsSnapshot = () => structuredClone(metricsSnapshot);
+export const getAIMetricsSnapshot = () => cloneSnapshot(metricsSnapshot);
 
 const toDiagnosticsItem = (operation: AIOperation | "totals", metrics: OperationMetrics): AIDiagnosticsItem => ({
   operation,

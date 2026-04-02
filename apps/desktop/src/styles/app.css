@@ -1211,6 +1211,51 @@ select {
   margin-top: 1rem;
 }
 
+.capture-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.1rem;
+}
+
+.capture-mode-card {
+  border: 1px solid var(--app-border);
+  border-radius: 22px;
+  background: var(--app-surface-soft);
+  color: var(--app-text);
+  cursor: pointer;
+  text-align: left;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  box-shadow: 0 12px 28px var(--app-shadow);
+}
+
+.capture-mode-card[data-active="true"] {
+  border-color: var(--app-accent-strong-border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 72%, white 28%) 0%, var(--app-surface) 100%),
+    var(--app-surface);
+}
+
+.capture-mode-card strong {
+  font-size: 0.98rem;
+}
+
+.capture-mode-card span {
+  color: var(--app-muted);
+  font-size: 0.9rem;
+}
+
+.overlay-mode-switch {
+  margin-bottom: 0;
+}
+
+.wrap-row {
+  flex-wrap: wrap;
+}
+
 .theme-mode-grid,
 .theme-preview-grid {
   display: grid;

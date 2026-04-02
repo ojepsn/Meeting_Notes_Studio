@@ -39,6 +39,17 @@ const getDetailLevelInstruction = (detailLevel: number) => {
   return `Match a ${labels[Math.min(5, Math.max(1, Math.round(detailLevel))) as 1 | 2 | 3 | 4 | 5]} level of detail.`;
 };
 
+const getCaptureModeInstruction = (session: SessionRecord) => {
+  switch (session.captureMode) {
+    case "quick-note":
+      return "This is a quick note workflow. Keep the output lightweight, clear, and proportionate rather than overly formal meeting minutes.";
+    case "voice-note":
+      return "This is a voice note workflow. Clean up spoken phrasing, keep the note concise, and preserve the sense of a dictated personal/work note unless the template asks for more structure.";
+    default:
+      return "This is a meeting note workflow. Produce clearly structured professional meeting notes rather than a transcript-style recap.";
+  }
+};
+
 export const generateNotes = async ({
   session,
   settings,
@@ -90,6 +101,7 @@ export const generateNotes = async ({
     systemTexts: [
       promptProfile.profile.generationSystem,
       promptProfile.profile.generationRules,
+      getCaptureModeInstruction(session),
       outputLanguageInstruction,
       getDetailLevelInstruction(session.detailLevel),
     ],

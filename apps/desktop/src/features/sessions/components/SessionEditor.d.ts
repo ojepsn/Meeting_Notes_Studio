@@ -1,4 +1,4 @@
-import type { AttachmentRecord, SessionRecord, TemplateDefinition } from "@notesmith/domain";
+import { type AttachmentRecord, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 interface SessionEditorProps {
     session: SessionRecord;
     templates: TemplateDefinition[];

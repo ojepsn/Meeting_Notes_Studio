@@ -14,6 +14,8 @@ interface OutputWorkspaceProps {
   onExportText: () => void;
   onExportMarkdown: () => void;
   onExportHtml: () => void;
+  primaryActionLabel?: string;
+  emptyStateLabel?: string;
 }
 
 export const OutputWorkspace = ({
@@ -28,6 +30,8 @@ export const OutputWorkspace = ({
   onExportText,
   onExportMarkdown,
   onExportHtml,
+  primaryActionLabel = "Generate",
+  emptyStateLabel = "Generate polished notes",
 }: OutputWorkspaceProps) => {
   const [revisionInstructions, setRevisionInstructions] = useState("");
   const [showAdvancedRefinement, setShowAdvancedRefinement] = useState(false);
@@ -45,7 +49,7 @@ export const OutputWorkspace = ({
         </div>
         <div className="page-actions">
           <button className="primary-button" type="button" onClick={onGenerate}>
-            {isGenerating ? "Generating output..." : "Generate"}
+            {isGenerating ? `${primaryActionLabel}...` : primaryActionLabel}
           </button>
           <button className="shell-button" type="button" onClick={onTranslate}>
             Translate
@@ -60,7 +64,7 @@ export const OutputWorkspace = ({
           <h3>Ready to generate</h3>
           <ol className="empty-state-steps">
             <li>Go back to Capture if you want to add rough notes, transcript text, or images first.</li>
-            <li>Click Generate to turn the current session material into structured professional notes.</li>
+            <li>Click {emptyStateLabel} to turn the current session material into a polished document.</li>
             <li>Use Translate, Revise, and Export after the first polished draft appears here.</li>
           </ol>
         </div>

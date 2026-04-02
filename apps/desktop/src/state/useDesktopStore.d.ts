@@ -1,10 +1,13 @@
-import type { DesktopAppSnapshot } from "@notesmith/domain";
+import type { CaptureMode, DesktopAppSnapshot } from "@notesmith/domain";
 import { createAppRepository } from "../lib/db/repository";
 type DesktopView = "capture" | "output";
+type SaveState = "saved" | "saving" | "error";
 interface DesktopState {
     snapshot: DesktopAppSnapshot | null;
     activeSessionId: string | null;
     activeView: DesktopView;
+    saveState: SaveState;
+    lastSavedAt: string | null;
     isLoaded: boolean;
     loadError: string | null;
     repository: ReturnType<typeof createAppRepository>;
@@ -12,7 +15,10 @@ interface DesktopState {
     setActiveView: (view: DesktopView) => void;
     setActiveSessionId: (id: string) => void;
     saveSession: (payload: DesktopAppSnapshot["sessions"][number]) => Promise<void>;
-    createNewSession: (templateId?: string) => Promise<void>;
+    createNewSession: (options?: {
+        templateId?: string;
+        captureMode?: CaptureMode;
+    }) => Promise<void>;
     deleteSession: (id: string) => Promise<void>;
     saveTodo: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
     addTodo: (description: string) => Promise<void>;

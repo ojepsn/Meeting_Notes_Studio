@@ -1,4 +1,4 @@
-import { type AttachmentRecord, type DesktopAppSnapshot, type LocalAppSettings, type SessionRecord, type TemplateDefinition, type TodoRecord } from "@notesmith/domain";
+import { type AttachmentRecord, type CaptureMode, type DesktopAppSnapshot, type LocalAppSettings, type SessionRecord, type TemplateDefinition, type TodoRecord } from "@notesmith/domain";
 import type { AIRequestHistoryEntry } from "../ai/history";
 import { type AIModelPricingSnapshot } from "../ai/modelPricing";
 export declare const createDefaultSettings: () => LocalAppSettings;
@@ -36,7 +36,7 @@ export interface AppRepository extends EntityRepository {
     saveSnapshot(snapshot: DesktopAppSnapshot): Promise<void>;
 }
 export declare const createAppRepository: () => AppRepository;
-export declare const createSessionRecord: (templateId: string) => SessionRecord;
+export declare const createSessionRecord: (templateId: string, captureMode?: CaptureMode) => SessionRecord;
 export declare const upsertSession: (sessions: SessionRecord[], nextSession: SessionRecord) => SessionRecord[];
 export declare const upsertTemplate: (templates: TemplateDefinition[], nextTemplate: TemplateDefinition) => TemplateDefinition[];
 export declare const upsertTodo: (todos: TodoRecord[], nextTodo: TodoRecord) => TodoRecord[];

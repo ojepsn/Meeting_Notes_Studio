@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE, type CaptureMode } from "@notesmith/domain";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
@@ -38,7 +39,7 @@ import {
 } from "../lib/files/attachmentStore";
 
 type AppWorkspace = "notes" | "tasks" | "calendar" | "assistant" | "files";
-type OverlayPanel = "sessions" | "todos" | "backup" | "settings" | "more" | null;
+type OverlayPanel = "new-note" | "sessions" | "todos" | "backup" | "settings" | "more" | null;
 type CommandAction = {
   id: string;
   label: string;
@@ -55,6 +56,35 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
   { id: "assistant", label: "Assistant", description: "Future AI workflows and agents", available: false },
   { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
 ];
+
+const CAPTURE_MODE_UI: Record<
+  CaptureMode,
+  {
+    label: string;
+    description: string;
+    generateLabel: string;
+    outputActionLabel: string;
+  }
+> = {
+  "meeting-note": {
+    label: "Meeting note",
+    description: "Best for meetings, calls, and structured minutes.",
+    generateLabel: "Generate meeting notes",
+    outputActionLabel: "Generate meeting notes",
+  },
+  "quick-note": {
+    label: "Quick note",
+    description: "Best for fast typed notes with minimal setup.",
+    generateLabel: "Polish note",
+    outputActionLabel: "Polish note",
+  },
+  "voice-note": {
+    label: "Voice note",
+    description: "Best for spoken capture, dictation, and audio-first notes.",
+    generateLabel: "Transcribe and polish",
+    outputActionLabel: "Transcribe and polish",
+  },
+};
 
 const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
   recordAIRequestHistory(event);
@@ -258,6 +288,7 @@ export const App = () => {
     () => snapshot?.templates.find((template) => template.id === activeSession?.templateId) ?? null,
     [activeSession, snapshot],
   );
+  const activeCaptureMode: CaptureMode = activeSession?.captureMode ?? "meeting-note";
 
   const activeAttachments = useMemo(
     () => snapshot?.attachments.filter((attachment) => attachment.sessionId === activeSession?.id) ?? [],
@@ -642,21 +673,28 @@ export const App = () => {
 
   const openOverlay = (panel: OverlayPanel) => setOpenPanel(panel);
   const closeOverlay = () => setOpenPanel(null);
+  const handleCreateSessionFromMode = async (captureMode: CaptureMode) => {
+    await createNewSession({
+      captureMode,
+      templateId: DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode],
+    });
+    setStatusNote(`Started a new ${CAPTURE_MODE_UI[captureMode].label.toLowerCase()} session.`);
+    closeOverlay();
+  };
   const openCommandPalette = () => {
     setCommandQuery("");
     setIsCommandPaletteOpen(true);
   };
   const closeCommandPalette = () => setIsCommandPaletteOpen(false);
 
-  const commandActions = useMemo<CommandAction[]>(
-    () => [
+  const commandActions: CommandAction[] = [
       {
         id: "new-session",
-        label: "New session",
-        description: "Create a fresh notes session.",
-        keywords: ["create session note capture"],
+        label: "New note",
+        description: "Choose Meeting note, Quick note, or Voice note.",
+        keywords: ["create session note capture meeting quick voice"],
         shortcut: "Ctrl/Cmd+N",
-        action: () => void createNewSession(),
+        action: () => openOverlay("new-note"),
       },
       {
         id: "capture-view",
@@ -727,8 +765,8 @@ export const App = () => {
       },
       {
         id: "generate-output",
-        label: "Generate output",
-        description: "Create structured polished notes from the current session.",
+        label: CAPTURE_MODE_UI[activeCaptureMode].generateLabel,
+        description: "Create polished output from the current session.",
         keywords: ["generate polish ai"],
         shortcut: "Ctrl/Cmd+Enter",
         action: () => void handleGenerate(),
@@ -771,70 +809,15 @@ export const App = () => {
           setActiveView("capture");
         },
       })),
-    ],
-    [createNewSession, snapshot.sessions, setActiveView, setActiveSessionId, activeSession.id],
-  );
+    ];
 
-  const filteredCommandActions = useMemo(() => {
+  const filteredCommandActions = (() => {
     const query = commandQuery.trim().toLowerCase();
     if (!query) return commandActions;
     return commandActions.filter((command) =>
       [command.label, command.description, ...command.keywords].join(" ").toLowerCase().includes(query),
     );
-  }, [commandActions, commandQuery]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const isPrimary = event.ctrlKey || event.metaKey;
-      if (isPrimary && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        openCommandPalette();
-        return;
-      }
-      if (isPrimary && event.key.toLowerCase() === "n") {
-        event.preventDefault();
-        void createNewSession();
-        return;
-      }
-      if (isPrimary && event.key === ",") {
-        event.preventDefault();
-        openSettingsSection("ai");
-        return;
-      }
-      if (isPrimary && event.shiftKey && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        openOverlay("sessions");
-        return;
-      }
-      if (isPrimary && event.key === "Enter") {
-        event.preventDefault();
-        void handleGenerate();
-        return;
-      }
-      if (event.altKey && event.key === "1") {
-        event.preventDefault();
-        setActiveView("capture");
-        return;
-      }
-      if (event.altKey && event.key === "2") {
-        event.preventDefault();
-        setActiveView("output");
-        return;
-      }
-      if (event.key === "Escape") {
-        if (isCommandPaletteOpen) {
-          closeCommandPalette();
-          return;
-        }
-        if (openPanel) {
-          closeOverlay();
-        }
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [createNewSession, isCommandPaletteOpen, openPanel, snapshot.sessions]);
+  })();
 
   const renderOverlayContent = () => {
     switch (openPanel) {
@@ -847,9 +830,31 @@ export const App = () => {
               setActiveSessionId(id);
               closeOverlay();
             }}
-            onCreate={() => void createNewSession()}
+            onCreate={() => openOverlay("new-note")}
             onDelete={(id) => void deleteSession(id)}
           />
+        );
+      case "new-note":
+        return (
+          <div className="sidebar-card overlay-card">
+            <div>
+              <h3>Choose note type</h3>
+              <p>Pick the workflow first. Templates then refine the structure inside that mode.</p>
+            </div>
+            <div className="capture-mode-switch overlay-mode-switch">
+              {(Object.keys(CAPTURE_MODE_UI) as CaptureMode[]).map((captureMode) => (
+                <button
+                  key={captureMode}
+                  type="button"
+                  className="capture-mode-card"
+                  onClick={() => void handleCreateSessionFromMode(captureMode)}
+                >
+                  <strong>{CAPTURE_MODE_UI[captureMode].label}</strong>
+                  <span>{CAPTURE_MODE_UI[captureMode].description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         );
       case "todos":
         return (
@@ -964,8 +969,8 @@ export const App = () => {
           </div>
           <div className="topbar-actions topbar-actions-split">
             {activeWorkspace === "notes" ? (
-              <button className="primary-button" type="button" onClick={() => void createNewSession()}>
-                + New Session
+              <button className="primary-button" type="button" onClick={() => openOverlay("new-note")}>
+                New note
               </button>
             ) : null}
             <div className="topbar-secondary-cluster">
@@ -1007,13 +1012,13 @@ export const App = () => {
                   <h2>
                     {activeWorkspace === "notes"
                       ? activeView === "capture"
-                        ? "Capture"
-                        : "Output"
+                        ? CAPTURE_MODE_UI[activeCaptureMode].label
+                        : `${CAPTURE_MODE_UI[activeCaptureMode].label} output`
                       : WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}
                   </h2>
                   <p>{activeWorkspace === "notes"
                     ? activeView === "capture"
-                      ? "Capture rough notes first. Secondary tools stay in the inspector or overlays so the center canvas stays simple."
+                      ? `${CAPTURE_MODE_UI[activeCaptureMode].description} Secondary tools stay in the inspector or overlays so the center canvas stays calm.`
                       : "Shape and export polished notes here. AI and export controls stay nearby without crowding the document."
                     : "This workspace placeholder already follows the same shell structure so the product can grow without changing how navigation works."}</p>
                 </div>
@@ -1082,6 +1087,8 @@ export const App = () => {
                 onExportText={() => exportOutputAsText({ title: activeSession.title, output: activeSession.output })}
                 onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}
                 onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output })}
+                primaryActionLabel={CAPTURE_MODE_UI[activeCaptureMode].generateLabel}
+                emptyStateLabel={CAPTURE_MODE_UI[activeCaptureMode].outputActionLabel}
               />
             )}
           </section>
@@ -1095,7 +1102,9 @@ export const App = () => {
               <div className="section-list">
                 <div className="list-item">
                   <strong>{activeSession.title || "Untitled session"}</strong>
-                  <span className="muted">{activeTemplate?.name ?? "No template selected"}</span>
+                  <span className="muted">
+                    {CAPTURE_MODE_UI[activeCaptureMode].label} · {activeTemplate?.name ?? "No template selected"}
+                  </span>
                 </div>
                 <div className="list-item">
                   <strong>{activeSession.date || "No date set"}</strong>
@@ -1104,7 +1113,7 @@ export const App = () => {
                   </span>
                 </div>
                 <div className="list-item">
-                  <strong>{activeSession.participantText || "No participants yet"}</strong>
+                  <strong>{activeSession.participantText || (activeCaptureMode === "meeting-note" ? "No people yet" : "Optional people context")}</strong>
                   <span className="muted">People</span>
                 </div>
                 <div className="list-item">
@@ -1145,7 +1154,11 @@ export const App = () => {
                 <h3>{activeView === "capture" ? "Capture tools" : "Output tools"}</h3>
                 <p>
                   {activeView === "capture"
-                    ? "Primary note fields stay in the center. Imports and transcription stay here."
+                    ? activeCaptureMode === "meeting-note"
+                      ? "Meeting imports, transcript tools, and supporting media stay here."
+                      : activeCaptureMode === "voice-note"
+                        ? "Voice capture, transcription, and audio-first actions stay here."
+                        : "Quick note capture stays minimal in the center; supporting imports stay here."
                     : "Primary output stays in the center. AI and export actions stay here."}
                 </p>
               </div>
@@ -1154,20 +1167,28 @@ export const App = () => {
                   <button className="small-button" type="button" onClick={() => void handleImportImage()}>
                     Upload image
                   </button>
-                  <button className="small-button" type="button" onClick={() => void handleImportAudio()}>
-                    Upload audio
-                  </button>
-                  <button className="small-button" type="button" onClick={() => void handleTranscribeAudio()}>
-                    {isTranscribingAudio ? "Transcribing..." : "Transcribe audio"}
-                  </button>
-                  <button className="small-button" type="button" onClick={() => void handleImportTranscript()}>
-                    Upload transcript
-                  </button>
+                  {activeCaptureMode !== "quick-note" ? (
+                    <>
+                      <button className="small-button" type="button" onClick={() => void handleImportAudio()}>
+                        Upload audio
+                      </button>
+                      <button className="small-button" type="button" onClick={() => void handleTranscribeAudio()}>
+                        {isTranscribingAudio ? "Transcribing..." : "Transcribe audio"}
+                      </button>
+                      <button className="small-button" type="button" onClick={() => void handleImportTranscript()}>
+                        Upload transcript
+                      </button>
+                    </>
+                  ) : (
+                    <button className="small-button" type="button" onClick={() => void handleImportTranscript()}>
+                      Upload note text
+                    </button>
+                  )}
                 </div>
               ) : activeWorkspace === "notes" ? (
                 <div className="sidebar-actions">
                   <button className="primary-button" type="button" onClick={() => void handleGenerate()} disabled={isGenerating}>
-                    {isGenerating ? "Generating..." : "Generate"}
+                    {isGenerating ? `${CAPTURE_MODE_UI[activeCaptureMode].generateLabel}...` : CAPTURE_MODE_UI[activeCaptureMode].generateLabel}
                   </button>
                   <button className="small-button" type="button" onClick={() => void handleTranslate()}>
                     Translate
@@ -1272,6 +1293,8 @@ export const App = () => {
                 <strong>
                   {openPanel === "sessions"
                     ? "All Sessions"
+                    : openPanel === "new-note"
+                      ? "New note"
                     : openPanel === "todos"
                         ? "To-dos"
                         : openPanel === "backup"

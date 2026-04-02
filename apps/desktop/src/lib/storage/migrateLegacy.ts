@@ -1,4 +1,5 @@
 import type {
+  CaptureMode,
   DesktopAppSnapshot,
   PromptBlock,
   PromptProfile,
@@ -125,6 +126,12 @@ const mapLegacyTemplateId = (legacyId?: string) => {
   return legacyId || "meeting";
 };
 
+const inferCaptureModeFromTemplateId = (templateId: string): CaptureMode => {
+  if (templateId === "personal-note") return "quick-note";
+  if (templateId === "voice-memo") return "voice-note";
+  return "meeting-note";
+};
+
 const mapLegacyThemeFamily = (legacyTheme?: string) => {
   switch (legacyTheme) {
     case "classic-blue":
@@ -143,6 +150,7 @@ const mapLegacySessions = (sessions: LegacySession[] | null): SessionRecord[] =>
     ? sessions.map((session) => ({
         id: typeof session.id === "string" && session.id ? session.id : crypto.randomUUID(),
         templateId: mapLegacyTemplateId(session.template),
+        captureMode: inferCaptureModeFromTemplateId(mapLegacyTemplateId(session.template)),
         title: typeof session.title === "string" ? session.title : "",
         participantText: typeof session.participants === "string" ? session.participants : "",
         date: typeof session.meetingDate === "string" ? session.meetingDate : "",
@@ -187,6 +195,7 @@ const mapLegacyTemplates = (customTemplates: LegacyCustomTemplate[] | undefined)
           id: typeof template.id === "string" && template.id.trim() ? template.id : crypto.randomUUID(),
           name: typeof template.label === "string" && template.label.trim() ? template.label.trim() : "Custom template",
           kind: "custom" as const,
+          captureModes: ["meeting-note", "quick-note", "voice-note"] as CaptureMode[],
           promptInstructions: typeof template.templateInstructions === "string" ? template.templateInstructions : "",
           fields: [
             { id: crypto.randomUUID(), key: "title", label: "Title", type: "text" as const, enabled: template.fields?.title !== false, required: false, position: 1 },

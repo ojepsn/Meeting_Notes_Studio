@@ -11,6 +11,8 @@ interface OutputWorkspaceProps {
     onExportText: () => void;
     onExportMarkdown: () => void;
     onExportHtml: () => void;
+    primaryActionLabel?: string;
+    emptyStateLabel?: string;
 }
-export declare const OutputWorkspace: ({ session, attachments, onChange, isGenerating, isRevising, onGenerate, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const OutputWorkspace: ({ session, attachments, onChange, isGenerating, isRevising, onGenerate, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, primaryActionLabel, emptyStateLabel, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE } from "@notesmith/domain";
 import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
 import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
 import { createAppRepository, createSessionRecord, upsertSession, upsertTemplate, upsertTodo, } from "../lib/db/repository";
@@ -9,8 +10,9 @@ let pendingSnapshot = null;
 const logPersistError = (error) => {
     console.error("NoteSmith desktop persistence failed", error);
 };
-const scheduleSnapshotPersist = (repository, snapshot) => {
+const scheduleSnapshotPersist = (repository, snapshot, setState) => {
     pendingSnapshot = snapshot;
+    setState({ saveState: "saving" });
     if (persistTimer) {
         clearTimeout(persistTimer);
     }
@@ -20,21 +22,46 @@ const scheduleSnapshotPersist = (repository, snapshot) => {
         persistTimer = null;
         if (!snapshotToPersist)
             return;
-        void repository.saveSnapshot(snapshotToPersist).catch(logPersistError);
+        void repository
+            .saveSnapshot(snapshotToPersist)
+            .then(() => {
+            setState({
+                saveState: "saved",
+                lastSavedAt: new Date().toISOString(),
+            });
+        })
+            .catch((error) => {
+            logPersistError(error);
+            setState({ saveState: "error" });
+        });
     }, PERSIST_DEBOUNCE_MS);
 };
-const flushSnapshotPersist = async (repository, snapshot) => {
+const flushSnapshotPersist = async (repository, snapshot, setState) => {
     pendingSnapshot = null;
     if (persistTimer) {
         clearTimeout(persistTimer);
         persistTimer = null;
     }
-    await repository.saveSnapshot(snapshot);
+    setState({ saveState: "saving" });
+    try {
+        await repository.saveSnapshot(snapshot);
+        setState({
+            saveState: "saved",
+            lastSavedAt: new Date().toISOString(),
+        });
+    }
+    catch (error) {
+        logPersistError(error);
+        setState({ saveState: "error" });
+        throw error;
+    }
 };
 export const useDesktopStore = create((set, get) => ({
     snapshot: null,
     activeSessionId: null,
     activeView: "capture",
+    saveState: "saved",
+    lastSavedAt: null,
     isLoaded: false,
     loadError: null,
     repository: createAppRepository(),
@@ -58,6 +85,8 @@ export const useDesktopStore = create((set, get) => ({
                 activeSessionId: snapshot.sessions[0]?.id ?? null,
                 isLoaded: true,
                 loadError: null,
+                saveState: "saved",
+                lastSavedAt: new Date().toISOString(),
             });
         }
         catch (error) {
@@ -83,19 +112,23 @@ export const useDesktopStore = create((set, get) => ({
             }),
         };
         set({ snapshot: nextSnapshot, activeSessionId: payload.id });
-        scheduleSnapshotPersist(get().repository, nextSnapshot);
+        scheduleSnapshotPersist(get().repository, nextSnapshot, set);
     },
-    createNewSession: async (templateId = get().snapshot?.settings.preferredDesktopTemplateId ?? "meeting") => {
+    createNewSession: async (options) => {
         const snapshot = get().snapshot;
         if (!snapshot)
             return;
-        const nextSession = createSessionRecord(templateId);
+        const captureMode = options?.captureMode ?? "meeting-note";
+        const fallbackTemplateId = captureMode === "meeting-note"
+            ? get().snapshot?.settings.preferredDesktopTemplateId ?? DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode]
+            : DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode];
+        const nextSession = createSessionRecord(options?.templateId ?? fallbackTemplateId, captureMode);
         const nextSnapshot = {
             ...snapshot,
             sessions: [nextSession, ...snapshot.sessions],
         };
         set({ snapshot: nextSnapshot, activeSessionId: nextSession.id, activeView: "capture" });
-        await flushSnapshotPersist(get().repository, nextSnapshot);
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
     },
     deleteSession: async (id) => {
         const snapshot = get().snapshot;
@@ -103,7 +136,7 @@ export const useDesktopStore = create((set, get) => ({
             return;
         const remainingSessions = snapshot.sessions.filter((session) => session.id !== id);
         if (!remainingSessions.length) {
-            const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting");
+            const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting", "meeting-note");
             remainingSessions.push(replacement);
         }
         const nextSnapshot = { ...snapshot, sessions: remainingSessions };
@@ -112,7 +145,7 @@ export const useDesktopStore = create((set, get) => ({
             activeSessionId: remainingSessions[0]?.id ?? null,
             activeView: get().activeView,
         });
-        await flushSnapshotPersist(get().repository, nextSnapshot);
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
     },
     saveTodo: async (todo) => {
         const snapshot = get().snapshot;
@@ -123,7 +156,7 @@ export const useDesktopStore = create((set, get) => ({
             todos: upsertTodo(snapshot.todos, todo),
         };
         set({ snapshot: nextSnapshot });
-        scheduleSnapshotPersist(get().repository, nextSnapshot);
+        scheduleSnapshotPersist(get().repository, nextSnapshot, set);
     },
     addTodo: async (description) => {
         const snapshot = get().snapshot;
@@ -144,7 +177,7 @@ export const useDesktopStore = create((set, get) => ({
             ],
         };
         set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot);
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
     },
     deleteTodo: async (id) => {
         const snapshot = get().snapshot;
@@ -152,7 +185,7 @@ export const useDesktopStore = create((set, get) => ({
             return;
         const nextSnapshot = { ...snapshot, todos: snapshot.todos.filter((todo) => todo.id !== id) };
         set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot);
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
     },
     saveSettings: async (settings) => {
         const snapshot = get().snapshot;
@@ -160,7 +193,7 @@ export const useDesktopStore = create((set, get) => ({
             return;
         const nextSnapshot = { ...snapshot, settings };
         set({ snapshot: nextSnapshot });
-        scheduleSnapshotPersist(get().repository, nextSnapshot);
+        scheduleSnapshotPersist(get().repository, nextSnapshot, set);
     },
     saveTemplate: async (template) => {
         const snapshot = get().snapshot;
@@ -171,7 +204,7 @@ export const useDesktopStore = create((set, get) => ({
             templates: upsertTemplate(snapshot.templates, template),
         };
         set({ snapshot: nextSnapshot });
-        scheduleSnapshotPersist(get().repository, nextSnapshot);
+        scheduleSnapshotPersist(get().repository, nextSnapshot, set);
     },
     saveAttachments: async (attachments) => {
         const snapshot = get().snapshot;
@@ -179,7 +212,7 @@ export const useDesktopStore = create((set, get) => ({
             return;
         const nextSnapshot = { ...snapshot, attachments };
         set({ snapshot: nextSnapshot });
-        scheduleSnapshotPersist(get().repository, nextSnapshot);
+        scheduleSnapshotPersist(get().repository, nextSnapshot, set);
     },
     importLegacyBrowserData: async () => {
         const migrated = loadLegacyBrowserSnapshot();
@@ -191,7 +224,7 @@ export const useDesktopStore = create((set, get) => ({
             activeSessionId: migrated.sessions[0]?.id ?? null,
             activeView: "capture",
         });
-        await flushSnapshotPersist(get().repository, migrated);
+        await flushSnapshotPersist(get().repository, migrated, set);
         return "imported";
     },
 }));

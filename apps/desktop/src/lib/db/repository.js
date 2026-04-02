@@ -1,4 +1,4 @@
-import { BUILTIN_TEMPLATES, } from "@notesmith/domain";
+import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, } from "@notesmith/domain";
 import { DEFAULT_GENERATION_RULES, DEFAULT_GENERATION_SYSTEM_PROMPT, DEFAULT_REVISION_RULES, DEFAULT_TRANSLATION_RULES, } from "@notesmith/prompts";
 import { normalizeAIModelPricingSnapshot, normalizeTextModelId, normalizeTranscriptionModelId, } from "../ai/modelPricing";
 import { isTauriRuntime } from "../storage/environment";
@@ -22,6 +22,7 @@ const normalizeDetailLevel = (value) => {
 };
 const normalizeSessionRecord = (session) => ({
     ...session,
+    captureMode: session.captureMode === "quick-note" || session.captureMode === "voice-note" ? session.captureMode : "meeting-note",
     detailLevel: normalizeDetailLevel(session.detailLevel),
     customFieldValues: session.customFieldValues && typeof session.customFieldValues === "object" ? session.customFieldValues : {},
     excludedSectionIds: Array.isArray(session.excludedSectionIds) ? session.excludedSectionIds : [],
@@ -32,8 +33,12 @@ const normalizeAttachmentRecord = (attachment) => ({
     includeInOutput: Boolean(attachment.includeInOutput),
     outputPosition: Number.isFinite(Number(attachment.outputPosition)) ? Number(attachment.outputPosition) : 0,
 });
+const normalizeTemplateRecord = (template) => ({
+    ...template,
+    captureModes: Array.isArray(template.captureModes) && template.captureModes.length ? template.captureModes : ["meeting-note", "quick-note", "voice-note"],
+});
 export const createDefaultSettings = () => ({
-    theme: "modern-olive",
+    theme: "fluent-slate-light",
     outputLanguage: "same",
     preferredDesktopTemplateId: "meeting",
     apiKey: "",
@@ -53,6 +58,7 @@ export const createDefaultSnapshot = () => ({
     sessions: [
         {
             id: crypto.randomUUID(),
+            captureMode: "meeting-note",
             templateId: "meeting",
             title: "2026-03-30 Weekly team sync",
             participantText: "Anna, Marcus, Ola",
@@ -104,7 +110,7 @@ class BrowserEntityRepository {
         writeLocalJson(STORAGE_KEYS.sessions, records);
     }
     async loadTemplates() {
-        return readLocalJson(STORAGE_KEYS.templates, BUILTIN_TEMPLATES);
+        return readLocalJson(STORAGE_KEYS.templates, BUILTIN_TEMPLATES).map(normalizeTemplateRecord);
     }
     async saveTemplates(records) {
         writeLocalJson(STORAGE_KEYS.templates, records);
@@ -155,7 +161,7 @@ class BrowserEntityRepository {
         ]);
         return {
             sessions: sessions.length ? sessions : createDefaultSnapshot().sessions,
-            templates: templates.length ? templates : BUILTIN_TEMPLATES,
+            templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
             todos,
             attachments,
             settings,
@@ -182,6 +188,7 @@ class TauriSqliteRepository {
                 await db.execute("ALTER TABLE sessions ADD COLUMN detail_level INTEGER NOT NULL DEFAULT 3").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN custom_field_values TEXT NOT NULL DEFAULT '{}'").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN excluded_section_ids TEXT NOT NULL DEFAULT '[]'").catch(() => { });
+                await db.execute("ALTER TABLE sessions ADD COLUMN capture_mode TEXT NOT NULL DEFAULT 'meeting-note'").catch(() => { });
                 await db.execute("ALTER TABLE attachments ADD COLUMN caption TEXT NOT NULL DEFAULT ''").catch(() => { });
                 await db.execute("ALTER TABLE attachments ADD COLUMN include_in_output INTEGER NOT NULL DEFAULT 0").catch(() => { });
                 await db.execute("ALTER TABLE attachments ADD COLUMN output_position INTEGER NOT NULL DEFAULT 0").catch(() => { });
@@ -195,6 +202,7 @@ class TauriSqliteRepository {
         const rows = await db.select("SELECT * FROM sessions ORDER BY updated_at DESC");
         return rows.map((row) => normalizeSessionRecord({
             id: row.id,
+            captureMode: row.capture_mode === "quick-note" || row.capture_mode === "voice-note" ? row.capture_mode : "meeting-note",
             templateId: row.template_id,
             title: row.title,
             participantText: row.participant_text,
@@ -218,9 +226,9 @@ class TauriSqliteRepository {
         await db.execute("DELETE FROM sessions");
         await Promise.all(records.map((record) => db.execute(`INSERT INTO sessions (
             id, template_id, title, participant_text, session_date, start_time, end_time,
-            quick_highlights, detail_level, manual_notes, live_transcript, uploaded_transcript, custom_field_values, excluded_section_ids, output_text,
+            quick_highlights, detail_level, capture_mode, manual_notes, live_transcript, uploaded_transcript, custom_field_values, excluded_section_ids, output_text,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
             record.id,
             record.templateId,
             record.title,
@@ -230,6 +238,7 @@ class TauriSqliteRepository {
             record.endTime,
             record.quickHighlights,
             normalizeDetailLevel(record.detailLevel),
+            record.captureMode,
             record.manualNotes,
             record.liveTranscript,
             record.uploadedTranscript,
@@ -245,7 +254,7 @@ class TauriSqliteRepository {
         const rows = await db.select("SELECT payload_json FROM templates ORDER BY name ASC");
         if (!rows.length)
             return BUILTIN_TEMPLATES;
-        return rows.map((row) => JSON.parse(row.payload_json));
+        return rows.map((row) => normalizeTemplateRecord(JSON.parse(row.payload_json)));
     }
     async saveTemplates(records) {
         const db = await this.getDb();
@@ -343,7 +352,7 @@ class TauriSqliteRepository {
         ]);
         return {
             sessions: sessions.length ? sessions : createDefaultSnapshot().sessions,
-            templates: templates.length ? templates : BUILTIN_TEMPLATES,
+            templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
             todos,
             attachments,
             settings,
@@ -360,13 +369,14 @@ class TauriSqliteRepository {
     }
 }
 export const createAppRepository = () => isTauriRuntime() ? new TauriSqliteRepository() : new BrowserEntityRepository();
-export const createSessionRecord = (templateId) => {
+export const createSessionRecord = (templateId, captureMode = "meeting-note") => {
     const timestamp = new Date();
     const isoDate = timestamp.toISOString().slice(0, 10);
     const isoTime = timestamp.toTimeString().slice(0, 5);
     return {
         id: crypto.randomUUID(),
-        templateId,
+        captureMode,
+        templateId: templateId || DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode],
         title: "",
         participantText: "",
         date: isoDate,

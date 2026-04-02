@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { DesktopAppSnapshot } from "@notesmith/domain";
+import type { CaptureMode, DesktopAppSnapshot } from "@notesmith/domain";
+import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE } from "@notesmith/domain";
 import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
 import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
 import {
@@ -89,7 +90,7 @@ interface DesktopState {
   setActiveView: (view: DesktopView) => void;
   setActiveSessionId: (id: string) => void;
   saveSession: (payload: DesktopAppSnapshot["sessions"][number]) => Promise<void>;
-  createNewSession: (templateId?: string) => Promise<void>;
+  createNewSession: (options?: { templateId?: string; captureMode?: CaptureMode }) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
   saveTodo: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
   addTodo: (description: string) => Promise<void>;
@@ -156,10 +157,15 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     set({ snapshot: nextSnapshot, activeSessionId: payload.id });
     scheduleSnapshotPersist(get().repository, nextSnapshot, set);
   },
-  createNewSession: async (templateId = get().snapshot?.settings.preferredDesktopTemplateId ?? "meeting") => {
+  createNewSession: async (options) => {
     const snapshot = get().snapshot;
     if (!snapshot) return;
-    const nextSession = createSessionRecord(templateId);
+    const captureMode = options?.captureMode ?? "meeting-note";
+    const fallbackTemplateId =
+      captureMode === "meeting-note"
+        ? get().snapshot?.settings.preferredDesktopTemplateId ?? DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode]
+        : DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode];
+    const nextSession = createSessionRecord(options?.templateId ?? fallbackTemplateId, captureMode);
     const nextSnapshot = {
       ...snapshot,
       sessions: [nextSession, ...snapshot.sessions],
@@ -172,7 +178,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     if (!snapshot) return;
     const remainingSessions = snapshot.sessions.filter((session) => session.id !== id);
     if (!remainingSessions.length) {
-      const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting");
+      const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting", "meeting-note");
       remainingSessions.push(replacement);
     }
     const nextSnapshot = { ...snapshot, sessions: remainingSessions };

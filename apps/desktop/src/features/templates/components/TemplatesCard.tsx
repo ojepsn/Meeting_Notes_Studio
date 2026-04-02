@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { TemplateDefinition, TemplateField, TemplateFieldType, TemplateSection } from "@notesmith/domain";
+import type { CaptureMode, TemplateDefinition, TemplateField, TemplateFieldType, TemplateSection } from "@notesmith/domain";
 
 interface TemplatesCardProps {
   templates: TemplateDefinition[];
@@ -7,6 +7,11 @@ interface TemplatesCardProps {
 }
 
 const FIELD_TYPES: TemplateFieldType[] = ["text", "number", "date", "time", "textarea"];
+const CAPTURE_MODE_OPTIONS: Array<{ id: CaptureMode; label: string }> = [
+  { id: "meeting-note", label: "Meeting note" },
+  { id: "quick-note", label: "Quick note" },
+  { id: "voice-note", label: "Voice note" },
+];
 
 const createBlankField = (position: number): TemplateField => ({
   id: crypto.randomUUID(),
@@ -30,6 +35,7 @@ const createDraftTemplate = (): TemplateDefinition => ({
   id: `custom-${crypto.randomUUID()}`,
   name: "New custom template",
   kind: "custom",
+  captureModes: ["meeting-note", "quick-note", "voice-note"],
   fields: [createBlankField(1)],
   sections: [createBlankSection(1)],
   promptInstructions: "",
@@ -144,6 +150,29 @@ export const TemplatesCard = ({ templates, onSave }: TemplatesCardProps) => {
                 onChange={(event) => setDraft({ ...draft, promptInstructions: event.target.value })}
                 placeholder="Describe the tone, structure, or priorities this template should enforce during generation."
               />
+            </div>
+            <div className="field">
+              <label>Capture modes</label>
+              <div className="inline-row wrap-row">
+                {CAPTURE_MODE_OPTIONS.map((mode) => (
+                  <label key={mode.id} className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={draft.captureModes.includes(mode.id)}
+                      onChange={(event) => {
+                        const nextCaptureModes = event.target.checked
+                          ? Array.from(new Set([...draft.captureModes, mode.id]))
+                          : draft.captureModes.filter((entry) => entry !== mode.id);
+                        setDraft({
+                          ...draft,
+                          captureModes: nextCaptureModes.length ? nextCaptureModes : [mode.id],
+                        });
+                      }}
+                    />
+                    {mode.label}
+                  </label>
+                ))}
+              </div>
             </div>
             <div className="section-divider">
               <div className="inline-row">

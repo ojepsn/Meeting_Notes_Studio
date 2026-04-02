@@ -42,10 +42,30 @@ const mapLegacyTemplateId = (legacyId) => {
         return "meeting";
     return legacyId || "meeting";
 };
+const inferCaptureModeFromTemplateId = (templateId) => {
+    if (templateId === "personal-note")
+        return "quick-note";
+    if (templateId === "voice-memo")
+        return "voice-note";
+    return "meeting-note";
+};
+const mapLegacyThemeFamily = (legacyTheme) => {
+    switch (legacyTheme) {
+        case "classic-blue":
+            return "atlas-blue-light";
+        case "graphite-forest":
+            return "graphite-forest-light";
+        case "modern-olive":
+            return "stone-olive-light";
+        default:
+            return "fluent-slate-light";
+    }
+};
 const mapLegacySessions = (sessions) => Array.isArray(sessions)
     ? sessions.map((session) => ({
         id: typeof session.id === "string" && session.id ? session.id : crypto.randomUUID(),
         templateId: mapLegacyTemplateId(session.template),
+        captureMode: inferCaptureModeFromTemplateId(mapLegacyTemplateId(session.template)),
         title: typeof session.title === "string" ? session.title : "",
         participantText: typeof session.participants === "string" ? session.participants : "",
         date: typeof session.meetingDate === "string" ? session.meetingDate : "",
@@ -86,6 +106,7 @@ const mapLegacyTemplates = (customTemplates) => {
             id: typeof template.id === "string" && template.id.trim() ? template.id : crypto.randomUUID(),
             name: typeof template.label === "string" && template.label.trim() ? template.label.trim() : "Custom template",
             kind: "custom",
+            captureModes: ["meeting-note", "quick-note", "voice-note"],
             promptInstructions: typeof template.templateInstructions === "string" ? template.templateInstructions : "",
             fields: [
                 { id: crypto.randomUUID(), key: "title", label: "Title", type: "text", enabled: template.fields?.title !== false, required: false, position: 1 },
@@ -139,7 +160,7 @@ export const loadLegacyBrowserSnapshot = () => {
             todos: mapLegacyTodos(parsedSettings?.todoItems),
             attachments: [],
             settings: {
-                theme: parsedSettings?.themeFamily || "modern-olive",
+                theme: mapLegacyThemeFamily(parsedSettings?.themeFamily),
                 outputLanguage: parsedSettings?.outputLanguage || "same",
                 preferredDesktopTemplateId: mapLegacyTemplateId(preferredDesktopTemplateId),
                 apiKey: "",

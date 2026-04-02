@@ -22,6 +22,16 @@ const getDetailLevelInstruction = (detailLevel) => {
     };
     return `Match a ${labels[Math.min(5, Math.max(1, Math.round(detailLevel)))]} level of detail.`;
 };
+const getCaptureModeInstruction = (session) => {
+    switch (session.captureMode) {
+        case "quick-note":
+            return "This is a quick note workflow. Keep the output lightweight, clear, and proportionate rather than overly formal meeting minutes.";
+        case "voice-note":
+            return "This is a voice note workflow. Clean up spoken phrasing, keep the note concise, and preserve the sense of a dictated personal/work note unless the template asks for more structure.";
+        default:
+            return "This is a meeting note workflow. Produce clearly structured professional meeting notes rather than a transcript-style recap.";
+    }
+};
 export const generateNotes = async ({ session, settings, template, attachments = [], onEvent, }) => {
     const promptProfile = resolvePromptProfile(settings.promptProfile);
     const activeSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
@@ -54,6 +64,7 @@ export const generateNotes = async ({ session, settings, template, attachments =
         systemTexts: [
             promptProfile.profile.generationSystem,
             promptProfile.profile.generationRules,
+            getCaptureModeInstruction(session),
             outputLanguageInstruction,
             getDetailLevelInstruction(session.detailLevel),
         ],
