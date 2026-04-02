@@ -39,7 +39,7 @@ import {
 } from "../lib/files/attachmentStore";
 
 type AppWorkspace = "notes" | "tasks" | "calendar" | "assistant" | "files";
-type OverlayPanel = "new-note" | "sessions" | "todos" | "backup" | "settings" | "more" | null;
+type OverlayPanel = "new-note" | "people-review" | "sessions" | "todos" | "backup" | "settings" | "more" | null;
 type CommandAction = {
   id: string;
   label: string;
@@ -147,6 +147,8 @@ export const App = () => {
   const [modelPricingSnapshot, setModelPricingSnapshot] = useState<AIModelPricingSnapshot>(createDefaultModelPricingSnapshot);
   const [modelPricingStatus, setModelPricingStatus] = useState(buildModelPricingStatus(createDefaultModelPricingSnapshot()));
   const [isRefreshingModelPricing, setIsRefreshingModelPricing] = useState(false);
+  const [suggestedPeopleToAdd, setSuggestedPeopleToAdd] = useState<string[]>([]);
+  const [selectedSuggestedPeople, setSelectedSuggestedPeople] = useState<string[]>([]);
 
   useEffect(() => {
     void load();
@@ -278,6 +280,17 @@ export const App = () => {
       setIsRefreshingModelPricing(false);
     }
   };
+
+  const parsePeopleFromSession = (participantText: string) =>
+    Array.from(
+      new Map(
+        participantText
+          .split(/[\n,;]+/)
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+          .map((entry) => [entry.toLocaleLowerCase(), entry] as const),
+      ).values(),
+    );
 
   const activeSession = useMemo(
     () => snapshot?.sessions.find((session) => session.id === activeSessionId) ?? snapshot?.sessions[0] ?? null,
@@ -462,6 +475,15 @@ export const App = () => {
           ? "Loaded structured output from a matching local AI cache entry."
           : "Generated structured output with the desktop AI service.",
       );
+      const knownPeople = new Set(snapshot.settings.savedParticipants.map((entry) => entry.trim().toLocaleLowerCase()));
+      const newPeople = parsePeopleFromSession(activeSession.participantText).filter(
+        (entry) => !knownPeople.has(entry.toLocaleLowerCase()),
+      );
+      if (newPeople.length) {
+        setSuggestedPeopleToAdd(newPeople);
+        setSelectedSuggestedPeople(newPeople);
+        setOpenPanel("people-review");
+      }
       setActiveView("output");
     } catch (error) {
       setStatusNote(formatAIErrorMessage(error, "Generation failed."));
@@ -856,6 +878,72 @@ export const App = () => {
             </div>
           </div>
         );
+      case "people-review":
+        return (
+          <div className="sidebar-card overlay-card">
+            <div>
+              <h3>Add people to your database?</h3>
+              <p>These names appeared in the note but are not yet saved in People. Add the ones you want available for future meetings.</p>
+            </div>
+            <div className="section-list">
+              {suggestedPeopleToAdd.map((person) => (
+                <label key={person} className="list-item checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={selectedSuggestedPeople.includes(person)}
+                    onChange={(event) =>
+                      setSelectedSuggestedPeople((current) =>
+                        event.target.checked ? Array.from(new Set([...current, person])) : current.filter((entry) => entry !== person),
+                      )
+                    }
+                  />
+                  <span>
+                    <strong>{person}</strong>
+                    <span className="muted">Save for future People suggestions and quick selection.</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="sidebar-actions">
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => {
+                  if (selectedSuggestedPeople.length) {
+                    void saveSettings({
+                      ...snapshot.settings,
+                      savedParticipants: Array.from(new Set([...snapshot.settings.savedParticipants, ...selectedSuggestedPeople])).sort(),
+                    });
+                    setStatusNote(
+                      selectedSuggestedPeople.length === 1
+                        ? `Added ${selectedSuggestedPeople[0]} to People.`
+                        : `Added ${selectedSuggestedPeople.length} people to People.`,
+                    );
+                  }
+                  setSuggestedPeopleToAdd([]);
+                  setSelectedSuggestedPeople([]);
+                  closeOverlay();
+                }}
+              >
+                Add selected
+              </button>
+              <button className="small-button" type="button" onClick={() => setSelectedSuggestedPeople(suggestedPeopleToAdd)}>
+                Select all
+              </button>
+              <button
+                className="small-button"
+                type="button"
+                onClick={() => {
+                  setSuggestedPeopleToAdd([]);
+                  setSelectedSuggestedPeople([]);
+                  closeOverlay();
+                }}
+              >
+                Not now
+              </button>
+            </div>
+          </div>
+        );
       case "todos":
         return (
           <TodosCard
@@ -1065,6 +1153,7 @@ export const App = () => {
                 session={activeSession}
                 templates={snapshot.templates}
                 attachments={activeAttachments}
+                savedPeople={snapshot.settings.savedParticipants}
                 isTranscribingAudio={isTranscribingAudio}
                 onChange={(session) => void saveSession(session)}
                 onImportImage={() => void handleImportImage()}
@@ -1291,10 +1380,12 @@ export const App = () => {
             <div className="overlay-header">
               <div>
                 <strong>
-                  {openPanel === "sessions"
+                    {openPanel === "sessions"
                     ? "All Sessions"
                     : openPanel === "new-note"
                       ? "New note"
+                    : openPanel === "people-review"
+                      ? "People"
                     : openPanel === "todos"
                         ? "To-dos"
                         : openPanel === "backup"

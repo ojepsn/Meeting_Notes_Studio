@@ -1256,6 +1256,55 @@ select {
   flex-wrap: wrap;
 }
 
+.people-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.people-chip-list,
+.people-suggestion-row {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.people-chip,
+.people-suggestion-chip {
+  border-radius: 999px;
+  border: 1px solid var(--app-accent-border);
+  background: var(--app-accent-soft);
+  color: var(--app-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.people-chip-remove {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  font-size: 1rem;
+}
+
+.people-input-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.people-input-row input {
+  flex: 1;
+}
+
+.people-suggestion-chip {
+  cursor: pointer;
+}
+
 .theme-mode-grid,
 .theme-preview-grid {
   display: grid;

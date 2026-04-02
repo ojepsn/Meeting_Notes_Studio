@@ -1,4 +1,5 @@
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
+import { PeoplePicker } from "../../../components/PeoplePicker";
 import {
   DEFAULT_TEMPLATE_BY_CAPTURE_MODE,
   getTemplatesForCaptureMode,
@@ -12,6 +13,7 @@ interface SessionEditorProps {
   session: SessionRecord;
   templates: TemplateDefinition[];
   attachments: AttachmentRecord[];
+  savedPeople: string[];
   isTranscribingAudio: boolean;
   onChange: (session: SessionRecord) => void;
   onImportTranscript: () => void;
@@ -79,6 +81,7 @@ export const SessionEditor = ({
   session,
   templates,
   attachments,
+  savedPeople,
   isTranscribingAudio,
   onChange,
   onImportTranscript,
@@ -239,12 +242,7 @@ export const SessionEditor = ({
             </div>
             <div className="field">
               <label htmlFor="session-participants">People</label>
-              <input
-                id="session-participants"
-                value={session.participantText}
-                onChange={(event) => update("participantText", event.target.value)}
-                placeholder="Add people"
-              />
+              <PeoplePicker value={session.participantText} savedPeople={savedPeople} onChange={(value) => update("participantText", value)} placeholder="Add people" />
             </div>
             <div className="field">
               <label htmlFor="session-start">Start time</label>
@@ -265,12 +263,7 @@ export const SessionEditor = ({
               </div>
               <div className="field">
                 <label htmlFor="session-participants">People</label>
-                <input
-                  id="session-participants"
-                  value={session.participantText}
-                  onChange={(event) => update("participantText", event.target.value)}
-                  placeholder="Optional context"
-                />
+                <PeoplePicker value={session.participantText} savedPeople={savedPeople} onChange={(value) => update("participantText", value)} placeholder="Optional context" />
               </div>
             </div>
           </details>
