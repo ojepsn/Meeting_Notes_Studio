@@ -22,7 +22,7 @@ export const SessionsSidebar = ({
     const query = filter.trim().toLowerCase();
     if (!query) return sessions;
     return sessions.filter((session) =>
-      [session.title, session.date, session.participantText, session.project, session.department, session.tagsText, session.manualNotes, session.liveTranscript]
+      [session.title, session.date, session.participantText, session.domain, session.project, session.activity, session.tagsText, session.manualNotes, session.liveTranscript]
         .join(" ")
         .toLowerCase()
         .includes(query),
@@ -67,7 +67,7 @@ export const SessionsSidebar = ({
                 {session.date || "No date"} {session.title || "Untitled session"}
               </strong>
               <span className="muted">
-                {[session.participantText, session.project, session.department, session.tagsText].filter(Boolean).join(" · ") || "No metadata yet"}
+                {[session.participantText, session.domain, session.project, session.activity, session.tagsText].filter(Boolean).join(" · ") || "No metadata yet"}
               </span>
             </button>
             <div className="list-item-actions">

@@ -28,8 +28,9 @@ Planned:
 - sessions
 - templates
 - people
+- domain
 - project
-- department
+- activity
 - tags
 - attachments
 - capture/output split

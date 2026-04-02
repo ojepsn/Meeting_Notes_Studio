@@ -19,8 +19,10 @@ interface SessionEditorProps {
   suggestedPeople: string[];
   savedProjects: string[];
   suggestedProjects: string[];
-  savedDepartments: string[];
-  suggestedDepartments: string[];
+  savedDomains: string[];
+  suggestedDomains: string[];
+  savedActivities: string[];
+  suggestedActivities: string[];
   savedTags: string[];
   suggestedTags: string[];
   isTranscribingAudio: boolean;
@@ -105,8 +107,10 @@ export const SessionEditor = ({
   suggestedPeople,
   savedProjects,
   suggestedProjects,
-  savedDepartments,
-  suggestedDepartments,
+  savedDomains,
+  suggestedDomains,
+  savedActivities,
+  suggestedActivities,
   savedTags,
   suggestedTags,
   isTranscribingAudio,
@@ -264,33 +268,51 @@ export const SessionEditor = ({
                   placeholder="Search or add people"
                 />
               </div>
-              <div className="field">
-                <label htmlFor="session-project">Project</label>
-                <TokenPicker
-                  value={session.project}
-                  savedOptions={savedProjects}
-                  suggestedOptions={suggestedProjects}
-                  placeholder="Search or add project"
-                  helperText="Use Project for work you expect to sort and revisit often."
-                  suggestionSummary="Recent projects"
-                  suggestionBadgeText="From saved Projects"
-                  mode="single"
-                  onChange={(value) => update("project", value)}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="session-department">Department</label>
-                <TokenPicker
-                  value={session.department}
-                  savedOptions={savedDepartments}
-                  suggestedOptions={suggestedDepartments}
-                  placeholder="Search or add department"
-                  helperText="Use Department for the main business area behind this note."
-                  suggestionSummary="Recent departments"
-                  suggestionBadgeText="From saved Departments"
-                  mode="single"
-                  onChange={(value) => update("department", value)}
-                />
+              <div className="field field-wide metadata-triplet">
+                <div className="metadata-triplet-grid">
+                  <div className="field metadata-subfield">
+                    <label htmlFor="session-domain">Domain</label>
+                    <TokenPicker
+                      value={session.domain}
+                      savedOptions={savedDomains}
+                      suggestedOptions={suggestedDomains}
+                      placeholder="Search or add domain"
+                      helperText="Use Domain for the top-level business area behind this note."
+                      suggestionSummary="Recent domains"
+                      suggestionBadgeText="From saved Domains"
+                      mode="single"
+                      onChange={(value) => update("domain", value)}
+                    />
+                  </div>
+                  <div className="field metadata-subfield">
+                    <label htmlFor="session-project">Project</label>
+                    <TokenPicker
+                      value={session.project}
+                      savedOptions={savedProjects}
+                      suggestedOptions={suggestedProjects}
+                      placeholder="Search or add project"
+                      helperText="Use Project for work you expect to sort and revisit often."
+                      suggestionSummary="Recent projects"
+                      suggestionBadgeText="From saved Projects"
+                      mode="single"
+                      onChange={(value) => update("project", value)}
+                    />
+                  </div>
+                  <div className="field metadata-subfield">
+                    <label htmlFor="session-activity">Activity</label>
+                    <TokenPicker
+                      value={session.activity}
+                      savedOptions={savedActivities}
+                      suggestedOptions={suggestedActivities}
+                      placeholder="Search or add activity"
+                      helperText="Use Activity for the concrete stream of work inside the project or domain."
+                      suggestionSummary="Recent activities"
+                      suggestionBadgeText="From saved Activities"
+                      mode="single"
+                      onChange={(value) => update("activity", value)}
+                    />
+                  </div>
+                </div>
               </div>
               <div className="field">
                 <label htmlFor="session-start">Start time</label>
@@ -307,7 +329,7 @@ export const SessionEditor = ({
                   savedOptions={savedTags}
                   suggestedOptions={suggestedTags}
                   placeholder="Add tags like q2-planning, budget, hiring"
-                  helperText="Use Tags for flexible cross-cutting labels when Project or Department alone is not enough."
+                  helperText="Use Tags for flexible cross-cutting labels when Domain, Project, and Activity alone are not enough."
                   suggestionSummary="Recent tags"
                   suggestionBadgeText="From saved Tags"
                   onChange={(value) => update("tagsText", value)}
@@ -337,32 +359,49 @@ export const SessionEditor = ({
                   placeholder="Search or add optional context"
                 />
               </div>
-              <div className="field">
-                <label htmlFor="session-project">Project</label>
-                <TokenPicker
-                  value={session.project}
-                  savedOptions={savedProjects}
-                  suggestedOptions={suggestedProjects}
-                  placeholder="Search or add project"
-                  helperText="Optional, but useful when you want to group related notes later."
-                  suggestionSummary="Recent projects"
-                  suggestionBadgeText="From saved Projects"
-                  mode="single"
-                  onChange={(value) => update("project", value)}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="session-department">Department</label>
-                <TokenPicker
-                  value={session.department}
-                  savedOptions={savedDepartments}
-                  suggestedOptions={suggestedDepartments}
-                  placeholder="Search or add department"
-                  suggestionSummary="Recent departments"
-                  suggestionBadgeText="From saved Departments"
-                  mode="single"
-                  onChange={(value) => update("department", value)}
-                />
+              <div className="field field-wide metadata-triplet">
+                <div className="metadata-triplet-grid">
+                  <div className="field metadata-subfield">
+                    <label htmlFor="session-domain">Domain</label>
+                    <TokenPicker
+                      value={session.domain}
+                      savedOptions={savedDomains}
+                      suggestedOptions={suggestedDomains}
+                      placeholder="Search or add domain"
+                      suggestionSummary="Recent domains"
+                      suggestionBadgeText="From saved Domains"
+                      mode="single"
+                      onChange={(value) => update("domain", value)}
+                    />
+                  </div>
+                  <div className="field metadata-subfield">
+                    <label htmlFor="session-project">Project</label>
+                    <TokenPicker
+                      value={session.project}
+                      savedOptions={savedProjects}
+                      suggestedOptions={suggestedProjects}
+                      placeholder="Search or add project"
+                      helperText="Optional, but useful when you want to group related notes later."
+                      suggestionSummary="Recent projects"
+                      suggestionBadgeText="From saved Projects"
+                      mode="single"
+                      onChange={(value) => update("project", value)}
+                    />
+                  </div>
+                  <div className="field metadata-subfield">
+                    <label htmlFor="session-activity">Activity</label>
+                    <TokenPicker
+                      value={session.activity}
+                      savedOptions={savedActivities}
+                      suggestedOptions={suggestedActivities}
+                      placeholder="Search or add activity"
+                      suggestionSummary="Recent activities"
+                      suggestionBadgeText="From saved Activities"
+                      mode="single"
+                      onChange={(value) => update("activity", value)}
+                    />
+                  </div>
+                </div>
               </div>
               <div className="field field-wide">
                 <label htmlFor="session-tags">Tags</label>
@@ -371,7 +410,7 @@ export const SessionEditor = ({
                   savedOptions={savedTags}
                   suggestedOptions={suggestedTags}
                   placeholder="Add tags like q2-planning, budget, hiring"
-                  helperText="Use Tags for flexible labels that cut across projects, departments, and note types."
+                  helperText="Use Tags for flexible labels that cut across domains, projects, activities, and note types."
                   suggestionSummary="Recent tags"
                   suggestionBadgeText="From saved Tags"
                   onChange={(value) => update("tagsText", value)}

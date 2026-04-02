@@ -37,7 +37,8 @@ export interface SessionRecord {
   title: string;
   participantText: string;
   project: string;
-  department: string;
+  domain: string;
+  activity: string;
   tagsText: string;
   date: string;
   startTime: string;
@@ -103,7 +104,8 @@ export interface LocalAppSettings {
   transcriptionModel: string;
   savedParticipants: string[];
   savedProjects: string[];
-  savedDepartments: string[];
+  savedDomains: string[];
+  savedActivities: string[];
   savedTags: string[];
   abbreviations: Array<{ id: string; shortForm: string; fullForm: string }>;
   promptProfile: PromptProfile;

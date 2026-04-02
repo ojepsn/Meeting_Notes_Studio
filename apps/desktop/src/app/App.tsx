@@ -388,11 +388,18 @@ export const App = () => {
     return rankSavedValues(snapshot.sessions, snapshot.settings.savedProjects, (session) => (session.project ? [session.project] : []));
   }, [snapshot]);
 
-  const suggestedDepartments = useMemo(() => {
+  const suggestedDomains = useMemo(() => {
     if (!snapshot) {
       return [];
     }
-    return rankSavedValues(snapshot.sessions, snapshot.settings.savedDepartments, (session) => (session.department ? [session.department] : []));
+    return rankSavedValues(snapshot.sessions, snapshot.settings.savedDomains, (session) => (session.domain ? [session.domain] : []));
+  }, [snapshot]);
+
+  const suggestedActivities = useMemo(() => {
+    if (!snapshot) {
+      return [];
+    }
+    return rankSavedValues(snapshot.sessions, snapshot.settings.savedActivities, (session) => (session.activity ? [session.activity] : []));
   }, [snapshot]);
 
   const suggestedTags = useMemo(() => {
@@ -477,7 +484,8 @@ export const App = () => {
         : session.startTime.trim();
     const people = session.participantText.trim();
     const project = session.project.trim();
-    const department = session.department.trim();
+    const domain = session.domain.trim();
+    const activity = session.activity.trim();
     const tags = session.tagsText.trim();
     const highlights = session.quickHighlights.trim();
     const manualNotes = session.manualNotes.trim();
@@ -486,13 +494,14 @@ export const App = () => {
     if (title) {
       segments.push(title);
     }
-    if (date || time || people || project || department || tags) {
+    if (date || time || people || domain || project || activity || tags) {
       const metaLines = [
         date,
         time,
         people ? `People: ${people}` : "",
+        domain ? `Domain: ${domain}` : "",
         project ? `Project: ${project}` : "",
-        department ? `Department: ${department}` : "",
+        activity ? `Activity: ${activity}` : "",
         tags ? `Tags: ${tags}` : "",
       ].filter(Boolean);
       if (metaLines.length) {
@@ -1343,7 +1352,7 @@ export const App = () => {
         id: `session-${session.id}`,
         label: `Open session: ${session.title || "Untitled session"}`,
         description: session.date || "Recent session",
-        keywords: [session.title, session.participantText, session.project, session.department, session.tagsText, session.date].filter(Boolean) as string[],
+        keywords: [session.title, session.participantText, session.domain, session.project, session.activity, session.tagsText, session.date].filter(Boolean) as string[],
         action: () => {
           setActiveSessionId(session.id);
           setActiveView("capture");
@@ -1677,8 +1686,10 @@ export const App = () => {
                 suggestedPeople={suggestedPeople}
                 savedProjects={snapshot.settings.savedProjects}
                 suggestedProjects={suggestedProjects}
-                savedDepartments={snapshot.settings.savedDepartments}
-                suggestedDepartments={suggestedDepartments}
+                savedDomains={snapshot.settings.savedDomains}
+                suggestedDomains={suggestedDomains}
+                savedActivities={snapshot.settings.savedActivities}
+                suggestedActivities={suggestedActivities}
                 savedTags={snapshot.settings.savedTags}
                 suggestedTags={suggestedTags}
                 isTranscribingAudio={isTranscribingAudio}
@@ -1747,10 +1758,16 @@ export const App = () => {
                     <span className="muted">Project</span>
                   </div>
                 ) : null}
-                {activeSession.department ? (
+                {activeSession.domain ? (
                   <div className="list-item">
-                    <strong>{activeSession.department}</strong>
-                    <span className="muted">Department</span>
+                    <strong>{activeSession.domain}</strong>
+                    <span className="muted">Domain</span>
+                  </div>
+                ) : null}
+                {activeSession.activity ? (
+                  <div className="list-item">
+                    <strong>{activeSession.activity}</strong>
+                    <span className="muted">Activity</span>
                   </div>
                 ) : null}
                 {activeSession.tagsText ? (

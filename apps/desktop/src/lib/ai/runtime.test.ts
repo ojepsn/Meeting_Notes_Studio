@@ -13,7 +13,8 @@ const settings: LocalAppSettings = {
   transcriptionModel: "gpt-4o-mini-transcribe",
   savedParticipants: [],
   savedProjects: [],
-  savedDepartments: [],
+  savedDomains: [],
+  savedActivities: [],
   savedTags: [],
   abbreviations: [],
   promptProfile: {

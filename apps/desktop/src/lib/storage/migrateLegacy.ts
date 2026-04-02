@@ -158,7 +158,8 @@ const mapLegacySessions = (sessions: LegacySession[] | null): SessionRecord[] =>
         title: typeof session.title === "string" ? session.title : "",
         participantText: typeof session.participants === "string" ? session.participants : "",
         project: "",
-        department: "",
+        domain: "",
+        activity: "",
         tagsText: "",
         date: typeof session.meetingDate === "string" ? session.meetingDate : "",
         startTime: typeof session.meetingStartTime === "string" ? session.meetingStartTime : "",
@@ -269,7 +270,8 @@ export const loadLegacyBrowserSnapshot = (): DesktopAppSnapshot | null => {
         transcriptionModel: "gpt-4o-mini-transcribe",
         savedParticipants: Array.isArray(parsedSettings?.participantDirectory) ? parsedSettings.participantDirectory.filter(Boolean) : [],
         savedProjects: [],
-        savedDepartments: [],
+        savedDomains: [],
+        savedActivities: [],
         savedTags: [],
         abbreviations: Array.isArray(parsedSettings?.abbreviationDirectory)
           ? parsedSettings.abbreviationDirectory

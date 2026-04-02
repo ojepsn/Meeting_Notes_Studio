@@ -69,8 +69,9 @@ Purpose:
 Includes:
 
 - saved people
+- saved domains
 - saved projects
-- saved departments
+- saved activities
 - saved tags
 - abbreviations
 

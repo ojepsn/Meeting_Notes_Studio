@@ -8,8 +8,10 @@ interface SessionEditorProps {
     suggestedPeople: string[];
     savedProjects: string[];
     suggestedProjects: string[];
-    savedDepartments: string[];
-    suggestedDepartments: string[];
+    savedDomains: string[];
+    suggestedDomains: string[];
+    savedActivities: string[];
+    suggestedActivities: string[];
     savedTags: string[];
     suggestedTags: string[];
     isTranscribingAudio: boolean;
@@ -27,5 +29,5 @@ interface SessionEditorProps {
     onRemoveAttachment: (attachmentId: string) => void;
     onUpdateAttachment: (attachment: AttachmentRecord) => void;
 }
-export declare const SessionEditor: ({ session, templates, attachments, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDepartments, suggestedDepartments, savedTags, suggestedTags, isTranscribingAudio, recordingMode, isRecordingAudio, recordingStatusNote, onChange, onImportTranscript, onImportAudio, onImportImage, onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment, onUpdateAttachment, }: SessionEditorProps) => import("react/jsx-runtime").JSX.Element;
+export declare const SessionEditor: ({ session, templates, attachments, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, savedTags, suggestedTags, isTranscribingAudio, recordingMode, isRecordingAudio, recordingStatusNote, onChange, onImportTranscript, onImportAudio, onImportImage, onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment, onUpdateAttachment, }: SessionEditorProps) => import("react/jsx-runtime").JSX.Element;
 export {};

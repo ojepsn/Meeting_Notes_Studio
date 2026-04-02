@@ -226,7 +226,8 @@ export const SettingsCard = ({
   const [showAdvancedTranscriptionModels, setShowAdvancedTranscriptionModels] = useState(false);
   const [personDraft, setPersonDraft] = useState("");
   const [projectDraft, setProjectDraft] = useState("");
-  const [departmentDraft, setDepartmentDraft] = useState("");
+  const [domainDraft, setDomainDraft] = useState("");
+  const [activityDraft, setActivityDraft] = useState("");
   const [tagDraft, setTagDraft] = useState("");
   const [abbrShort, setAbbrShort] = useState("");
   const [abbrFull, setAbbrFull] = useState("");
@@ -646,7 +647,7 @@ export const SettingsCard = ({
           <div className="sidebar-card">
             <div>
               <h3>People & labels</h3>
-              <p>Keep reusable People, Projects, Departments, Tags, and shorthand in one place so capture stays fast while filtering stays structured.</p>
+              <p>Keep reusable People, Domains, Projects, Activities, Tags, and shorthand in one place so capture stays fast while filtering stays structured.</p>
             </div>
             <div className="section-divider">
               <div className="inline-row">
@@ -749,34 +750,34 @@ export const SettingsCard = ({
             <div className="section-divider">
               <div className="inline-row">
                 <div className="field">
-                  <label htmlFor="department-draft">Saved departments</label>
+                  <label htmlFor="domain-draft">Saved domains</label>
                   <input
-                    id="department-draft"
-                    value={departmentDraft}
-                    onChange={(event) => setDepartmentDraft(event.target.value)}
-                    placeholder="Add department"
+                    id="domain-draft"
+                    value={domainDraft}
+                    onChange={(event) => setDomainDraft(event.target.value)}
+                    placeholder="Add domain"
                   />
                 </div>
                 <button
                   className="small-button inline-action"
                   type="button"
                   onClick={() => {
-                    const nextValue = departmentDraft.trim();
+                    const nextValue = domainDraft.trim();
                     if (!nextValue) return;
                     onChange({
                       ...settings,
-                      savedDepartments: Array.from(new Set([...settings.savedDepartments, nextValue])).sort(),
+                      savedDomains: Array.from(new Set([...settings.savedDomains, nextValue])).sort(),
                     });
-                    setDepartmentDraft("");
+                    setDomainDraft("");
                   }}
                 >
                   Add
                 </button>
               </div>
               <div className="section-list">
-                {settings.savedDepartments.map((department) => (
-                  <div key={department} className="list-item">
-                    <strong>{department}</strong>
+                {settings.savedDomains.map((domain) => (
+                  <div key={domain} className="list-item">
+                    <strong>{domain}</strong>
                     <div className="list-item-actions">
                       <button
                         className="small-button danger-button"
@@ -784,7 +785,56 @@ export const SettingsCard = ({
                         onClick={() =>
                           onChange({
                             ...settings,
-                            savedDepartments: settings.savedDepartments.filter((entry) => entry !== department),
+                            savedDomains: settings.savedDomains.filter((entry) => entry !== domain),
+                          })
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="section-divider">
+              <div className="inline-row">
+                <div className="field">
+                  <label htmlFor="activity-draft">Saved activities</label>
+                  <input
+                    id="activity-draft"
+                    value={activityDraft}
+                    onChange={(event) => setActivityDraft(event.target.value)}
+                    placeholder="Add activity"
+                  />
+                </div>
+                <button
+                  className="small-button inline-action"
+                  type="button"
+                  onClick={() => {
+                    const nextValue = activityDraft.trim();
+                    if (!nextValue) return;
+                    onChange({
+                      ...settings,
+                      savedActivities: Array.from(new Set([...settings.savedActivities, nextValue])).sort(),
+                    });
+                    setActivityDraft("");
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+              <div className="section-list">
+                {settings.savedActivities.map((activity) => (
+                  <div key={activity} className="list-item">
+                    <strong>{activity}</strong>
+                    <div className="list-item-actions">
+                      <button
+                        className="small-button danger-button"
+                        type="button"
+                        onClick={() =>
+                          onChange({
+                            ...settings,
+                            savedActivities: settings.savedActivities.filter((entry) => entry !== activity),
                           })
                         }
                       >

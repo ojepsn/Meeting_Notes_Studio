@@ -658,6 +658,20 @@ select {
   grid-column: 1 / -1;
 }
 
+.metadata-triplet {
+  min-width: 0;
+}
+
+.metadata-triplet-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.metadata-subfield {
+  min-width: 0;
+}
+
 .section-list,
 .todo-list,
 .session-list {
@@ -1551,6 +1565,10 @@ select {
   }
 
   .model-picker-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metadata-triplet-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -28,8 +28,9 @@ Typical fields:
 - title
 - expandable meeting details:
   - people
+  - domain
   - project
-  - department
+  - activity
   - tags
   - date
   - start time
@@ -55,7 +56,7 @@ Typical fields:
 
 - title
 - main note body
-- optional date/time/people/project/department/tag details
+- optional date/time/people/domain/project/activity/tag details
 
 Default expectation:
 
@@ -93,8 +94,9 @@ This is where rough material is collected:
 - images
 - audio
 - people
+- domain
 - project
-- department
+- activity
 - tags
 - time/date context
 
@@ -133,18 +135,20 @@ The `People` field supports:
 
 After generation, the app can suggest saving newly seen people into the shared `People` database if they are not already stored.
 
-## Project, Department, and Tags
+## Domain, Project, Activity, and Tags
 
 The Notes workspace also supports lightweight classification metadata:
 
+- `Domain`
 - `Project`
-- `Department`
+- `Activity`
 - `Tags`
 
 Best-practice usage in the app:
 
+- use `Domain` for the top-level business area behind the note
 - use `Project` for recurring work streams you want to sort and revisit often
-- use `Department` for the main business area behind the note
+- use `Activity` for the concrete stream of work inside the project or domain
 - use `Tags` for flexible cross-cutting labels such as initiatives, activities, themes, or temporary tracking labels
 
 These fields use the same modern picker pattern as `People`:
