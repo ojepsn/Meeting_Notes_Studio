@@ -14,6 +14,7 @@ interface SessionEditorProps {
   templates: TemplateDefinition[];
   attachments: AttachmentRecord[];
   savedPeople: string[];
+  suggestedPeople: string[];
   isTranscribingAudio: boolean;
   onChange: (session: SessionRecord) => void;
   onImportTranscript: () => void;
@@ -37,7 +38,6 @@ const CAPTURE_MODE_META: Record<
   {
     label: string;
     subtitle: string;
-    emptySteps: string[];
     primaryFieldLabel: string;
     primaryFieldPlaceholder: string;
   }
@@ -45,33 +45,18 @@ const CAPTURE_MODE_META: Record<
   "meeting-note": {
     label: "Meeting note",
     subtitle: "Best for meetings, calls, interviews, and structured minutes.",
-    emptySteps: [
-      "Choose the meeting template that fits this conversation best.",
-      "Capture rough notes, transcript text, or imported material from the right-side tools.",
-      "Switch to Output to generate structured meeting notes when the capture feels complete.",
-    ],
     primaryFieldLabel: "Manual notes",
     primaryFieldPlaceholder: "Capture the rough meeting notes here. The AI will combine this with transcript and context.",
   },
   "quick-note": {
     label: "Quick note",
     subtitle: "Best for fast typed notes with minimal setup and low metadata.",
-    emptySteps: [
-      "Pick a lightweight note template if you want extra structure.",
-      "Write directly into the note body. Keep metadata collapsed unless it helps.",
-      "Switch to Output when you want the note cleaned up or reformatted.",
-    ],
     primaryFieldLabel: "Note",
     primaryFieldPlaceholder: "Write the note here. Keep it rough and fast; polishing comes later.",
   },
   "voice-note": {
     label: "Voice note",
     subtitle: "Best for dictation, spoken reflections, and quick audio-first capture.",
-    emptySteps: [
-      "Use the capture tools to upload or transcribe audio, or dictate directly into the transcript field.",
-      "Add a short title or brief written note only if it helps later.",
-      "Switch to Output when you want the spoken capture turned into a polished note.",
-    ],
     primaryFieldLabel: "Dictation / transcript",
     primaryFieldPlaceholder: "Dictated or transcribed speech should live here as the main capture source.",
   },
@@ -82,6 +67,7 @@ export const SessionEditor = ({
   templates,
   attachments,
   savedPeople,
+  suggestedPeople,
   isTranscribingAudio,
   onChange,
   onImportTranscript,
@@ -113,13 +99,6 @@ export const SessionEditor = ({
     })) ?? [];
   const imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
   const otherAttachments = attachments.filter((attachment) => attachment.kind !== "image");
-  const hasCaptureContent = Boolean(
-    session.manualNotes.trim() ||
-      session.quickHighlights.trim() ||
-      session.liveTranscript.trim() ||
-      session.uploadedTranscript.trim() ||
-      attachments.length,
-  );
   const modeMeta = CAPTURE_MODE_META[session.captureMode];
   const showMeetingMeta = session.captureMode === "meeting-note";
   const showQuickHighlights = session.captureMode === "meeting-note";
@@ -195,17 +174,6 @@ export const SessionEditor = ({
         ))}
       </div>
 
-      {!hasCaptureContent ? (
-        <div className="empty-state-card compact-empty-state">
-          <h3>{modeMeta.label}</h3>
-          <ol className="empty-state-steps">
-            {modeMeta.emptySteps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
-
       <div className="form-grid">
         <div className="field field-wide">
           <label htmlFor="template-select">Template</label>
@@ -242,7 +210,13 @@ export const SessionEditor = ({
             </div>
             <div className="field">
               <label htmlFor="session-participants">People</label>
-              <PeoplePicker value={session.participantText} savedPeople={savedPeople} onChange={(value) => update("participantText", value)} placeholder="Add people" />
+              <PeoplePicker
+                value={session.participantText}
+                savedPeople={savedPeople}
+                suggestedPeople={suggestedPeople}
+                onChange={(value) => update("participantText", value)}
+                placeholder="Search or add people"
+              />
             </div>
             <div className="field">
               <label htmlFor="session-start">Start time</label>
@@ -263,7 +237,13 @@ export const SessionEditor = ({
               </div>
               <div className="field">
                 <label htmlFor="session-participants">People</label>
-                <PeoplePicker value={session.participantText} savedPeople={savedPeople} onChange={(value) => update("participantText", value)} placeholder="Optional context" />
+                <PeoplePicker
+                  value={session.participantText}
+                  savedPeople={savedPeople}
+                  suggestedPeople={suggestedPeople}
+                  onChange={(value) => update("participantText", value)}
+                  placeholder="Search or add optional context"
+                />
               </div>
             </div>
           </details>

@@ -4,6 +4,7 @@ interface SessionEditorProps {
     templates: TemplateDefinition[];
     attachments: AttachmentRecord[];
     savedPeople: string[];
+    suggestedPeople: string[];
     isTranscribingAudio: boolean;
     onChange: (session: SessionRecord) => void;
     onImportTranscript: () => void;
@@ -13,5 +14,5 @@ interface SessionEditorProps {
     onRemoveAttachment: (attachmentId: string) => void;
     onUpdateAttachment: (attachment: AttachmentRecord) => void;
 }
-export declare const SessionEditor: ({ session, templates, attachments, savedPeople, isTranscribingAudio, onChange, onImportTranscript, onImportAudio, onImportImage, onTranscribeAudio, onRemoveAttachment, onUpdateAttachment, }: SessionEditorProps) => import("react/jsx-runtime").JSX.Element;
+export declare const SessionEditor: ({ session, templates, attachments, savedPeople, suggestedPeople, isTranscribingAudio, onChange, onImportTranscript, onImportAudio, onImportImage, onTranscribeAudio, onRemoveAttachment, onUpdateAttachment, }: SessionEditorProps) => import("react/jsx-runtime").JSX.Element;
 export {};

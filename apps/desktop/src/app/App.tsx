@@ -292,6 +292,68 @@ export const App = () => {
       ).values(),
     );
 
+  const suggestedPeople = useMemo(() => {
+    if (!snapshot) {
+      return [];
+    }
+
+    const savedPeopleLookup = new Map(
+      snapshot.settings.savedParticipants
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => [entry.toLocaleLowerCase(), entry] as const),
+    );
+    const peopleStats = new Map<string, { name: string; count: number; lastSeen: number }>();
+
+    snapshot.sessions.forEach((session) => {
+      const lastSeen = Date.parse(session.updatedAt || session.createdAt || "") || 0;
+      parsePeopleFromSession(session.participantText).forEach((person) => {
+        const key = person.toLocaleLowerCase();
+        const existing = peopleStats.get(key);
+        const canonicalName = savedPeopleLookup.get(key) ?? person;
+        if (existing) {
+          existing.count += 1;
+          existing.lastSeen = Math.max(existing.lastSeen, lastSeen);
+          existing.name = canonicalName;
+        } else {
+          peopleStats.set(key, {
+            name: canonicalName,
+            count: 1,
+            lastSeen,
+          });
+        }
+      });
+    });
+
+    const rankedSavedPeople = snapshot.settings.savedParticipants
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map((entry) => {
+        const key = entry.toLocaleLowerCase();
+        const stats = peopleStats.get(key);
+        return {
+          name: entry,
+          count: stats?.count ?? 0,
+          lastSeen: stats?.lastSeen ?? 0,
+        };
+      })
+      .sort((left, right) => {
+        if (right.count !== left.count) {
+          return right.count - left.count;
+        }
+        if (right.lastSeen !== left.lastSeen) {
+          return right.lastSeen - left.lastSeen;
+        }
+        return left.name.localeCompare(right.name);
+      });
+
+    const prioritized = rankedSavedPeople.filter((entry) => entry.count > 0).slice(0, 6).map((entry) => entry.name);
+    if (prioritized.length) {
+      return prioritized;
+    }
+    return rankedSavedPeople.slice(0, 6).map((entry) => entry.name);
+  }, [snapshot]);
+
   const activeSession = useMemo(
     () => snapshot?.sessions.find((session) => session.id === activeSessionId) ?? snapshot?.sessions[0] ?? null,
     [activeSessionId, snapshot],
@@ -882,8 +944,10 @@ export const App = () => {
         return (
           <div className="sidebar-card overlay-card">
             <div>
-              <h3>Add people to your database?</h3>
-              <p>These names appeared in the note but are not yet saved in People. Add the ones you want available for future meetings.</p>
+              <h3>Save new people to People?</h3>
+              <p>
+                These names were used in this note but are not yet saved in the People database. Save the ones you want available for future search and quick selection.
+              </p>
             </div>
             <div className="section-list">
               {suggestedPeopleToAdd.map((person) => (
@@ -899,7 +963,7 @@ export const App = () => {
                   />
                   <span>
                     <strong>{person}</strong>
-                    <span className="muted">Save for future People suggestions and quick selection.</span>
+                    <span className="muted">Currently only in this note. Save it to reuse in future notes.</span>
                   </span>
                 </label>
               ))}
@@ -925,7 +989,7 @@ export const App = () => {
                   closeOverlay();
                 }}
               >
-                Add selected
+                Save selected to People
               </button>
               <button className="small-button" type="button" onClick={() => setSelectedSuggestedPeople(suggestedPeopleToAdd)}>
                 Select all
@@ -1154,6 +1218,7 @@ export const App = () => {
                 templates={snapshot.templates}
                 attachments={activeAttachments}
                 savedPeople={snapshot.settings.savedParticipants}
+                suggestedPeople={suggestedPeople}
                 isTranscribingAudio={isTranscribingAudio}
                 onChange={(session) => void saveSession(session)}
                 onImportImage={() => void handleImportImage()}
