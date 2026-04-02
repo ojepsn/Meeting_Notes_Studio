@@ -14,8 +14,8 @@ describe("resolvePromptProfile", () => {
         expect(resolved.version).toBe(AI_PROMPT_PROFILE_VERSION);
         expect(resolved.profile.meetingMinutesSystem).toContain("meeting-minutes writer");
         expect(resolved.profile.meetingMinutesRules).toContain("Write professional meeting minutes from the source material");
-        expect(resolved.profile.personalNotesSystem).toContain("professional note editor");
-        expect(resolved.profile.personalNotesRules).toContain("Polish personal notes and dictations");
+        expect(resolved.profile.personalNotesSystem).toContain("expert editor for personal notes");
+        expect(resolved.profile.personalNotesRules).toContain("Polish the source into a clean, readable note");
         expect(resolved.profile.revisionRules).toContain("requested improvements");
         expect(resolved.profile.translationRules).toContain("Translate the current output faithfully");
     });

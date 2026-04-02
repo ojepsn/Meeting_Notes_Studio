@@ -35,6 +35,7 @@ It is intentionally split by audience and task:
 ## Development
 
 - [Local development](./development/local-development.md)
+- [Testing strategy](./development/testing-strategy.md)
 - [Desktop release automation](./desktop-release-automation.md)
 
 ## Documentation Principles
