@@ -10,8 +10,10 @@ import {
   type TodoRecord,
 } from "@notesmith/domain";
 import {
-  DEFAULT_GENERATION_RULES,
-  DEFAULT_GENERATION_SYSTEM_PROMPT,
+  DEFAULT_MEETING_MINUTES_RULES,
+  DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
+  DEFAULT_PERSONAL_NOTES_RULES,
+  DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
   DEFAULT_REVISION_RULES,
   DEFAULT_TRANSLATION_RULES,
 } from "@notesmith/prompts";
@@ -76,13 +78,43 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   savedParticipants: [],
   abbreviations: [],
   promptProfile: {
-    generationSystem: DEFAULT_GENERATION_SYSTEM_PROMPT,
-    generationRules: DEFAULT_GENERATION_RULES,
+    meetingMinutesSystem: DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
+    meetingMinutesRules: DEFAULT_MEETING_MINUTES_RULES,
+    personalNotesSystem: DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
+    personalNotesRules: DEFAULT_PERSONAL_NOTES_RULES,
     revisionRules: DEFAULT_REVISION_RULES,
     translationRules: DEFAULT_TRANSLATION_RULES,
     extraBlocks: [],
   },
 });
+
+const normalizePromptProfile = (promptProfile: Partial<LocalAppSettings["promptProfile"]> | undefined) => {
+  const defaults = createDefaultSettings().promptProfile;
+  const legacyPromptProfile = promptProfile as
+    | (Partial<LocalAppSettings["promptProfile"]> & {
+        generationSystem?: string;
+        generationRules?: string;
+      })
+    | undefined;
+
+  return {
+    ...defaults,
+    ...(promptProfile || {}),
+    meetingMinutesSystem:
+      promptProfile?.meetingMinutesSystem?.trim() ||
+      legacyPromptProfile?.generationSystem?.trim() ||
+      defaults.meetingMinutesSystem,
+    meetingMinutesRules:
+      promptProfile?.meetingMinutesRules?.trim() ||
+      legacyPromptProfile?.generationRules?.trim() ||
+      defaults.meetingMinutesRules,
+    personalNotesSystem: promptProfile?.personalNotesSystem?.trim() || defaults.personalNotesSystem,
+    personalNotesRules: promptProfile?.personalNotesRules?.trim() || defaults.personalNotesRules,
+    revisionRules: promptProfile?.revisionRules?.trim() || defaults.revisionRules,
+    translationRules: promptProfile?.translationRules?.trim() || defaults.translationRules,
+    extraBlocks: Array.isArray(promptProfile?.extraBlocks) ? promptProfile.extraBlocks : [],
+  };
+};
 
 export const createDefaultSnapshot = (): DesktopAppSnapshot => ({
   sessions: [
@@ -156,6 +188,7 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
   ...settings,
   textModel: normalizeTextModelId(settings.textModel),
   transcriptionModel: normalizeTranscriptionModelId(settings.transcriptionModel),
+  promptProfile: normalizePromptProfile(settings.promptProfile),
 });
 
 class BrowserEntityRepository implements AppRepository {

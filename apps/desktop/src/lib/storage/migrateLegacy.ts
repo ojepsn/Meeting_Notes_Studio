@@ -10,8 +10,10 @@ import type {
 } from "@notesmith/domain";
 import { BUILTIN_TEMPLATES } from "@notesmith/domain";
 import {
-  DEFAULT_GENERATION_RULES,
-  DEFAULT_GENERATION_SYSTEM_PROMPT,
+  DEFAULT_MEETING_MINUTES_RULES,
+  DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
+  DEFAULT_PERSONAL_NOTES_RULES,
+  DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
   DEFAULT_REVISION_RULES,
   DEFAULT_TRANSLATION_RULES,
 } from "@notesmith/prompts";
@@ -100,14 +102,16 @@ const normalizePromptBlocks = (blocks: LegacyPromptBlock[] | undefined): PromptB
     : [];
 
 const normalizePromptProfile = (settings: LegacySettings | null): PromptProfile => ({
-  generationSystem:
+  meetingMinutesSystem:
     typeof settings?.promptSettings?.generationSystem === "string" && settings.promptSettings.generationSystem.trim()
       ? settings.promptSettings.generationSystem
-      : DEFAULT_GENERATION_SYSTEM_PROMPT,
-  generationRules:
+      : DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
+  meetingMinutesRules:
     typeof settings?.promptSettings?.generationRules === "string" && settings.promptSettings.generationRules.trim()
       ? settings.promptSettings.generationRules
-      : DEFAULT_GENERATION_RULES,
+      : DEFAULT_MEETING_MINUTES_RULES,
+  personalNotesSystem: DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
+  personalNotesRules: DEFAULT_PERSONAL_NOTES_RULES,
   revisionRules:
     typeof settings?.promptSettings?.revisionRules === "string" && settings.promptSettings.revisionRules.trim()
       ? settings.promptSettings.revisionRules

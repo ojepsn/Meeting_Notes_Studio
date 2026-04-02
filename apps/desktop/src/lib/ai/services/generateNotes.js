@@ -57,13 +57,15 @@ export const generateNotes = async ({ session, settings, template, attachments =
         .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt))
         .map((attachment, index) => `- Image ${index + 1}: ${attachment.caption.trim() || attachment.filename} (${attachment.filename})`)
         .join("\n");
+    const generationPromptTexts = session.captureMode === "meeting-note"
+        ? [promptProfile.profile.meetingMinutesSystem, promptProfile.profile.meetingMinutesRules]
+        : [promptProfile.profile.personalNotesSystem, promptProfile.profile.personalNotesRules];
     return executeAITextOperation({
         settings,
         operation: "generate-notes",
         promptVersion: promptProfile.version,
         systemTexts: [
-            promptProfile.profile.generationSystem,
-            promptProfile.profile.generationRules,
+            ...generationPromptTexts,
             getCaptureModeInstruction(session),
             outputLanguageInstruction,
             getDetailLevelInstruction(session.detailLevel),

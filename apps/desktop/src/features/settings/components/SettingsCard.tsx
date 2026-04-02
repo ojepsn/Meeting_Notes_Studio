@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import type { LocalAppSettings, PromptBlock, TemplateDefinition } from "@notesmith/domain";
 import { BUILTIN_TEMPLATES } from "@notesmith/domain";
 import {
-  DEFAULT_GENERATION_RULES,
-  DEFAULT_GENERATION_SYSTEM_PROMPT,
+  DEFAULT_MEETING_MINUTES_RULES,
+  DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
+  DEFAULT_PERSONAL_NOTES_RULES,
+  DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
   DEFAULT_REVISION_RULES,
   DEFAULT_TRANSLATION_RULES,
 } from "@notesmith/prompts";
@@ -741,68 +743,128 @@ export const SettingsCard = ({
           <div className="sidebar-card">
             <div>
               <h3>Prompts</h3>
-              <p>Prompt behavior is separated here so the AI layer can keep evolving without cluttering the rest of settings.</p>
+              <p>Prompt management is organized by feature type so meeting minutes, personal notes, and future AI tools can evolve without turning settings into one long prompt page.</p>
             </div>
-            <div className="field">
-              <label htmlFor="generation-system">Generation system prompt</label>
-              <textarea
-                id="generation-system"
-                value={settings.promptProfile.generationSystem}
-                onChange={(event) =>
-                  updatePromptProfile({
-                    ...settings.promptProfile,
-                    generationSystem: event.target.value,
-                  })
-                }
-              />
+            <div className="diagnostics-grid">
+              <div className="diagnostics-card">
+                <strong>Generation workflows</strong>
+                <span className="tiny-text">Keep meeting minutes and personal-note polishing separate so each workflow can optimize for the right tone, structure, and level of synthesis.</span>
+              </div>
+              <div className="diagnostics-card">
+                <strong>Shared post-processing</strong>
+                <span className="tiny-text">Revision and translation stay reusable across workflows so the prompt system scales cleanly as more AI features are added.</span>
+              </div>
+              <div className="diagnostics-card">
+                <strong>Reusable prompt blocks</strong>
+                <span className="tiny-text">Store optional add-on instructions once and reuse them across future AI tools instead of duplicating prompt logic everywhere.</span>
+              </div>
             </div>
-            <div className="field">
-              <label htmlFor="generation-rules">Generation rules</label>
-              <textarea
-                id="generation-rules"
-                value={settings.promptProfile.generationRules}
-                onChange={(event) =>
-                  updatePromptProfile({
-                    ...settings.promptProfile,
-                    generationRules: event.target.value,
-                  })
-                }
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="revision-rules">Revision rules</label>
-              <textarea
-                id="revision-rules"
-                value={settings.promptProfile.revisionRules}
-                onChange={(event) =>
-                  updatePromptProfile({
-                    ...settings.promptProfile,
-                    revisionRules: event.target.value,
-                  })
-                }
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="translation-rules">Translation rules</label>
-              <textarea
-                id="translation-rules"
-                value={settings.promptProfile.translationRules}
-                onChange={(event) =>
-                  updatePromptProfile({
-                    ...settings.promptProfile,
-                    translationRules: event.target.value,
-                  })
-                }
-              />
-            </div>
+            <details className="workspace-disclosure" open>
+              <summary>Meeting minutes</summary>
+              <div className="workspace-disclosure-body stack">
+                <p className="tiny-text">Used for meeting-focused sessions where the expected outcome is a professional minutes document that emphasizes decisions, action items, and business-ready clarity.</p>
+                <div className="field">
+                  <label htmlFor="meeting-minutes-system">System prompt</label>
+                  <textarea
+                    id="meeting-minutes-system"
+                    value={settings.promptProfile.meetingMinutesSystem}
+                    onChange={(event) =>
+                      updatePromptProfile({
+                        ...settings.promptProfile,
+                        meetingMinutesSystem: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="meeting-minutes-rules">Generation rules</label>
+                  <textarea
+                    id="meeting-minutes-rules"
+                    value={settings.promptProfile.meetingMinutesRules}
+                    onChange={(event) =>
+                      updatePromptProfile({
+                        ...settings.promptProfile,
+                        meetingMinutesRules: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </details>
+            <details className="workspace-disclosure" open>
+              <summary>Personal notes & dictation</summary>
+              <div className="workspace-disclosure-body stack">
+                <p className="tiny-text">Used for quick notes and voice notes where readability matters, but the output should stay proportionate to the original note instead of becoming formal meeting documentation.</p>
+                <div className="field">
+                  <label htmlFor="personal-notes-system">System prompt</label>
+                  <textarea
+                    id="personal-notes-system"
+                    value={settings.promptProfile.personalNotesSystem}
+                    onChange={(event) =>
+                      updatePromptProfile({
+                        ...settings.promptProfile,
+                        personalNotesSystem: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="personal-notes-rules">Generation rules</label>
+                  <textarea
+                    id="personal-notes-rules"
+                    value={settings.promptProfile.personalNotesRules}
+                    onChange={(event) =>
+                      updatePromptProfile({
+                        ...settings.promptProfile,
+                        personalNotesRules: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </details>
+            <details className="workspace-disclosure">
+              <summary>Shared revision & translation</summary>
+              <div className="workspace-disclosure-body stack">
+                <p className="tiny-text">These prompt families are shared across note types so polishing and translation stay consistent even as new AI-powered workflows are added later.</p>
+                <div className="field">
+                  <label htmlFor="revision-rules">Revision rules</label>
+                  <textarea
+                    id="revision-rules"
+                    value={settings.promptProfile.revisionRules}
+                    onChange={(event) =>
+                      updatePromptProfile({
+                        ...settings.promptProfile,
+                        revisionRules: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="translation-rules">Translation rules</label>
+                  <textarea
+                    id="translation-rules"
+                    value={settings.promptProfile.translationRules}
+                    onChange={(event) =>
+                      updatePromptProfile({
+                        ...settings.promptProfile,
+                        translationRules: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </details>
             <div className="inline-row">
               <button
                 className="small-button"
                 type="button"
                 onClick={() =>
                   updatePromptProfile({
-                    generationSystem: DEFAULT_GENERATION_SYSTEM_PROMPT,
-                    generationRules: DEFAULT_GENERATION_RULES,
+                    meetingMinutesSystem: DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
+                    meetingMinutesRules: DEFAULT_MEETING_MINUTES_RULES,
+                    personalNotesSystem: DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
+                    personalNotesRules: DEFAULT_PERSONAL_NOTES_RULES,
                     revisionRules: DEFAULT_REVISION_RULES,
                     translationRules: DEFAULT_TRANSLATION_RULES,
                     extraBlocks: settings.promptProfile.extraBlocks,
@@ -817,8 +879,8 @@ export const SettingsCard = ({
             </p>
             <div className="section-divider">
               <div>
-                <h3>Extra Prompt Blocks</h3>
-                <p className="muted">Reusable add-on instructions that can stay enabled or disabled per user preference.</p>
+                <h3>Reusable extra prompt blocks</h3>
+                <p className="muted">Keep add-on instructions here so future AI features can reuse them without duplicating prompt logic everywhere.</p>
               </div>
               <div className="field">
                 <label htmlFor="extra-block-label">Block label</label>

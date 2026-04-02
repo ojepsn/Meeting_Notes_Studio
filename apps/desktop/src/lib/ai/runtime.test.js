@@ -11,8 +11,10 @@ const settings = {
     savedParticipants: [],
     abbreviations: [],
     promptProfile: {
-        generationSystem: "System",
-        generationRules: "Rules",
+        meetingMinutesSystem: "Meeting system",
+        meetingMinutesRules: "Meeting rules",
+        personalNotesSystem: "Personal system",
+        personalNotesRules: "Personal rules",
         revisionRules: "Revise",
         translationRules: "Translate",
         extraBlocks: [],

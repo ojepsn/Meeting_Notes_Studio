@@ -94,13 +94,17 @@ export const generateNotes = async ({
     )
     .join("\n");
 
+  const generationPromptTexts =
+    session.captureMode === "meeting-note"
+      ? [promptProfile.profile.meetingMinutesSystem, promptProfile.profile.meetingMinutesRules]
+      : [promptProfile.profile.personalNotesSystem, promptProfile.profile.personalNotesRules];
+
   return executeAITextOperation({
     settings,
     operation: "generate-notes",
     promptVersion: promptProfile.version,
     systemTexts: [
-      promptProfile.profile.generationSystem,
-      promptProfile.profile.generationRules,
+      ...generationPromptTexts,
       getCaptureModeInstruction(session),
       outputLanguageInstruction,
       getDetailLevelInstruction(session.detailLevel),

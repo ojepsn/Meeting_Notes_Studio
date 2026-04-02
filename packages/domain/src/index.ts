@@ -68,8 +68,10 @@ export interface PromptBlock {
 }
 
 export interface PromptProfile {
-  generationSystem: string;
-  generationRules: string;
+  meetingMinutesSystem: string;
+  meetingMinutesRules: string;
+  personalNotesSystem: string;
+  personalNotesRules: string;
   revisionRules: string;
   translationRules: string;
   extraBlocks: PromptBlock[];
