@@ -99,14 +99,23 @@ export const SessionsSidebar = ({
               style={{ all: "unset", cursor: "pointer", display: "block", width: "100%" }}
               onClick={() => onSelect(session.id)}
             >
-              <strong>{session.title || "Untitled session"}</strong>
-              <span className="muted">
-                {compact
-                  ? [session.date || "No date", session.isPrivate ? "Private" : "Public"].join(" · ")
-                  : [session.date || "No date", session.isPrivate ? "Private" : "", session.participantText, session.domain, session.project, session.activity, session.tagsText]
+              {compact ? (
+                <div className="compact-session-row">
+                  <strong>{session.title || "Untitled session"}</strong>
+                  <span className="muted">
+                    {[session.date || "No date", session.isPrivate ? "Private" : "Public"].join(" · ")}
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <strong>{session.title || "Untitled session"}</strong>
+                  <span className="muted">
+                    {[session.date || "No date", session.isPrivate ? "Private" : "", session.participantText, session.domain, session.project, session.activity, session.tagsText]
                       .filter(Boolean)
                       .join(" · ") || "No metadata yet"}
-              </span>
+                  </span>
+                </>
+              )}
             </button>
             {!compact ? (
               <div className="list-item-actions">

@@ -64,6 +64,7 @@ Typical fields:
 Default expectation:
 
 - the user can create output directly or polish it with AI
+- new quick notes start with the current date and time as the default title
 
 ### Voice note
 
@@ -86,6 +87,7 @@ Default expectation:
 
 - recorded or uploaded audio can be transcribed into the live transcript
 - the user can then create output directly or polish it with AI
+- new voice notes start with the current date and time as the default title
 
 ## Capture and Output
 

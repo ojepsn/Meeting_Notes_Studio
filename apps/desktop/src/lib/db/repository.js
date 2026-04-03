@@ -426,11 +426,14 @@ export const createSessionRecord = (templateId, captureMode = "meeting-note") =>
     const timestamp = new Date();
     const isoDate = timestamp.toISOString().slice(0, 10);
     const isoTime = timestamp.toTimeString().slice(0, 5);
+    const defaultTitle = captureMode === "meeting-note"
+        ? ""
+        : `${isoDate} ${isoTime}`;
     return {
         id: crypto.randomUUID(),
         captureMode,
         templateId: templateId || DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode],
-        title: "",
+        title: defaultTitle,
         isPrivate: false,
         participantText: "",
         project: "",
