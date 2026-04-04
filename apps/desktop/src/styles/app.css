@@ -654,8 +654,32 @@ select {
   resize: vertical;
 }
 
+.editor-textarea {
+  line-height: 1.6;
+}
+
 .field-wide {
   grid-column: 1 / -1;
+}
+
+.session-editor {
+  position: relative;
+}
+
+.session-editor-minimal {
+  padding: 1.35rem 1.4rem 1.6rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-surface) 88%, white 12%) 0%, var(--app-surface-soft) 100%);
+}
+
+.session-editor-header-minimal {
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.session-editor-header-minimal h2 {
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
 }
 
 .capture-top-row {
@@ -667,6 +691,12 @@ select {
 
 .capture-top-row .field {
   min-width: 0;
+}
+
+.capture-top-row-minimal {
+  grid-template-columns: minmax(180px, 0.9fr) minmax(420px, 4fr) minmax(130px, 0.7fr);
+  gap: 0.75rem;
+  margin-bottom: 0.2rem;
 }
 
 .capture-private-field {
@@ -694,6 +724,27 @@ select {
 
 .compact-private-toggle .checkbox-label {
   margin: 0;
+}
+
+.capture-meta-field label,
+.session-editor-minimal .field > label,
+.session-editor-minimal .field > span:first-child {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--app-muted);
+  margin-bottom: 0.3rem;
+}
+
+.capture-title-field-minimal label {
+  display: none;
+}
+
+.minimal-title-input {
+  min-height: 64px;
+  font-size: 1.12rem;
+  font-weight: 600;
+  border-radius: 22px;
 }
 
 .audio-capture-card {
@@ -1482,6 +1533,8 @@ select {
 
 .capture-mode-switch-minimal {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.9rem;
 }
 
 .capture-mode-card {
@@ -1520,15 +1573,29 @@ select {
   gap: 0.6rem;
 }
 
+.capture-mode-card-minimal {
+  border-radius: 999px;
+  padding: 0.68rem 0.9rem;
+  box-shadow: none;
+  background: transparent;
+}
+
+.capture-mode-card-minimal strong {
+  font-size: 0.86rem;
+}
+
+.capture-mode-card-minimal span {
+  display: none;
+}
+
 .minimal-audio-strip {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  border-radius: 20px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 55%, transparent 45%) 0%, var(--app-surface-soft) 100%),
-    var(--app-surface-soft);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--app-accent-soft) 30%, var(--app-surface-soft) 70%);
+  padding: 0.7rem 0.8rem;
 }
 
 .minimal-audio-strip[data-recording="true"] {
@@ -1540,6 +1607,10 @@ select {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+
+.minimal-audio-strip-main strong {
+  font-size: 0.86rem;
 }
 
 .minimal-audio-strip-actions {
@@ -1554,6 +1625,10 @@ select {
   gap: 0.85rem;
 }
 
+.minimal-context-primary {
+  min-width: 0;
+}
+
 .capture-density-toggle {
   display: inline-flex;
   align-items: center;
@@ -1566,6 +1641,49 @@ select {
 
 .capture-density-toggle .segment-button {
   min-width: 88px;
+}
+
+.form-grid-minimal {
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+.session-editor-minimal .field textarea,
+.session-editor-minimal .field input,
+.session-editor-minimal .field select {
+  border-radius: 20px;
+}
+
+.session-editor-minimal .workspace-disclosure,
+.session-editor-minimal .list-item,
+.session-editor-minimal .field:not(.field-wide) {
+  box-shadow: none;
+}
+
+.editor-textarea-primary {
+  min-height: 320px;
+  font-size: 1rem;
+}
+
+.editor-textarea-secondary {
+  min-height: 220px;
+  font-size: 0.98rem;
+}
+
+.session-editor-minimal .editor-textarea-primary {
+  min-height: 380px;
+  font-size: 1.02rem;
+  padding: 1.05rem 1.1rem;
+}
+
+.session-editor-minimal .editor-textarea-secondary {
+  min-height: 240px;
+  padding: 1rem 1.05rem;
+}
+
+.session-editor-minimal .capture-minimal-actions .small-button {
+  border-radius: 999px;
+  padding-inline: 0.9rem;
 }
 
 .overlay-mode-switch {

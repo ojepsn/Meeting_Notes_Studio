@@ -212,8 +212,8 @@ export const SessionEditor = ({
   };
 
   return (
-    <div className="card">
-      <div className="card-header">
+    <div className={`card session-editor${isMinimal ? " session-editor-minimal" : ""}`}>
+      <div className={`card-header${isMinimal ? " session-editor-header-minimal" : ""}`}>
         <div>
           <h2>Capture</h2>
         </div>
@@ -231,7 +231,7 @@ export const SessionEditor = ({
         {(Object.keys(CAPTURE_MODE_META) as CaptureMode[]).map((captureMode) => (
           <button
             key={captureMode}
-            className="capture-mode-card"
+            className={`capture-mode-card${isMinimal ? " capture-mode-card-minimal" : ""}`}
             data-active={session.captureMode === captureMode}
             type="button"
             onClick={() => switchMode(captureMode)}
@@ -242,9 +242,9 @@ export const SessionEditor = ({
         ))}
       </div>
 
-      <div className="form-grid">
-        <div className="capture-top-row field field-wide">
-          <div className="field capture-template-field">
+      <div className={`form-grid${isMinimal ? " form-grid-minimal" : ""}`}>
+        <div className={`capture-top-row field field-wide${isMinimal ? " capture-top-row-minimal" : ""}`}>
+          <div className={`field capture-template-field${isMinimal ? " capture-meta-field" : ""}`}>
             <label htmlFor="template-select">Template</label>
             <select id="template-select" value={activeTemplate?.id ?? ""} onChange={(event) => handleTemplateChange(event.target.value)}>
               {primaryTemplateOptions.map((template) => (
@@ -255,9 +255,10 @@ export const SessionEditor = ({
             </select>
           </div>
 
-          <div className="field capture-title-field">
+          <div className={`field capture-title-field${isMinimal ? " capture-title-field-minimal" : ""}`}>
             <label htmlFor="session-title">Title</label>
             <input
+              className={isMinimal ? "minimal-title-input" : undefined}
               id="session-title"
               value={session.title}
               onChange={(event) => update("title", event.target.value)}
@@ -271,7 +272,7 @@ export const SessionEditor = ({
             />
           </div>
 
-          <div className="field capture-private-field">
+          <div className={`field capture-private-field${isMinimal ? " capture-meta-field" : ""}`}>
             <span>Private</span>
             <div className="compact-private-toggle">
               <input
@@ -385,7 +386,7 @@ export const SessionEditor = ({
 
         {showMinimalMeetingCore ? (
           <div className="field field-wide minimal-context-grid">
-            <div className="field">
+            <div className="field minimal-context-primary">
               <label htmlFor="session-participants">People</label>
               <PeoplePicker
                 value={session.participantText}
@@ -395,15 +396,15 @@ export const SessionEditor = ({
                 placeholder="Search or add people"
               />
             </div>
-            <div className="field">
+            <div className="field capture-meta-field">
               <label htmlFor="session-date">Date</label>
               <input id="session-date" type="date" value={session.date} onChange={(event) => update("date", event.target.value)} />
             </div>
-            <div className="field">
+            <div className="field capture-meta-field">
               <label htmlFor="session-start">Start time</label>
               <input id="session-start" type="time" value={session.startTime} onChange={(event) => update("startTime", event.target.value)} />
             </div>
-            <div className="field">
+            <div className="field capture-meta-field">
               <label htmlFor="session-end">End time</label>
               <input id="session-end" type="time" value={session.endTime} onChange={(event) => update("endTime", event.target.value)} />
             </div>
@@ -579,6 +580,7 @@ export const SessionEditor = ({
             <div className="field field-wide">
               <label htmlFor="live-transcript">{modeMeta.primaryFieldLabel}</label>
               <textarea
+                className="editor-textarea editor-textarea-primary"
                 id="live-transcript"
                 value={session.liveTranscript}
                 onChange={(event) => update("liveTranscript", event.target.value)}
@@ -589,6 +591,7 @@ export const SessionEditor = ({
               <div className="field field-wide">
                 <label htmlFor="manual-notes">Notes</label>
                 <textarea
+                  className="editor-textarea editor-textarea-secondary"
                   id="manual-notes"
                   value={session.manualNotes}
                   onChange={(event) => update("manualNotes", event.target.value)}
@@ -616,6 +619,7 @@ export const SessionEditor = ({
           <div className="field field-wide">
             <label htmlFor="manual-notes">{modeMeta.primaryFieldLabel}</label>
             <textarea
+              className={`editor-textarea${isMinimal ? " editor-textarea-primary" : ""}`}
               id="manual-notes"
               value={session.manualNotes}
               onChange={(event) => update("manualNotes", event.target.value)}
@@ -672,6 +676,7 @@ export const SessionEditor = ({
               {session.captureMode === "meeting-note" ? "Transcript" : "Live transcript"}
             </label>
             <textarea
+              className={`editor-textarea${isMinimal ? " editor-textarea-secondary" : ""}`}
               id="session-transcript"
               value={session.liveTranscript}
               onChange={(event) => update("liveTranscript", event.target.value)}
