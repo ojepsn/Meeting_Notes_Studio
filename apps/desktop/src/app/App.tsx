@@ -137,6 +137,8 @@ export const App = () => {
     saveSession,
     createNewSession,
     deleteSession,
+    restoreSession,
+    permanentlyDeleteSession,
     saveTodo,
     addTodo,
     deleteTodo,
@@ -402,46 +404,54 @@ export const App = () => {
     return Array.from(new Set([...prioritized, ...fallback])).slice(0, 6);
   };
 
+  const activeSessions = useMemo(
+    () => (snapshot ? snapshot.sessions.filter((session) => !session.deletedAt) : []),
+    [snapshot],
+  );
+
   const suggestedPeople = useMemo(() => {
     if (!snapshot) {
       return [];
     }
 
-    return rankSavedValues(snapshot.sessions, snapshot.settings.savedParticipants, (session) => parsePeopleFromSession(session.participantText));
-  }, [snapshot]);
+    return rankSavedValues(activeSessions, snapshot.settings.savedParticipants, (session) => parsePeopleFromSession(session.participantText));
+  }, [activeSessions, snapshot]);
 
   const suggestedProjects = useMemo(() => {
     if (!snapshot) {
       return [];
     }
-    return rankSavedValues(snapshot.sessions, snapshot.settings.savedProjects, (session) => (session.project ? [session.project] : []));
-  }, [snapshot]);
+    return rankSavedValues(activeSessions, snapshot.settings.savedProjects, (session) => (session.project ? [session.project] : []));
+  }, [activeSessions, snapshot]);
 
   const suggestedDomains = useMemo(() => {
     if (!snapshot) {
       return [];
     }
-    return rankSavedValues(snapshot.sessions, snapshot.settings.savedDomains, (session) => (session.domain ? [session.domain] : []));
-  }, [snapshot]);
+    return rankSavedValues(activeSessions, snapshot.settings.savedDomains, (session) => (session.domain ? [session.domain] : []));
+  }, [activeSessions, snapshot]);
 
   const suggestedActivities = useMemo(() => {
     if (!snapshot) {
       return [];
     }
-    return rankSavedValues(snapshot.sessions, snapshot.settings.savedActivities, (session) => (session.activity ? [session.activity] : []));
-  }, [snapshot]);
+    return rankSavedValues(activeSessions, snapshot.settings.savedActivities, (session) => (session.activity ? [session.activity] : []));
+  }, [activeSessions, snapshot]);
 
   const suggestedTags = useMemo(() => {
     if (!snapshot) {
       return [];
     }
-    return rankSavedValues(snapshot.sessions, snapshot.settings.savedTags, (session) => parseTokenList(session.tagsText));
-  }, [snapshot]);
+    return rankSavedValues(activeSessions, snapshot.settings.savedTags, (session) => parseTokenList(session.tagsText));
+  }, [activeSessions, snapshot]);
 
-  const activeSession = useMemo(
-    () => snapshot?.sessions.find((session) => session.id === activeSessionId) ?? snapshot?.sessions[0] ?? null,
-    [activeSessionId, snapshot],
-  );
+  const activeSession = useMemo(() => {
+    if (!snapshot) {
+      return null;
+    }
+    const directMatch = snapshot.sessions.find((session) => session.id === activeSessionId && !session.deletedAt);
+    return directMatch ?? snapshot.sessions.find((session) => !session.deletedAt) ?? null;
+  }, [activeSessionId, snapshot]);
 
   const activeTemplate = useMemo(
     () =>
@@ -1459,7 +1469,7 @@ export const App = () => {
         keywords: ["image attachment picture"],
         action: () => void handleImportImage(),
       },
-      ...snapshot.sessions.slice(0, 8).map((session) => ({
+      ...activeSessions.slice(0, 8).map((session) => ({
         id: `session-${session.id}`,
         label: `Open session: ${session.title || "Untitled session"}`,
         description: session.date || "Recent session",
@@ -1492,6 +1502,8 @@ export const App = () => {
             }}
             onCreate={() => openOverlay("new-note")}
             onDelete={(id) => void deleteSession(id)}
+            onRestore={(id) => void restoreSession(id)}
+            onDeleteForever={(id) => void permanentlyDeleteSession(id)}
           />
         );
       case "new-note":
@@ -1926,6 +1938,8 @@ export const App = () => {
               onSelect={(id) => setActiveSessionId(id)}
               onCreate={() => openOverlay("new-note")}
               onDelete={(id) => void deleteSession(id)}
+              onRestore={(id) => void restoreSession(id)}
+              onDeleteForever={(id) => void permanentlyDeleteSession(id)}
               compact
               title="Sessions"
             />

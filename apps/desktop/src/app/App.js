@@ -66,7 +66,7 @@ const logAIRuntimeEvent = (event) => {
     }
 };
 export const App = () => {
-    const { snapshot, activeSessionId, activeView, saveState, lastSavedAt, isLoaded, loadError, load, setActiveSessionId, setActiveView, repository, saveSession, createNewSession, deleteSession, saveTodo, addTodo, deleteTodo, saveSettings, saveTemplate, resetTemplates, importLegacyBrowserData, saveAttachments, } = useDesktopStore();
+    const { snapshot, activeSessionId, activeView, saveState, lastSavedAt, isLoaded, loadError, load, setActiveSessionId, setActiveView, repository, saveSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, saveTodo, addTodo, deleteTodo, saveSettings, saveTemplate, resetTemplates, importLegacyBrowserData, saveAttachments, } = useDesktopStore();
     const [activeWorkspace, setActiveWorkspace] = useState("notes");
     const [openPanel, setOpenPanel] = useState(null);
     const [settingsSection, setSettingsSection] = useState("ai");
@@ -293,37 +293,44 @@ export const App = () => {
         const fallback = rankedSaved.map((entry) => entry.name);
         return Array.from(new Set([...prioritized, ...fallback])).slice(0, 6);
     };
+    const activeSessions = useMemo(() => (snapshot ? snapshot.sessions.filter((session) => !session.deletedAt) : []), [snapshot]);
     const suggestedPeople = useMemo(() => {
         if (!snapshot) {
             return [];
         }
-        return rankSavedValues(snapshot.sessions, snapshot.settings.savedParticipants, (session) => parsePeopleFromSession(session.participantText));
-    }, [snapshot]);
+        return rankSavedValues(activeSessions, snapshot.settings.savedParticipants, (session) => parsePeopleFromSession(session.participantText));
+    }, [activeSessions, snapshot]);
     const suggestedProjects = useMemo(() => {
         if (!snapshot) {
             return [];
         }
-        return rankSavedValues(snapshot.sessions, snapshot.settings.savedProjects, (session) => (session.project ? [session.project] : []));
-    }, [snapshot]);
+        return rankSavedValues(activeSessions, snapshot.settings.savedProjects, (session) => (session.project ? [session.project] : []));
+    }, [activeSessions, snapshot]);
     const suggestedDomains = useMemo(() => {
         if (!snapshot) {
             return [];
         }
-        return rankSavedValues(snapshot.sessions, snapshot.settings.savedDomains, (session) => (session.domain ? [session.domain] : []));
-    }, [snapshot]);
+        return rankSavedValues(activeSessions, snapshot.settings.savedDomains, (session) => (session.domain ? [session.domain] : []));
+    }, [activeSessions, snapshot]);
     const suggestedActivities = useMemo(() => {
         if (!snapshot) {
             return [];
         }
-        return rankSavedValues(snapshot.sessions, snapshot.settings.savedActivities, (session) => (session.activity ? [session.activity] : []));
-    }, [snapshot]);
+        return rankSavedValues(activeSessions, snapshot.settings.savedActivities, (session) => (session.activity ? [session.activity] : []));
+    }, [activeSessions, snapshot]);
     const suggestedTags = useMemo(() => {
         if (!snapshot) {
             return [];
         }
-        return rankSavedValues(snapshot.sessions, snapshot.settings.savedTags, (session) => parseTokenList(session.tagsText));
-    }, [snapshot]);
-    const activeSession = useMemo(() => snapshot?.sessions.find((session) => session.id === activeSessionId) ?? snapshot?.sessions[0] ?? null, [activeSessionId, snapshot]);
+        return rankSavedValues(activeSessions, snapshot.settings.savedTags, (session) => parseTokenList(session.tagsText));
+    }, [activeSessions, snapshot]);
+    const activeSession = useMemo(() => {
+        if (!snapshot) {
+            return null;
+        }
+        const directMatch = snapshot.sessions.find((session) => session.id === activeSessionId && !session.deletedAt);
+        return directMatch ?? snapshot.sessions.find((session) => !session.deletedAt) ?? null;
+    }, [activeSessionId, snapshot]);
     const activeTemplate = useMemo(() => activeSession && snapshot
         ? getTemplatesForCaptureMode(snapshot.templates, activeSession.captureMode).find((template) => template.id === activeSession.templateId) ??
             getTemplatesForCaptureMode(snapshot.templates, activeSession.captureMode)[0] ??
@@ -1195,7 +1202,7 @@ export const App = () => {
             keywords: ["image attachment picture"],
             action: () => void handleImportImage(),
         },
-        ...snapshot.sessions.slice(0, 8).map((session) => ({
+        ...activeSessions.slice(0, 8).map((session) => ({
             id: `session-${session.id}`,
             label: `Open session: ${session.title || "Untitled session"}`,
             description: session.date || "Recent session",
@@ -1218,7 +1225,7 @@ export const App = () => {
                 return (_jsx(SessionsSidebar, { sessions: snapshot.sessions, activeSessionId: activeSession.id, onSelect: (id) => {
                         setActiveSessionId(id);
                         closeOverlay();
-                    }, onCreate: () => openOverlay("new-note"), onDelete: (id) => void deleteSession(id) }));
+                    }, onCreate: () => openOverlay("new-note"), onDelete: (id) => void deleteSession(id), onRestore: (id) => void restoreSession(id), onDeleteForever: (id) => void permanentlyDeleteSession(id) }));
             case "new-note":
                 return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Choose note type" }), _jsx("p", { children: "Pick the workflow first. Templates then refine the structure inside that mode." })] }), _jsx("div", { className: "capture-mode-switch overlay-mode-switch", children: Object.keys(CAPTURE_MODE_UI).map((captureMode) => (_jsxs("button", { type: "button", className: "capture-mode-card", onClick: () => void handleCreateSessionFromMode(captureMode), children: [_jsx("strong", { children: CAPTURE_MODE_UI[captureMode].label }), _jsx("span", { children: CAPTURE_MODE_UI[captureMode].description })] }, captureMode))) })] }));
             case "metadata-review":
@@ -1283,7 +1290,7 @@ export const App = () => {
                                                                     ? activeView === "capture"
                                                                         ? `${CAPTURE_MODE_UI[activeCaptureMode].description} Secondary tools stay in the inspector or overlays so the center canvas stays calm.`
                                                                         : "Shape and export polished notes here. AI and export controls stay nearby without crowding the document."
-                                                                    : "This workspace placeholder already follows the same shell structure so the product can grow without changing how navigation works." })] }), _jsx("div", { className: "page-actions", children: _jsxs("div", { className: "view-switch", children: [_jsx("button", { className: "segment-button", "data-active": activeView === "capture", type: "button", onClick: () => setActiveView("capture"), disabled: activeWorkspace !== "notes", children: "Capture" }), _jsx("button", { className: "segment-button", "data-active": activeView === "output", type: "button", onClick: () => setActiveView("output"), disabled: activeWorkspace !== "notes", children: "Output" })] }) })] }), _jsx("div", { className: "workspace-guide-row", children: _jsx("span", { className: "tiny-text", children: "Shortcuts: Ctrl/Cmd+K command palette, Ctrl/Cmd+N new session, Alt+1/2 switch views, Ctrl/Cmd+Enter primary output action." }) })] }), activeWorkspace !== "notes" ? (_jsxs("div", { className: "card empty-state-card", children: [_jsx("h2", { children: "Coming next" }), _jsx("p", { children: WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.description || "This workspace is planned for a later phase." }), _jsxs("ol", { className: "empty-state-steps", children: [_jsx("li", { children: "Return to Notes from the left rail whenever you want to work now." }), _jsx("li", { children: "Use Ctrl/Cmd+K to reach settings, sessions, and future actions quickly." }), _jsx("li", { children: "This workspace will use the same center-canvas plus right-inspector pattern when it ships." })] })] })) : activeView === "capture" ? (_jsx(SessionEditor, { session: activeSession, templates: snapshot.templates, attachments: activeAttachments, savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isTranscribingAudio: isTranscribingAudio, recordingMode: recordingMode, isRecordingAudio: isRecordingAudio, recordingStatusNote: recordingStatusNote, onChange: (session) => void saveSession(session), onImportImage: () => void handleImportImage(), onImportAudio: () => void handleImportAudio(), onTranscribeAudio: () => void handleTranscribeAudio(), onChangeRecordingMode: setRecordingMode, onStartRecording: () => void handleStartRecording(), onStopRecording: () => void handleStopRecording(), onImportTranscript: () => void handleImportTranscript(), onRemoveAttachment: (attachmentId) => void handleRemoveAttachment(attachmentId), onUpdateAttachment: (attachment) => void handleUpdateAttachment(attachment) })) : (_jsx(OutputWorkspace, { session: activeSession, attachments: activeAttachments, onChange: (session) => void saveSession(session), savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isPrimaryActionRunning: outputActionConfig.isPrimaryRunning, isSecondaryActionRunning: outputActionConfig.isSecondaryRunning, isRevising: isRevising, onPrimaryAction: outputActionConfig.onPrimary, onSecondaryAction: outputActionConfig.onSecondary, onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onExportText: () => exportOutputAsText({ title: activeSession.title, output: activeSession.output }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output }), onExportHtml: () => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output }), primaryActionLabel: outputActionConfig.primaryLabel, secondaryActionLabel: outputActionConfig.secondaryLabel, emptyStatePrimaryLabel: outputActionConfig.emptyStatePrimaryLabel, emptyStateSecondaryLabel: outputActionConfig.emptyStateSecondaryLabel }))] }), _jsxs("aside", { className: "workspace-inspector stack", children: [_jsx(SessionsSidebar, { sessions: snapshot.sessions, activeSessionId: activeSession.id, onSelect: (id) => setActiveSessionId(id), onCreate: () => openOverlay("new-note"), onDelete: (id) => void deleteSession(id), compact: true, title: "Sessions" }), _jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: activeView === "capture" ? "Capture tools" : "Output tools" }), _jsx("p", { children: activeView === "capture"
+                                                                    : "This workspace placeholder already follows the same shell structure so the product can grow without changing how navigation works." })] }), _jsx("div", { className: "page-actions", children: _jsxs("div", { className: "view-switch", children: [_jsx("button", { className: "segment-button", "data-active": activeView === "capture", type: "button", onClick: () => setActiveView("capture"), disabled: activeWorkspace !== "notes", children: "Capture" }), _jsx("button", { className: "segment-button", "data-active": activeView === "output", type: "button", onClick: () => setActiveView("output"), disabled: activeWorkspace !== "notes", children: "Output" })] }) })] }), _jsx("div", { className: "workspace-guide-row", children: _jsx("span", { className: "tiny-text", children: "Shortcuts: Ctrl/Cmd+K command palette, Ctrl/Cmd+N new session, Alt+1/2 switch views, Ctrl/Cmd+Enter primary output action." }) })] }), activeWorkspace !== "notes" ? (_jsxs("div", { className: "card empty-state-card", children: [_jsx("h2", { children: "Coming next" }), _jsx("p", { children: WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.description || "This workspace is planned for a later phase." }), _jsxs("ol", { className: "empty-state-steps", children: [_jsx("li", { children: "Return to Notes from the left rail whenever you want to work now." }), _jsx("li", { children: "Use Ctrl/Cmd+K to reach settings, sessions, and future actions quickly." }), _jsx("li", { children: "This workspace will use the same center-canvas plus right-inspector pattern when it ships." })] })] })) : activeView === "capture" ? (_jsx(SessionEditor, { session: activeSession, templates: snapshot.templates, attachments: activeAttachments, savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isTranscribingAudio: isTranscribingAudio, recordingMode: recordingMode, isRecordingAudio: isRecordingAudio, recordingStatusNote: recordingStatusNote, onChange: (session) => void saveSession(session), onImportImage: () => void handleImportImage(), onImportAudio: () => void handleImportAudio(), onTranscribeAudio: () => void handleTranscribeAudio(), onChangeRecordingMode: setRecordingMode, onStartRecording: () => void handleStartRecording(), onStopRecording: () => void handleStopRecording(), onImportTranscript: () => void handleImportTranscript(), onRemoveAttachment: (attachmentId) => void handleRemoveAttachment(attachmentId), onUpdateAttachment: (attachment) => void handleUpdateAttachment(attachment) })) : (_jsx(OutputWorkspace, { session: activeSession, attachments: activeAttachments, onChange: (session) => void saveSession(session), savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isPrimaryActionRunning: outputActionConfig.isPrimaryRunning, isSecondaryActionRunning: outputActionConfig.isSecondaryRunning, isRevising: isRevising, onPrimaryAction: outputActionConfig.onPrimary, onSecondaryAction: outputActionConfig.onSecondary, onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onExportText: () => exportOutputAsText({ title: activeSession.title, output: activeSession.output }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output }), onExportHtml: () => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output }), primaryActionLabel: outputActionConfig.primaryLabel, secondaryActionLabel: outputActionConfig.secondaryLabel, emptyStatePrimaryLabel: outputActionConfig.emptyStatePrimaryLabel, emptyStateSecondaryLabel: outputActionConfig.emptyStateSecondaryLabel }))] }), _jsxs("aside", { className: "workspace-inspector stack", children: [_jsx(SessionsSidebar, { sessions: snapshot.sessions, activeSessionId: activeSession.id, onSelect: (id) => setActiveSessionId(id), onCreate: () => openOverlay("new-note"), onDelete: (id) => void deleteSession(id), onRestore: (id) => void restoreSession(id), onDeleteForever: (id) => void permanentlyDeleteSession(id), compact: true, title: "Sessions" }), _jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: activeView === "capture" ? "Capture tools" : "Output tools" }), _jsx("p", { children: activeView === "capture"
                                                             ? activeCaptureMode === "meeting-note"
                                                                 ? "Meeting imports, transcript tools, and supporting media stay here."
                                                                 : activeCaptureMode === "voice-note"

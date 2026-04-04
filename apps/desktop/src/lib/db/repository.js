@@ -24,6 +24,7 @@ const normalizeSessionRecord = (session) => ({
     ...session,
     captureMode: session.captureMode === "quick-note" || session.captureMode === "voice-note" ? session.captureMode : "meeting-note",
     isPrivate: Boolean(session.isPrivate),
+    deletedAt: typeof session.deletedAt === "string" ? session.deletedAt : null,
     project: typeof session.project === "string" ? session.project : "",
     domain: typeof session.domain === "string" ? session.domain : "",
     activity: typeof session.activity === "string" ? session.activity : "",
@@ -94,6 +95,7 @@ export const createDefaultSnapshot = () => ({
             templateId: "meeting",
             title: "2026-03-30 Weekly team sync",
             isPrivate: false,
+            deletedAt: null,
             participantText: "Anna, Marcus, Ola",
             project: "Alpha",
             domain: "Product",
@@ -228,6 +230,7 @@ class TauriSqliteRepository {
                 await db.execute("ALTER TABLE sessions ADD COLUMN excluded_section_ids TEXT NOT NULL DEFAULT '[]'").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN capture_mode TEXT NOT NULL DEFAULT 'meeting-note'").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0").catch(() => { });
+                await db.execute("ALTER TABLE sessions ADD COLUMN deleted_at TEXT NOT NULL DEFAULT ''").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN project TEXT NOT NULL DEFAULT ''").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN domain TEXT NOT NULL DEFAULT ''").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN activity TEXT NOT NULL DEFAULT ''").catch(() => { });
@@ -248,6 +251,7 @@ class TauriSqliteRepository {
             captureMode: row.capture_mode === "quick-note" || row.capture_mode === "voice-note" ? row.capture_mode : "meeting-note",
             templateId: row.template_id,
             title: row.title,
+            deletedAt: row.deleted_at || null,
             isPrivate: Boolean(row.is_private),
             participantText: row.participant_text,
             project: row.project,
@@ -273,13 +277,14 @@ class TauriSqliteRepository {
         const db = await this.getDb();
         await db.execute("DELETE FROM sessions");
         await Promise.all(records.map((record) => db.execute(`INSERT INTO sessions (
-            id, template_id, title, is_private, participant_text, project, domain, activity, tags_text, session_date, start_time, end_time,
+            id, template_id, title, deleted_at, is_private, participant_text, project, domain, activity, tags_text, session_date, start_time, end_time,
             quick_highlights, detail_level, capture_mode, manual_notes, live_transcript, uploaded_transcript, custom_field_values, excluded_section_ids, output_text,
             created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
             record.id,
             record.templateId,
             record.title,
+            record.deletedAt || "",
             record.isPrivate ? 1 : 0,
             record.participantText,
             record.project,
@@ -435,6 +440,7 @@ export const createSessionRecord = (templateId, captureMode = "meeting-note") =>
         templateId: templateId || DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode],
         title: defaultTitle,
         isPrivate: false,
+        deletedAt: null,
         participantText: "",
         project: "",
         domain: "",

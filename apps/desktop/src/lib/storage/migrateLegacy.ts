@@ -173,6 +173,7 @@ const mapLegacySessions = (sessions: LegacySession[] | null): SessionRecord[] =>
         captureMode: inferCaptureModeFromTemplateId(mapLegacyTemplateId(session.template)),
         title: typeof session.title === "string" ? session.title : "",
         isPrivate: false,
+        deletedAt: null,
         participantText: typeof session.participants === "string" ? session.participants : "",
         project: "",
         domain: "",

@@ -3,8 +3,22 @@ import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCap
 import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
 import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
 import { createAppRepository, createSessionRecord, upsertSession, upsertTemplate, upsertTodo, } from "../lib/db/repository";
+import { removePersistedAttachment } from "../lib/files/attachmentStore";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 const PERSIST_DEBOUNCE_MS = 300;
+const TRASH_RETENTION_DAYS = 7;
+const TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const isSessionExpired = (session, nowMs) => {
+    if (!session.deletedAt) {
+        return false;
+    }
+    const deletedMs = Date.parse(session.deletedAt);
+    if (!Number.isFinite(deletedMs)) {
+        return false;
+    }
+    return nowMs - deletedMs >= TRASH_RETENTION_MS;
+};
+const getFirstActiveSessionId = (sessions) => sessions.find((session) => !session.deletedAt)?.id ?? null;
 let persistTimer = null;
 let pendingSnapshot = null;
 const logPersistError = (error) => {
@@ -67,11 +81,35 @@ export const useDesktopStore = create((set, get) => ({
     repository: createAppRepository(),
     load: async () => {
         try {
-            const [snapshot, aiTextCache, aiRequestHistory] = await Promise.all([
+            const [loadedSnapshot, aiTextCache, aiRequestHistory] = await Promise.all([
                 get().repository.loadSnapshot(),
                 get().repository.loadAITextCache(),
                 get().repository.loadAIRequestHistory(),
             ]);
+            const nowMs = Date.now();
+            const expiredSessionIds = new Set(loadedSnapshot.sessions.filter((session) => isSessionExpired(session, nowMs)).map((session) => session.id));
+            const remainingSessions = loadedSnapshot.sessions.filter((session) => !expiredSessionIds.has(session.id));
+            const removedAttachments = loadedSnapshot.attachments.filter((attachment) => expiredSessionIds.has(attachment.sessionId));
+            if (removedAttachments.length) {
+                await Promise.all(removedAttachments.map((attachment) => removePersistedAttachment(attachment.filePath)));
+            }
+            const nextAttachments = loadedSnapshot.attachments.filter((attachment) => !expiredSessionIds.has(attachment.sessionId));
+            let snapshot = {
+                ...loadedSnapshot,
+                sessions: remainingSessions,
+                attachments: nextAttachments,
+            };
+            const activeCandidate = getFirstActiveSessionId(snapshot.sessions);
+            if (!snapshot.sessions.length || !activeCandidate) {
+                const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting", "meeting-note");
+                snapshot = {
+                    ...snapshot,
+                    sessions: [replacement, ...snapshot.sessions],
+                };
+            }
+            if (expiredSessionIds.size) {
+                await get().repository.saveSnapshot(snapshot);
+            }
             configureAITextCachePersistence({
                 save: (records) => get().repository.saveAITextCache(records),
             });
@@ -82,7 +120,7 @@ export const useDesktopStore = create((set, get) => ({
             hydrateAIRequestHistory(aiRequestHistory);
             set({
                 snapshot,
-                activeSessionId: snapshot.sessions[0]?.id ?? null,
+                activeSessionId: getFirstActiveSessionId(snapshot.sessions),
                 isLoaded: true,
                 loadError: null,
                 saveState: "saved",
@@ -140,15 +178,78 @@ export const useDesktopStore = create((set, get) => ({
         const snapshot = get().snapshot;
         if (!snapshot)
             return;
-        const remainingSessions = snapshot.sessions.filter((session) => session.id !== id);
-        if (!remainingSessions.length) {
-            const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting", "meeting-note");
-            remainingSessions.push(replacement);
+        const deletionTimestamp = new Date().toISOString();
+        let nextSessions = snapshot.sessions.map((session) => session.id === id
+            ? {
+                ...session,
+                deletedAt: deletionTimestamp,
+                updatedAt: deletionTimestamp,
+            }
+            : session);
+        let nextActiveId = get().activeSessionId;
+        if (!nextActiveId || nextActiveId === id) {
+            const firstActive = getFirstActiveSessionId(nextSessions);
+            if (firstActive) {
+                nextActiveId = firstActive;
+            }
+            else {
+                const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting", "meeting-note");
+                nextSessions = [replacement, ...nextSessions];
+                nextActiveId = replacement.id;
+            }
         }
-        const nextSnapshot = { ...snapshot, sessions: remainingSessions };
+        const nextSnapshot = { ...snapshot, sessions: nextSessions };
         set({
             snapshot: nextSnapshot,
-            activeSessionId: remainingSessions[0]?.id ?? null,
+            activeSessionId: nextActiveId,
+            activeView: get().activeView,
+        });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    restoreSession: async (id) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const restoreTimestamp = new Date().toISOString();
+        const nextSnapshot = {
+            ...snapshot,
+            sessions: snapshot.sessions.map((session) => session.id === id
+                ? {
+                    ...session,
+                    deletedAt: null,
+                    updatedAt: restoreTimestamp,
+                }
+                : session),
+        };
+        set({ snapshot: nextSnapshot, activeSessionId: id });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    permanentlyDeleteSession: async (id) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const removedAttachments = snapshot.attachments.filter((attachment) => attachment.sessionId === id);
+        if (removedAttachments.length) {
+            await Promise.all(removedAttachments.map((attachment) => removePersistedAttachment(attachment.filePath)));
+        }
+        let remainingSessions = snapshot.sessions.filter((session) => session.id !== id);
+        let nextActiveId = get().activeSessionId;
+        if (!remainingSessions.length || !getFirstActiveSessionId(remainingSessions)) {
+            const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting", "meeting-note");
+            remainingSessions = [replacement, ...remainingSessions];
+            nextActiveId = replacement.id;
+        }
+        else if (nextActiveId === id) {
+            nextActiveId = getFirstActiveSessionId(remainingSessions);
+        }
+        const nextSnapshot = {
+            ...snapshot,
+            sessions: remainingSessions,
+            attachments: snapshot.attachments.filter((attachment) => attachment.sessionId !== id),
+        };
+        set({
+            snapshot: nextSnapshot,
+            activeSessionId: nextActiveId,
             activeView: get().activeView,
         });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);

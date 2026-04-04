@@ -20,6 +20,8 @@ interface DesktopState {
         captureMode?: CaptureMode;
     }) => Promise<void>;
     deleteSession: (id: string) => Promise<void>;
+    restoreSession: (id: string) => Promise<void>;
+    permanentlyDeleteSession: (id: string) => Promise<void>;
     saveTodo: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
     addTodo: (description: string) => Promise<void>;
     deleteTodo: (id: string) => Promise<void>;

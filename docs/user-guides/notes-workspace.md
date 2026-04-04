@@ -180,6 +180,8 @@ In `All Sessions`, you can filter:
 - private notes
 - or both together
 
+Deleted sessions are moved to a trash list for 7 days. From there you can restore them or delete them immediately.
+
 ## Domain, Project, Activity, and Tags
 
 The Notes workspace also supports lightweight classification metadata:

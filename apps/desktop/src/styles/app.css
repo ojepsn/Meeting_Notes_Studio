@@ -833,6 +833,25 @@ select {
   min-width: 0;
 }
 
+.compact-session-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-align: left;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.compact-session-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .compact-session-row strong {
   min-width: 0;
   overflow: hidden;
@@ -840,6 +859,43 @@ select {
   white-space: nowrap;
   font-size: 0.82rem;
   line-height: 1.15;
+}
+
+.compact-session-delete {
+  border: 1px solid var(--app-danger-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--app-danger);
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.compact-session-restore {
+  border: 1px solid var(--app-border-strong);
+  border-radius: 999px;
+  background: var(--app-input);
+  color: var(--app-text);
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.compact-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.session-item-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
 }
 
 .list-item strong {

@@ -5,8 +5,10 @@ interface SessionsSidebarProps {
     onSelect: (id: string) => void;
     onCreate: () => void;
     onDelete: (id: string) => void;
+    onRestore: (id: string) => void;
+    onDeleteForever: (id: string) => void;
     compact?: boolean;
     title?: string;
 }
-export declare const SessionsSidebar: ({ sessions, activeSessionId, onSelect, onCreate, onDelete, compact, title, }: SessionsSidebarProps) => import("react/jsx-runtime").JSX.Element;
+export declare const SessionsSidebar: ({ sessions, activeSessionId, onSelect, onCreate, onDelete, onRestore, onDeleteForever, compact, title, }: SessionsSidebarProps) => import("react/jsx-runtime").JSX.Element;
 export {};

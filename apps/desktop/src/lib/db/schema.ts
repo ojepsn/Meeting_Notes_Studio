@@ -15,6 +15,7 @@ export const sqliteBootstrapStatements = [
     id TEXT PRIMARY KEY,
     template_id TEXT NOT NULL,
     title TEXT NOT NULL,
+    deleted_at TEXT NOT NULL DEFAULT '',
     participant_text TEXT NOT NULL,
     session_date TEXT NOT NULL,
     start_time TEXT NOT NULL,

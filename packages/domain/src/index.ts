@@ -36,6 +36,7 @@ export interface SessionRecord {
   templateId: string;
   title: string;
   isPrivate: boolean;
+  deletedAt?: string | null;
   participantText: string;
   project: string;
   domain: string;
