@@ -736,10 +736,6 @@ select {
   margin-bottom: 0.3rem;
 }
 
-.capture-title-field-minimal label {
-  display: none;
-}
-
 .minimal-title-input {
   min-height: 64px;
   font-size: 1.12rem;
