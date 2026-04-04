@@ -1253,6 +1253,22 @@ export const SettingsCard = ({
               <h3>Other upcoming settings</h3>
               <p>This section gathers the miscellaneous desktop settings that do not belong to the main note-taking flow.</p>
             </div>
+            <div className="field">
+              <label htmlFor="capture-workspace-density">Default Capture UI</label>
+              <select
+                id="capture-workspace-density"
+                value={settings.captureWorkspaceDensity}
+                onChange={(event) =>
+                  onChange({
+                    ...settings,
+                    captureWorkspaceDensity: event.target.value === "minimal" ? "minimal" : "full",
+                  })
+                }
+              >
+                <option value="full">Full</option>
+                <option value="minimal">Minimal</option>
+              </select>
+            </div>
             <div className="inline-row">
               <button className="small-button" type="button" onClick={() => void onCheckForUpdates()}>
                 Check for updates

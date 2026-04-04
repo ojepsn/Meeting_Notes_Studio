@@ -10,6 +10,11 @@ It is designed around one stable shell:
 
 Secondary tools such as Settings, Sessions, To-dos, and Back-up open as overlays so the main workspace stays focused.
 
+The Capture view now supports two presentation densities:
+
+- `Full` keeps the current complete desktop editor visible.
+- `Minimal` reduces Capture to the essential working fields for the active note type, with `Open details` available when you want the full editor in an overlay.
+
 ## Capture Modes
 
 The Notes workspace supports three explicit capture modes.

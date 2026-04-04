@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCaptureMode, type CaptureMode } from "@notesmith/domain";
+import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCaptureMode, type CaptureMode, type CaptureWorkspaceDensity } from "@notesmith/domain";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
@@ -57,7 +57,7 @@ import { buildMetadataReview, EMPTY_METADATA_REVIEW, type MetadataReviewState } 
 import { parseTokenList } from "../components/peoplePickerUtils";
 
 type AppWorkspace = "notes" | "tasks" | "calendar" | "assistant" | "files";
-type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "todos" | "backup" | "settings" | "more" | null;
+type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "todos" | "backup" | "settings" | "more" | "capture-details" | null;
 type CommandAction = {
   id: string;
   label: string;
@@ -150,6 +150,7 @@ export const App = () => {
   } = useDesktopStore();
   const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("notes");
   const [openPanel, setOpenPanel] = useState<OverlayPanel>(null);
+  const [captureDensityOverride, setCaptureDensityOverride] = useState<CaptureWorkspaceDensity | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
@@ -474,6 +475,8 @@ export const App = () => {
     () => activeAttachments.find((attachment) => attachment.kind === "audio") ?? null,
     [activeAttachments],
   );
+  const effectiveCaptureDensity: CaptureWorkspaceDensity =
+    captureDensityOverride ?? snapshot?.settings.captureWorkspaceDensity ?? "full";
   const selectedTextModelOption = modelPricingSnapshot.textModels
     .map(buildTextModelOption)
     .find((option) => option.id === snapshot?.settings.textModel);
@@ -520,6 +523,11 @@ export const App = () => {
     setMetadataSuggestions(nextReview);
     setSelectedMetadataSuggestions(nextReview);
     setOpenPanel("metadata-review");
+  };
+
+  const handleCaptureDensityChange = (nextDensity: CaptureWorkspaceDensity) => {
+    const defaultDensity = snapshot?.settings.captureWorkspaceDensity ?? "full";
+    setCaptureDensityOverride(nextDensity === defaultDensity ? null : nextDensity);
   };
 
   const buildRawOutput = (session = activeSession) => {
@@ -1491,6 +1499,40 @@ export const App = () => {
 
   const renderOverlayContent = () => {
     switch (openPanel) {
+      case "capture-details":
+        return (
+          <SessionEditor
+            session={activeSession}
+            templates={snapshot.templates}
+            attachments={activeAttachments}
+            presentation="full"
+            showPresentationActions={false}
+            savedPeople={snapshot.settings.savedParticipants}
+            suggestedPeople={suggestedPeople}
+            savedProjects={snapshot.settings.savedProjects}
+            suggestedProjects={suggestedProjects}
+            savedDomains={snapshot.settings.savedDomains}
+            suggestedDomains={suggestedDomains}
+            savedActivities={snapshot.settings.savedActivities}
+            suggestedActivities={suggestedActivities}
+            savedTags={snapshot.settings.savedTags}
+            suggestedTags={suggestedTags}
+            isTranscribingAudio={isTranscribingAudio}
+            recordingMode={recordingMode}
+            isRecordingAudio={isRecordingAudio}
+            recordingStatusNote={recordingStatusNote}
+            onChange={(session) => void saveSession(session)}
+            onImportImage={() => void handleImportImage()}
+            onImportAudio={() => void handleImportAudio()}
+            onTranscribeAudio={() => void handleTranscribeAudio()}
+            onChangeRecordingMode={setRecordingMode}
+            onStartRecording={() => void handleStartRecording()}
+            onStopRecording={() => void handleStopRecording()}
+            onImportTranscript={() => void handleImportTranscript()}
+            onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
+            onUpdateAttachment={(attachment) => void handleUpdateAttachment(attachment)}
+          />
+        );
       case "sessions":
         return (
           <SessionsSidebar
@@ -1851,6 +1893,26 @@ export const App = () => {
                       Output
                     </button>
                   </div>
+                  {activeWorkspace === "notes" && activeView === "capture" ? (
+                    <div className="capture-density-toggle">
+                      <button
+                        className="segment-button"
+                        data-active={effectiveCaptureDensity === "minimal"}
+                        type="button"
+                        onClick={() => handleCaptureDensityChange("minimal")}
+                      >
+                        Minimal
+                      </button>
+                      <button
+                        className="segment-button"
+                        data-active={effectiveCaptureDensity === "full"}
+                        type="button"
+                        onClick={() => handleCaptureDensityChange("full")}
+                      >
+                        Full
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="workspace-guide-row">
@@ -1873,6 +1935,7 @@ export const App = () => {
                 session={activeSession}
                 templates={snapshot.templates}
                 attachments={activeAttachments}
+                presentation={effectiveCaptureDensity}
                 savedPeople={snapshot.settings.savedParticipants}
                 suggestedPeople={suggestedPeople}
                 savedProjects={snapshot.settings.savedProjects}
@@ -1897,6 +1960,7 @@ export const App = () => {
                 onImportTranscript={() => void handleImportTranscript()}
                 onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
                 onUpdateAttachment={(attachment) => void handleUpdateAttachment(attachment)}
+                onOpenDetails={() => openOverlay("capture-details")}
               />
             ) : (
               <OutputWorkspace
@@ -2093,7 +2157,9 @@ export const App = () => {
             <div className="overlay-header">
               <div>
                 <strong>
-                    {openPanel === "sessions"
+                    {openPanel === "capture-details"
+                    ? "Capture details"
+                    : openPanel === "sessions"
                     ? "All Sessions"
                     : openPanel === "new-note"
                       ? "New note"

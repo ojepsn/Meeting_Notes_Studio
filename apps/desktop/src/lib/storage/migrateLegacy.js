@@ -183,6 +183,7 @@ export const loadLegacyBrowserSnapshot = () => {
                 theme: mapLegacyThemeFamily(parsedSettings?.themeFamily),
                 outputLanguage: parsedSettings?.outputLanguage || "same",
                 preferredDesktopTemplateId: mapLegacyTemplateId(preferredDesktopTemplateId),
+                captureWorkspaceDensity: "full",
                 apiKey: "",
                 textModel: "gpt-5.4-mini",
                 transcriptionModel: "gpt-4o-mini-transcribe",

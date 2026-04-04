@@ -1,6 +1,7 @@
 export type TemplateKind = "builtin" | "custom";
 export type TemplateFieldType = "text" | "number" | "date" | "time" | "textarea";
 export type CaptureMode = "meeting-note" | "quick-note" | "voice-note";
+export type CaptureWorkspaceDensity = "full" | "minimal";
 
 export interface TemplateField {
   id: string;
@@ -101,6 +102,7 @@ export interface LocalAppSettings {
   theme: string;
   outputLanguage: "same" | "sv" | "en";
   preferredDesktopTemplateId: string;
+  captureWorkspaceDensity: CaptureWorkspaceDensity;
   apiKey: string;
   textModel: string;
   transcriptionModel: string;

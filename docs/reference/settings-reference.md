@@ -76,6 +76,17 @@ Includes:
 - abbreviations
 
 These saved values are used by session capture and suggestion flows.
+
+## Other Upcoming Settings
+
+### Default Capture UI
+
+The desktop app lets the user choose the default Capture presentation:
+
+- `Full` for the complete editor
+- `Minimal` for a reduced writing-first capture surface
+
+This is the default only. Inside the Notes workspace, the user can still switch between `Minimal` and `Full` directly from the Capture header.
 New People, Domains, Projects, and Activities can be entered directly in notes, then saved here for future reuse after Output is created.
 
 ## Prompts

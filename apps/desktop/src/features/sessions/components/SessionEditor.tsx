@@ -3,6 +3,7 @@ import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import type { RecordingMode } from "../../../lib/files/recording";
 import {
+  type CaptureWorkspaceDensity,
   DEFAULT_TEMPLATE_BY_CAPTURE_MODE,
   getTemplatesForCaptureMode,
   type AttachmentRecord,
@@ -15,6 +16,8 @@ interface SessionEditorProps {
   session: SessionRecord;
   templates: TemplateDefinition[];
   attachments: AttachmentRecord[];
+  presentation?: CaptureWorkspaceDensity;
+  showPresentationActions?: boolean;
   savedPeople: string[];
   suggestedPeople: string[];
   savedProjects: string[];
@@ -39,6 +42,7 @@ interface SessionEditorProps {
   onStopRecording: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
   onUpdateAttachment: (attachment: AttachmentRecord) => void;
+  onOpenDetails?: () => void;
 }
 
 const RECORDING_MODE_META: Record<
@@ -103,6 +107,8 @@ export const SessionEditor = ({
   session,
   templates,
   attachments,
+  presentation = "full",
+  showPresentationActions = true,
   savedPeople,
   suggestedPeople,
   savedProjects,
@@ -127,6 +133,7 @@ export const SessionEditor = ({
   onStopRecording,
   onRemoveAttachment,
   onUpdateAttachment,
+  onOpenDetails,
 }: SessionEditorProps) => {
   const update = <K extends keyof SessionRecord>(key: K, value: SessionRecord[K]) =>
     onChange({ ...session, [key]: value });
@@ -154,6 +161,12 @@ export const SessionEditor = ({
   const showQuickHighlights = session.captureMode === "meeting-note";
   const showTranscriptField = session.captureMode !== "quick-note";
   const primaryTemplateOptions = availableTemplates.length ? availableTemplates : templates;
+  const isMinimal = presentation === "minimal";
+  const showMinimalMeetingCore = isMinimal && session.captureMode === "meeting-note";
+  const showMinimalVoiceCore = isMinimal && session.captureMode === "voice-note";
+  const showFullAudioCard = !isMinimal && session.captureMode !== "quick-note";
+  const showMinimalAudioStrip = isMinimal && session.captureMode !== "quick-note";
+  const showDetailsDisclosure = !isMinimal;
 
   const switchMode = (captureMode: CaptureMode) => {
     const nextTemplates = getTemplatesForCaptureMode(templates, captureMode);
@@ -204,9 +217,17 @@ export const SessionEditor = ({
         <div>
           <h2>Capture</h2>
         </div>
+        {isMinimal && showPresentationActions ? (
+          <div className="capture-minimal-actions">
+            <span className="tiny-text">Minimal mode</span>
+            <button className="small-button" type="button" onClick={onOpenDetails}>
+              Open details
+            </button>
+          </div>
+        ) : null}
       </div>
 
-      <div className="capture-mode-switch">
+      <div className={`capture-mode-switch${isMinimal ? " capture-mode-switch-minimal" : ""}`}>
         {(Object.keys(CAPTURE_MODE_META) as CaptureMode[]).map((captureMode) => (
           <button
             key={captureMode}
@@ -266,7 +287,7 @@ export const SessionEditor = ({
           </div>
         </div>
 
-        {session.captureMode !== "quick-note" ? (
+        {showFullAudioCard ? (
           <div className="field field-wide audio-capture-card" data-recording={isRecordingAudio}>
             <div className="audio-capture-header">
               <div>
@@ -333,7 +354,63 @@ export const SessionEditor = ({
           </div>
         ) : null}
 
-        {showMeetingMeta ? (
+        {showMinimalAudioStrip ? (
+          <div className="field field-wide minimal-audio-strip" data-recording={isRecordingAudio}>
+            <div className="minimal-audio-strip-main">
+              <strong>Audio capture</strong>
+              <span className="muted">
+                {isRecordingAudio
+                  ? recordingMode === "microphone"
+                    ? "Recording microphone"
+                    : recordingMode === "system-audio"
+                      ? "Recording computer audio"
+                      : "Recording microphone and computer audio"
+                  : "Ready to record or transcribe"}
+              </span>
+            </div>
+            <div className="minimal-audio-strip-actions">
+              <select value={recordingMode} onChange={(event) => onChangeRecordingMode(event.target.value as RecordingMode)}>
+                {(Object.keys(RECORDING_MODE_META) as RecordingMode[]).map((mode) => (
+                  <option key={mode} value={mode}>
+                    {RECORDING_MODE_META[mode].label}
+                  </option>
+                ))}
+              </select>
+              <button className="primary-button" type="button" onClick={isRecordingAudio ? onStopRecording : onStartRecording}>
+                {isRecordingAudio ? "Stop recording" : "Record"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {showMinimalMeetingCore ? (
+          <div className="field field-wide minimal-context-grid">
+            <div className="field">
+              <label htmlFor="session-participants">People</label>
+              <PeoplePicker
+                value={session.participantText}
+                savedPeople={savedPeople}
+                suggestedPeople={suggestedPeople}
+                onChange={(value) => update("participantText", value)}
+                placeholder="Search or add people"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="session-date">Date</label>
+              <input id="session-date" type="date" value={session.date} onChange={(event) => update("date", event.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="session-start">Start time</label>
+              <input id="session-start" type="time" value={session.startTime} onChange={(event) => update("startTime", event.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="session-end">End time</label>
+              <input id="session-end" type="time" value={session.endTime} onChange={(event) => update("endTime", event.target.value)} />
+            </div>
+          </div>
+        ) : null}
+
+        {showDetailsDisclosure && showMeetingMeta ? (
           <details className="field field-wide workspace-disclosure">
             <summary>Meeting details</summary>
             <div className="workspace-disclosure-body form-grid">
@@ -416,7 +493,7 @@ export const SessionEditor = ({
               </div>
             </div>
           </details>
-        ) : (
+        ) : showDetailsDisclosure ? (
           <details className="field field-wide workspace-disclosure">
             <summary>Optional note details</summary>
             <div className="workspace-disclosure-body form-grid">
@@ -495,7 +572,7 @@ export const SessionEditor = ({
               </div>
             </div>
           </details>
-        )}
+        ) : null}
 
         {session.captureMode === "voice-note" ? (
           <>
@@ -508,20 +585,32 @@ export const SessionEditor = ({
                 placeholder={modeMeta.primaryFieldPlaceholder}
               />
             </div>
-            <details className="field field-wide workspace-disclosure">
-              <summary>Optional written note</summary>
-              <div className="workspace-disclosure-body">
-                <div className="field field-wide">
-                  <label htmlFor="manual-notes">Manual note</label>
-                  <textarea
-                    id="manual-notes"
-                    value={session.manualNotes}
-                    onChange={(event) => update("manualNotes", event.target.value)}
-                    placeholder="Add a short written note if it helps later."
-                  />
-                </div>
+            {isMinimal ? (
+              <div className="field field-wide">
+                <label htmlFor="manual-notes">Notes</label>
+                <textarea
+                  id="manual-notes"
+                  value={session.manualNotes}
+                  onChange={(event) => update("manualNotes", event.target.value)}
+                  placeholder="Add a short written note if it helps later."
+                />
               </div>
-            </details>
+            ) : (
+              <details className="field field-wide workspace-disclosure">
+                <summary>Optional written note</summary>
+                <div className="workspace-disclosure-body">
+                  <div className="field field-wide">
+                    <label htmlFor="manual-notes">Manual note</label>
+                    <textarea
+                      id="manual-notes"
+                      value={session.manualNotes}
+                      onChange={(event) => update("manualNotes", event.target.value)}
+                      placeholder="Add a short written note if it helps later."
+                    />
+                  </div>
+                </div>
+              </details>
+            )}
           </>
         ) : (
           <div className="field field-wide">
@@ -535,7 +624,7 @@ export const SessionEditor = ({
           </div>
         )}
 
-        {showQuickHighlights ? (
+        {!isMinimal && showQuickHighlights ? (
           <div className="field field-wide">
             <label htmlFor="quick-highlights">Quick highlights</label>
             <textarea
@@ -547,7 +636,7 @@ export const SessionEditor = ({
           </div>
         ) : null}
 
-        {customFields.map((field) => (
+        {!isMinimal ? customFields.map((field) => (
           <div key={field.id} className={field.type === "textarea" ? "field field-wide" : "field"}>
             <label htmlFor={`custom-field-${field.id}`}>{field.label}</label>
             {field.type === "textarea" ? (
@@ -575,9 +664,9 @@ export const SessionEditor = ({
               />
             )}
           </div>
-        ))}
+        )) : null}
 
-        {showTranscriptField ? (
+        {!showMinimalVoiceCore && showTranscriptField ? (
           <div className="field field-wide">
             <label htmlFor="session-transcript">
               {session.captureMode === "meeting-note" ? "Transcript" : "Live transcript"}
@@ -595,54 +684,57 @@ export const SessionEditor = ({
           </div>
         ) : null}
 
-        <details className="field field-wide workspace-disclosure">
-          <summary>Advanced output controls</summary>
-          <div className="workspace-disclosure-body form-grid">
-            <div className="field">
-              <label htmlFor="detail-level">Detail level</label>
-              <select
-                id="detail-level"
-                value={String(session.detailLevel)}
-                onChange={(event) => update("detailLevel", Number(event.target.value))}
-              >
-                {Object.entries(DETAIL_LEVEL_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {value} - {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {enabledSections.length ? (
-              <div className="field field-wide">
-                <label>Output sections for this session</label>
-                <div className="section-list">
-                  {enabledSections.map((section) => (
-                    <label key={section.id} className="list-item checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={section.checked}
-                        onChange={(event) =>
-                          update(
-                            "excludedSectionIds",
-                            event.target.checked
-                              ? session.excludedSectionIds.filter((id) => id !== section.id)
-                              : Array.from(new Set([...session.excludedSectionIds, section.id])),
-                          )
-                        }
-                      />
-                      <span>
-                        <strong>{section.title}</strong>
-                        <span className="muted">{section.instructions}</span>
-                      </span>
-                    </label>
+        {!isMinimal ? (
+          <details className="field field-wide workspace-disclosure">
+            <summary>Advanced output controls</summary>
+            <div className="workspace-disclosure-body form-grid">
+              <div className="field">
+                <label htmlFor="detail-level">Detail level</label>
+                <select
+                  id="detail-level"
+                  value={String(session.detailLevel)}
+                  onChange={(event) => update("detailLevel", Number(event.target.value))}
+                >
+                  {Object.entries(DETAIL_LEVEL_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {value} - {label}
+                    </option>
                   ))}
-                </div>
+                </select>
               </div>
-            ) : null}
-          </div>
-        </details>
+              {enabledSections.length ? (
+                <div className="field field-wide">
+                  <label>Output sections for this session</label>
+                  <div className="section-list">
+                    {enabledSections.map((section) => (
+                      <label key={section.id} className="list-item checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={section.checked}
+                          onChange={(event) =>
+                            update(
+                              "excludedSectionIds",
+                              event.target.checked
+                                ? session.excludedSectionIds.filter((id) => id !== section.id)
+                                : Array.from(new Set([...session.excludedSectionIds, section.id])),
+                            )
+                          }
+                        />
+                        <span>
+                          <strong>{section.title}</strong>
+                          <span className="muted">{section.instructions}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </details>
+        ) : null}
 
-        <div className="page-actions field-wide">
+        {!isMinimal ? (
+          <div className="page-actions field-wide">
           <button className="small-button" type="button" onClick={onImportImage}>
             Upload image
           </button>
@@ -663,9 +755,10 @@ export const SessionEditor = ({
               Upload note text
             </button>
           )}
-        </div>
+          </div>
+        ) : null}
 
-        {imageAttachments.length ? (
+        {!isMinimal && imageAttachments.length ? (
           <div className="field field-wide">
             <label>Session images</label>
             <div className="section-list">
@@ -719,7 +812,7 @@ export const SessionEditor = ({
           </div>
         ) : null}
 
-        {otherAttachments.length ? (
+        {!isMinimal && otherAttachments.length ? (
           <div className="field field-wide">
             <label>Session attachments</label>
             <div className="section-list">

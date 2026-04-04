@@ -4,6 +4,7 @@ const settings = {
     theme: "fluent-slate-light",
     outputLanguage: "same",
     preferredDesktopTemplateId: "meeting",
+    captureWorkspaceDensity: "full",
     apiKey: "",
     textModel: "gpt-5.4-mini",
     transcriptionModel: "gpt-4o-mini-transcribe",

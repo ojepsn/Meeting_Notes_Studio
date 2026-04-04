@@ -81,6 +81,7 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   theme: "fluent-slate-light",
   outputLanguage: "same",
   preferredDesktopTemplateId: "meeting",
+  captureWorkspaceDensity: "full",
   apiKey: "",
   textModel: "gpt-5.4-mini",
   transcriptionModel: "gpt-4o-mini-transcribe",
@@ -205,6 +206,7 @@ const writeLocalJson = (key: string, value: unknown) => {
 const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSettings => ({
   ...createDefaultSettings(),
   ...settings,
+  captureWorkspaceDensity: settings.captureWorkspaceDensity === "minimal" ? "minimal" : "full",
   textModel: normalizeTextModelId(settings.textModel),
   transcriptionModel: normalizeTranscriptionModelId(settings.transcriptionModel),
   promptProfile: normalizePromptProfile(settings.promptProfile),

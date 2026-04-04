@@ -8,6 +8,7 @@ const settings: LocalAppSettings = {
   theme: "modern-olive",
   outputLanguage: "same",
   preferredDesktopTemplateId: "meeting",
+  captureWorkspaceDensity: "full",
   apiKey: "test-key",
   textModel: "gpt-5-mini",
   transcriptionModel: "gpt-4o-mini-transcribe",
