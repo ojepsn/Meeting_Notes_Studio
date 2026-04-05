@@ -25,6 +25,7 @@ import {
   normalizeTranscriptionModelId,
   type AIModelPricingSnapshot,
 } from "../ai/modelPricing";
+import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, isOutputLayoutPresetId } from "../export/outputLayouts";
 import { isTauriRuntime } from "../storage/environment";
 import { sqliteBootstrapStatements } from "./schema";
 
@@ -81,6 +82,7 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   theme: "fluent-slate-light",
   outputLanguage: "same",
   preferredDesktopTemplateId: "meeting",
+  outputLayoutPresetId: DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
   captureWorkspaceDensity: "minimal",
   outputWorkspaceDensity: "minimal",
   apiKey: "",
@@ -207,6 +209,9 @@ const writeLocalJson = (key: string, value: unknown) => {
 const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSettings => ({
   ...createDefaultSettings(),
   ...settings,
+  outputLayoutPresetId: typeof settings.outputLayoutPresetId === "string" && isOutputLayoutPresetId(settings.outputLayoutPresetId)
+    ? settings.outputLayoutPresetId
+    : DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
   captureWorkspaceDensity: settings.captureWorkspaceDensity === "minimal" ? "minimal" : "full",
   outputWorkspaceDensity: settings.outputWorkspaceDensity === "minimal" ? "minimal" : "full",
   textModel: normalizeTextModelId(settings.textModel),

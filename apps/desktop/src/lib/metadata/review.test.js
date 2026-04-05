@@ -4,6 +4,7 @@ const settings = {
     theme: "fluent-slate-light",
     outputLanguage: "same",
     preferredDesktopTemplateId: "meeting",
+    outputLayoutPresetId: "modern-aptos",
     captureWorkspaceDensity: "full",
     outputWorkspaceDensity: "full",
     apiKey: "",

@@ -1,6 +1,7 @@
 import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getPrimaryCaptureMode, } from "@notesmith/domain";
 import { DEFAULT_MEETING_MINUTES_RULES, DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT, DEFAULT_PERSONAL_NOTES_RULES, DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT, DEFAULT_REVISION_RULES, DEFAULT_TRANSLATION_RULES, } from "@notesmith/prompts";
 import { normalizeAIModelPricingSnapshot, normalizeTextModelId, normalizeTranscriptionModelId, } from "../ai/modelPricing";
+import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, isOutputLayoutPresetId } from "../export/outputLayouts";
 import { isTauriRuntime } from "../storage/environment";
 import { sqliteBootstrapStatements } from "./schema";
 const STORAGE_KEYS = {
@@ -49,6 +50,7 @@ export const createDefaultSettings = () => ({
     theme: "fluent-slate-light",
     outputLanguage: "same",
     preferredDesktopTemplateId: "meeting",
+    outputLayoutPresetId: DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
     captureWorkspaceDensity: "minimal",
     outputWorkspaceDensity: "minimal",
     apiKey: "",
@@ -140,6 +142,9 @@ const writeLocalJson = (key, value) => {
 const normalizeSettings = (settings) => ({
     ...createDefaultSettings(),
     ...settings,
+    outputLayoutPresetId: typeof settings.outputLayoutPresetId === "string" && isOutputLayoutPresetId(settings.outputLayoutPresetId)
+        ? settings.outputLayoutPresetId
+        : DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
     captureWorkspaceDensity: settings.captureWorkspaceDensity === "minimal" ? "minimal" : "full",
     outputWorkspaceDensity: settings.outputWorkspaceDensity === "minimal" ? "minimal" : "full",
     textModel: normalizeTextModelId(settings.textModel),

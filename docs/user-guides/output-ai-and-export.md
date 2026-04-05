@@ -61,6 +61,45 @@ AI behavior is controlled in `Settings`:
 
 AI settings are intended to stay local to the machine and not be mixed into shared session data files.
 
+## Export Formats
+
+The desktop app can export Output as:
+
+- text (`.txt`)
+- markdown (`.md`)
+- HTML (`.html`)
+- Word (`.docx`)
+- PDF (`.pdf`)
+
+When images are marked for inclusion in polished output, Word and PDF export attempt to carry those staged images into the exported document as well.
+
+## Export Layout Presets
+
+`Settings` -> `Output formatting` now includes standardized document layout presets for professional business output.
+
+Current presets:
+
+- `Modern Aptos`
+- `Enterprise Sans`
+- `Editorial Serif`
+- `Board Briefing`
+- `Digital Inter`
+
+These presets control:
+
+- title font
+- heading font
+- body font
+- metadata and caption font
+- default sizes
+- line spacing rhythm
+
+The selected preset is used by:
+
+- Word export (`.docx`)
+- PDF export (`.pdf`)
+- HTML export (`.html`)
+
 ## Prompt Families
 
 Prompt management is separated by function:

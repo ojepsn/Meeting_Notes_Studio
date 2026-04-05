@@ -1,7 +1,9 @@
-import type { AttachmentRecord, SessionRecord } from "@notesmith/domain";
+import type { AttachmentRecord, CaptureWorkspaceDensity, SessionRecord } from "@notesmith/domain";
 interface OutputWorkspaceProps {
     session: SessionRecord;
     attachments: AttachmentRecord[];
+    presentation?: CaptureWorkspaceDensity;
+    showPresentationActions?: boolean;
     onChange: (session: SessionRecord) => void;
     savedPeople: string[];
     suggestedPeople: string[];
@@ -23,10 +25,13 @@ interface OutputWorkspaceProps {
     onExportText: () => void;
     onExportMarkdown: () => void;
     onExportHtml: () => void;
+    onExportDocx: () => void;
+    onExportPdf: () => void;
     primaryActionLabel?: string;
     secondaryActionLabel?: string | null;
     emptyStatePrimaryLabel?: string;
     emptyStateSecondaryLabel?: string | null;
+    onOpenDetails?: () => void;
 }
-export declare const OutputWorkspace: ({ session, attachments, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const OutputWorkspace: ({ session, attachments, presentation, showPresentationActions, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, onOpenDetails, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

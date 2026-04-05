@@ -5,6 +5,7 @@ const settings = {
     theme: "modern-olive",
     outputLanguage: "same",
     preferredDesktopTemplateId: "meeting",
+    outputLayoutPresetId: "modern-aptos",
     captureWorkspaceDensity: "full",
     outputWorkspaceDensity: "full",
     apiKey: "test-key",

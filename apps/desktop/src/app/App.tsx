@@ -28,7 +28,7 @@ import { transcribeAudio } from "../lib/ai/services/transcribeAudio";
 import { translateOutput } from "../lib/ai/services/translateOutput";
 import type { AIRuntimeEvent } from "../lib/ai/runtime";
 import { checkForDesktopUpdates } from "../lib/ai/updater";
-import { exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsText } from "../lib/export/exportService";
+import { exportOutputAsDocx, exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsPdf, exportOutputAsText } from "../lib/export/exportService";
 import {
   fileToAttachmentRecord,
   loadPersistedAttachmentFile,
@@ -1607,7 +1607,9 @@ export const App = () => {
             onRevise={(instructions) => void handleRevise(instructions)}
             onExportText={() => exportOutputAsText({ title: activeSession.title, output: activeSession.output })}
             onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}
-            onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output })}
+            onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+            onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+            onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
             primaryActionLabel={outputActionConfig.primaryLabel}
             secondaryActionLabel={outputActionConfig.secondaryLabel}
             emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
@@ -2095,7 +2097,9 @@ export const App = () => {
                 onRevise={(instructions) => void handleRevise(instructions)}
                 onExportText={() => exportOutputAsText({ title: activeSession.title, output: activeSession.output })}
                 onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}
-                onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output })}
+                onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
                 primaryActionLabel={outputActionConfig.primaryLabel}
                 secondaryActionLabel={outputActionConfig.secondaryLabel}
                 emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
@@ -2177,8 +2181,14 @@ export const App = () => {
                       <button className="small-button" type="button" onClick={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}>
                         Export markdown
                       </button>
-                      <button className="small-button" type="button" onClick={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output })}>
+                      <button className="small-button" type="button" onClick={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}>
                         Export HTML
+                      </button>
+                      <button className="small-button" type="button" onClick={() => void exportOutputAsDocx({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}>
+                        Export Word
+                      </button>
+                      <button className="small-button" type="button" onClick={() => void exportOutputAsPdf({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}>
+                        Export PDF
                       </button>
                     </div>
                   </details>

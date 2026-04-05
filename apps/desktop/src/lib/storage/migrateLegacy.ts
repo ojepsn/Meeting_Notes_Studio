@@ -17,6 +17,7 @@ import {
   DEFAULT_REVISION_RULES,
   DEFAULT_TRANSLATION_RULES,
 } from "@notesmith/prompts";
+import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, isOutputLayoutPresetId } from "../export/outputLayouts";
 
 const LEGACY_SESSIONS_KEY = "notesmith-sessions";
 const LEGACY_SETTINGS_KEY = "notesmith-settings";
@@ -67,6 +68,7 @@ type LegacyTodo = {
 type LegacySettings = {
   themeFamily?: string;
   outputLanguage?: "same" | "sv" | "en";
+  exportStylePreset?: string;
   templateUsageCounts?: Record<string, number>;
   participantDirectory?: string[];
   abbreviationDirectory?: Array<{ id?: string; shortForm?: string; fullForm?: string }>;
@@ -272,6 +274,7 @@ export const loadLegacyBrowserSnapshot = (): DesktopAppSnapshot | null => {
     const parsedSessions = rawSessions ? (JSON.parse(rawSessions) as LegacySession[]) : [];
     const parsedSettings = rawSettings ? (JSON.parse(rawSettings) as LegacySettings) : null;
     const templateUsageCounts = parsedSettings?.templateUsageCounts ?? {};
+    const legacyExportPresetId = parsedSettings?.exportStylePreset;
     const preferredDesktopTemplateId = Object.entries(templateUsageCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
 
     return {
@@ -283,6 +286,9 @@ export const loadLegacyBrowserSnapshot = (): DesktopAppSnapshot | null => {
         theme: mapLegacyThemeFamily(parsedSettings?.themeFamily),
         outputLanguage: parsedSettings?.outputLanguage || "same",
         preferredDesktopTemplateId: mapLegacyTemplateId(preferredDesktopTemplateId),
+        outputLayoutPresetId: typeof legacyExportPresetId === "string" && isOutputLayoutPresetId(legacyExportPresetId)
+          ? legacyExportPresetId
+          : DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
         captureWorkspaceDensity: "minimal",
         outputWorkspaceDensity: "minimal",
         apiKey: "",

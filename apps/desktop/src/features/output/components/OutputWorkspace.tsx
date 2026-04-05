@@ -30,6 +30,8 @@ interface OutputWorkspaceProps {
   onExportText: () => void;
   onExportMarkdown: () => void;
   onExportHtml: () => void;
+  onExportDocx: () => void;
+  onExportPdf: () => void;
   primaryActionLabel?: string;
   secondaryActionLabel?: string | null;
   emptyStatePrimaryLabel?: string;
@@ -63,6 +65,8 @@ export const OutputWorkspace = ({
   onExportText,
   onExportMarkdown,
   onExportHtml,
+  onExportDocx,
+  onExportPdf,
   primaryActionLabel = "Generate",
   secondaryActionLabel = null,
   emptyStatePrimaryLabel = "Generate polished notes",
@@ -70,7 +74,6 @@ export const OutputWorkspace = ({
   onOpenDetails,
 }: OutputWorkspaceProps) => {
   const [revisionInstructions, setRevisionInstructions] = useState("");
-  const [showAdvancedRefinement, setShowAdvancedRefinement] = useState(false);
   const includedImages = attachments
     .filter((attachment) => attachment.kind === "image" && attachment.includeInOutput)
     .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt));
@@ -106,9 +109,6 @@ export const OutputWorkspace = ({
             ) : null}
             <button className="shell-button" type="button" onClick={onTranslate}>
               Translate
-            </button>
-            <button className="shell-button" type="button" onClick={() => setShowAdvancedRefinement((current) => !current)}>
-              {showAdvancedRefinement ? "Hide advanced actions" : "Show advanced actions"}
             </button>
           </div>
         )}
@@ -291,7 +291,7 @@ export const OutputWorkspace = ({
           </div>
         </div>
       ) : null}
-      {!isMinimal && showAdvancedRefinement ? (
+      {!isMinimal ? (
         <div className="stack">
           <div className="field field-wide">
             <label htmlFor="revision-instructions">Revision instructions</label>
@@ -323,6 +323,12 @@ export const OutputWorkspace = ({
             </button>
             <button className="shell-button" type="button" onClick={onExportHtml}>
               Export HTML
+            </button>
+            <button className="shell-button" type="button" onClick={onExportDocx}>
+              Export Word
+            </button>
+            <button className="shell-button" type="button" onClick={onExportPdf}>
+              Export PDF
             </button>
           </div>
         </div>

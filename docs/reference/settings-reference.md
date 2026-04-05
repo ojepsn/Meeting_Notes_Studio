@@ -59,6 +59,18 @@ Purpose:
 Includes:
 
 - output language
+- default desktop template
+- standardized document layout presets for export styling
+
+Current output layout presets:
+
+- `Modern Aptos` for the most balanced modern Microsoft-style business output
+- `Enterprise Sans` for compact executive and board-facing documents
+- `Editorial Serif` for more formal, premium client-ready notes
+- `Board Briefing` for denser briefing packs and leadership updates
+- `Digital Inter` for digital-first product and operations teams
+
+These presets are used when exporting Output to Word and PDF, so document typography stays consistent with the user’s selected formatting preference.
 
 ## People & Labels
 

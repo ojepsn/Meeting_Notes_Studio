@@ -13,6 +13,7 @@ import {
 import type { AIRequestHistoryEntry } from "../../../lib/ai/history";
 import type { AIDiagnosticsItem } from "../../../lib/ai/metrics";
 import type { SelectModelOption } from "../../../lib/ai/modelPricing";
+import { OUTPUT_LAYOUT_PRESETS } from "../../../lib/export/outputLayouts";
 import { TemplatesCard } from "../../templates/components/TemplatesCard";
 
 export type SettingsSection =
@@ -621,7 +622,7 @@ export const SettingsCard = ({
           <div className="sidebar-card">
             <div>
               <h3>Output formatting</h3>
-              <p>These defaults shape how generated notes should read and which template should open by default.</p>
+              <p>These defaults shape how generated notes read on screen and how Word and PDF exports are styled.</p>
             </div>
             <div className="field">
               <label htmlFor="desktop-default-template">Default desktop template</label>
@@ -653,6 +654,52 @@ export const SettingsCard = ({
                 <option value="sv">Swedish</option>
                 <option value="en">English</option>
               </select>
+            </div>
+            <div className="field">
+              <label htmlFor="output-layout-preset">Document layout preset</label>
+              <select
+                id="output-layout-preset"
+                value={settings.outputLayoutPresetId}
+                onChange={(event) => onChange({ ...settings, outputLayoutPresetId: event.target.value })}
+              >
+                {OUTPUT_LAYOUT_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="settings-option-grid">
+              {OUTPUT_LAYOUT_PRESETS.map((preset) => {
+                const isSelected = settings.outputLayoutPresetId === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    className={`settings-option-card${isSelected ? " settings-option-card-selected" : ""}`}
+                    type="button"
+                    onClick={() => onChange({ ...settings, outputLayoutPresetId: preset.id })}
+                  >
+                    <div className="model-option-title-row">
+                      <strong>{preset.label}</strong>
+                      {isSelected ? <span className="model-option-selected">Selected</span> : null}
+                    </div>
+                    <p>{preset.description}</p>
+                    <div className="model-option-copy-block model-option-copy-block-compact">
+                      <span className="model-option-label">Typography</span>
+                      <span className="tiny-text">
+                        Headers: {preset.style.headingFont.split(",")[0].replaceAll("\"", "")}
+                      </span>
+                      <span className="tiny-text">
+                        Body: {preset.style.bodyFont.split(",")[0].replaceAll("\"", "")} · {preset.style.bodySize} pt · {preset.style.lineHeight} line height
+                      </span>
+                    </div>
+                    <div className="model-option-copy-block model-option-copy-block-compact">
+                      <span className="model-option-label">Best for</span>
+                      <span className="tiny-text">{preset.bestFor}</span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         ) : null}
