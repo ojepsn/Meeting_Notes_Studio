@@ -451,6 +451,16 @@ select {
   opacity: 0.72;
 }
 
+.todo-sidebar-meta-compact {
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.todo-sidebar-list-compact {
+  max-height: 260px;
+  overflow: auto;
+}
+
 .workspace-shell {
   display: flex;
   flex-direction: column;
@@ -1192,6 +1202,147 @@ select {
 .todo-sidebar-item-copy strong {
   font-size: 0.88rem;
   line-height: 1.35;
+}
+
+.todos-workspace {
+  gap: 1rem;
+}
+
+.todos-workspace-minimal {
+  padding: 1.5rem;
+}
+
+.todos-workspace-input-row,
+.todos-workspace-toolbar {
+  display: flex;
+  gap: 0.85rem;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.todos-workspace-list,
+.todos-workspace-completed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.todos-workspace-item {
+  border: 1px solid var(--app-border);
+  border-radius: 20px;
+  background: var(--app-surface-soft);
+  padding: 0.95rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.todos-workspace-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.todos-workspace-main input {
+  width: auto;
+  min-height: 0;
+  margin-top: 0.25rem;
+}
+
+.todos-workspace-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.todos-workspace-copy strong {
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.todos-workspace-main-completed strong {
+  text-decoration: line-through;
+  opacity: 0.72;
+}
+
+.todos-workspace-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.todos-workspace-row {
+  display: grid;
+  grid-template-columns: 56px minmax(220px, 2fr) 72px repeat(3, minmax(110px, 1fr)) 98px 98px 110px 84px;
+  gap: 0.55rem;
+  align-items: center;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--app-surface-soft);
+  padding: 0.7rem 0.85rem;
+  font-size: 0.84rem;
+}
+
+.todos-workspace-row-header {
+  background: transparent;
+  border: 0;
+  padding: 0 0.85rem;
+  color: var(--app-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.todos-workspace-row[role="button"] {
+  cursor: pointer;
+}
+
+.activities-workspace-row {
+  grid-template-columns: 56px minmax(200px, 2fr) 72px repeat(3, minmax(100px, 1fr)) 92px 92px 80px 80px 110px 84px;
+}
+
+.todo-private-field {
+  min-width: 140px;
+}
+
+.todos-workspace-row input[type="checkbox"] {
+  width: auto;
+  min-height: 0;
+}
+
+.todos-cell-strong {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.todos-editor-backdrop {
+  position: fixed;
+}
+
+.todos-editor-surface {
+  width: min(760px, calc(100vw - 3rem));
+}
+
+.rich-text-surface {
+  min-height: 180px;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--app-input-bg);
+  padding: 0.85rem 0.95rem;
+  color: var(--app-text);
+  outline: none;
+}
+
+.todo-rich-text-surface:focus {
+  border-color: var(--app-accent-border);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent-soft) 40%, transparent 60%);
 }
 
 .section-divider {

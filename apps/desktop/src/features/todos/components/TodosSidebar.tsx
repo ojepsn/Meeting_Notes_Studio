@@ -7,14 +7,15 @@ interface TodosSidebarProps {
   onAdd: (description: string) => void;
   onDelete: (id: string) => void;
   onOpenAll: () => void;
+  compact?: boolean;
 }
 
-export const TodosSidebar = ({ todos, onToggle, onAdd, onDelete, onOpenAll }: TodosSidebarProps) => {
+export const TodosSidebar = ({ todos, onToggle, onAdd, onDelete, onOpenAll, compact = false }: TodosSidebarProps) => {
   const [draft, setDraft] = useState("");
 
   const pendingTodos = useMemo(
-    () => todos.filter((todo) => !todo.isDone).slice(0, 5),
-    [todos],
+    () => todos.filter((todo) => !todo.isDone).slice(0, compact ? 4 : 5),
+    [compact, todos],
   );
 
   const completedCount = todos.filter((todo) => todo.isDone).length;
@@ -28,19 +29,19 @@ export const TodosSidebar = ({ todos, onToggle, onAdd, onDelete, onOpenAll }: To
   };
 
   return (
-    <div className="sidebar-card">
+    <div className={compact ? "workspace-rail-todo-card" : "sidebar-card"}>
       <div className="card-header">
         <div>
           <h3>To-dos</h3>
         </div>
         <button className="small-button" type="button" onClick={onOpenAll}>
-          Open all
+          {compact ? "Open" : "Open all"}
         </button>
       </div>
       <div className="field">
-        <label htmlFor="sidebar-todo-draft">Quick add</label>
+        <label htmlFor={compact ? "rail-todo-draft" : "sidebar-todo-draft"}>Quick add</label>
         <input
-          id="sidebar-todo-draft"
+          id={compact ? "rail-todo-draft" : "sidebar-todo-draft"}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
@@ -52,11 +53,11 @@ export const TodosSidebar = ({ todos, onToggle, onAdd, onDelete, onOpenAll }: To
           placeholder="Add a to-do or type td ... anywhere"
         />
       </div>
-      <div className="todo-sidebar-meta">
+      <div className={`todo-sidebar-meta${compact ? " todo-sidebar-meta-compact" : ""}`}>
         <span className="status-chip">{pendingTodos.length} visible</span>
         <span className="tiny-text">{completedCount} done</span>
       </div>
-      <div className="todo-sidebar-list">
+      <div className={`todo-sidebar-list${compact ? " todo-sidebar-list-compact" : ""}`}>
         {pendingTodos.length ? (
           pendingTodos.map((todo) => (
             <label key={todo.id} className="todo-sidebar-item">
@@ -67,7 +68,7 @@ export const TodosSidebar = ({ todos, onToggle, onAdd, onDelete, onOpenAll }: To
               />
               <span className="todo-sidebar-item-copy">
                 <strong>{todo.description}</strong>
-                <span className="muted">{todo.createdAt.slice(0, 10)}</span>
+                <span className="muted">{compact ? todo.createdAt.slice(5, 10) : todo.createdAt.slice(0, 10)}</span>
               </span>
               <button
                 className="small-button danger-button"

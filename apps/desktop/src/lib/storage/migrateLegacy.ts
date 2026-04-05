@@ -205,7 +205,14 @@ const mapLegacyTodos = (todos: LegacyTodo[] | undefined): TodoRecord[] =>
           id: typeof todo.id === "string" && todo.id.trim() ? todo.id : crypto.randomUUID(),
           description: typeof todo.description === "string" ? todo.description.trim() : "",
           isDone: todo.completed === true,
+          isPrivate: false,
           comments: typeof todo.comments === "string" ? todo.comments : "",
+          domain: "",
+          project: "",
+          activity: "",
+          doOn: "",
+          dueDate: "",
+          detailsHtml: typeof todo.comments === "string" ? todo.comments : "",
           createdAt: typeof todo.addedAt === "string" && todo.addedAt.trim() ? todo.addedAt : new Date().toISOString(),
           sessionIds: Array.isArray(todo.sessionRefs)
             ? todo.sessionRefs
@@ -281,6 +288,8 @@ export const loadLegacyBrowserSnapshot = (): DesktopAppSnapshot | null => {
       sessions: mapLegacySessions(parsedSessions),
       templates: mapLegacyTemplates(parsedSettings?.customTemplates),
       todos: mapLegacyTodos(parsedSettings?.todoItems),
+      activities: [],
+      entityLinks: [],
       attachments: [],
       settings: {
         theme: mapLegacyThemeFamily(parsedSettings?.themeFamily),

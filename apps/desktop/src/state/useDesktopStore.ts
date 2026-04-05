@@ -6,11 +6,13 @@ import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from ".
 import {
   createAppRepository,
   createSessionRecord,
+  upsertActivity,
   upsertSession,
   upsertTemplate,
   upsertTodo,
 } from "../lib/db/repository";
 import { removePersistedAttachment } from "../lib/files/attachmentStore";
+import { findSessionIdForActivity, upsertEntityLink } from "../lib/links/entityLinks";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 
 type DesktopView = "capture" | "output";
@@ -32,6 +34,24 @@ const isSessionExpired = (session: DesktopAppSnapshot["sessions"][number], nowMs
 
 const getFirstActiveSessionId = (sessions: DesktopAppSnapshot["sessions"]) =>
   sessions.find((session) => !session.deletedAt)?.id ?? null;
+
+const buildLinkedMeetingSession = (
+  activity: DesktopAppSnapshot["activities"][number],
+  preferredTemplateId: string,
+) => {
+  const session = createSessionRecord(preferredTemplateId || "meeting", "meeting-note");
+  const meetingDate = activity.doOn || activity.dueDate || session.date;
+  return {
+    ...session,
+    title: activity.description,
+    isPrivate: activity.isPrivate,
+    project: activity.project,
+    domain: activity.domain,
+    activity: activity.activity,
+    date: meetingDate,
+    updatedAt: new Date().toISOString(),
+  };
+};
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingSnapshot: DesktopAppSnapshot | null = null;
@@ -114,6 +134,11 @@ interface DesktopState {
   saveTodo: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
   addTodo: (description: string) => Promise<void>;
   deleteTodo: (id: string) => Promise<void>;
+  saveActivity: (activity: DesktopAppSnapshot["activities"][number]) => Promise<void>;
+  addActivity: (description: string, type?: DesktopAppSnapshot["activities"][number]["type"]) => Promise<void>;
+  deleteActivity: (id: string) => Promise<void>;
+  convertTodoToActivity: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
+  ensureSessionForActivity: (activityId: string) => Promise<string | null>;
   saveSettings: (settings: DesktopAppSnapshot["settings"]) => Promise<void>;
   saveTemplate: (template: DesktopAppSnapshot["templates"][number]) => Promise<void>;
   resetTemplates: () => Promise<void>;
@@ -328,7 +353,14 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
           id: crypto.randomUUID(),
           description: description.trim(),
           isDone: false,
+          isPrivate: false,
           comments: "",
+          domain: "",
+          project: "",
+          activity: "",
+          doOn: "",
+          dueDate: "",
+          detailsHtml: "",
           createdAt: new Date().toISOString(),
           sessionIds: get().activeSessionId ? [get().activeSessionId].filter((value): value is string => Boolean(value)) : [],
         },
@@ -344,6 +376,107 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     const nextSnapshot = { ...snapshot, todos: snapshot.todos.filter((todo) => todo.id !== id) };
     set({ snapshot: nextSnapshot });
     await flushSnapshotPersist(get().repository, nextSnapshot, set);
+  },
+  saveActivity: async (activity) => {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const nextSnapshot: DesktopAppSnapshot = {
+      ...snapshot,
+      activities: upsertActivity(snapshot.activities, activity),
+    };
+    set({ snapshot: nextSnapshot });
+    scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+  },
+  addActivity: async (description, type = "task") => {
+    const snapshot = get().snapshot;
+    if (!snapshot || !description.trim()) return;
+    const nextActivity: DesktopAppSnapshot["activities"][number] = {
+      id: crypto.randomUUID(),
+      type,
+      description: description.trim(),
+      isDone: false,
+      isPrivate: false,
+      comments: "",
+      domain: "",
+      project: "",
+      activity: "",
+      doOn: "",
+      dueDate: "",
+      detailsHtml: "",
+      timeRequiredMinutes: 0,
+      actualTimeSpentMinutes: 0,
+      createdAt: new Date().toISOString(),
+      sessionIds: get().activeSessionId ? [get().activeSessionId].filter((value): value is string => Boolean(value)) : [],
+    };
+    const nextSnapshot = {
+      ...snapshot,
+      activities: [nextActivity, ...snapshot.activities],
+    };
+    set({ snapshot: nextSnapshot });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
+  },
+  deleteActivity: async (id) => {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const nextSnapshot = { ...snapshot, activities: snapshot.activities.filter((activity) => activity.id !== id) };
+    set({ snapshot: nextSnapshot });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
+  },
+  convertTodoToActivity: async (todo) => {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const nextActivity = {
+      id: crypto.randomUUID(),
+      type: "task" as const,
+      description: todo.description,
+      isDone: false,
+      isPrivate: todo.isPrivate,
+      comments: todo.comments,
+      domain: todo.domain,
+      project: todo.project,
+      activity: todo.activity,
+      doOn: todo.doOn,
+      dueDate: todo.dueDate,
+      detailsHtml: todo.detailsHtml,
+      timeRequiredMinutes: 0,
+      actualTimeSpentMinutes: 0,
+      createdAt: new Date().toISOString(),
+      sessionIds: todo.sessionIds,
+    };
+    const nextSnapshot = {
+      ...snapshot,
+      todos: snapshot.todos.filter((entry) => entry.id !== todo.id),
+      activities: [nextActivity, ...snapshot.activities],
+    };
+    set({ snapshot: nextSnapshot });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
+  },
+  ensureSessionForActivity: async (activityId) => {
+    const snapshot = get().snapshot;
+    if (!snapshot) return null;
+    const activity = snapshot.activities.find((entry) => entry.id === activityId);
+    if (!activity) return null;
+    const existingSessionId = findSessionIdForActivity(snapshot.entityLinks, activityId);
+    if (existingSessionId) {
+      return existingSessionId;
+    }
+    const linkedSession = buildLinkedMeetingSession(activity, snapshot.settings.preferredDesktopTemplateId);
+    const nextSnapshot = {
+      ...snapshot,
+      sessions: [linkedSession, ...snapshot.sessions],
+      entityLinks: upsertEntityLink(snapshot.entityLinks, {
+        id: crypto.randomUUID(),
+        fromType: "activity",
+        fromId: activity.id,
+        toType: "session",
+        toId: linkedSession.id,
+        relation: "has_session",
+        createdAt: new Date().toISOString(),
+      }),
+    };
+    set({ snapshot: nextSnapshot, activeSessionId: linkedSession.id });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    return linkedSession.id;
   },
   saveSettings: async (settings) => {
     const snapshot = get().snapshot;

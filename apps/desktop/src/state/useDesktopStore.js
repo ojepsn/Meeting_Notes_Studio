@@ -2,8 +2,9 @@ import { create } from "zustand";
 import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCaptureMode } from "@notesmith/domain";
 import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
 import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
-import { createAppRepository, createSessionRecord, upsertSession, upsertTemplate, upsertTodo, } from "../lib/db/repository";
+import { createAppRepository, createSessionRecord, upsertActivity, upsertSession, upsertTemplate, upsertTodo, } from "../lib/db/repository";
 import { removePersistedAttachment } from "../lib/files/attachmentStore";
+import { findSessionIdForActivity, upsertEntityLink } from "../lib/links/entityLinks";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 const PERSIST_DEBOUNCE_MS = 300;
 const TRASH_RETENTION_DAYS = 7;
@@ -19,6 +20,20 @@ const isSessionExpired = (session, nowMs) => {
     return nowMs - deletedMs >= TRASH_RETENTION_MS;
 };
 const getFirstActiveSessionId = (sessions) => sessions.find((session) => !session.deletedAt)?.id ?? null;
+const buildLinkedMeetingSession = (activity, preferredTemplateId) => {
+    const session = createSessionRecord(preferredTemplateId || "meeting", "meeting-note");
+    const meetingDate = activity.doOn || activity.dueDate || session.date;
+    return {
+        ...session,
+        title: activity.description,
+        isPrivate: activity.isPrivate,
+        project: activity.project,
+        domain: activity.domain,
+        activity: activity.activity,
+        date: meetingDate,
+        updatedAt: new Date().toISOString(),
+    };
+};
 let persistTimer = null;
 let pendingSnapshot = null;
 const logPersistError = (error) => {
@@ -276,7 +291,14 @@ export const useDesktopStore = create((set, get) => ({
                     id: crypto.randomUUID(),
                     description: description.trim(),
                     isDone: false,
+                    isPrivate: false,
                     comments: "",
+                    domain: "",
+                    project: "",
+                    activity: "",
+                    doOn: "",
+                    dueDate: "",
+                    detailsHtml: "",
                     createdAt: new Date().toISOString(),
                     sessionIds: get().activeSessionId ? [get().activeSessionId].filter((value) => Boolean(value)) : [],
                 },
@@ -293,6 +315,113 @@ export const useDesktopStore = create((set, get) => ({
         const nextSnapshot = { ...snapshot, todos: snapshot.todos.filter((todo) => todo.id !== id) };
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    saveActivity: async (activity) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const nextSnapshot = {
+            ...snapshot,
+            activities: upsertActivity(snapshot.activities, activity),
+        };
+        set({ snapshot: nextSnapshot });
+        scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    addActivity: async (description, type = "task") => {
+        const snapshot = get().snapshot;
+        if (!snapshot || !description.trim())
+            return;
+        const nextActivity = {
+            id: crypto.randomUUID(),
+            type,
+            description: description.trim(),
+            isDone: false,
+            isPrivate: false,
+            comments: "",
+            domain: "",
+            project: "",
+            activity: "",
+            doOn: "",
+            dueDate: "",
+            detailsHtml: "",
+            timeRequiredMinutes: 0,
+            actualTimeSpentMinutes: 0,
+            createdAt: new Date().toISOString(),
+            sessionIds: get().activeSessionId ? [get().activeSessionId].filter((value) => Boolean(value)) : [],
+        };
+        const nextSnapshot = {
+            ...snapshot,
+            activities: [nextActivity, ...snapshot.activities],
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    deleteActivity: async (id) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const nextSnapshot = { ...snapshot, activities: snapshot.activities.filter((activity) => activity.id !== id) };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    convertTodoToActivity: async (todo) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const nextActivity = {
+            id: crypto.randomUUID(),
+            type: "task",
+            description: todo.description,
+            isDone: false,
+            isPrivate: todo.isPrivate,
+            comments: todo.comments,
+            domain: todo.domain,
+            project: todo.project,
+            activity: todo.activity,
+            doOn: todo.doOn,
+            dueDate: todo.dueDate,
+            detailsHtml: todo.detailsHtml,
+            timeRequiredMinutes: 0,
+            actualTimeSpentMinutes: 0,
+            createdAt: new Date().toISOString(),
+            sessionIds: todo.sessionIds,
+        };
+        const nextSnapshot = {
+            ...snapshot,
+            todos: snapshot.todos.filter((entry) => entry.id !== todo.id),
+            activities: [nextActivity, ...snapshot.activities],
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    ensureSessionForActivity: async (activityId) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return null;
+        const activity = snapshot.activities.find((entry) => entry.id === activityId);
+        if (!activity)
+            return null;
+        const existingSessionId = findSessionIdForActivity(snapshot.entityLinks, activityId);
+        if (existingSessionId) {
+            return existingSessionId;
+        }
+        const linkedSession = buildLinkedMeetingSession(activity, snapshot.settings.preferredDesktopTemplateId);
+        const nextSnapshot = {
+            ...snapshot,
+            sessions: [linkedSession, ...snapshot.sessions],
+            entityLinks: upsertEntityLink(snapshot.entityLinks, {
+                id: crypto.randomUUID(),
+                fromType: "activity",
+                fromId: activity.id,
+                toType: "session",
+                toId: linkedSession.id,
+                relation: "has_session",
+                createdAt: new Date().toISOString(),
+            }),
+        };
+        set({ snapshot: nextSnapshot, activeSessionId: linkedSession.id });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        return linkedSession.id;
     },
     saveSettings: async (settings) => {
         const snapshot = get().snapshot;

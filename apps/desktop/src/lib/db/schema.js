@@ -38,6 +38,24 @@ export const sqliteBootstrapStatements = [
     created_at TEXT NOT NULL,
     payload_json TEXT NOT NULL
   );`,
+    `CREATE TABLE IF NOT EXISTS activities (
+    id TEXT PRIMARY KEY,
+    description TEXT NOT NULL,
+    is_done INTEGER NOT NULL,
+    comments TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+  );`,
+    `CREATE TABLE IF NOT EXISTS entity_links (
+    id TEXT PRIMARY KEY,
+    from_type TEXT NOT NULL,
+    from_id TEXT NOT NULL,
+    to_type TEXT NOT NULL,
+    to_id TEXT NOT NULL,
+    relation TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+  );`,
     `CREATE TABLE IF NOT EXISTS attachments (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,

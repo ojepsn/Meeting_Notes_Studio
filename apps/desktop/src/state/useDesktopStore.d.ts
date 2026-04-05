@@ -25,6 +25,11 @@ interface DesktopState {
     saveTodo: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
     addTodo: (description: string) => Promise<void>;
     deleteTodo: (id: string) => Promise<void>;
+    saveActivity: (activity: DesktopAppSnapshot["activities"][number]) => Promise<void>;
+    addActivity: (description: string, type?: DesktopAppSnapshot["activities"][number]["type"]) => Promise<void>;
+    deleteActivity: (id: string) => Promise<void>;
+    convertTodoToActivity: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
+    ensureSessionForActivity: (activityId: string) => Promise<string | null>;
     saveSettings: (settings: DesktopAppSnapshot["settings"]) => Promise<void>;
     saveTemplate: (template: DesktopAppSnapshot["templates"][number]) => Promise<void>;
     resetTemplates: () => Promise<void>;

@@ -4,8 +4,9 @@ import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
 import { OutputWorkspace } from "../features/output/components/OutputWorkspace";
-import { TodosCard } from "../features/todos/components/TodosCard";
-import { TodosSidebar } from "../features/todos/components/TodosSidebar";
+import { ActivitiesWorkspace } from "../features/activities/components/ActivitiesWorkspace";
+import { TodosRailCard } from "../features/todos/components/TodosRailCard";
+import { TodosWorkspace } from "../features/todos/components/TodosWorkspace";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
 import type { SettingsSection } from "../features/settings/components/SettingsCard";
 import { generateNotes } from "../lib/ai/services/generateNotes";
@@ -55,11 +56,12 @@ import {
   type DesktopStorageInfo,
 } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW, type MetadataReviewState } from "../lib/metadata/review";
-import { parseTodoShortcut } from "../lib/todos/shortcut";
+import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links/entityLinks";
+import { parseActivityShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
 
-type AppWorkspace = "notes" | "tasks" | "calendar" | "assistant" | "files";
-type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "todos" | "backup" | "settings" | "more" | "capture-details" | "output-details" | null;
+type AppWorkspace = "notes" | "todos" | "activities" | "calendar" | "assistant" | "files";
+type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | null;
 type CommandAction = {
   id: string;
   label: string;
@@ -71,11 +73,15 @@ type CommandAction = {
 
 const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: string; available: boolean }> = [
   { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
-  { id: "tasks", label: "Tasks", description: "Personal follow-up management", available: false },
+  { id: "todos", label: "Todos", description: "Focused follow-up management", available: true },
+  { id: "activities", label: "Activities", description: "Tracked work with time and scheduling", available: true },
   { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: false },
   { id: "assistant", label: "Assistant", description: "Future AI workflows and agents", available: false },
   { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
 ];
+
+const PRIMARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(0, 1);
+const SECONDARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(2);
 
 const CAPTURE_MODE_UI: Record<
   CaptureMode,
@@ -144,6 +150,11 @@ export const App = () => {
     saveTodo,
     addTodo,
     deleteTodo,
+    saveActivity,
+    addActivity,
+    deleteActivity,
+    convertTodoToActivity,
+    ensureSessionForActivity,
     saveSettings,
     saveTemplate,
     resetTemplates,
@@ -155,6 +166,7 @@ export const App = () => {
   const [captureDensityOverride, setCaptureDensityOverride] = useState<CaptureWorkspaceDensity | null>(null);
   const [outputDensityOverride, setOutputDensityOverride] = useState<CaptureWorkspaceDensity | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
+  const [requestedActivityId, setRequestedActivityId] = useState<string | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [statusNote, setStatusNote] = useState("Ready.");
@@ -474,6 +486,20 @@ export const App = () => {
     () => snapshot?.attachments.filter((attachment) => attachment.sessionId === activeSession?.id) ?? [],
     [activeSession, snapshot],
   );
+  const activeLinkedActivity = useMemo(() => {
+    if (!snapshot || !activeSession) {
+      return null;
+    }
+    const activityId = findActivityIdForSession(snapshot.entityLinks, activeSession.id);
+    return snapshot.activities.find((entry) => entry.id === activityId) ?? null;
+  }, [activeSession, snapshot]);
+  const linkedSessionIdsByActivity = useMemo(
+    () =>
+      Object.fromEntries(
+        (snapshot?.activities ?? []).map((activity) => [activity.id, snapshot ? findSessionIdForActivity(snapshot.entityLinks, activity.id) : null]),
+      ) as Record<string, string | null>,
+    [snapshot],
+  );
   const activeAudioAttachment = useMemo(
     () => activeAttachments.find((attachment) => attachment.kind === "audio") ?? null,
     [activeAttachments],
@@ -564,17 +590,29 @@ export const App = () => {
     }
 
     const todoDescription = parseTodoShortcut(target.value);
-    if (!todoDescription) {
+    if (todoDescription) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      await addTodo(todoDescription);
+      target.value = "";
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+      setStatusNote(`Added to-do: ${todoDescription}`);
+      return;
+    }
+
+    const activityDescription = parseActivityShortcut(target.value);
+    if (!activityDescription) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
 
-    await addTodo(todoDescription);
+    await addActivity(activityDescription, "task");
     target.value = "";
     target.dispatchEvent(new Event("input", { bubbles: true }));
-    setStatusNote(`Added to-do: ${todoDescription}`);
+    setStatusNote(`Added activity: ${activityDescription}`);
   };
 
   const buildRawOutput = (session = activeSession) => {
@@ -1380,10 +1418,21 @@ export const App = () => {
   };
 
   const handleWorkspaceSelection = (workspaceId: AppWorkspace, available: boolean) => {
+    setRequestedActivityId(null);
     setActiveWorkspace(workspaceId);
     if (!available) {
       setStatusNote(`${WORKSPACE_ITEMS.find((item) => item.id === workspaceId)?.label ?? "Workspace"} is planned next. The shell already keeps its place so the app can grow without changing navigation patterns.`);
     }
+  };
+  const openSessionFromLink = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    setActiveWorkspace("notes");
+    setActiveView("capture");
+  };
+  const openActivityFromLink = (activityId: string) => {
+    setRequestedActivityId(activityId);
+    setActiveWorkspace("activities");
+    setStatusNote("Opened linked activity.");
   };
 
   const openOverlay = (panel: OverlayPanel) => setOpenPanel(panel);
@@ -1440,7 +1489,14 @@ export const App = () => {
         label: "Open To-dos",
         description: "See personal follow-ups captured from notes.",
         keywords: ["todo tasks follow up"],
-        action: () => openOverlay("todos"),
+        action: () => setActiveWorkspace("todos"),
+      },
+      {
+        id: "activities",
+        label: "Open Activities",
+        description: "See tracked work and time-based activities.",
+        keywords: ["activities work tracked time"],
+        action: () => setActiveWorkspace("activities"),
       },
       {
         id: "backup",
@@ -1766,15 +1822,6 @@ export const App = () => {
             </div>
           </div>
         );
-      case "todos":
-        return (
-          <TodosCard
-            todos={snapshot.todos}
-            onToggle={(todo) => void saveTodo(todo)}
-            onAdd={(description) => void addTodo(description)}
-            onDelete={(id) => void deleteTodo(id)}
-          />
-        );
       case "settings":
         return (
           <SettingsCard
@@ -1809,8 +1856,8 @@ export const App = () => {
               <p>Secondary utilities stay grouped here so the main workspace remains calm and obvious.</p>
             </div>
             <div className="stack">
-              <button className="small-button" type="button" onClick={() => setOpenPanel("todos")}>
-                Open To-dos
+              <button className="small-button" type="button" onClick={() => setActiveWorkspace("todos")}>
+                Open Todos workspace
               </button>
               <button className="small-button" type="button" onClick={() => setOpenPanel("backup")}>
                 Open Back-up
@@ -1870,7 +1917,21 @@ export const App = () => {
           <span className="tiny-text">Desktop</span>
         </div>
         <nav className="workspace-nav">
-          {WORKSPACE_ITEMS.map((item) => (
+          {PRIMARY_WORKSPACE_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="workspace-nav-button"
+              data-active={activeWorkspace === item.id}
+              data-available={item.available}
+              onClick={() => handleWorkspaceSelection(item.id, item.available)}
+            >
+              <span>{item.label}</span>
+              <small>{item.available ? item.description : "Coming later"}</small>
+            </button>
+          ))}
+          <TodosRailCard active={activeWorkspace === "todos"} onOpen={() => setActiveWorkspace("todos")} />
+          {SECONDARY_WORKSPACE_ITEMS.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -1958,26 +2019,26 @@ export const App = () => {
                   </h2>
                 </div>
                 <div className="page-actions">
-                  <div className="view-switch">
-                    <button
-                      className="segment-button"
-                      data-active={activeView === "capture"}
-                      type="button"
-                      onClick={() => setActiveView("capture")}
-                      disabled={activeWorkspace !== "notes"}
-                    >
-                      Capture
-                    </button>
-                    <button
-                      className="segment-button"
-                      data-active={activeView === "output"}
-                      type="button"
-                      onClick={() => setActiveView("output")}
-                      disabled={activeWorkspace !== "notes"}
-                    >
-                      Output
-                    </button>
-                  </div>
+                  {activeWorkspace === "notes" ? (
+                    <div className="view-switch">
+                      <button
+                        className="segment-button"
+                        data-active={activeView === "capture"}
+                        type="button"
+                        onClick={() => setActiveView("capture")}
+                      >
+                        Capture
+                      </button>
+                      <button
+                        className="segment-button"
+                        data-active={activeView === "output"}
+                        type="button"
+                        onClick={() => setActiveView("output")}
+                      >
+                        Output
+                      </button>
+                    </div>
+                  ) : null}
                   {activeWorkspace === "notes" && activeView === "capture" ? (
                     <div className="capture-density-toggle">
                       <button
@@ -2019,18 +2080,54 @@ export const App = () => {
                   ) : null}
                 </div>
               </div>
-              <div className="workspace-guide-row workspace-guide-row-quiet">
-                <span className="tiny-text">
-                  {activeWorkspace === "notes"
-                    ? activeView === "capture"
-                      ? "Keep the center canvas for writing. Use the inspector and details overlays when you need more."
-                      : "Keep the document central. Use details, export, and refinement only when you need them."
-                    : "The same calm shell will carry into future workspaces."}
-                </span>
-              </div>
+              {activeWorkspace === "notes" || (activeWorkspace !== "todos" && activeWorkspace !== "activities") ? (
+                <div className="workspace-guide-row workspace-guide-row-quiet">
+                  <span className="tiny-text">
+                    {activeWorkspace === "notes"
+                      ? activeView === "capture"
+                        ? "Keep the center canvas for writing. Use the inspector and details overlays when you need more."
+                        : "Keep the document central. Use details, export, and refinement only when you need them."
+                      : "The same calm shell will carry into future workspaces."}
+                  </span>
+                </div>
+              ) : null}
+              {activeWorkspace === "notes" && activeLinkedActivity ? (
+                <div className="workspace-guide-row workspace-guide-row-quiet">
+                  <button className="shell-button" type="button" onClick={() => openActivityFromLink(activeLinkedActivity.id)}>
+                    Linked activity: {activeLinkedActivity.description}
+                  </button>
+                </div>
+              ) : null}
             </div>
 
-            {activeWorkspace !== "notes" ? (
+            {activeWorkspace === "todos" ? (
+              <TodosWorkspace
+                todos={snapshot.todos}
+                onToggle={(todo) => void saveTodo(todo)}
+                onAdd={(description) => void addTodo(description)}
+                onSave={(todo) => void saveTodo(todo)}
+                onDelete={(id) => void deleteTodo(id)}
+                onConvertToActivity={(todo) => void convertTodoToActivity(todo)}
+              />
+            ) : activeWorkspace === "activities" ? (
+              <ActivitiesWorkspace
+                activities={snapshot.activities}
+                linkedSessionIdsByActivity={linkedSessionIdsByActivity}
+                requestedActivityId={requestedActivityId}
+                onToggle={(activity) => void saveActivity(activity)}
+                onAdd={(description, type) => void addActivity(description, type)}
+                onSave={(activity) => void saveActivity(activity)}
+                onDelete={(id) => void deleteActivity(id)}
+                onCreateLinkedMeetingSession={(activityId) =>
+                  void ensureSessionForActivity(activityId).then((sessionId) => {
+                    if (sessionId) {
+                      openSessionFromLink(sessionId);
+                    }
+                  })
+                }
+                onOpenSession={openSessionFromLink}
+              />
+            ) : activeWorkspace !== "notes" ? (
               <div className="card empty-state-card">
                 <h2>Coming next</h2>
                 <p>{WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.description || "This workspace is planned for a later phase."}</p>
@@ -2193,6 +2290,15 @@ export const App = () => {
                     </div>
                   </details>
                 </div>
+              ) : activeWorkspace === "todos" || activeWorkspace === "activities" ? (
+                <div className="sidebar-actions">
+                  <button className="primary-button" type="button" onClick={() => setActiveWorkspace("notes")}>
+                    Back to Notes
+                  </button>
+                  <button className="small-button" type="button" onClick={openCommandPalette}>
+                    Command palette
+                  </button>
+                </div>
               ) : (
                 <p className="tiny-text">This inspector area will hold the primary tools for this workspace once it is implemented.</p>
               )}
@@ -2203,20 +2309,27 @@ export const App = () => {
                 <h3>Status</h3>
               </div>
               <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
-              <span className="status-chip">{activeAttachments.length} attachment{activeAttachments.length === 1 ? "" : "s"}</span>
-              <span className="status-chip">
-                {activeTemplate?.sections.length ?? 0} output section{(activeTemplate?.sections.length ?? 0) === 1 ? "" : "s"}
-              </span>
+              {activeWorkspace === "notes" ? (
+                <>
+                  <span className="status-chip">{activeAttachments.length} attachment{activeAttachments.length === 1 ? "" : "s"}</span>
+                  <span className="status-chip">
+                    {activeTemplate?.sections.length ?? 0} output section{(activeTemplate?.sections.length ?? 0) === 1 ? "" : "s"}
+                  </span>
+                </>
+              ) : activeWorkspace === "todos" ? (
+                <>
+                  <span className="status-chip">{snapshot.todos.filter((todo) => !todo.isDone).length} open todos</span>
+                  <span className="status-chip">{snapshot.todos.filter((todo) => todo.isDone).length} completed</span>
+                </>
+              ) : activeWorkspace === "activities" ? (
+                <>
+                  <span className="status-chip">{snapshot.activities.filter((activity) => !activity.isDone).length} open activities</span>
+                  <span className="status-chip">{snapshot.activities.filter((activity) => activity.isDone).length} completed</span>
+                </>
+              ) : null}
               {updateStatusNote ? <span className="tiny-text topbar-status-note">{updateStatusNote}</span> : null}
             </div>
 
-            <TodosSidebar
-              todos={snapshot.todos}
-              onToggle={(todo) => void saveTodo(todo)}
-              onAdd={(description) => void addTodo(description)}
-              onDelete={(id) => void deleteTodo(id)}
-              onOpenAll={() => openOverlay("todos")}
-            />
           </aside>
         </main>
       </div>
@@ -2293,9 +2406,7 @@ export const App = () => {
                       ? "New note"
                     : openPanel === "metadata-review"
                       ? "People"
-                    : openPanel === "todos"
-                        ? "To-dos"
-                        : openPanel === "backup"
+                    : openPanel === "backup"
                           ? "Back-up"
                           : openPanel === "more"
                             ? "More tools"

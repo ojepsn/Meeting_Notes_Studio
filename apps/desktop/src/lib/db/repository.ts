@@ -3,8 +3,10 @@ import {
   DEFAULT_TEMPLATE_BY_CAPTURE_MODE,
   getPrimaryCaptureMode,
   type AttachmentRecord,
+  type ActivityRecord,
   type CaptureMode,
   type DesktopAppSnapshot,
+  type EntityLinkRecord,
   type LocalAppSettings,
   type SessionRecord,
   type TemplateDefinition,
@@ -33,6 +35,8 @@ const STORAGE_KEYS = {
   sessions: "notesmith-desktop-sessions",
   templates: "notesmith-desktop-templates",
   todos: "notesmith-desktop-todos",
+  activities: "notesmith-desktop-activities",
+  entityLinks: "notesmith-desktop-entity-links",
   attachments: "notesmith-desktop-attachments",
   settings: "notesmith-desktop-settings",
   aiTextCache: "notesmith-desktop-ai-text-cache",
@@ -69,6 +73,54 @@ const normalizeAttachmentRecord = (attachment: AttachmentRecord): AttachmentReco
   caption: typeof attachment.caption === "string" ? attachment.caption : "",
   includeInOutput: Boolean(attachment.includeInOutput),
   outputPosition: Number.isFinite(Number(attachment.outputPosition)) ? Number(attachment.outputPosition) : 0,
+});
+
+const normalizeTodoRecord = (todo: TodoRecord): TodoRecord => ({
+  ...todo,
+  isPrivate: Boolean(todo.isPrivate),
+  comments: typeof todo.comments === "string" ? todo.comments : "",
+  domain: typeof todo.domain === "string" ? todo.domain : "",
+  project: typeof todo.project === "string" ? todo.project : "",
+  activity: typeof todo.activity === "string" ? todo.activity : "",
+  doOn: typeof todo.doOn === "string" ? todo.doOn : "",
+  dueDate: typeof todo.dueDate === "string" ? todo.dueDate : "",
+  detailsHtml:
+    typeof todo.detailsHtml === "string"
+      ? todo.detailsHtml
+      : typeof todo.comments === "string"
+        ? todo.comments
+        : "",
+  sessionIds: Array.isArray(todo.sessionIds) ? todo.sessionIds.filter((value): value is string => typeof value === "string") : [],
+});
+
+const normalizeActivityRecord = (activity: ActivityRecord): ActivityRecord => ({
+  ...activity,
+  type: activity.type === "meeting" ? "meeting" : "task",
+  isPrivate: Boolean(activity.isPrivate),
+  comments: typeof activity.comments === "string" ? activity.comments : "",
+  domain: typeof activity.domain === "string" ? activity.domain : "",
+  project: typeof activity.project === "string" ? activity.project : "",
+  activity: typeof activity.activity === "string" ? activity.activity : "",
+  doOn: typeof activity.doOn === "string" ? activity.doOn : "",
+  dueDate: typeof activity.dueDate === "string" ? activity.dueDate : "",
+  detailsHtml:
+    typeof activity.detailsHtml === "string"
+      ? activity.detailsHtml
+      : typeof activity.comments === "string"
+        ? activity.comments
+        : "",
+  timeRequiredMinutes: Number.isFinite(Number(activity.timeRequiredMinutes)) ? Number(activity.timeRequiredMinutes) : 0,
+  actualTimeSpentMinutes: Number.isFinite(Number(activity.actualTimeSpentMinutes)) ? Number(activity.actualTimeSpentMinutes) : 0,
+  sessionIds: Array.isArray(activity.sessionIds)
+    ? activity.sessionIds.filter((value): value is string => typeof value === "string")
+    : [],
+});
+
+const normalizeEntityLinkRecord = (link: EntityLinkRecord): EntityLinkRecord => ({
+  ...link,
+  fromType: link.fromType === "session" ? "session" : "activity",
+  toType: link.toType === "activity" ? "activity" : "session",
+  relation: "has_session",
 });
 
 const normalizeTemplateRecord = (template: TemplateDefinition): TemplateDefinition => ({
@@ -164,7 +216,9 @@ export const createDefaultSnapshot = (): DesktopAppSnapshot => ({
   ],
   templates: BUILTIN_TEMPLATES,
   todos: [],
-      attachments: [],
+  activities: [],
+  entityLinks: [],
+  attachments: [],
   settings: createDefaultSettings(),
 });
 
@@ -175,6 +229,10 @@ export interface EntityRepository {
   saveTemplates(records: TemplateDefinition[]): Promise<void>;
   loadTodos(): Promise<TodoRecord[]>;
   saveTodos(records: TodoRecord[]): Promise<void>;
+  loadActivities(): Promise<ActivityRecord[]>;
+  saveActivities(records: ActivityRecord[]): Promise<void>;
+  loadEntityLinks(): Promise<EntityLinkRecord[]>;
+  saveEntityLinks(records: EntityLinkRecord[]): Promise<void>;
   loadAttachments(): Promise<AttachmentRecord[]>;
   saveAttachments(records: AttachmentRecord[]): Promise<void>;
   loadSettings(): Promise<LocalAppSettings>;
@@ -237,11 +295,27 @@ class BrowserEntityRepository implements AppRepository {
   }
 
   async loadTodos() {
-    return readLocalJson<TodoRecord[]>(STORAGE_KEYS.todos, []);
+    return readLocalJson<TodoRecord[]>(STORAGE_KEYS.todos, []).map(normalizeTodoRecord);
   }
 
   async saveTodos(records: TodoRecord[]) {
     writeLocalJson(STORAGE_KEYS.todos, records);
+  }
+
+  async loadActivities() {
+    return readLocalJson<ActivityRecord[]>(STORAGE_KEYS.activities, []).map(normalizeActivityRecord);
+  }
+
+  async saveActivities(records: ActivityRecord[]) {
+    writeLocalJson(STORAGE_KEYS.activities, records);
+  }
+
+  async loadEntityLinks() {
+    return readLocalJson<EntityLinkRecord[]>(STORAGE_KEYS.entityLinks, []).map(normalizeEntityLinkRecord);
+  }
+
+  async saveEntityLinks(records: EntityLinkRecord[]) {
+    writeLocalJson(STORAGE_KEYS.entityLinks, records);
   }
 
   async loadAttachments() {
@@ -285,10 +359,12 @@ class BrowserEntityRepository implements AppRepository {
   }
 
   async loadSnapshot(): Promise<DesktopAppSnapshot> {
-    const [sessions, templates, todos, attachments, settings] = await Promise.all([
+    const [sessions, templates, todos, activities, entityLinks, attachments, settings] = await Promise.all([
       this.loadSessions(),
       this.loadTemplates(),
       this.loadTodos(),
+      this.loadActivities(),
+      this.loadEntityLinks(),
       this.loadAttachments(),
       this.loadSettings(),
     ]);
@@ -297,6 +373,8 @@ class BrowserEntityRepository implements AppRepository {
       sessions: sessions.length ? sessions : createDefaultSnapshot().sessions,
       templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
       todos,
+      activities,
+      entityLinks,
       attachments,
       settings,
     };
@@ -307,6 +385,8 @@ class BrowserEntityRepository implements AppRepository {
       this.saveSessions(snapshot.sessions),
       this.saveTemplates(snapshot.templates),
       this.saveTodos(snapshot.todos),
+      this.saveActivities(snapshot.activities),
+      this.saveEntityLinks(snapshot.entityLinks),
       this.saveAttachments(snapshot.attachments),
       this.saveSettings(snapshot.settings),
     ]);
@@ -471,7 +551,7 @@ class TauriSqliteRepository implements AppRepository {
   async loadTodos() {
     const db = await this.getDb();
     const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM todos ORDER BY created_at DESC");
-    return rows.map((row) => JSON.parse(row.payload_json) as TodoRecord);
+    return rows.map((row) => normalizeTodoRecord(JSON.parse(row.payload_json) as TodoRecord));
   }
 
   async saveTodos(records: TodoRecord[]) {
@@ -482,6 +562,44 @@ class TauriSqliteRepository implements AppRepository {
         db.execute(
           "INSERT INTO todos (id, description, is_done, comments, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
           [record.id, record.description, record.isDone ? 1 : 0, record.comments, record.createdAt, JSON.stringify(record)],
+        ),
+      ),
+    );
+  }
+
+  async loadActivities() {
+    const db = await this.getDb();
+    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM activities ORDER BY created_at DESC");
+    return rows.map((row) => normalizeActivityRecord(JSON.parse(row.payload_json) as ActivityRecord));
+  }
+
+  async saveActivities(records: ActivityRecord[]) {
+    const db = await this.getDb();
+    await db.execute("DELETE FROM activities");
+    await Promise.all(
+      records.map((record) =>
+        db.execute(
+          "INSERT INTO activities (id, description, is_done, comments, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
+          [record.id, record.description, record.isDone ? 1 : 0, record.comments, record.createdAt, JSON.stringify(record)],
+        ),
+      ),
+    );
+  }
+
+  async loadEntityLinks() {
+    const db = await this.getDb();
+    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM entity_links ORDER BY created_at DESC");
+    return rows.map((row) => normalizeEntityLinkRecord(JSON.parse(row.payload_json) as EntityLinkRecord));
+  }
+
+  async saveEntityLinks(records: EntityLinkRecord[]) {
+    const db = await this.getDb();
+    await db.execute("DELETE FROM entity_links");
+    await Promise.all(
+      records.map((record) =>
+        db.execute(
+          "INSERT INTO entity_links (id, from_type, from_id, to_type, to_id, relation, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          [record.id, record.fromType, record.fromId, record.toType, record.toId, record.relation, record.createdAt, JSON.stringify(record)],
         ),
       ),
     );
@@ -600,10 +718,12 @@ class TauriSqliteRepository implements AppRepository {
   }
 
   async loadSnapshot(): Promise<DesktopAppSnapshot> {
-    const [sessions, templates, todos, attachments, settings] = await Promise.all([
+    const [sessions, templates, todos, activities, entityLinks, attachments, settings] = await Promise.all([
       this.loadSessions(),
       this.loadTemplates(),
       this.loadTodos(),
+      this.loadActivities(),
+      this.loadEntityLinks(),
       this.loadAttachments(),
       this.loadSettings(),
     ]);
@@ -612,6 +732,8 @@ class TauriSqliteRepository implements AppRepository {
       sessions: sessions.length ? sessions : createDefaultSnapshot().sessions,
       templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
       todos,
+      activities,
+      entityLinks,
       attachments,
       settings,
     };
@@ -622,6 +744,8 @@ class TauriSqliteRepository implements AppRepository {
       this.saveSessions(snapshot.sessions),
       this.saveTemplates(snapshot.templates),
       this.saveTodos(snapshot.todos),
+      this.saveActivities(snapshot.activities),
+      this.saveEntityLinks(snapshot.entityLinks),
       this.saveAttachments(snapshot.attachments),
       this.saveSettings(snapshot.settings),
     ]);
@@ -685,3 +809,8 @@ export const upsertTodo = (todos: TodoRecord[], nextTodo: TodoRecord) =>
   todos.some((todo) => todo.id === nextTodo.id)
     ? todos.map((todo) => (todo.id === nextTodo.id ? nextTodo : todo))
     : [nextTodo, ...todos];
+
+export const upsertActivity = (activities: ActivityRecord[], nextActivity: ActivityRecord) =>
+  activities.some((activity) => activity.id === nextActivity.id)
+    ? activities.map((activity) => (activity.id === nextActivity.id ? nextActivity : activity))
+    : [nextActivity, ...activities];

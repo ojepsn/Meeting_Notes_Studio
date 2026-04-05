@@ -5,6 +5,7 @@ interface TodosSidebarProps {
     onAdd: (description: string) => void;
     onDelete: (id: string) => void;
     onOpenAll: () => void;
+    compact?: boolean;
 }
-export declare const TodosSidebar: ({ todos, onToggle, onAdd, onDelete, onOpenAll }: TodosSidebarProps) => import("react/jsx-runtime").JSX.Element;
+export declare const TodosSidebar: ({ todos, onToggle, onAdd, onDelete, onOpenAll, compact }: TodosSidebarProps) => import("react/jsx-runtime").JSX.Element;
 export {};

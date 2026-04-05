@@ -62,9 +62,45 @@ export interface TodoRecord {
   id: string;
   description: string;
   isDone: boolean;
+  isPrivate: boolean;
   comments: string;
+  domain: string;
+  project: string;
+  activity: string;
+  doOn: string;
+  dueDate: string;
+  detailsHtml: string;
   createdAt: string;
   sessionIds: string[];
+}
+
+export interface ActivityRecord {
+  id: string;
+  type: "task" | "meeting";
+  description: string;
+  isDone: boolean;
+  isPrivate: boolean;
+  comments: string;
+  domain: string;
+  project: string;
+  activity: string;
+  doOn: string;
+  dueDate: string;
+  detailsHtml: string;
+  timeRequiredMinutes: number;
+  actualTimeSpentMinutes: number;
+  createdAt: string;
+  sessionIds: string[];
+}
+
+export interface EntityLinkRecord {
+  id: string;
+  fromType: "activity" | "session";
+  fromId: string;
+  toType: "activity" | "session";
+  toId: string;
+  relation: "has_session";
+  createdAt: string;
 }
 
 export interface PromptBlock {
@@ -121,6 +157,8 @@ export interface DesktopAppSnapshot {
   sessions: SessionRecord[];
   templates: TemplateDefinition[];
   todos: TodoRecord[];
+  activities: ActivityRecord[];
+  entityLinks: EntityLinkRecord[];
   attachments: AttachmentRecord[];
   settings: LocalAppSettings;
 }
