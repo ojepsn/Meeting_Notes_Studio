@@ -87,6 +87,15 @@ The desktop app lets the user choose the default Capture presentation:
 - `Minimal` for a reduced writing-first capture surface
 
 This is the default only. Inside the Notes workspace, the user can still switch between `Minimal` and `Full` directly from the Capture header.
+
+### Default Output UI
+
+The desktop app also lets the user choose the default Output presentation:
+
+- `Full` for the complete output workspace
+- `Minimal` for a calmer document-first editing surface
+
+This is the default only. Inside the Notes workspace, the user can still switch between `Minimal` and `Full` directly from the Output header.
 New People, Domains, Projects, and Activities can be entered directly in notes, then saved here for future reuse after Output is created.
 
 ## Prompts

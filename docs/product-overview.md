@@ -52,6 +52,13 @@ This is a foundational product rule:
 
 AI may improve the output, but `Output` is not limited to AI-generated content.
 
+Current desktop UX direction:
+
+- keep the center canvas for the primary task only
+- make one primary action obvious in each workspace state
+- move secondary tools into the inspector, overlays, or disclosures
+- prefer calm minimal presentations by default, with deeper controls available on demand
+
 ## Desktop App Direction
 
 The long-term desktop foundation is:

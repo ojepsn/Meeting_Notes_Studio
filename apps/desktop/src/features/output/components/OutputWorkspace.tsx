@@ -1,12 +1,14 @@
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
-import type { AttachmentRecord, SessionRecord } from "@notesmith/domain";
+import type { AttachmentRecord, CaptureWorkspaceDensity, SessionRecord } from "@notesmith/domain";
 import { useState } from "react";
 
 interface OutputWorkspaceProps {
   session: SessionRecord;
   attachments: AttachmentRecord[];
+  presentation?: CaptureWorkspaceDensity;
+  showPresentationActions?: boolean;
   onChange: (session: SessionRecord) => void;
   savedPeople: string[];
   suggestedPeople: string[];
@@ -32,11 +34,14 @@ interface OutputWorkspaceProps {
   secondaryActionLabel?: string | null;
   emptyStatePrimaryLabel?: string;
   emptyStateSecondaryLabel?: string | null;
+  onOpenDetails?: () => void;
 }
 
 export const OutputWorkspace = ({
   session,
   attachments,
+  presentation = "full",
+  showPresentationActions = true,
   onChange,
   savedPeople,
   suggestedPeople,
@@ -62,6 +67,7 @@ export const OutputWorkspace = ({
   secondaryActionLabel = null,
   emptyStatePrimaryLabel = "Generate polished notes",
   emptyStateSecondaryLabel = null,
+  onOpenDetails,
 }: OutputWorkspaceProps) => {
   const [revisionInstructions, setRevisionInstructions] = useState("");
   const [showAdvancedRefinement, setShowAdvancedRefinement] = useState(false);
@@ -70,33 +76,45 @@ export const OutputWorkspace = ({
     .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt));
   const hasOutput = Boolean(session.output.trim());
   const isMeetingNote = session.captureMode === "meeting-note";
+  const isMinimal = presentation === "minimal";
 
   return (
-    <div className="card">
-      <div className="card-header">
+    <div className={`card output-workspace${isMinimal ? " output-workspace-minimal" : ""}`}>
+      <div className={`card-header${isMinimal ? " session-editor-header-minimal" : ""}`}>
         <div>
           <h2>Output</h2>
-          <p>Use Output when you want polished notes, translation, revision, and exports. The document stays central; advanced actions stay secondary.</p>
-        </div>
-        <div className="page-actions">
-          <button className="primary-button" type="button" onClick={onPrimaryAction}>
-            {isPrimaryActionRunning ? `${primaryActionLabel}...` : primaryActionLabel}
-          </button>
-          {secondaryActionLabel && onSecondaryAction ? (
-            <button className="shell-button" type="button" onClick={onSecondaryAction}>
-              {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
-            </button>
+          {!isMinimal ? (
+            <p>Use Output when you want polished notes, translation, revision, and exports. The document stays central; advanced actions stay secondary.</p>
           ) : null}
-          <button className="shell-button" type="button" onClick={onTranslate}>
-            Translate
-          </button>
-          <button className="shell-button" type="button" onClick={() => setShowAdvancedRefinement((current) => !current)}>
-            {showAdvancedRefinement ? "Hide advanced actions" : "Show advanced actions"}
-          </button>
         </div>
+        {isMinimal && showPresentationActions ? (
+          <div className="capture-minimal-actions">
+            <span className="tiny-text">Minimal mode</span>
+            <button className="small-button" type="button" onClick={onOpenDetails}>
+              Open details
+            </button>
+          </div>
+        ) : (
+          <div className="page-actions">
+            <button className="primary-button" type="button" onClick={onPrimaryAction}>
+              {isPrimaryActionRunning ? `${primaryActionLabel}...` : primaryActionLabel}
+            </button>
+            {secondaryActionLabel && onSecondaryAction ? (
+              <button className="shell-button" type="button" onClick={onSecondaryAction}>
+                {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
+              </button>
+            ) : null}
+            <button className="shell-button" type="button" onClick={onTranslate}>
+              Translate
+            </button>
+            <button className="shell-button" type="button" onClick={() => setShowAdvancedRefinement((current) => !current)}>
+              {showAdvancedRefinement ? "Hide advanced actions" : "Show advanced actions"}
+            </button>
+          </div>
+        )}
       </div>
       {!hasOutput ? (
-        <div className="empty-state-card compact-empty-state">
+        <div className={`empty-state-card compact-empty-state${isMinimal ? " output-empty-state-minimal" : ""}`}>
           <h3>Ready to generate</h3>
           <ol className="empty-state-steps">
             <li>Go back to Capture if you want to add rough notes, transcript text, or images first.</li>
@@ -106,38 +124,45 @@ export const OutputWorkspace = ({
           </ol>
         </div>
       ) : null}
-      <div className="field field-wide">
-        <label htmlFor="output-title">Title</label>
-        <input
-          id="output-title"
-          value={session.title}
-          onChange={(event) => onChange({ ...session, title: event.target.value })}
-          placeholder={isMeetingNote ? "Weekly project meeting" : "Note title"}
-        />
-      </div>
-      <label className="list-item checkbox-label field field-wide session-privacy-toggle">
-        <input
-          type="checkbox"
-          checked={session.isPrivate}
-          onChange={(event) => onChange({ ...session, isPrivate: event.target.checked })}
-        />
-        <div>
-          <strong>Private</strong>
-          <span className="muted">Hide this note from normal public-only session views.</span>
+      <div className={`capture-top-row field field-wide${isMinimal ? " capture-top-row-minimal" : ""}`}>
+        <div className={`field${isMinimal ? " capture-title-field-minimal" : ""}`}>
+          <label htmlFor="output-title">Title</label>
+          <input
+            className={isMinimal ? "minimal-title-input" : undefined}
+            id="output-title"
+            value={session.title}
+            onChange={(event) => onChange({ ...session, title: event.target.value })}
+            placeholder={isMeetingNote ? "Weekly project meeting" : "Note title"}
+          />
         </div>
-      </label>
+        <div className={`field${isMinimal ? " capture-meta-field" : ""}`}>
+          <label htmlFor="output-date">Date</label>
+          <input
+            id="output-date"
+            type="date"
+            value={session.date}
+            onChange={(event) => onChange({ ...session, date: event.target.value })}
+          />
+        </div>
+        <div className={`field capture-private-field${isMinimal ? " capture-meta-field" : ""}`}>
+          <span>Private</span>
+          <div className="compact-private-toggle">
+            <input
+              id="output-private"
+              type="checkbox"
+              checked={session.isPrivate}
+              onChange={(event) => onChange({ ...session, isPrivate: event.target.checked })}
+            />
+            <label htmlFor="output-private" className="checkbox-label">
+              Private
+            </label>
+          </div>
+        </div>
+      </div>
+      {!isMinimal ? (
       <details className="field field-wide workspace-disclosure">
         <summary>{isMeetingNote ? "Meeting details" : "Optional note details"}</summary>
         <div className="workspace-disclosure-body form-grid">
-          <div className="field">
-            <label htmlFor="output-date">Date</label>
-            <input
-              id="output-date"
-              type="date"
-              value={session.date}
-              onChange={(event) => onChange({ ...session, date: event.target.value })}
-            />
-          </div>
           <div className="field">
             <label htmlFor="output-people">People</label>
             <PeoplePicker
@@ -237,9 +262,11 @@ export const OutputWorkspace = ({
           </div>
         </div>
       </details>
+      ) : null}
       <div className="field field-wide">
         <label htmlFor="session-output">Polished output</label>
         <textarea
+          className={`editor-textarea${isMinimal ? " editor-textarea-primary output-textarea-minimal" : ""}`}
           id="session-output"
           value={session.output}
           onChange={(event) => onChange({ ...session, output: event.target.value })}
@@ -264,7 +291,7 @@ export const OutputWorkspace = ({
           </div>
         </div>
       ) : null}
-      {showAdvancedRefinement ? (
+      {!isMinimal && showAdvancedRefinement ? (
         <div className="stack">
           <div className="field field-wide">
             <label htmlFor="revision-instructions">Revision instructions</label>

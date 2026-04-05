@@ -103,6 +103,7 @@ export interface LocalAppSettings {
   outputLanguage: "same" | "sv" | "en";
   preferredDesktopTemplateId: string;
   captureWorkspaceDensity: CaptureWorkspaceDensity;
+  outputWorkspaceDensity: CaptureWorkspaceDensity;
   apiKey: string;
   textModel: string;
   transcriptionModel: string;

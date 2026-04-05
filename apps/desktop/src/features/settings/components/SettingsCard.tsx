@@ -1269,6 +1269,22 @@ export const SettingsCard = ({
                 <option value="minimal">Minimal</option>
               </select>
             </div>
+            <div className="field">
+              <label htmlFor="output-workspace-density">Default Output UI</label>
+              <select
+                id="output-workspace-density"
+                value={settings.outputWorkspaceDensity}
+                onChange={(event) =>
+                  onChange({
+                    ...settings,
+                    outputWorkspaceDensity: event.target.value === "minimal" ? "minimal" : "full",
+                  })
+                }
+              >
+                <option value="full">Full</option>
+                <option value="minimal">Minimal</option>
+              </select>
+            </div>
             <div className="inline-row">
               <button className="small-button" type="button" onClick={() => void onCheckForUpdates()}>
                 Check for updates

@@ -15,6 +15,22 @@ The Capture view now supports two presentation densities:
 - `Full` keeps the current complete desktop editor visible.
 - `Minimal` reduces Capture to the essential working fields for the active note type, with `Open details` available when you want the full editor in an overlay.
 
+The Output view supports the same pattern:
+
+- `Full` keeps revision, translation, export, and note details visible in the main workspace.
+- `Minimal` turns Output into a calmer document-first editor, with `Open details` available for the complete output workspace.
+
+## Quick Todo Capture
+
+From text inputs and text areas across the desktop app, you can create a to-do instantly:
+
+- type `td` followed by the todo text
+- press `Enter`
+
+The app converts that text into a to-do item and clears the field so you can keep working.
+
+The main desktop shell also includes a compact `To-dos` card in the right inspector so current items stay visible while you work. The full to-do manager remains available as a separate overlay.
+
 ## Capture Modes
 
 The Notes workspace supports three explicit capture modes.

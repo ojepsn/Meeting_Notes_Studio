@@ -5,6 +5,7 @@ const settings = {
     outputLanguage: "same",
     preferredDesktopTemplateId: "meeting",
     captureWorkspaceDensity: "full",
+    outputWorkspaceDensity: "full",
     apiKey: "",
     textModel: "gpt-5.4-mini",
     transcriptionModel: "gpt-4o-mini-transcribe",

@@ -498,6 +498,10 @@ select {
   gap: 0.35rem;
 }
 
+.topbar-status-note {
+  display: block;
+}
+
 .topbar-eyebrow {
   font-size: 0.74rem;
   letter-spacing: 0.08em;
@@ -567,11 +571,19 @@ select {
   margin-top: 0.75rem;
 }
 
+.workspace-guide-row-quiet {
+  margin-top: 0.45rem;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
+}
+
+.workspace-header .card-header {
+  align-items: flex-end;
 }
 
 .card-header h2,
@@ -586,6 +598,14 @@ select {
   margin: 0.25rem 0 0;
   color: var(--app-muted);
   font-size: 0.9rem;
+}
+
+.sidebar-actions {
+  align-items: stretch;
+}
+
+.sidebar-actions > .primary-button {
+  width: 100%;
 }
 
 .shell-button,
@@ -1129,6 +1149,49 @@ select {
 .todo-table th:last-child,
 .todo-table td:last-child {
   width: 100px;
+}
+
+.todo-sidebar-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.todo-sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.todo-sidebar-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: start;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  background: var(--app-surface-soft);
+}
+
+.todo-sidebar-item input {
+  width: auto;
+  min-height: 0;
+  margin-top: 0.2rem;
+}
+
+.todo-sidebar-item-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.todo-sidebar-item-copy strong {
+  font-size: 0.88rem;
+  line-height: 1.35;
 }
 
 .section-divider {
@@ -1680,6 +1743,33 @@ select {
 .session-editor-minimal .capture-minimal-actions .small-button {
   border-radius: 999px;
   padding-inline: 0.9rem;
+}
+
+.output-workspace-minimal {
+  padding: 1.35rem 1.4rem 1.6rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-surface) 90%, white 10%) 0%, var(--app-surface-soft) 100%);
+}
+
+.output-workspace-minimal .page-actions {
+  display: none;
+}
+
+.output-empty-state-minimal {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--app-surface-soft) 84%, white 16%);
+}
+
+.output-textarea-minimal {
+  min-height: 520px;
+  line-height: 1.75;
+}
+
+.output-workspace-minimal .field > label {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--app-muted);
 }
 
 .overlay-mode-switch {
