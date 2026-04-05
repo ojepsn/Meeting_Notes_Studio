@@ -2155,7 +2155,7 @@ export const App = () => {
               <CalendarWorkspace
                 todos={snapshot.todos}
                 activities={snapshot.activities}
-                calendarItems={snapshot.calendarItems}
+                calendarItems={snapshot.calendarItems ?? []}
                 onCreateFromText={(date, startSlot, value) => void createCalendarEntryFromText(date, startSlot, value)}
                 onMoveItem={(id, date, startSlot) => void moveCalendarItem(id, date, startSlot)}
                 onOpenTodoWorkspace={() => setActiveWorkspace("todos")}

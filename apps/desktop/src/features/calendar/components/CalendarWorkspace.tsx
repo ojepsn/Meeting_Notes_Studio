@@ -58,9 +58,9 @@ interface CalendarWorkspaceProps {
 }
 
 export const CalendarWorkspace = ({
-  todos,
-  activities,
-  calendarItems,
+  todos = [],
+  activities = [],
+  calendarItems = [],
   onCreateFromText,
   onMoveItem,
   onOpenTodoWorkspace,
@@ -80,13 +80,16 @@ export const CalendarWorkspace = ({
   const dayWidth = DAY_WIDTHS[dayScaleIndex];
   const slotHeight = SLOT_HEIGHTS[timeScaleIndex];
   const dates = useMemo(() => buildDateRange(rangeStart, rangeEnd), [rangeEnd, rangeStart]);
+  const safeTodos = Array.isArray(todos) ? todos : [];
+  const safeActivities = Array.isArray(activities) ? activities : [];
+  const safeCalendarItems = Array.isArray(calendarItems) ? calendarItems : [];
 
   const itemsByDate = useMemo(() => {
-    const todoMap = new Map(todos.map((todo) => [todo.id, todo]));
-    const activityMap = new Map(activities.map((activity) => [activity.id, activity]));
+    const todoMap = new Map(safeTodos.map((todo) => [todo.id, todo]));
+    const activityMap = new Map(safeActivities.map((activity) => [activity.id, activity]));
     const grouped = new Map<string, CalendarRenderItem[]>();
 
-    calendarItems.forEach((item) => {
+    safeCalendarItems.forEach((item) => {
       const target = item.targetType === "todo" ? todoMap.get(item.targetId) : activityMap.get(item.targetId);
       if (!target) {
         return;
@@ -115,7 +118,7 @@ export const CalendarWorkspace = ({
     });
 
     return grouped;
-  }, [activities, calendarItems, todos]);
+  }, [safeActivities, safeCalendarItems, safeTodos]);
 
   useEffect(() => {
     if (!scrollRef.current || initializedScrollRef.current) return;
