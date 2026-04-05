@@ -34,7 +34,12 @@ const slotToTimeLabel = (slot) => {
     const minutes = totalMinutes % 60;
     return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 };
-export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFromText, onMoveItem, onOpenTodoWorkspace, onOpenActivityWorkspace, }) => {
+const slotFromPointer = (clientY, element, slotHeight) => {
+    const bounds = element.getBoundingClientRect();
+    const offset = Math.max(0, clientY - bounds.top);
+    return Math.max(0, Math.min(SLOT_COUNT - 1, Math.floor(offset / slotHeight)));
+};
+export const CalendarWorkspace = ({ todos = [], activities = [], calendarItems = [], onCreateFromText, onMoveItem, onOpenTodoWorkspace, onOpenActivityWorkspace, }) => {
     const today = new Date().toISOString().slice(0, 10);
     const [rangeStart, setRangeStart] = useState(addDays(today, -INITIAL_DAYS_BEFORE));
     const [rangeEnd, setRangeEnd] = useState(addDays(today, INITIAL_DAYS_AFTER));
@@ -48,11 +53,14 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFr
     const dayWidth = DAY_WIDTHS[dayScaleIndex];
     const slotHeight = SLOT_HEIGHTS[timeScaleIndex];
     const dates = useMemo(() => buildDateRange(rangeStart, rangeEnd), [rangeEnd, rangeStart]);
+    const safeTodos = Array.isArray(todos) ? todos : [];
+    const safeActivities = Array.isArray(activities) ? activities : [];
+    const safeCalendarItems = Array.isArray(calendarItems) ? calendarItems : [];
     const itemsByDate = useMemo(() => {
-        const todoMap = new Map(todos.map((todo) => [todo.id, todo]));
-        const activityMap = new Map(activities.map((activity) => [activity.id, activity]));
+        const todoMap = new Map(safeTodos.map((todo) => [todo.id, todo]));
+        const activityMap = new Map(safeActivities.map((activity) => [activity.id, activity]));
         const grouped = new Map();
-        calendarItems.forEach((item) => {
+        safeCalendarItems.forEach((item) => {
             const target = item.targetType === "todo" ? todoMap.get(item.targetId) : activityMap.get(item.targetId);
             if (!target) {
                 return;
@@ -75,7 +83,12 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFr
             grouped.set(date, [...items].sort((left, right) => left.startSlot - right.startSlot || right.durationSlots - left.durationSlots));
         });
         return grouped;
-    }, [activities, calendarItems, todos]);
+    }, [safeActivities, safeCalendarItems, safeTodos]);
+    const surfaceStyle = {
+        ["--calendar-slot-height"]: `${slotHeight}px`,
+        gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${dates.length}, ${dayWidth}px)`,
+        gridTemplateRows: `52px ${SLOT_COUNT * slotHeight}px`,
+    };
     useEffect(() => {
         if (!scrollRef.current || initializedScrollRef.current)
             return;
@@ -121,33 +134,34 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFr
                                     setActiveCell(null);
                                     setCellDraft("");
                                     initializedScrollRef.current = false;
-                                }, children: "Today" }), _jsxs("div", { className: "capture-density-toggle", children: [_jsx("button", { className: "segment-button", type: "button", disabled: dayScaleIndex === 0, onClick: () => setDayScaleIndex((value) => Math.max(0, value - 1)), children: "Fewer days" }), _jsx("button", { className: "segment-button", type: "button", disabled: dayScaleIndex === DAY_WIDTHS.length - 1, onClick: () => setDayScaleIndex((value) => Math.min(DAY_WIDTHS.length - 1, value + 1)), children: "More detail" })] }), _jsxs("div", { className: "capture-density-toggle", children: [_jsx("button", { className: "segment-button", type: "button", disabled: timeScaleIndex === 0, onClick: () => setTimeScaleIndex((value) => Math.max(0, value - 1)), children: "More hours" }), _jsx("button", { className: "segment-button", type: "button", disabled: timeScaleIndex === SLOT_HEIGHTS.length - 1, onClick: () => setTimeScaleIndex((value) => Math.min(SLOT_HEIGHTS.length - 1, value + 1)), children: "More time detail" })] })] })] }), _jsx("div", { className: "workspace-guide-row workspace-guide-row-quiet", children: _jsx("span", { className: "tiny-text", children: "Type directly into a slot to create a todo, or use `td`, `act`, or `meet` prefixes. Drag blocks to reschedule them." }) }), _jsx("div", { className: "calendar-scroll", ref: scrollRef, onScroll: handleScroll, children: _jsxs("div", { className: "calendar-surface", style: {
-                        gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${dates.length}, ${dayWidth}px)`,
-                        gridTemplateRows: `52px ${SLOT_COUNT * slotHeight}px`,
-                    }, children: [_jsx("div", { className: "calendar-corner" }), dates.map((date) => (_jsxs("div", { className: "calendar-day-header", children: [_jsx("strong", { children: date }), _jsx("span", { children: formatDayLabel(date) })] }, `header-${date}`))), _jsx("div", { className: "calendar-time-column", children: Array.from({ length: SLOT_COUNT }, (_, slot) => (_jsx("div", { className: `calendar-time-cell${slot % SLOTS_PER_HOUR === 0 ? " calendar-time-cell-hour" : ""}`, style: { height: slotHeight }, children: _jsx("span", { children: slotToTimeLabel(slot) }) }, `time-${slot}`))) }), dates.map((date) => (_jsxs("div", { className: "calendar-day-column", style: { height: SLOT_COUNT * slotHeight }, children: [Array.from({ length: SLOT_COUNT }, (_, slot) => {
-                                    const isActive = activeCell?.date === date && activeCell.slot === slot;
-                                    return (_jsx("div", { className: `calendar-grid-cell${slot % SLOTS_PER_HOUR === 0 ? " calendar-grid-cell-hour" : ""}${isActive ? " calendar-grid-cell-active" : ""}`, style: { height: slotHeight }, onClick: () => {
-                                            setActiveCell({ date, slot });
-                                            setCellDraft("");
-                                        }, onDragOver: (event) => {
-                                            event.preventDefault();
-                                        }, onDrop: (event) => {
-                                            event.preventDefault();
-                                            const itemId = event.dataTransfer.getData("text/plain");
-                                            if (itemId) {
-                                                onMoveItem(itemId, date, slot);
+                                }, children: "Today" }), _jsxs("div", { className: "capture-density-toggle", children: [_jsx("button", { className: "segment-button", type: "button", disabled: dayScaleIndex === 0, onClick: () => setDayScaleIndex((value) => Math.max(0, value - 1)), children: "Fewer days" }), _jsx("button", { className: "segment-button", type: "button", disabled: dayScaleIndex === DAY_WIDTHS.length - 1, onClick: () => setDayScaleIndex((value) => Math.min(DAY_WIDTHS.length - 1, value + 1)), children: "More detail" })] }), _jsxs("div", { className: "capture-density-toggle", children: [_jsx("button", { className: "segment-button", type: "button", disabled: timeScaleIndex === 0, onClick: () => setTimeScaleIndex((value) => Math.max(0, value - 1)), children: "More hours" }), _jsx("button", { className: "segment-button", type: "button", disabled: timeScaleIndex === SLOT_HEIGHTS.length - 1, onClick: () => setTimeScaleIndex((value) => Math.min(SLOT_HEIGHTS.length - 1, value + 1)), children: "More time detail" })] })] })] }), _jsx("div", { className: "workspace-guide-row workspace-guide-row-quiet", children: _jsx("span", { className: "tiny-text", children: "Type directly into a slot to create a todo, or use `td`, `act`, or `meet` prefixes. Drag blocks to reschedule them." }) }), _jsx("div", { className: "calendar-scroll", ref: scrollRef, onScroll: handleScroll, children: _jsxs("div", { className: "calendar-surface", style: surfaceStyle, children: [_jsx("div", { className: "calendar-corner" }), dates.map((date) => (_jsxs("div", { className: "calendar-day-header", children: [_jsx("strong", { children: date }), _jsx("span", { children: formatDayLabel(date) })] }, `header-${date}`))), _jsx("div", { className: "calendar-time-column", children: Array.from({ length: SLOT_COUNT }, (_, slot) => (_jsx("div", { className: `calendar-time-cell${slot % SLOTS_PER_HOUR === 0 ? " calendar-time-cell-hour" : ""}`, style: { height: slotHeight }, children: _jsx("span", { children: slotToTimeLabel(slot) }) }, `time-${slot}`))) }), dates.map((date) => (_jsxs("div", { className: "calendar-day-column", style: { height: SLOT_COUNT * slotHeight }, children: [_jsx("div", { className: "calendar-day-interaction-layer", style: { height: SLOT_COUNT * slotHeight }, onClick: (event) => {
+                                        const target = event.currentTarget;
+                                        const slot = slotFromPointer(event.clientY, target, slotHeight);
+                                        setActiveCell({ date, slot });
+                                        setCellDraft("");
+                                    }, onDragOver: (event) => {
+                                        event.preventDefault();
+                                    }, onDrop: (event) => {
+                                        event.preventDefault();
+                                        const itemId = event.dataTransfer.getData("text/plain");
+                                        if (!itemId)
+                                            return;
+                                        const target = event.currentTarget;
+                                        const slot = slotFromPointer(event.clientY, target, slotHeight);
+                                        onMoveItem(itemId, date, slot);
+                                    } }), activeCell?.date === date ? (_jsx("div", { className: "calendar-active-cell", style: {
+                                        top: activeCell.slot * slotHeight,
+                                        height: slotHeight,
+                                    }, children: _jsx("input", { autoFocus: true, className: "calendar-cell-input", value: cellDraft, onChange: (event) => setCellDraft(event.target.value), onBlur: commitCellDraft, onKeyDown: (event) => {
+                                            if (event.key === "Enter" && !event.shiftKey) {
+                                                event.preventDefault();
+                                                commitCellDraft();
                                             }
-                                        }, children: isActive ? (_jsx("input", { autoFocus: true, className: "calendar-cell-input", value: cellDraft, onChange: (event) => setCellDraft(event.target.value), onBlur: commitCellDraft, onKeyDown: (event) => {
-                                                if (event.key === "Enter" && !event.shiftKey) {
-                                                    event.preventDefault();
-                                                    commitCellDraft();
-                                                }
-                                                if (event.key === "Escape") {
-                                                    setActiveCell(null);
-                                                    setCellDraft("");
-                                                }
-                                            }, placeholder: "Add todo, act, or meet" })) : null }, `${date}-${slot}`));
-                                }), (itemsByDate.get(date) ?? []).map((item) => (_jsxs("button", { className: `calendar-item-block${item.isMeeting ? " calendar-item-block-meeting" : ""}`, style: {
+                                            if (event.key === "Escape") {
+                                                setActiveCell(null);
+                                                setCellDraft("");
+                                            }
+                                        }, placeholder: "Add todo, act, or meet" }) })) : null, (itemsByDate.get(date) ?? []).map((item) => (_jsxs("button", { className: `calendar-item-block${item.isMeeting ? " calendar-item-block-meeting" : ""}`, style: {
                                         top: item.startSlot * slotHeight + 1,
                                         height: Math.max(slotHeight - 2, item.durationSlots * slotHeight - 2),
                                     }, draggable: true, type: "button", onDragStart: (event) => event.dataTransfer.setData("text/plain", item.id), onDoubleClick: () => {

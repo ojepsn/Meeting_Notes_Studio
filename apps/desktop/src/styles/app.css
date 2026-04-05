@@ -1769,22 +1769,44 @@ select {
 .calendar-day-column {
   position: relative;
   border-right: 1px solid var(--app-border);
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--calendar-slot-height) - 1px),
+      color-mix(in srgb, var(--app-border) 85%, transparent 15%) calc(var(--calendar-slot-height) - 1px),
+      color-mix(in srgb, var(--app-border) 85%, transparent 15%) var(--calendar-slot-height)
+    );
 }
 
-.calendar-grid-cell {
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 85%, transparent 15%);
+.calendar-day-interaction-layer {
+  position: absolute;
+  inset: 0;
 }
 
-.calendar-grid-cell-hour {
-  border-top: 1px solid var(--app-border-strong);
+.calendar-day-column::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--calendar-slot-height) * 12 - 1px),
+      var(--app-border-strong) calc(var(--calendar-slot-height) * 12 - 1px),
+      var(--app-border-strong) calc(var(--calendar-slot-height) * 12)
+    );
+  pointer-events: none;
 }
 
-.calendar-grid-cell:hover {
-  background: color-mix(in srgb, var(--app-accent-soft) 24%, transparent 76%);
-}
-
-.calendar-grid-cell-active {
+.calendar-active-cell {
+  position: absolute;
+  left: 0;
+  right: 0;
   background: color-mix(in srgb, var(--app-accent-soft) 46%, transparent 54%);
+  border-top: 1px solid var(--app-accent-border);
+  border-bottom: 1px solid var(--app-accent-border);
+  z-index: 1;
 }
 
 .calendar-cell-input {

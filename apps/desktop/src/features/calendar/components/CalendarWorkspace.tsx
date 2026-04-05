@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import type { ActivityRecord, CalendarItemRecord, TodoRecord } from "@notesmith/domain";
 
 const SLOTS_PER_HOUR = 12;
@@ -56,6 +57,12 @@ interface CalendarWorkspaceProps {
   onOpenTodoWorkspace: () => void;
   onOpenActivityWorkspace: (activityId: string) => void;
 }
+
+const slotFromPointer = (clientY: number, element: HTMLDivElement, slotHeight: number) => {
+  const bounds = element.getBoundingClientRect();
+  const offset = Math.max(0, clientY - bounds.top);
+  return Math.max(0, Math.min(SLOT_COUNT - 1, Math.floor(offset / slotHeight)));
+};
 
 export const CalendarWorkspace = ({
   todos = [],
@@ -119,6 +126,11 @@ export const CalendarWorkspace = ({
 
     return grouped;
   }, [safeActivities, safeCalendarItems, safeTodos]);
+  const surfaceStyle = {
+    ["--calendar-slot-height"]: `${slotHeight}px`,
+    gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${dates.length}, ${dayWidth}px)`,
+    gridTemplateRows: `52px ${SLOT_COUNT * slotHeight}px`,
+  } as CSSProperties;
 
   useEffect(() => {
     if (!scrollRef.current || initializedScrollRef.current) return;
@@ -199,13 +211,7 @@ export const CalendarWorkspace = ({
       </div>
 
       <div className="calendar-scroll" ref={scrollRef} onScroll={handleScroll}>
-        <div
-          className="calendar-surface"
-          style={{
-            gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${dates.length}, ${dayWidth}px)`,
-            gridTemplateRows: `52px ${SLOT_COUNT * slotHeight}px`,
-          }}
-        >
+        <div className="calendar-surface" style={surfaceStyle}>
           <div className="calendar-corner" />
           {dates.map((date) => (
             <div key={`header-${date}`} className="calendar-day-header">
@@ -224,51 +230,56 @@ export const CalendarWorkspace = ({
 
           {dates.map((date) => (
             <div key={date} className="calendar-day-column" style={{ height: SLOT_COUNT * slotHeight }}>
-              {Array.from({ length: SLOT_COUNT }, (_, slot) => {
-                const isActive = activeCell?.date === date && activeCell.slot === slot;
-                return (
-                  <div
-                    key={`${date}-${slot}`}
-                    className={`calendar-grid-cell${slot % SLOTS_PER_HOUR === 0 ? " calendar-grid-cell-hour" : ""}${isActive ? " calendar-grid-cell-active" : ""}`}
-                    style={{ height: slotHeight }}
-                    onClick={() => {
-                      setActiveCell({ date, slot });
-                      setCellDraft("");
-                    }}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      const itemId = event.dataTransfer.getData("text/plain");
-                      if (itemId) {
-                        onMoveItem(itemId, date, slot);
+              <div
+                className="calendar-day-interaction-layer"
+                style={{ height: SLOT_COUNT * slotHeight }}
+                onClick={(event) => {
+                  const target = event.currentTarget;
+                  const slot = slotFromPointer(event.clientY, target, slotHeight);
+                  setActiveCell({ date, slot });
+                  setCellDraft("");
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const itemId = event.dataTransfer.getData("text/plain");
+                  if (!itemId) return;
+                  const target = event.currentTarget;
+                  const slot = slotFromPointer(event.clientY, target, slotHeight);
+                  onMoveItem(itemId, date, slot);
+                }}
+              />
+
+              {activeCell?.date === date ? (
+                <div
+                  className="calendar-active-cell"
+                  style={{
+                    top: activeCell.slot * slotHeight,
+                    height: slotHeight,
+                  }}
+                >
+                  <input
+                    autoFocus
+                    className="calendar-cell-input"
+                    value={cellDraft}
+                    onChange={(event) => setCellDraft(event.target.value)}
+                    onBlur={commitCellDraft}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        commitCellDraft();
+                      }
+                      if (event.key === "Escape") {
+                        setActiveCell(null);
+                        setCellDraft("");
                       }
                     }}
-                  >
-                    {isActive ? (
-                      <input
-                        autoFocus
-                        className="calendar-cell-input"
-                        value={cellDraft}
-                        onChange={(event) => setCellDraft(event.target.value)}
-                        onBlur={commitCellDraft}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" && !event.shiftKey) {
-                            event.preventDefault();
-                            commitCellDraft();
-                          }
-                          if (event.key === "Escape") {
-                            setActiveCell(null);
-                            setCellDraft("");
-                          }
-                        }}
-                        placeholder="Add todo, act, or meet"
-                      />
-                    ) : null}
-                  </div>
-                );
-              })}
+                    placeholder="Add todo, act, or meet"
+                  />
+                </div>
+              ) : null}
 
               {(itemsByDate.get(date) ?? []).map((item) => (
                 <button
