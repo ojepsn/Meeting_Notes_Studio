@@ -2,7 +2,7 @@ import { Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "do
 import { jsPDF } from "jspdf";
 import type { AttachmentRecord } from "@notesmith/domain";
 import { loadPersistedAttachmentFile } from "../files/attachmentStore";
-import { getOutputLayoutPreset } from "./outputLayouts";
+import { getOutputLayoutPreset, getPrimaryFontFamily } from "./outputLayouts";
 
 type ExportPayload = {
   title: string;
@@ -165,6 +165,10 @@ export const exportOutputAsHtml = ({ title, output, attachments = [], layoutPres
 
 export const exportOutputAsDocx = async ({ title, output, attachments = [], layoutPresetId }: ExportPayload) => {
   const layout = getOutputLayoutPreset(layoutPresetId);
+  const titleFontFamily = getPrimaryFontFamily(layout.style.titleFont);
+  const headingFontFamily = getPrimaryFontFamily(layout.style.headingFont);
+  const bodyFontFamily = getPrimaryFontFamily(layout.style.bodyFont);
+  const metaFontFamily = getPrimaryFontFamily(layout.style.metaFont);
   const imageAttachments = await loadImageAttachments(attachments);
   const paragraphs = buildStructuredOutput(output).map((entry) =>
     new Paragraph({
@@ -172,7 +176,7 @@ export const exportOutputAsDocx = async ({ title, output, attachments = [], layo
       children: [
         new TextRun({
           text: entry.text,
-          font: entry.kind === "heading" ? layout.style.headingFont : layout.style.bodyFont,
+          font: entry.kind === "heading" ? headingFontFamily : bodyFontFamily,
           size: Math.round((entry.kind === "heading" ? layout.style.headingSize : layout.style.bodySize) * 2),
           bold: entry.kind === "heading",
         }),
@@ -206,7 +210,7 @@ export const exportOutputAsDocx = async ({ title, output, attachments = [], layo
           new TextRun({
             text: attachment.caption || attachment.filename,
             italics: true,
-            font: layout.style.metaFont,
+            font: metaFontFamily,
             size: Math.round(layout.style.metaSize * 2),
           }),
         ],
@@ -223,7 +227,7 @@ export const exportOutputAsDocx = async ({ title, output, attachments = [], layo
             children: [
               new TextRun({
                 text: title || "Meeting Notes",
-                font: layout.style.titleFont,
+                font: titleFontFamily,
                 size: Math.round(layout.style.titleSize * 2),
                 bold: true,
               }),

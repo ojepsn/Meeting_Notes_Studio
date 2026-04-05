@@ -151,3 +151,10 @@ export const getOutputLayoutPreset = (presetId: string | undefined | null): Outp
   OUTPUT_LAYOUT_PRESETS.find((preset) => preset.id === presetId)
   ?? OUTPUT_LAYOUT_PRESETS.find((preset) => preset.id === DEFAULT_OUTPUT_LAYOUT_PRESET_ID)
   ?? OUTPUT_LAYOUT_PRESETS[0];
+
+export const getPrimaryFontFamily = (fontStack: string) =>
+  fontStack
+    .split(",")[0]
+    ?.trim()
+    .replace(/^["']|["']$/g, "")
+  || "Aptos";

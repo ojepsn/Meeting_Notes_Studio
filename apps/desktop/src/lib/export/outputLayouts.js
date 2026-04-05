@@ -120,3 +120,8 @@ export const isOutputLayoutPresetId = (value) => Boolean(value && OUTPUT_LAYOUT_
 export const getOutputLayoutPreset = (presetId) => OUTPUT_LAYOUT_PRESETS.find((preset) => preset.id === presetId)
     ?? OUTPUT_LAYOUT_PRESETS.find((preset) => preset.id === DEFAULT_OUTPUT_LAYOUT_PRESET_ID)
     ?? OUTPUT_LAYOUT_PRESETS[0];
+export const getPrimaryFontFamily = (fontStack) => fontStack
+    .split(",")[0]
+    ?.trim()
+    .replace(/^["']|["']$/g, "")
+    || "Aptos";

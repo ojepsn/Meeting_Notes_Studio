@@ -26,3 +26,4 @@ export declare const DEFAULT_OUTPUT_LAYOUT_PRESET_ID = "modern-aptos";
 export declare const OUTPUT_LAYOUT_PRESETS: OutputLayoutPreset[];
 export declare const isOutputLayoutPresetId: (value: string | undefined | null) => boolean;
 export declare const getOutputLayoutPreset: (presetId: string | undefined | null) => OutputLayoutPreset;
+export declare const getPrimaryFontFamily: (fontStack: string) => string;
