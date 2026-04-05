@@ -2,13 +2,49 @@ import { create } from "zustand";
 import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCaptureMode } from "@notesmith/domain";
 import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
 import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
-import { createAppRepository, createSessionRecord, upsertActivity, upsertSession, upsertTemplate, upsertTodo, } from "../lib/db/repository";
+import { createAppRepository, createSessionRecord, upsertActivity, upsertCalendarItem, upsertSession, upsertTemplate, upsertTodo, } from "../lib/db/repository";
 import { removePersistedAttachment } from "../lib/files/attachmentStore";
 import { findSessionIdForActivity, upsertEntityLink } from "../lib/links/entityLinks";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 const PERSIST_DEBOUNCE_MS = 300;
 const TRASH_RETENTION_DAYS = 7;
 const TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const SLOTS_PER_HOUR = 12;
+const MINUTES_PER_SLOT = 5;
+const MAX_SLOT_INDEX = 24 * SLOTS_PER_HOUR - 1;
+const DEFAULT_MEETING_DURATION_SLOTS = 12;
+const clampSlotIndex = (slot) => Math.max(0, Math.min(MAX_SLOT_INDEX, Math.round(slot)));
+const timeToSlot = (time) => {
+    const [hours, minutes] = time.split(":").map(Number);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes))
+        return 0;
+    return clampSlotIndex(hours * SLOTS_PER_HOUR + Math.floor(minutes / MINUTES_PER_SLOT));
+};
+const slotToTime = (slot) => {
+    const normalized = clampSlotIndex(slot);
+    const totalMinutes = normalized * MINUTES_PER_SLOT;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+};
+const durationFromTimes = (startTime, endTime) => {
+    const startSlot = timeToSlot(startTime);
+    const endSlot = timeToSlot(endTime);
+    return Math.max(1, endSlot - startSlot || DEFAULT_MEETING_DURATION_SLOTS);
+};
+const parseScheduledText = (value) => {
+    const trimmed = value.trim();
+    const meetMatch = trimmed.match(/^meet\s+(.+)$/i);
+    if (meetMatch?.[1]?.trim())
+        return { kind: "meeting", description: meetMatch[1].trim() };
+    const activityMatch = trimmed.match(/^act\s+(.+)$/i);
+    if (activityMatch?.[1]?.trim())
+        return { kind: "activity", description: activityMatch[1].trim() };
+    const todoMatch = trimmed.match(/^td\s+(.+)$/i);
+    if (todoMatch?.[1]?.trim())
+        return { kind: "todo", description: todoMatch[1].trim() };
+    return trimmed ? { kind: "todo", description: trimmed } : null;
+};
 const isSessionExpired = (session, nowMs) => {
     if (!session.deletedAt) {
         return false;
@@ -31,7 +67,50 @@ const buildLinkedMeetingSession = (activity, preferredTemplateId) => {
         domain: activity.domain,
         activity: activity.activity,
         date: meetingDate,
+        startTime: activity.startTime || session.startTime,
+        endTime: activity.endTime || session.endTime,
         updatedAt: new Date().toISOString(),
+    };
+};
+const syncLinkedSessionForMeeting = (snapshot, activity) => {
+    const linkedSessionId = findSessionIdForActivity(snapshot.entityLinks, activity.id);
+    if (!linkedSessionId) {
+        return snapshot;
+    }
+    return {
+        ...snapshot,
+        sessions: snapshot.sessions.map((session) => session.id === linkedSessionId
+            ? {
+                ...session,
+                title: activity.description || session.title,
+                date: activity.doOn || session.date,
+                startTime: activity.startTime || session.startTime,
+                endTime: activity.endTime || session.endTime,
+                updatedAt: new Date().toISOString(),
+            }
+            : session),
+    };
+};
+const syncCalendarItemForMeeting = (snapshot, activity) => {
+    if (activity.type !== "meeting" || !activity.doOn || !activity.startTime) {
+        return snapshot;
+    }
+    const matchingItem = snapshot.calendarItems.find((item) => item.targetType === "activity" && item.targetId === activity.id);
+    const startSlot = timeToSlot(activity.startTime);
+    const durationSlots = durationFromTimes(activity.startTime, activity.endTime || slotToTime(startSlot + DEFAULT_MEETING_DURATION_SLOTS));
+    const nextItem = {
+        id: matchingItem?.id ?? crypto.randomUUID(),
+        targetType: "activity",
+        targetId: activity.id,
+        date: activity.doOn,
+        startSlot,
+        durationSlots,
+        createdAt: matchingItem?.createdAt ?? new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    };
+    return {
+        ...snapshot,
+        calendarItems: upsertCalendarItem(snapshot.calendarItems, nextItem),
     };
 };
 let persistTimer = null;
@@ -312,7 +391,11 @@ export const useDesktopStore = create((set, get) => ({
         const snapshot = get().snapshot;
         if (!snapshot)
             return;
-        const nextSnapshot = { ...snapshot, todos: snapshot.todos.filter((todo) => todo.id !== id) };
+        const nextSnapshot = {
+            ...snapshot,
+            todos: snapshot.todos.filter((todo) => todo.id !== id),
+            calendarItems: snapshot.calendarItems.filter((item) => !(item.targetType === "todo" && item.targetId === id)),
+        };
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);
     },
@@ -320,10 +403,14 @@ export const useDesktopStore = create((set, get) => ({
         const snapshot = get().snapshot;
         if (!snapshot)
             return;
-        const nextSnapshot = {
+        let nextSnapshot = {
             ...snapshot,
             activities: upsertActivity(snapshot.activities, activity),
         };
+        if (activity.type === "meeting") {
+            nextSnapshot = syncCalendarItemForMeeting(nextSnapshot, activity);
+            nextSnapshot = syncLinkedSessionForMeeting(nextSnapshot, activity);
+        }
         set({ snapshot: nextSnapshot });
         scheduleSnapshotPersist(get().repository, nextSnapshot, set);
     },
@@ -343,6 +430,8 @@ export const useDesktopStore = create((set, get) => ({
             activity: "",
             doOn: "",
             dueDate: "",
+            startTime: "",
+            endTime: "",
             detailsHtml: "",
             timeRequiredMinutes: 0,
             actualTimeSpentMinutes: 0,
@@ -360,7 +449,140 @@ export const useDesktopStore = create((set, get) => ({
         const snapshot = get().snapshot;
         if (!snapshot)
             return;
-        const nextSnapshot = { ...snapshot, activities: snapshot.activities.filter((activity) => activity.id !== id) };
+        const nextSnapshot = {
+            ...snapshot,
+            activities: snapshot.activities.filter((activity) => activity.id !== id),
+            calendarItems: snapshot.calendarItems.filter((item) => !(item.targetType === "activity" && item.targetId === id)),
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    createCalendarEntryFromText: async (date, startSlot, value) => {
+        const snapshot = get().snapshot;
+        const parsed = parseScheduledText(value);
+        if (!snapshot || !parsed)
+            return;
+        const createdAt = new Date().toISOString();
+        const normalizedSlot = clampSlotIndex(startSlot);
+        let nextSnapshot = snapshot;
+        if (parsed.kind === "todo") {
+            const todo = {
+                id: crypto.randomUUID(),
+                description: parsed.description,
+                isDone: false,
+                isPrivate: false,
+                comments: "",
+                domain: "",
+                project: "",
+                activity: "",
+                doOn: date,
+                dueDate: "",
+                detailsHtml: "",
+                createdAt,
+                sessionIds: get().activeSessionId ? [get().activeSessionId].filter((entry) => Boolean(entry)) : [],
+            };
+            nextSnapshot = {
+                ...snapshot,
+                todos: [todo, ...snapshot.todos],
+                calendarItems: upsertCalendarItem(snapshot.calendarItems, {
+                    id: crypto.randomUUID(),
+                    targetType: "todo",
+                    targetId: todo.id,
+                    date,
+                    startSlot: normalizedSlot,
+                    durationSlots: 1,
+                    createdAt,
+                    updatedAt: createdAt,
+                }),
+            };
+        }
+        else {
+            const isMeeting = parsed.kind === "meeting";
+            const activity = {
+                id: crypto.randomUUID(),
+                type: isMeeting ? "meeting" : "task",
+                description: parsed.description,
+                isDone: false,
+                isPrivate: false,
+                comments: "",
+                domain: "",
+                project: "",
+                activity: "",
+                doOn: date,
+                dueDate: "",
+                startTime: isMeeting ? slotToTime(normalizedSlot) : "",
+                endTime: isMeeting ? slotToTime(normalizedSlot + DEFAULT_MEETING_DURATION_SLOTS) : "",
+                detailsHtml: "",
+                timeRequiredMinutes: 0,
+                actualTimeSpentMinutes: 0,
+                createdAt,
+                sessionIds: get().activeSessionId ? [get().activeSessionId].filter((entry) => Boolean(entry)) : [],
+            };
+            nextSnapshot = {
+                ...snapshot,
+                activities: [activity, ...snapshot.activities],
+                calendarItems: upsertCalendarItem(snapshot.calendarItems, {
+                    id: crypto.randomUUID(),
+                    targetType: "activity",
+                    targetId: activity.id,
+                    date,
+                    startSlot: normalizedSlot,
+                    durationSlots: isMeeting ? DEFAULT_MEETING_DURATION_SLOTS : 1,
+                    createdAt,
+                    updatedAt: createdAt,
+                }),
+            };
+        }
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    moveCalendarItem: async (id, date, startSlot) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const existing = snapshot.calendarItems.find((item) => item.id === id);
+        if (!existing)
+            return;
+        const normalizedSlot = clampSlotIndex(startSlot);
+        let nextSnapshot = {
+            ...snapshot,
+            calendarItems: upsertCalendarItem(snapshot.calendarItems, {
+                ...existing,
+                date,
+                startSlot: normalizedSlot,
+                updatedAt: new Date().toISOString(),
+            }),
+        };
+        if (existing.targetType === "todo") {
+            const todo = snapshot.todos.find((entry) => entry.id === existing.targetId);
+            if (todo) {
+                nextSnapshot = {
+                    ...nextSnapshot,
+                    todos: upsertTodo(nextSnapshot.todos, { ...todo, doOn: date }),
+                };
+            }
+        }
+        else {
+            const activity = snapshot.activities.find((entry) => entry.id === existing.targetId);
+            if (activity) {
+                const durationSlots = Math.max(1, existing.durationSlots);
+                const nextActivity = {
+                    ...activity,
+                    doOn: date,
+                    startTime: activity.type === "meeting" ? slotToTime(normalizedSlot) : activity.startTime,
+                    endTime: activity.type === "meeting"
+                        ? slotToTime(normalizedSlot + durationSlots)
+                        : activity.endTime,
+                };
+                nextSnapshot = {
+                    ...nextSnapshot,
+                    activities: upsertActivity(nextSnapshot.activities, nextActivity),
+                };
+                if (nextActivity.type === "meeting") {
+                    nextSnapshot = syncLinkedSessionForMeeting(nextSnapshot, nextActivity);
+                }
+            }
+        }
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);
     },
@@ -380,6 +602,8 @@ export const useDesktopStore = create((set, get) => ({
             activity: todo.activity,
             doOn: todo.doOn,
             dueDate: todo.dueDate,
+            startTime: "",
+            endTime: "",
             detailsHtml: todo.detailsHtml,
             timeRequiredMinutes: 0,
             actualTimeSpentMinutes: 0,
@@ -390,6 +614,14 @@ export const useDesktopStore = create((set, get) => ({
             ...snapshot,
             todos: snapshot.todos.filter((entry) => entry.id !== todo.id),
             activities: [nextActivity, ...snapshot.activities],
+            calendarItems: snapshot.calendarItems.map((item) => item.targetType === "todo" && item.targetId === todo.id
+                ? {
+                    ...item,
+                    targetType: "activity",
+                    targetId: nextActivity.id,
+                    updatedAt: new Date().toISOString(),
+                }
+                : item),
         };
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);

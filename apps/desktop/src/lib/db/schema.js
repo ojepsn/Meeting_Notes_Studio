@@ -1,4 +1,4 @@
-export const APP_SCHEMA_VERSION = 2;
+export const APP_SCHEMA_VERSION = 3;
 export const sqliteBootstrapStatements = [
     `CREATE TABLE IF NOT EXISTS settings_local (
     key TEXT PRIMARY KEY,
@@ -44,6 +44,17 @@ export const sqliteBootstrapStatements = [
     is_done INTEGER NOT NULL,
     comments TEXT NOT NULL,
     created_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+  );`,
+    `CREATE TABLE IF NOT EXISTS calendar_items (
+    id TEXT PRIMARY KEY,
+    target_type TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    schedule_date TEXT NOT NULL,
+    start_slot INTEGER NOT NULL,
+    duration_slots INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
     payload_json TEXT NOT NULL
   );`,
     `CREATE TABLE IF NOT EXISTS entity_links (

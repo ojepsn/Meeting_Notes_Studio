@@ -28,6 +28,8 @@ interface DesktopState {
     saveActivity: (activity: DesktopAppSnapshot["activities"][number]) => Promise<void>;
     addActivity: (description: string, type?: DesktopAppSnapshot["activities"][number]["type"]) => Promise<void>;
     deleteActivity: (id: string) => Promise<void>;
+    createCalendarEntryFromText: (date: string, startSlot: number, value: string) => Promise<void>;
+    moveCalendarItem: (id: string, date: string, startSlot: number) => Promise<void>;
     convertTodoToActivity: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
     ensureSessionForActivity: (activityId: string) => Promise<string | null>;
     saveSettings: (settings: DesktopAppSnapshot["settings"]) => Promise<void>;

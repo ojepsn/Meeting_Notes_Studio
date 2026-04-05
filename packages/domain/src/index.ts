@@ -86,11 +86,24 @@ export interface ActivityRecord {
   activity: string;
   doOn: string;
   dueDate: string;
+  startTime: string;
+  endTime: string;
   detailsHtml: string;
   timeRequiredMinutes: number;
   actualTimeSpentMinutes: number;
   createdAt: string;
   sessionIds: string[];
+}
+
+export interface CalendarItemRecord {
+  id: string;
+  targetType: "todo" | "activity";
+  targetId: string;
+  date: string;
+  startSlot: number;
+  durationSlots: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface EntityLinkRecord {
@@ -158,6 +171,7 @@ export interface DesktopAppSnapshot {
   templates: TemplateDefinition[];
   todos: TodoRecord[];
   activities: ActivityRecord[];
+  calendarItems: CalendarItemRecord[];
   entityLinks: EntityLinkRecord[];
   attachments: AttachmentRecord[];
   settings: LocalAppSettings;

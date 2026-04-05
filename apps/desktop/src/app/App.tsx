@@ -5,6 +5,7 @@ import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
 import { OutputWorkspace } from "../features/output/components/OutputWorkspace";
 import { ActivitiesWorkspace } from "../features/activities/components/ActivitiesWorkspace";
+import { CalendarWorkspace } from "../features/calendar/components/CalendarWorkspace";
 import { TodosRailCard } from "../features/todos/components/TodosRailCard";
 import { TodosWorkspace } from "../features/todos/components/TodosWorkspace";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
@@ -57,7 +58,7 @@ import {
 } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW, type MetadataReviewState } from "../lib/metadata/review";
 import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links/entityLinks";
-import { parseActivityShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
+import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
 
 type AppWorkspace = "notes" | "todos" | "activities" | "calendar" | "assistant" | "files";
@@ -75,7 +76,7 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
   { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
   { id: "todos", label: "Todos", description: "Focused follow-up management", available: true },
   { id: "activities", label: "Activities", description: "Tracked work with time and scheduling", available: true },
-  { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: false },
+  { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: true },
   { id: "assistant", label: "Assistant", description: "Future AI workflows and agents", available: false },
   { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
 ];
@@ -153,6 +154,8 @@ export const App = () => {
     saveActivity,
     addActivity,
     deleteActivity,
+    createCalendarEntryFromText,
+    moveCalendarItem,
     convertTodoToActivity,
     ensureSessionForActivity,
     saveSettings,
@@ -602,17 +605,31 @@ export const App = () => {
     }
 
     const activityDescription = parseActivityShortcut(target.value);
-    if (!activityDescription) {
+    if (activityDescription) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      await addActivity(activityDescription, "task");
+      target.value = "";
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+      setStatusNote(`Added activity: ${activityDescription}`);
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
+    const meetingDescription = parseMeetingShortcut(target.value);
+    if (meetingDescription) {
+      event.preventDefault();
+      event.stopPropagation();
 
-    await addActivity(activityDescription, "task");
-    target.value = "";
-    target.dispatchEvent(new Event("input", { bubbles: true }));
-    setStatusNote(`Added activity: ${activityDescription}`);
+      await addActivity(meetingDescription, "meeting");
+      target.value = "";
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+      setStatusNote(`Added meeting activity: ${meetingDescription}`);
+      return;
+    }
+
+    return;
+
   };
 
   const buildRawOutput = (session = activeSession) => {
@@ -1499,6 +1516,13 @@ export const App = () => {
         action: () => setActiveWorkspace("activities"),
       },
       {
+        id: "calendar",
+        label: "Open Calendar",
+        description: "Schedule todos, activities, and meetings across time.",
+        keywords: ["calendar schedule plan meeting"],
+        action: () => setActiveWorkspace("calendar"),
+      },
+      {
         id: "backup",
         label: "Open Back-up",
         description: "Import or export desktop data snapshots.",
@@ -2127,6 +2151,16 @@ export const App = () => {
                 }
                 onOpenSession={openSessionFromLink}
               />
+            ) : activeWorkspace === "calendar" ? (
+              <CalendarWorkspace
+                todos={snapshot.todos}
+                activities={snapshot.activities}
+                calendarItems={snapshot.calendarItems}
+                onCreateFromText={(date, startSlot, value) => void createCalendarEntryFromText(date, startSlot, value)}
+                onMoveItem={(id, date, startSlot) => void moveCalendarItem(id, date, startSlot)}
+                onOpenTodoWorkspace={() => setActiveWorkspace("todos")}
+                onOpenActivityWorkspace={(activityId) => openActivityFromLink(activityId)}
+              />
             ) : activeWorkspace !== "notes" ? (
               <div className="card empty-state-card">
                 <h2>Coming next</h2>
@@ -2290,7 +2324,7 @@ export const App = () => {
                     </div>
                   </details>
                 </div>
-              ) : activeWorkspace === "todos" || activeWorkspace === "activities" ? (
+              ) : activeWorkspace === "todos" || activeWorkspace === "activities" || activeWorkspace === "calendar" ? (
                 <div className="sidebar-actions">
                   <button className="primary-button" type="button" onClick={() => setActiveWorkspace("notes")}>
                     Back to Notes

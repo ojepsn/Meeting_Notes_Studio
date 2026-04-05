@@ -37,6 +37,8 @@ const createBlankActivityDraft = (description = ""): ActivityRecord => ({
   activity: "",
   doOn: "",
   dueDate: "",
+  startTime: "",
+  endTime: "",
   detailsHtml: "",
   timeRequiredMinutes: 0,
   actualTimeSpentMinutes: 0,
@@ -413,6 +415,28 @@ export const ActivitiesWorkspace = ({
                   />
                 </div>
               </div>
+              {editingDraft.type === "meeting" ? (
+                <div className="inline-row">
+                  <div className="field">
+                    <label htmlFor="activity-edit-start-time">Start time</label>
+                    <input
+                      id="activity-edit-start-time"
+                      type="time"
+                      value={editingDraft.startTime}
+                      onChange={(event) => setEditingDraft({ ...editingDraft, startTime: event.target.value })}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="activity-edit-end-time">End time</label>
+                    <input
+                      id="activity-edit-end-time"
+                      type="time"
+                      value={editingDraft.endTime}
+                      onChange={(event) => setEditingDraft({ ...editingDraft, endTime: event.target.value })}
+                    />
+                  </div>
+                </div>
+              ) : null}
               <div className="inline-row">
                 <div className="field todo-private-field">
                   <span>Private</span>

@@ -1689,6 +1689,161 @@ select {
   gap: 0.3rem;
 }
 
+.calendar-workspace {
+  gap: 1rem;
+}
+
+.calendar-scroll {
+  position: relative;
+  overflow: auto;
+  max-height: calc(100vh - 260px);
+  border: 1px solid var(--app-border);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-surface) 95%, white 5%) 0%, var(--app-input-bg) 100%),
+    var(--app-surface);
+}
+
+.calendar-surface {
+  display: grid;
+  min-width: max-content;
+  position: relative;
+}
+
+.calendar-corner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  background: var(--app-surface-elevated);
+  border-right: 1px solid var(--app-border-strong);
+  border-bottom: 1px solid var(--app-border-strong);
+}
+
+.calendar-day-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  background: var(--app-surface-elevated);
+  border-bottom: 1px solid var(--app-border-strong);
+  border-right: 1px solid var(--app-border);
+}
+
+.calendar-day-header strong {
+  font-size: 0.94rem;
+}
+
+.calendar-day-header span {
+  color: var(--app-muted);
+  font-size: 0.78rem;
+}
+
+.calendar-time-column {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--app-surface-elevated);
+  border-right: 1px solid var(--app-border-strong);
+}
+
+.calendar-time-cell {
+  border-bottom: 1px solid var(--app-border);
+  padding: 0 0.55rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  color: var(--app-muted);
+  font-size: 0.72rem;
+}
+
+.calendar-time-cell-hour {
+  border-top: 1px solid var(--app-border-strong);
+}
+
+.calendar-day-column {
+  position: relative;
+  border-right: 1px solid var(--app-border);
+}
+
+.calendar-grid-cell {
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 85%, transparent 15%);
+}
+
+.calendar-grid-cell-hour {
+  border-top: 1px solid var(--app-border-strong);
+}
+
+.calendar-grid-cell:hover {
+  background: color-mix(in srgb, var(--app-accent-soft) 24%, transparent 76%);
+}
+
+.calendar-grid-cell-active {
+  background: color-mix(in srgb, var(--app-accent-soft) 46%, transparent 54%);
+}
+
+.calendar-cell-input {
+  width: 100%;
+  min-height: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0 0.35rem;
+  color: var(--app-text);
+  font-size: 0.78rem;
+}
+
+.calendar-cell-input:focus {
+  outline: none;
+}
+
+.calendar-item-block {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 78%, white 22%) 0%, color-mix(in srgb, var(--app-surface) 88%, var(--app-bg-end) 12%) 100%),
+    var(--app-surface);
+  color: var(--app-text);
+  box-shadow: 0 10px 18px var(--app-shadow);
+  text-align: left;
+  padding: 0.35rem 0.45rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  cursor: grab;
+}
+
+.calendar-item-block strong,
+.calendar-item-block span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-item-block strong {
+  font-size: 0.78rem;
+}
+
+.calendar-item-block span {
+  font-size: 0.68rem;
+  color: var(--app-muted);
+}
+
+.calendar-item-block-meeting {
+  border-color: var(--app-accent-strong-border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 88%, white 12%) 0%, color-mix(in srgb, var(--app-surface) 70%, var(--app-accent-soft) 30%) 100%),
+    var(--app-surface);
+}
+
 .settings-option-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

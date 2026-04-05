@@ -4,6 +4,7 @@ import {
   getPrimaryCaptureMode,
   type AttachmentRecord,
   type ActivityRecord,
+  type CalendarItemRecord,
   type CaptureMode,
   type DesktopAppSnapshot,
   type EntityLinkRecord,
@@ -36,6 +37,7 @@ const STORAGE_KEYS = {
   templates: "notesmith-desktop-templates",
   todos: "notesmith-desktop-todos",
   activities: "notesmith-desktop-activities",
+  calendarItems: "notesmith-desktop-calendar-items",
   entityLinks: "notesmith-desktop-entity-links",
   attachments: "notesmith-desktop-attachments",
   settings: "notesmith-desktop-settings",
@@ -103,6 +105,8 @@ const normalizeActivityRecord = (activity: ActivityRecord): ActivityRecord => ({
   activity: typeof activity.activity === "string" ? activity.activity : "",
   doOn: typeof activity.doOn === "string" ? activity.doOn : "",
   dueDate: typeof activity.dueDate === "string" ? activity.dueDate : "",
+  startTime: typeof activity.startTime === "string" ? activity.startTime : "",
+  endTime: typeof activity.endTime === "string" ? activity.endTime : "",
   detailsHtml:
     typeof activity.detailsHtml === "string"
       ? activity.detailsHtml
@@ -114,6 +118,16 @@ const normalizeActivityRecord = (activity: ActivityRecord): ActivityRecord => ({
   sessionIds: Array.isArray(activity.sessionIds)
     ? activity.sessionIds.filter((value): value is string => typeof value === "string")
     : [],
+});
+
+const normalizeCalendarItemRecord = (item: CalendarItemRecord): CalendarItemRecord => ({
+  ...item,
+  targetType: item.targetType === "activity" ? "activity" : "todo",
+  date: typeof item.date === "string" ? item.date : now().slice(0, 10),
+  startSlot: Number.isFinite(Number(item.startSlot)) ? Math.max(0, Math.min(287, Math.round(Number(item.startSlot)))) : 0,
+  durationSlots: Number.isFinite(Number(item.durationSlots))
+    ? Math.max(1, Math.min(288, Math.round(Number(item.durationSlots))))
+    : 1,
 });
 
 const normalizeEntityLinkRecord = (link: EntityLinkRecord): EntityLinkRecord => ({
@@ -217,6 +231,7 @@ export const createDefaultSnapshot = (): DesktopAppSnapshot => ({
   templates: BUILTIN_TEMPLATES,
   todos: [],
   activities: [],
+  calendarItems: [],
   entityLinks: [],
   attachments: [],
   settings: createDefaultSettings(),
@@ -231,6 +246,8 @@ export interface EntityRepository {
   saveTodos(records: TodoRecord[]): Promise<void>;
   loadActivities(): Promise<ActivityRecord[]>;
   saveActivities(records: ActivityRecord[]): Promise<void>;
+  loadCalendarItems(): Promise<CalendarItemRecord[]>;
+  saveCalendarItems(records: CalendarItemRecord[]): Promise<void>;
   loadEntityLinks(): Promise<EntityLinkRecord[]>;
   saveEntityLinks(records: EntityLinkRecord[]): Promise<void>;
   loadAttachments(): Promise<AttachmentRecord[]>;
@@ -310,6 +327,14 @@ class BrowserEntityRepository implements AppRepository {
     writeLocalJson(STORAGE_KEYS.activities, records);
   }
 
+  async loadCalendarItems() {
+    return readLocalJson<CalendarItemRecord[]>(STORAGE_KEYS.calendarItems, []).map(normalizeCalendarItemRecord);
+  }
+
+  async saveCalendarItems(records: CalendarItemRecord[]) {
+    writeLocalJson(STORAGE_KEYS.calendarItems, records);
+  }
+
   async loadEntityLinks() {
     return readLocalJson<EntityLinkRecord[]>(STORAGE_KEYS.entityLinks, []).map(normalizeEntityLinkRecord);
   }
@@ -359,11 +384,12 @@ class BrowserEntityRepository implements AppRepository {
   }
 
   async loadSnapshot(): Promise<DesktopAppSnapshot> {
-    const [sessions, templates, todos, activities, entityLinks, attachments, settings] = await Promise.all([
+    const [sessions, templates, todos, activities, calendarItems, entityLinks, attachments, settings] = await Promise.all([
       this.loadSessions(),
       this.loadTemplates(),
       this.loadTodos(),
       this.loadActivities(),
+      this.loadCalendarItems(),
       this.loadEntityLinks(),
       this.loadAttachments(),
       this.loadSettings(),
@@ -374,6 +400,7 @@ class BrowserEntityRepository implements AppRepository {
       templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
       todos,
       activities,
+      calendarItems,
       entityLinks,
       attachments,
       settings,
@@ -386,6 +413,7 @@ class BrowserEntityRepository implements AppRepository {
       this.saveTemplates(snapshot.templates),
       this.saveTodos(snapshot.todos),
       this.saveActivities(snapshot.activities),
+      this.saveCalendarItems(snapshot.calendarItems),
       this.saveEntityLinks(snapshot.entityLinks),
       this.saveAttachments(snapshot.attachments),
       this.saveSettings(snapshot.settings),
@@ -420,6 +448,7 @@ class TauriSqliteRepository implements AppRepository {
         await db.execute("ALTER TABLE attachments ADD COLUMN caption TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE attachments ADD COLUMN include_in_output INTEGER NOT NULL DEFAULT 0").catch(() => {});
         await db.execute("ALTER TABLE attachments ADD COLUMN output_position INTEGER NOT NULL DEFAULT 0").catch(() => {});
+        await db.execute("CREATE TABLE IF NOT EXISTS calendar_items (id TEXT PRIMARY KEY, target_type TEXT NOT NULL, target_id TEXT NOT NULL, schedule_date TEXT NOT NULL, start_slot INTEGER NOT NULL, duration_slots INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
         return db;
       })();
     }
@@ -586,6 +615,35 @@ class TauriSqliteRepository implements AppRepository {
     );
   }
 
+  async loadCalendarItems() {
+    const db = await this.getDb();
+    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM calendar_items ORDER BY updated_at DESC");
+    return rows.map((row) => normalizeCalendarItemRecord(JSON.parse(row.payload_json) as CalendarItemRecord));
+  }
+
+  async saveCalendarItems(records: CalendarItemRecord[]) {
+    const db = await this.getDb();
+    await db.execute("DELETE FROM calendar_items");
+    await Promise.all(
+      records.map((record) =>
+        db.execute(
+          "INSERT INTO calendar_items (id, target_type, target_id, schedule_date, start_slot, duration_slots, created_at, updated_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [
+            record.id,
+            record.targetType,
+            record.targetId,
+            record.date,
+            record.startSlot,
+            record.durationSlots,
+            record.createdAt,
+            record.updatedAt,
+            JSON.stringify(record),
+          ],
+        ),
+      ),
+    );
+  }
+
   async loadEntityLinks() {
     const db = await this.getDb();
     const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM entity_links ORDER BY created_at DESC");
@@ -718,11 +776,12 @@ class TauriSqliteRepository implements AppRepository {
   }
 
   async loadSnapshot(): Promise<DesktopAppSnapshot> {
-    const [sessions, templates, todos, activities, entityLinks, attachments, settings] = await Promise.all([
+    const [sessions, templates, todos, activities, calendarItems, entityLinks, attachments, settings] = await Promise.all([
       this.loadSessions(),
       this.loadTemplates(),
       this.loadTodos(),
       this.loadActivities(),
+      this.loadCalendarItems(),
       this.loadEntityLinks(),
       this.loadAttachments(),
       this.loadSettings(),
@@ -733,6 +792,7 @@ class TauriSqliteRepository implements AppRepository {
       templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
       todos,
       activities,
+      calendarItems,
       entityLinks,
       attachments,
       settings,
@@ -745,6 +805,7 @@ class TauriSqliteRepository implements AppRepository {
       this.saveTemplates(snapshot.templates),
       this.saveTodos(snapshot.todos),
       this.saveActivities(snapshot.activities),
+      this.saveCalendarItems(snapshot.calendarItems),
       this.saveEntityLinks(snapshot.entityLinks),
       this.saveAttachments(snapshot.attachments),
       this.saveSettings(snapshot.settings),
@@ -814,3 +875,8 @@ export const upsertActivity = (activities: ActivityRecord[], nextActivity: Activ
   activities.some((activity) => activity.id === nextActivity.id)
     ? activities.map((activity) => (activity.id === nextActivity.id ? nextActivity : activity))
     : [nextActivity, ...activities];
+
+export const upsertCalendarItem = (items: CalendarItemRecord[], nextItem: CalendarItemRecord) =>
+  items.some((item) => item.id === nextItem.id)
+    ? items.map((item) => (item.id === nextItem.id ? nextItem : item))
+    : [nextItem, ...items];

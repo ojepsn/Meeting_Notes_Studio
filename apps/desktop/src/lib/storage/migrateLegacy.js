@@ -188,6 +188,7 @@ export const loadLegacyBrowserSnapshot = () => {
             templates: mapLegacyTemplates(parsedSettings?.customTemplates),
             todos: mapLegacyTodos(parsedSettings?.todoItems),
             activities: [],
+            calendarItems: [],
             entityLinks: [],
             attachments: [],
             settings: {

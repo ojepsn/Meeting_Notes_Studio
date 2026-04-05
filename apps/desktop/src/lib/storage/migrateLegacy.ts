@@ -289,6 +289,7 @@ export const loadLegacyBrowserSnapshot = (): DesktopAppSnapshot | null => {
       templates: mapLegacyTemplates(parsedSettings?.customTemplates),
       todos: mapLegacyTodos(parsedSettings?.todoItems),
       activities: [],
+      calendarItems: [],
       entityLinks: [],
       attachments: [],
       settings: {
