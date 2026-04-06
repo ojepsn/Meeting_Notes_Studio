@@ -5,7 +5,6 @@ import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
 import { OutputWorkspace } from "../features/output/components/OutputWorkspace";
 import { ActivitiesWorkspace } from "../features/activities/components/ActivitiesWorkspace";
-import { CalendarWorkspace } from "../features/calendar/components/CalendarWorkspace";
 import { TodosRailCard } from "../features/todos/components/TodosRailCard";
 import { TodosWorkspace } from "../features/todos/components/TodosWorkspace";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
@@ -154,8 +153,6 @@ export const App = () => {
     saveActivity,
     addActivity,
     deleteActivity,
-    createCalendarEntryFromText,
-    moveCalendarItem,
     convertTodoToActivity,
     ensureSessionForActivity,
     saveSettings,
@@ -2152,15 +2149,15 @@ export const App = () => {
                 onOpenSession={openSessionFromLink}
               />
             ) : activeWorkspace === "calendar" ? (
-              <CalendarWorkspace
-                todos={snapshot.todos}
-                activities={snapshot.activities}
-                calendarItems={snapshot.calendarItems ?? []}
-                onCreateFromText={(date, startSlot, value) => void createCalendarEntryFromText(date, startSlot, value)}
-                onMoveItem={(id, date, startSlot) => void moveCalendarItem(id, date, startSlot)}
-                onOpenTodoWorkspace={() => setActiveWorkspace("todos")}
-                onOpenActivityWorkspace={(activityId) => openActivityFromLink(activityId)}
-              />
+              <div className="card empty-state-card">
+                <h2>Calendar diagnostic view</h2>
+                <p>The Calendar workspace shell opened successfully. This confirms the freeze is inside the calendar render layer, not in workspace switching.</p>
+                <ol className="empty-state-steps">
+                  <li>Notes workspace is still available from the left rail.</li>
+                  <li>Todos: {snapshot.todos.length}</li>
+                  <li>Activities: {snapshot.activities.length}</li>
+                </ol>
+              </div>
             ) : activeWorkspace !== "notes" ? (
               <div className="card empty-state-card">
                 <h2>Coming next</h2>
