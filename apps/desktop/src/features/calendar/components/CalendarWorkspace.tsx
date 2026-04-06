@@ -4,7 +4,7 @@ import type { ActivityRecord, CalendarItemRecord, TodoRecord } from "@notesmith/
 const TOTAL_SLOTS = 24 * 12;
 const MINUTES_PER_SLOT = 5;
 const DEFAULT_DAYS_IN_VIEW = 3;
-const DAYS_IN_VIEW_OPTIONS = [3, 5, 7] as const;
+const DAYS_IN_VIEW_OPTIONS = [3, 5, 7, 14] as const;
 const SLOT_HEIGHT_OPTIONS = [12, 16, 22] as const;
 
 const addDays = (date: string, days: number) => {
@@ -93,10 +93,24 @@ type CalendarEditorDraft = {
   isMeeting: boolean;
 };
 
+type CalendarTypeFilter = "all" | "todo" | "activity" | "meeting";
+type CalendarVisibilityFilter = "all" | "public" | "private";
+
+type ResizeState = {
+  itemId: string;
+  edge: "start" | "end";
+  baseStartSlot: number;
+  baseDurationSlots: number;
+  currentStartSlot: number;
+  currentDurationSlots: number;
+  date: string;
+};
+
 interface CalendarWorkspaceProps {
   todos: TodoRecord[];
   activities: ActivityRecord[];
   calendarItems: CalendarItemRecord[];
+  linkedSessionIdsByActivity: Record<string, string | null>;
   onCreateFromText: (date: string, startSlot: number, value: string) => void;
   onMoveItem: (id: string, date: string, startSlot: number) => void;
   onSaveTodo: (todo: TodoRecord) => void;
@@ -104,12 +118,15 @@ interface CalendarWorkspaceProps {
   onUpdateCalendarItem: (id: string, updates: { date: string; startSlot: number; durationSlots: number }) => void;
   onOpenTodoWorkspace: () => void;
   onOpenActivityWorkspace: (activityId: string) => void;
+  onOpenSession: (sessionId: string) => void;
+  onFullScreenChange?: (isFullScreen: boolean) => void;
 }
 
 export const CalendarWorkspace = ({
   todos,
   activities,
   calendarItems,
+  linkedSessionIdsByActivity,
   onCreateFromText,
   onMoveItem,
   onSaveTodo,
@@ -117,6 +134,8 @@ export const CalendarWorkspace = ({
   onUpdateCalendarItem,
   onOpenTodoWorkspace,
   onOpenActivityWorkspace,
+  onOpenSession,
+  onFullScreenChange,
 }: CalendarWorkspaceProps) => {
   const today = new Date().toISOString().slice(0, 10);
   const safeTodos = Array.isArray(todos) ? todos : [];
@@ -129,6 +148,19 @@ export const CalendarWorkspace = ({
   const [draftText, setDraftText] = useState("");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [editorDraft, setEditorDraft] = useState<CalendarEditorDraft | null>(null);
+  const [jumpDate, setJumpDate] = useState(today);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<CalendarTypeFilter>("all");
+  const [visibilityFilter, setVisibilityFilter] = useState<CalendarVisibilityFilter>("all");
+  const [resizeState, setResizeState] = useState<ResizeState | null>(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+
+  useEffect(() => {
+    onFullScreenChange?.(isFullScreen);
+    return () => {
+      onFullScreenChange?.(false);
+    };
+  }, [isFullScreen, onFullScreenChange]);
 
   const visibleDates = useMemo(
     () => Array.from({ length: daysInView }, (_, index) => addDays(anchorDate, index)),
@@ -248,15 +280,28 @@ export const CalendarWorkspace = ({
     });
   }, [safeActivities, safeCalendarItems, safeTodos]);
 
+  const visibleItems = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    return items.filter((item) => {
+      if (typeFilter === "todo" && item.targetType !== "todo") return false;
+      if (typeFilter === "activity" && (item.targetType !== "activity" || item.isMeeting)) return false;
+      if (typeFilter === "meeting" && !item.isMeeting) return false;
+      if (visibilityFilter === "private" && !item.isPrivate) return false;
+      if (visibilityFilter === "public" && item.isPrivate) return false;
+      if (!normalizedSearch) return true;
+      return [item.title, item.domain, item.project, item.activity, item.label].join(" ").toLowerCase().includes(normalizedSearch);
+    });
+  }, [items, searchQuery, typeFilter, visibilityFilter]);
+
   const itemsByDate = useMemo(() => {
     const grouped = new Map<string, CalendarRenderItem[]>();
-    items.forEach((item) => {
+    visibleItems.forEach((item) => {
       const existing = grouped.get(item.date) ?? [];
       existing.push(item);
       grouped.set(item.date, existing);
     });
     return grouped;
-  }, [items]);
+  }, [visibleItems]);
 
   useEffect(() => {
     if (!selectedItemId) {
@@ -322,6 +367,57 @@ export const CalendarWorkspace = ({
     });
   }, [safeActivities, safeCalendarItems, safeTodos, selectedItemId]);
 
+  useEffect(() => {
+    if (!resizeState) {
+      return;
+    }
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const deltaSlots = Math.round(event.movementY / slotHeight);
+      if (deltaSlots === 0) {
+        return;
+      }
+      setResizeState((current) => {
+        if (!current) {
+          return current;
+        }
+        if (current.edge === "end") {
+          return {
+            ...current,
+            currentDurationSlots: Math.max(1, current.currentDurationSlots + deltaSlots),
+          };
+        }
+        const currentEnd = current.currentStartSlot + current.currentDurationSlots;
+        const nextStart = clampSlot(Math.min(currentEnd - 1, current.currentStartSlot + deltaSlots));
+        return {
+          ...current,
+          currentStartSlot: nextStart,
+          currentDurationSlots: Math.max(1, currentEnd - nextStart),
+        };
+      });
+    };
+
+    const handleMouseUp = () => {
+      setResizeState((current) => {
+        if (current) {
+          onUpdateCalendarItem(current.itemId, {
+            date: current.date,
+            startSlot: current.currentStartSlot,
+            durationSlots: current.currentDurationSlots,
+          });
+        }
+        return null;
+      });
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [onUpdateCalendarItem, resizeState, slotHeight]);
+
   const handleCommitActiveCell = () => {
     if (!activeCell) {
       return;
@@ -338,6 +434,15 @@ export const CalendarWorkspace = ({
     setSelectedItemId(null);
     setActiveCell({ date, slot: clampSlot(slot) });
     setDraftText("");
+  };
+
+  const moveActiveCell = (deltaDays: number, deltaSlots: number) => {
+    if (!activeCell) {
+      return;
+    }
+    const nextDate = addDays(activeCell.date, deltaDays);
+    const nextSlot = clampSlot(activeCell.slot + deltaSlots);
+    setActiveCell({ date: nextDate, slot: nextSlot });
   };
 
   const handleSaveEditor = () => {
@@ -392,7 +497,7 @@ export const CalendarWorkspace = ({
   };
 
   return (
-    <div className="card calendar-workspace">
+    <div className={`card calendar-workspace${isFullScreen ? " calendar-workspace-fullscreen" : ""}`}>
       <div className="card-header session-editor-header-minimal">
         <div>
           <h2>Calendar</h2>
@@ -408,11 +513,17 @@ export const CalendarWorkspace = ({
           <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, daysInView))}>
             Next
           </button>
+          <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, 30))}>
+            +30 days
+          </button>
+          <button className="shell-button" type="button" onClick={() => setIsFullScreen((current) => !current)}>
+            {isFullScreen ? "Exit full screen" : "Full screen"}
+          </button>
         </div>
       </div>
 
       <div className="calendar-calendar-summary">
-        <div className="status-chip">{items.length} scheduled items</div>
+        <div className="status-chip">{visibleItems.length} scheduled items</div>
         <div className="capture-density-toggle" role="group" aria-label="Days in view">
           {DAYS_IN_VIEW_OPTIONS.map((option) => (
             <button
@@ -441,9 +552,49 @@ export const CalendarWorkspace = ({
         </div>
       </div>
 
-      <div className="calendar-layout">
+      <div className="calendar-toolbar">
+        <div className="field">
+          <label htmlFor="calendar-jump-date">Jump to date</label>
+          <input id="calendar-jump-date" type="date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} />
+        </div>
+        <button className="shell-button" type="button" onClick={() => setAnchorDate(jumpDate || today)}>
+          Go
+        </button>
+        <div className="field field-wide">
+          <label htmlFor="calendar-search">Search</label>
+          <input
+            id="calendar-search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search title, domain, project, activity"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="calendar-type-filter">Type</label>
+          <select id="calendar-type-filter" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as CalendarTypeFilter)}>
+            <option value="all">All</option>
+            <option value="todo">Todos</option>
+            <option value="activity">Activities</option>
+            <option value="meeting">Meetings</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="calendar-visibility-filter">Visibility</label>
+          <select
+            id="calendar-visibility-filter"
+            value={visibilityFilter}
+            onChange={(event) => setVisibilityFilter(event.target.value as CalendarVisibilityFilter)}
+          >
+            <option value="all">All</option>
+            <option value="public">Public</option>
+            <option value="private">Private</option>
+          </select>
+        </div>
+      </div>
+
+      <div className={`calendar-layout${isFullScreen ? " calendar-layout-fullscreen" : ""}`}>
         <div className="calendar-main stack">
-          <div className="calendar-scroll" style={{ ["--calendar-slot-height" as string]: `${slotHeight}px` }}>
+          <div className={`calendar-scroll${isFullScreen ? " calendar-scroll-fullscreen" : ""}`} style={{ ["--calendar-slot-height" as string]: `${slotHeight}px` }}>
             <div
               className="calendar-surface"
               style={{
@@ -524,11 +675,26 @@ export const CalendarWorkspace = ({
                           onKeyDown={(event) => {
                             if (event.key === "Enter") {
                               event.preventDefault();
+                              const commitDate = activeForDay.date;
+                              const commitSlot = activeForDay.slot;
                               handleCommitActiveCell();
+                              setActiveCell({ date: commitDate, slot: clampSlot(commitSlot + 1) });
                             }
                             if (event.key === "Escape") {
                               setDraftText("");
                               setActiveCell(null);
+                            }
+                            if (event.key === "ArrowDown") {
+                              event.preventDefault();
+                              moveActiveCell(0, 1);
+                            }
+                            if (event.key === "ArrowUp") {
+                              event.preventDefault();
+                              moveActiveCell(0, -1);
+                            }
+                            if (event.key === "Tab") {
+                              event.preventDefault();
+                              moveActiveCell(event.shiftKey ? -1 : 1, 0);
                             }
                           }}
                           placeholder="Type to add todo, act..., td..., or meet..."
@@ -537,7 +703,16 @@ export const CalendarWorkspace = ({
                     ) : null}
 
                     {dayItems.map((item) => {
-                      const visualHeight = Math.max(slotHeight * Math.max(item.durationSlots, item.isMeeting ? 3 : 1) - 4, 18);
+                      const resizePreview =
+                        resizeState?.itemId === item.id
+                          ? {
+                              startSlot: resizeState.currentStartSlot,
+                              durationSlots: resizeState.currentDurationSlots,
+                            }
+                          : null;
+                      const startSlot = resizePreview?.startSlot ?? item.startSlot;
+                      const durationSlots = resizePreview?.durationSlots ?? item.durationSlots;
+                      const visualHeight = Math.max(slotHeight * Math.max(durationSlots, item.isMeeting ? 3 : 1) - 4, 18);
                       const laneWidth = 100 / Math.max(1, item.laneCount);
                       return (
                       <button
@@ -546,7 +721,7 @@ export const CalendarWorkspace = ({
                         type="button"
                         draggable
                         style={{
-                          top: `calc(var(--calendar-slot-height) * ${item.startSlot} + 2px)`,
+                          top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`,
                           height: `${visualHeight}px`,
                           width: `calc(${laneWidth}% - 8px)`,
                           left: `calc(${item.lane * laneWidth}% + 4px)`,
@@ -561,8 +736,44 @@ export const CalendarWorkspace = ({
                           setSelectedItemId(item.id);
                         }}
                       >
-                        <strong>{slotToTimeLabel(item.startSlot)} {item.title}</strong>
-                        <span>{item.isMeeting ? `${item.label} • ${durationLabel(item.durationSlots)}` : item.label}</span>
+                        {item.isMeeting ? (
+                          <span
+                            className="calendar-resize-handle calendar-resize-handle-start"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setResizeState({
+                                itemId: item.id,
+                                edge: "start",
+                                baseStartSlot: startSlot,
+                                baseDurationSlots: durationSlots,
+                                currentStartSlot: startSlot,
+                                currentDurationSlots: durationSlots,
+                                date: item.date,
+                              });
+                            }}
+                          />
+                        ) : null}
+                        <strong>{slotToTimeLabel(startSlot)} {item.title}</strong>
+                        <span>{item.isMeeting ? `${item.label} • ${durationLabel(durationSlots)}` : `${item.label}${item.isPrivate ? " • Private" : ""}`}</span>
+                        {item.isMeeting ? (
+                          <span
+                            className="calendar-resize-handle calendar-resize-handle-end"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setResizeState({
+                                itemId: item.id,
+                                edge: "end",
+                                baseStartSlot: startSlot,
+                                baseDurationSlots: durationSlots,
+                                currentStartSlot: startSlot,
+                                currentDurationSlots: durationSlots,
+                                date: item.date,
+                              });
+                            }}
+                          />
+                        ) : null}
                       </button>
                     );
                     })}
@@ -722,6 +933,13 @@ export const CalendarWorkspace = ({
                 />
               </div>
 
+              <div className="calendar-editor-meta">
+                <span className="status-chip">{editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity"}</span>
+                {editorDraft.isPrivate ? <span className="status-chip">Private</span> : null}
+                {editorDraft.domain ? <span className="status-chip">{editorDraft.domain}</span> : null}
+                {editorDraft.project ? <span className="status-chip">{editorDraft.project}</span> : null}
+              </div>
+
               <div className="calendar-editor-actions">
                 <button className="primary-button" type="button" onClick={handleSaveEditor}>
                   Save calendar edits
@@ -739,6 +957,20 @@ export const CalendarWorkspace = ({
                 >
                   Open full {editorDraft.targetType === "todo" ? "todo" : "activity"}
                 </button>
+                {editorDraft.targetType === "activity" && linkedSessionIdsByActivity[editorDraft.targetId] ? (
+                  <button
+                    className="shell-button"
+                    type="button"
+                    onClick={() => {
+                      const linkedSessionId = linkedSessionIdsByActivity[editorDraft.targetId];
+                      if (linkedSessionId) {
+                        onOpenSession(linkedSessionId);
+                      }
+                    }}
+                  >
+                    Open linked meeting session
+                  </button>
+                ) : null}
               </div>
             </div>
           ) : (

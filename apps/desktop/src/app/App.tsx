@@ -171,6 +171,7 @@ export const App = () => {
   const [outputDensityOverride, setOutputDensityOverride] = useState<CaptureWorkspaceDensity | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
   const [requestedActivityId, setRequestedActivityId] = useState<string | null>(null);
+  const [isCalendarWorkspaceFullScreen, setIsCalendarWorkspaceFullScreen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [statusNote, setStatusNote] = useState("Ready.");
@@ -215,6 +216,12 @@ export const App = () => {
       audioContextRef.current?.close().catch(() => {});
     };
   }, []);
+
+  useEffect(() => {
+    if (activeWorkspace !== "calendar" && isCalendarWorkspaceFullScreen) {
+      setIsCalendarWorkspaceFullScreen(false);
+    }
+  }, [activeWorkspace, isCalendarWorkspaceFullScreen]);
 
   useEffect(() => {
     if (!isLoaded || loadError) {
@@ -2023,7 +2030,7 @@ export const App = () => {
           </div>
         ) : null}
 
-        <main className="notes-shell">
+        <main className={`notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}`}>
           <section className="workspace-canvas">
             <div className="workspace-header card">
               <div className="card-header">
@@ -2157,6 +2164,7 @@ export const App = () => {
                 todos={snapshot.todos}
                 activities={snapshot.activities}
                 calendarItems={snapshot.calendarItems ?? []}
+                linkedSessionIdsByActivity={linkedSessionIdsByActivity}
                 onCreateFromText={(date, startSlot, value) => void createCalendarEntryFromText(date, startSlot, value)}
                 onMoveItem={(id, date, startSlot) => void moveCalendarItem(id, date, startSlot)}
                 onSaveTodo={(todo) => void saveTodo(todo)}
@@ -2164,6 +2172,8 @@ export const App = () => {
                 onUpdateCalendarItem={(id, updates) => void updateCalendarItem(id, updates)}
                 onOpenTodoWorkspace={() => setActiveWorkspace("todos")}
                 onOpenActivityWorkspace={(activityId) => openActivityFromLink(activityId)}
+                onOpenSession={openSessionFromLink}
+                onFullScreenChange={setIsCalendarWorkspaceFullScreen}
               />
             ) : activeWorkspace !== "notes" ? (
               <div className="card empty-state-card">
@@ -2244,6 +2254,7 @@ export const App = () => {
             )}
           </section>
 
+          {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) ? (
           <aside className="workspace-inspector stack">
             <SessionsSidebar
               sessions={snapshot.sessions}
@@ -2369,6 +2380,7 @@ export const App = () => {
             </div>
 
           </aside>
+          ) : null}
         </main>
       </div>
 

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 const TOTAL_SLOTS = 24 * 12;
 const MINUTES_PER_SLOT = 5;
 const DEFAULT_DAYS_IN_VIEW = 3;
-const DAYS_IN_VIEW_OPTIONS = [3, 5, 7];
+const DAYS_IN_VIEW_OPTIONS = [3, 5, 7, 14];
 const SLOT_HEIGHT_OPTIONS = [12, 16, 22];
 const addDays = (date, days) => {
     const next = new Date(`${date}T00:00:00`);
@@ -45,7 +45,7 @@ const durationLabel = (durationSlots) => {
     const restMinutes = minutes % 60;
     return restMinutes ? `${hours}h ${restMinutes}m` : `${hours}h`;
 };
-export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFromText, onMoveItem, onSaveTodo, onSaveActivity, onUpdateCalendarItem, onOpenTodoWorkspace, onOpenActivityWorkspace, }) => {
+export const CalendarWorkspace = ({ todos, activities, calendarItems, linkedSessionIdsByActivity, onCreateFromText, onMoveItem, onSaveTodo, onSaveActivity, onUpdateCalendarItem, onOpenTodoWorkspace, onOpenActivityWorkspace, onOpenSession, onFullScreenChange, }) => {
     const today = new Date().toISOString().slice(0, 10);
     const safeTodos = Array.isArray(todos) ? todos : [];
     const safeActivities = Array.isArray(activities) ? activities : [];
@@ -57,6 +57,18 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFr
     const [draftText, setDraftText] = useState("");
     const [selectedItemId, setSelectedItemId] = useState(null);
     const [editorDraft, setEditorDraft] = useState(null);
+    const [jumpDate, setJumpDate] = useState(today);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [typeFilter, setTypeFilter] = useState("all");
+    const [visibilityFilter, setVisibilityFilter] = useState("all");
+    const [resizeState, setResizeState] = useState(null);
+    const [isFullScreen, setIsFullScreen] = useState(false);
+    useEffect(() => {
+        onFullScreenChange?.(isFullScreen);
+        return () => {
+            onFullScreenChange?.(false);
+        };
+    }, [isFullScreen, onFullScreenChange]);
     const visibleDates = useMemo(() => Array.from({ length: daysInView }, (_, index) => addDays(anchorDate, index)), [anchorDate, daysInView]);
     const items = useMemo(() => {
         const todoMap = new Map(safeTodos.map((todo) => [todo.id, todo]));
@@ -164,15 +176,33 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFr
             return left.lane - right.lane;
         });
     }, [safeActivities, safeCalendarItems, safeTodos]);
+    const visibleItems = useMemo(() => {
+        const normalizedSearch = searchQuery.trim().toLowerCase();
+        return items.filter((item) => {
+            if (typeFilter === "todo" && item.targetType !== "todo")
+                return false;
+            if (typeFilter === "activity" && (item.targetType !== "activity" || item.isMeeting))
+                return false;
+            if (typeFilter === "meeting" && !item.isMeeting)
+                return false;
+            if (visibilityFilter === "private" && !item.isPrivate)
+                return false;
+            if (visibilityFilter === "public" && item.isPrivate)
+                return false;
+            if (!normalizedSearch)
+                return true;
+            return [item.title, item.domain, item.project, item.activity, item.label].join(" ").toLowerCase().includes(normalizedSearch);
+        });
+    }, [items, searchQuery, typeFilter, visibilityFilter]);
     const itemsByDate = useMemo(() => {
         const grouped = new Map();
-        items.forEach((item) => {
+        visibleItems.forEach((item) => {
             const existing = grouped.get(item.date) ?? [];
             existing.push(item);
             grouped.set(item.date, existing);
         });
         return grouped;
-    }, [items]);
+    }, [visibleItems]);
     useEffect(() => {
         if (!selectedItemId) {
             setEditorDraft(null);
@@ -234,6 +264,53 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFr
             isMeeting: activity.type === "meeting",
         });
     }, [safeActivities, safeCalendarItems, safeTodos, selectedItemId]);
+    useEffect(() => {
+        if (!resizeState) {
+            return;
+        }
+        const handleMouseMove = (event) => {
+            const deltaSlots = Math.round(event.movementY / slotHeight);
+            if (deltaSlots === 0) {
+                return;
+            }
+            setResizeState((current) => {
+                if (!current) {
+                    return current;
+                }
+                if (current.edge === "end") {
+                    return {
+                        ...current,
+                        currentDurationSlots: Math.max(1, current.currentDurationSlots + deltaSlots),
+                    };
+                }
+                const currentEnd = current.currentStartSlot + current.currentDurationSlots;
+                const nextStart = clampSlot(Math.min(currentEnd - 1, current.currentStartSlot + deltaSlots));
+                return {
+                    ...current,
+                    currentStartSlot: nextStart,
+                    currentDurationSlots: Math.max(1, currentEnd - nextStart),
+                };
+            });
+        };
+        const handleMouseUp = () => {
+            setResizeState((current) => {
+                if (current) {
+                    onUpdateCalendarItem(current.itemId, {
+                        date: current.date,
+                        startSlot: current.currentStartSlot,
+                        durationSlots: current.currentDurationSlots,
+                    });
+                }
+                return null;
+            });
+        };
+        window.addEventListener("mousemove", handleMouseMove);
+        window.addEventListener("mouseup", handleMouseUp);
+        return () => {
+            window.removeEventListener("mousemove", handleMouseMove);
+            window.removeEventListener("mouseup", handleMouseUp);
+        };
+    }, [onUpdateCalendarItem, resizeState, slotHeight]);
     const handleCommitActiveCell = () => {
         if (!activeCell) {
             return;
@@ -249,6 +326,14 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFr
         setSelectedItemId(null);
         setActiveCell({ date, slot: clampSlot(slot) });
         setDraftText("");
+    };
+    const moveActiveCell = (deltaDays, deltaSlots) => {
+        if (!activeCell) {
+            return;
+        }
+        const nextDate = addDays(activeCell.date, deltaDays);
+        const nextSlot = clampSlot(activeCell.slot + deltaSlots);
+        setActiveCell({ date: nextDate, slot: nextSlot });
     };
     const handleSaveEditor = () => {
         if (!editorDraft) {
@@ -299,7 +384,7 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFr
         });
         setSelectedItemId(editorDraft.itemId);
     };
-    return (_jsxs("div", { className: "card calendar-workspace", children: [_jsxs("div", { className: "card-header session-editor-header-minimal", children: [_jsxs("div", { children: [_jsx("h2", { children: "Calendar" }), _jsx("p", { className: "tiny-text", children: "Lightweight planner grid with one active input and direct in-calendar editing." })] }), _jsxs("div", { className: "page-actions wrap-row", children: [_jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, -daysInView)), children: "Previous" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate(today), children: "Today" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, daysInView)), children: "Next" })] })] }), _jsxs("div", { className: "calendar-calendar-summary", children: [_jsxs("div", { className: "status-chip", children: [items.length, " scheduled items"] }), _jsx("div", { className: "capture-density-toggle", role: "group", "aria-label": "Days in view", children: DAYS_IN_VIEW_OPTIONS.map((option) => (_jsxs("button", { className: "segment-button", type: "button", "data-active": option === daysInView, onClick: () => setDaysInView(option), children: [option, " days"] }, `days-${option}`))) }), _jsx("div", { className: "capture-density-toggle", role: "group", "aria-label": "Calendar scale", children: SLOT_HEIGHT_OPTIONS.map((option) => (_jsx("button", { className: "segment-button", type: "button", "data-active": option === slotHeight, onClick: () => setSlotHeight(option), children: option === 12 ? "Compact" : option === 16 ? "Default" : "Large" }, `scale-${option}`))) })] }), _jsxs("div", { className: "calendar-layout", children: [_jsxs("div", { className: "calendar-main stack", children: [_jsx("div", { className: "calendar-scroll", style: { ["--calendar-slot-height"]: `${slotHeight}px` }, children: _jsxs("div", { className: "calendar-surface", style: {
+    return (_jsxs("div", { className: `card calendar-workspace${isFullScreen ? " calendar-workspace-fullscreen" : ""}`, children: [_jsxs("div", { className: "card-header session-editor-header-minimal", children: [_jsxs("div", { children: [_jsx("h2", { children: "Calendar" }), _jsx("p", { className: "tiny-text", children: "Lightweight planner grid with one active input and direct in-calendar editing." })] }), _jsxs("div", { className: "page-actions wrap-row", children: [_jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, -daysInView)), children: "Previous" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate(today), children: "Today" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, daysInView)), children: "Next" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, 30)), children: "+30 days" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setIsFullScreen((current) => !current), children: isFullScreen ? "Exit full screen" : "Full screen" })] })] }), _jsxs("div", { className: "calendar-calendar-summary", children: [_jsxs("div", { className: "status-chip", children: [visibleItems.length, " scheduled items"] }), _jsx("div", { className: "capture-density-toggle", role: "group", "aria-label": "Days in view", children: DAYS_IN_VIEW_OPTIONS.map((option) => (_jsxs("button", { className: "segment-button", type: "button", "data-active": option === daysInView, onClick: () => setDaysInView(option), children: [option, " days"] }, `days-${option}`))) }), _jsx("div", { className: "capture-density-toggle", role: "group", "aria-label": "Calendar scale", children: SLOT_HEIGHT_OPTIONS.map((option) => (_jsx("button", { className: "segment-button", type: "button", "data-active": option === slotHeight, onClick: () => setSlotHeight(option), children: option === 12 ? "Compact" : option === 16 ? "Default" : "Large" }, `scale-${option}`))) })] }), _jsxs("div", { className: "calendar-toolbar", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-jump-date", children: "Jump to date" }), _jsx("input", { id: "calendar-jump-date", type: "date", value: jumpDate, onChange: (event) => setJumpDate(event.target.value) })] }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate(jumpDate || today), children: "Go" }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "calendar-search", children: "Search" }), _jsx("input", { id: "calendar-search", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "Search title, domain, project, activity" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-type-filter", children: "Type" }), _jsxs("select", { id: "calendar-type-filter", value: typeFilter, onChange: (event) => setTypeFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), _jsx("option", { value: "todo", children: "Todos" }), _jsx("option", { value: "activity", children: "Activities" }), _jsx("option", { value: "meeting", children: "Meetings" })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-visibility-filter", children: "Visibility" }), _jsxs("select", { id: "calendar-visibility-filter", value: visibilityFilter, onChange: (event) => setVisibilityFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), _jsx("option", { value: "public", children: "Public" }), _jsx("option", { value: "private", children: "Private" })] })] })] }), _jsxs("div", { className: `calendar-layout${isFullScreen ? " calendar-layout-fullscreen" : ""}`, children: [_jsxs("div", { className: "calendar-main stack", children: [_jsx("div", { className: `calendar-scroll${isFullScreen ? " calendar-scroll-fullscreen" : ""}`, style: { ["--calendar-slot-height"]: `${slotHeight}px` }, children: _jsxs("div", { className: "calendar-surface", style: {
                                         gridTemplateColumns: `84px repeat(${visibleDates.length}, minmax(220px, 1fr))`,
                                         gridTemplateRows: `52px repeat(${TOTAL_SLOTS}, var(--calendar-slot-height))`,
                                     }, children: [_jsx("div", { className: "calendar-corner", style: { gridColumn: "1 / 2", gridRow: "1 / 2" } }), visibleDates.map((date, index) => (_jsxs("div", { className: "calendar-day-header", style: { gridColumn: `${index + 2} / ${index + 3}`, gridRow: "1 / 2" }, children: [_jsx("strong", { children: date }), _jsx("span", { children: formatDayLabel(date) })] }, `header-${date}`))), _jsx("div", { className: "calendar-time-column", style: { gridColumn: "1 / 2", gridRow: `2 / span ${TOTAL_SLOTS}` }, children: Array.from({ length: TOTAL_SLOTS }, (_, slot) => (_jsx("div", { className: `calendar-time-cell${slot % 12 === 0 ? " calendar-time-cell-hour" : ""}`, style: { height: "var(--calendar-slot-height)" }, children: slot % 12 === 0 ? slotToTimeLabel(slot) : "" }, `time-${slot}`))) }), visibleDates.map((date, index) => {
@@ -332,17 +417,40 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFr
                                                         }, children: _jsx("input", { className: "calendar-cell-input", autoFocus: true, value: draftText, onChange: (event) => setDraftText(event.target.value), onBlur: handleCommitActiveCell, onKeyDown: (event) => {
                                                                 if (event.key === "Enter") {
                                                                     event.preventDefault();
+                                                                    const commitDate = activeForDay.date;
+                                                                    const commitSlot = activeForDay.slot;
                                                                     handleCommitActiveCell();
+                                                                    setActiveCell({ date: commitDate, slot: clampSlot(commitSlot + 1) });
                                                                 }
                                                                 if (event.key === "Escape") {
                                                                     setDraftText("");
                                                                     setActiveCell(null);
                                                                 }
+                                                                if (event.key === "ArrowDown") {
+                                                                    event.preventDefault();
+                                                                    moveActiveCell(0, 1);
+                                                                }
+                                                                if (event.key === "ArrowUp") {
+                                                                    event.preventDefault();
+                                                                    moveActiveCell(0, -1);
+                                                                }
+                                                                if (event.key === "Tab") {
+                                                                    event.preventDefault();
+                                                                    moveActiveCell(event.shiftKey ? -1 : 1, 0);
+                                                                }
                                                             }, placeholder: "Type to add todo, act..., td..., or meet..." }) })) : null, dayItems.map((item) => {
-                                                        const visualHeight = Math.max(slotHeight * Math.max(item.durationSlots, item.isMeeting ? 3 : 1) - 4, 18);
+                                                        const resizePreview = resizeState?.itemId === item.id
+                                                            ? {
+                                                                startSlot: resizeState.currentStartSlot,
+                                                                durationSlots: resizeState.currentDurationSlots,
+                                                            }
+                                                            : null;
+                                                        const startSlot = resizePreview?.startSlot ?? item.startSlot;
+                                                        const durationSlots = resizePreview?.durationSlots ?? item.durationSlots;
+                                                        const visualHeight = Math.max(slotHeight * Math.max(durationSlots, item.isMeeting ? 3 : 1) - 4, 18);
                                                         const laneWidth = 100 / Math.max(1, item.laneCount);
                                                         return (_jsxs("button", { className: `calendar-item-block${item.isMeeting ? " calendar-item-block-meeting" : ""}${selectedItemId === item.id ? " calendar-item-block-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`, type: "button", draggable: true, style: {
-                                                                top: `calc(var(--calendar-slot-height) * ${item.startSlot} + 2px)`,
+                                                                top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`,
                                                                 height: `${visualHeight}px`,
                                                                 width: `calc(${laneWidth}% - 8px)`,
                                                                 left: `calc(${item.lane * laneWidth}% + 4px)`,
@@ -353,7 +461,31 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFr
                                                             }, onClick: () => {
                                                                 setActiveCell(null);
                                                                 setSelectedItemId(item.id);
-                                                            }, children: [_jsxs("strong", { children: [slotToTimeLabel(item.startSlot), " ", item.title] }), _jsx("span", { children: item.isMeeting ? `${item.label} • ${durationLabel(item.durationSlots)}` : item.label })] }, item.id));
+                                                            }, children: [item.isMeeting ? (_jsx("span", { className: "calendar-resize-handle calendar-resize-handle-start", onMouseDown: (event) => {
+                                                                        event.preventDefault();
+                                                                        event.stopPropagation();
+                                                                        setResizeState({
+                                                                            itemId: item.id,
+                                                                            edge: "start",
+                                                                            baseStartSlot: startSlot,
+                                                                            baseDurationSlots: durationSlots,
+                                                                            currentStartSlot: startSlot,
+                                                                            currentDurationSlots: durationSlots,
+                                                                            date: item.date,
+                                                                        });
+                                                                    } })) : null, _jsxs("strong", { children: [slotToTimeLabel(startSlot), " ", item.title] }), _jsx("span", { children: item.isMeeting ? `${item.label} • ${durationLabel(durationSlots)}` : `${item.label}${item.isPrivate ? " • Private" : ""}` }), item.isMeeting ? (_jsx("span", { className: "calendar-resize-handle calendar-resize-handle-end", onMouseDown: (event) => {
+                                                                        event.preventDefault();
+                                                                        event.stopPropagation();
+                                                                        setResizeState({
+                                                                            itemId: item.id,
+                                                                            edge: "end",
+                                                                            baseStartSlot: startSlot,
+                                                                            baseDurationSlots: durationSlots,
+                                                                            currentStartSlot: startSlot,
+                                                                            currentDurationSlots: durationSlots,
+                                                                            date: item.date,
+                                                                        });
+                                                                    } })) : null] }, item.id));
                                                     })] }, `column-${date}`));
                                         })] }) }), _jsx("div", { className: "calendar-agenda-list", children: visibleDates.map((date) => {
                                     const itemsForDay = itemsByDate.get(date) ?? [];
@@ -363,11 +495,16 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, onCreateFr
                                                         const nextDuration = durationFromTimes(editorDraft.startTime || nextStart, editorDraft.endTime || nextStart) || editorDraft.durationSlots;
                                                         const nextEnd = slotToTimeLabel(timeToSlot(nextStart) + Math.max(1, nextDuration));
                                                         setEditorDraft({ ...editorDraft, startTime: nextStart, endTime: nextEnd });
-                                                    } })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-end", children: "End" }), _jsx("input", { id: "calendar-edit-end", type: "time", step: 300, value: editorDraft.endTime, onChange: (event) => setEditorDraft({ ...editorDraft, endTime: event.target.value }) })] })] })) : (_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-time", children: "Time" }), _jsx("input", { id: "calendar-edit-time", type: "time", step: 300, value: editorDraft.startTime, onChange: (event) => setEditorDraft({ ...editorDraft, startTime: event.target.value }) })] })), _jsxs("div", { className: "metadata-triplet-grid", children: [_jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-domain", children: "Domain" }), _jsx("input", { id: "calendar-edit-domain", value: editorDraft.domain, onChange: (event) => setEditorDraft({ ...editorDraft, domain: event.target.value }) })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-project", children: "Project" }), _jsx("input", { id: "calendar-edit-project", value: editorDraft.project, onChange: (event) => setEditorDraft({ ...editorDraft, project: event.target.value }) })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-activity", children: "Activity" }), _jsx("input", { id: "calendar-edit-activity", value: editorDraft.activity, onChange: (event) => setEditorDraft({ ...editorDraft, activity: event.target.value }) })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-due", children: "Due date" }), _jsx("input", { id: "calendar-edit-due", type: "date", value: editorDraft.dueDate, onChange: (event) => setEditorDraft({ ...editorDraft, dueDate: event.target.value }) })] }), _jsxs("div", { className: "calendar-editor-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: handleSaveEditor, children: "Save calendar edits" }), _jsxs("button", { className: "shell-button", type: "button", onClick: () => {
+                                                    } })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-end", children: "End" }), _jsx("input", { id: "calendar-edit-end", type: "time", step: 300, value: editorDraft.endTime, onChange: (event) => setEditorDraft({ ...editorDraft, endTime: event.target.value }) })] })] })) : (_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-time", children: "Time" }), _jsx("input", { id: "calendar-edit-time", type: "time", step: 300, value: editorDraft.startTime, onChange: (event) => setEditorDraft({ ...editorDraft, startTime: event.target.value }) })] })), _jsxs("div", { className: "metadata-triplet-grid", children: [_jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-domain", children: "Domain" }), _jsx("input", { id: "calendar-edit-domain", value: editorDraft.domain, onChange: (event) => setEditorDraft({ ...editorDraft, domain: event.target.value }) })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-project", children: "Project" }), _jsx("input", { id: "calendar-edit-project", value: editorDraft.project, onChange: (event) => setEditorDraft({ ...editorDraft, project: event.target.value }) })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-activity", children: "Activity" }), _jsx("input", { id: "calendar-edit-activity", value: editorDraft.activity, onChange: (event) => setEditorDraft({ ...editorDraft, activity: event.target.value }) })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-due", children: "Due date" }), _jsx("input", { id: "calendar-edit-due", type: "date", value: editorDraft.dueDate, onChange: (event) => setEditorDraft({ ...editorDraft, dueDate: event.target.value }) })] }), _jsxs("div", { className: "calendar-editor-meta", children: [_jsx("span", { className: "status-chip", children: editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity" }), editorDraft.isPrivate ? _jsx("span", { className: "status-chip", children: "Private" }) : null, editorDraft.domain ? _jsx("span", { className: "status-chip", children: editorDraft.domain }) : null, editorDraft.project ? _jsx("span", { className: "status-chip", children: editorDraft.project }) : null] }), _jsxs("div", { className: "calendar-editor-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: handleSaveEditor, children: "Save calendar edits" }), _jsxs("button", { className: "shell-button", type: "button", onClick: () => {
                                                 if (editorDraft.targetType === "todo") {
                                                     onOpenTodoWorkspace();
                                                     return;
                                                 }
                                                 onOpenActivityWorkspace(editorDraft.targetId);
-                                            }, children: ["Open full ", editorDraft.targetType === "todo" ? "todo" : "activity"] })] })] })) : (_jsxs("div", { className: "stack", children: [_jsx("h3", { children: "Calendar item" }), _jsx("p", { className: "muted", children: "Select a scheduled block to edit it here. Meetings now stand out more clearly and can be adjusted directly in Calendar." })] })) })] })] }));
+                                            }, children: ["Open full ", editorDraft.targetType === "todo" ? "todo" : "activity"] }), editorDraft.targetType === "activity" && linkedSessionIdsByActivity[editorDraft.targetId] ? (_jsx("button", { className: "shell-button", type: "button", onClick: () => {
+                                                const linkedSessionId = linkedSessionIdsByActivity[editorDraft.targetId];
+                                                if (linkedSessionId) {
+                                                    onOpenSession(linkedSessionId);
+                                                }
+                                            }, children: "Open linked meeting session" })) : null] })] })) : (_jsxs("div", { className: "stack", children: [_jsx("h3", { children: "Calendar item" }), _jsx("p", { className: "muted", children: "Select a scheduled block to edit it here. Meetings now stand out more clearly and can be adjusted directly in Calendar." })] })) })] })] }));
 };

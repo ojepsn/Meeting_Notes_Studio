@@ -548,6 +548,10 @@ select {
   align-items: start;
 }
 
+.notes-shell-calendar-fullscreen {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .workspace-canvas,
 .workspace-inspector,
 .stack {
@@ -1693,6 +1697,10 @@ select {
   gap: 1rem;
 }
 
+.calendar-workspace-fullscreen {
+  min-height: calc(100vh - 7rem);
+}
+
 .calendar-calendar-summary {
   display: flex;
   gap: 0.75rem;
@@ -1700,11 +1708,23 @@ select {
   flex-wrap: wrap;
 }
 
+.calendar-toolbar {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.8fr) auto minmax(260px, 1.4fr) repeat(2, minmax(150px, 0.8fr));
+  gap: 0.85rem;
+  align-items: end;
+}
+
 .calendar-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 1rem;
   align-items: start;
+}
+
+.calendar-layout-fullscreen {
+  grid-template-columns: minmax(0, 1fr) 340px;
+  align-items: stretch;
 }
 
 .calendar-main {
@@ -1729,6 +1749,12 @@ select {
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
+}
+
+.calendar-editor-meta {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
 }
 
 .calendar-agenda-list {
@@ -1785,6 +1811,10 @@ select {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--app-surface) 95%, white 5%) 0%, var(--app-input-bg) 100%),
     var(--app-surface);
+}
+
+.calendar-scroll-fullscreen {
+  max-height: calc(100vh - 15rem);
 }
 
 .calendar-surface {
@@ -1927,6 +1957,32 @@ select {
   transition: box-shadow 120ms ease, transform 120ms ease, border-color 120ms ease;
 }
 
+.calendar-resize-handle {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-accent) 55%, transparent 45%);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.calendar-item-block:hover .calendar-resize-handle,
+.calendar-item-block-selected .calendar-resize-handle {
+  opacity: 1;
+}
+
+.calendar-resize-handle-start {
+  top: 4px;
+  cursor: ns-resize;
+}
+
+.calendar-resize-handle-end {
+  bottom: 4px;
+  cursor: ns-resize;
+}
+
 .calendar-item-block strong,
 .calendar-item-block span {
   white-space: nowrap;
@@ -1955,6 +2011,11 @@ select {
 
 .calendar-item-block-compact span {
   display: none;
+}
+
+.calendar-item-block-compact .calendar-resize-handle {
+  left: 4px;
+  right: 4px;
 }
 
 .calendar-item-block-meeting {
@@ -2532,6 +2593,10 @@ select {
   }
 
   .calendar-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-toolbar {
     grid-template-columns: 1fr;
   }
 
