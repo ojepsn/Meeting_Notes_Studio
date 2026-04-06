@@ -1693,6 +1693,58 @@ select {
   gap: 1rem;
 }
 
+.calendar-calendar-summary {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.calendar-agenda-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+}
+
+.calendar-agenda-day {
+  border: 1px solid var(--app-border);
+  border-radius: 20px;
+  background: var(--app-surface-soft);
+  padding: 0.95rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.calendar-agenda-day-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.calendar-agenda-day-header span,
+.calendar-agenda-empty {
+  color: var(--app-muted);
+  font-size: 0.82rem;
+}
+
+.calendar-agenda-item {
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  padding: 0.7rem 0.8rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.calendar-agenda-item-meeting {
+  border-color: var(--app-accent-strong-border);
+  background: color-mix(in srgb, var(--app-accent-soft) 35%, var(--app-surface) 65%);
+}
+
 .calendar-scroll {
   position: relative;
   overflow: auto;

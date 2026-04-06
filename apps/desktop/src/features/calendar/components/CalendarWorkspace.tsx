@@ -78,6 +78,7 @@ export const CalendarWorkspace = ({
   const [rangeEnd, setRangeEnd] = useState(addDays(today, INITIAL_DAYS_AFTER));
   const [dayScaleIndex, setDayScaleIndex] = useState(1);
   const [timeScaleIndex, setTimeScaleIndex] = useState(1);
+  const [showInteractiveGrid, setShowInteractiveGrid] = useState(false);
   const [activeCell, setActiveCell] = useState<{ date: string; slot: number } | null>(null);
   const [cellDraft, setCellDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -130,6 +131,7 @@ export const CalendarWorkspace = ({
     gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${dates.length}, ${dayWidth}px)`,
     gridTemplateRows: `52px ${SLOT_COUNT * slotHeight}px`,
   } as CSSProperties;
+  const scheduledCount = safeCalendarItems.length;
 
   useEffect(() => {
     if (!scrollRef.current || initializedScrollRef.current) return;
@@ -209,6 +211,50 @@ export const CalendarWorkspace = ({
         <span className="tiny-text">Type directly into a slot to create a todo, or use `td`, `act`, or `meet` prefixes. Drag blocks to reschedule them.</span>
       </div>
 
+      <div className="calendar-calendar-summary">
+        <div className="status-chip">{dates.length} days in view</div>
+        <div className="status-chip">{scheduledCount} scheduled items</div>
+        <button className="primary-button" type="button" onClick={() => setShowInteractiveGrid((value) => !value)}>
+          {showInteractiveGrid ? "Hide interactive grid" : "Open interactive grid"}
+        </button>
+      </div>
+
+      {!showInteractiveGrid ? (
+        <div className="calendar-agenda-list">
+          {dates.map((date) => {
+            const items = itemsByDate.get(date) ?? [];
+            return (
+              <div key={`agenda-${date}`} className="calendar-agenda-day">
+                <div className="calendar-agenda-day-header">
+                  <strong>{date}</strong>
+                  <span>{formatDayLabel(date)}</span>
+                </div>
+                {items.length ? (
+                  items.map((item) => (
+                    <button
+                      key={`agenda-item-${item.id}`}
+                      className={`calendar-agenda-item${item.isMeeting ? " calendar-agenda-item-meeting" : ""}`}
+                      type="button"
+                      onClick={() => {
+                        if (item.targetType === "todo") {
+                          onOpenTodoWorkspace();
+                        } else {
+                          onOpenActivityWorkspace(item.targetId);
+                        }
+                      }}
+                    >
+                      <strong>{slotToTimeLabel(item.startSlot)} {item.label}</strong>
+                      <span>{item.kindLabel}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="calendar-agenda-empty">No scheduled items</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
       <div className="calendar-scroll" ref={scrollRef}>
         <div className="calendar-surface" style={surfaceStyle}>
           <div className="calendar-corner" />
@@ -307,6 +353,7 @@ export const CalendarWorkspace = ({
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 };
