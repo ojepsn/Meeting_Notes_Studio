@@ -230,6 +230,7 @@ interface DesktopState {
   deleteActivity: (id: string) => Promise<void>;
   createCalendarEntryFromText: (date: string, startSlot: number, value: string) => Promise<void>;
   moveCalendarItem: (id: string, date: string, startSlot: number) => Promise<void>;
+  updateCalendarItem: (id: string, updates: { date: string; startSlot: number; durationSlots: number }) => Promise<void>;
   convertTodoToActivity: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
   ensureSessionForActivity: (activityId: string) => Promise<string | null>;
   saveSettings: (settings: DesktopAppSnapshot["settings"]) => Promise<void>;
@@ -645,6 +646,54 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
             activity.type === "meeting"
               ? slotToTime(normalizedSlot + durationSlots)
               : activity.endTime,
+        };
+        nextSnapshot = {
+          ...nextSnapshot,
+          activities: upsertActivity(nextSnapshot.activities, nextActivity),
+        };
+        if (nextActivity.type === "meeting") {
+          nextSnapshot = syncLinkedSessionForMeeting(nextSnapshot, nextActivity);
+        }
+      }
+    }
+
+    set({ snapshot: nextSnapshot });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
+  },
+  updateCalendarItem: async (id, updates) => {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const existing = snapshot.calendarItems.find((item) => item.id === id);
+    if (!existing) return;
+    const normalizedSlot = clampSlotIndex(updates.startSlot);
+    const normalizedDuration = Math.max(1, Math.round(updates.durationSlots));
+    let nextSnapshot: DesktopAppSnapshot = {
+      ...snapshot,
+      calendarItems: upsertCalendarItem(snapshot.calendarItems, {
+        ...existing,
+        date: updates.date,
+        startSlot: normalizedSlot,
+        durationSlots: normalizedDuration,
+        updatedAt: new Date().toISOString(),
+      }),
+    };
+
+    if (existing.targetType === "todo") {
+      const todo = snapshot.todos.find((entry) => entry.id === existing.targetId);
+      if (todo) {
+        nextSnapshot = {
+          ...nextSnapshot,
+          todos: upsertTodo(nextSnapshot.todos, { ...todo, doOn: updates.date }),
+        };
+      }
+    } else {
+      const activity = snapshot.activities.find((entry) => entry.id === existing.targetId);
+      if (activity) {
+        const nextActivity = {
+          ...activity,
+          doOn: updates.date,
+          startTime: activity.type === "meeting" ? slotToTime(normalizedSlot) : activity.startTime,
+          endTime: activity.type === "meeting" ? slotToTime(normalizedSlot + normalizedDuration) : activity.endTime,
         };
         nextSnapshot = {
           ...nextSnapshot,

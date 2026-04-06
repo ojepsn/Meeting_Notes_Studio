@@ -1700,6 +1700,37 @@ select {
   flex-wrap: wrap;
 }
 
+.calendar-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 1rem;
+  align-items: start;
+}
+
+.calendar-main {
+  min-width: 0;
+}
+
+.calendar-editor-card {
+  position: sticky;
+  top: 6rem;
+  border: 1px solid var(--app-border);
+  border-radius: 24px;
+  background: var(--app-surface-soft);
+  padding: 1rem;
+  box-shadow: 0 16px 30px var(--app-shadow);
+}
+
+.calendar-editor-card h3 {
+  margin: 0;
+}
+
+.calendar-editor-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
 .calendar-agenda-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1893,6 +1924,7 @@ select {
   flex-direction: column;
   gap: 0.15rem;
   cursor: grab;
+  transition: box-shadow 120ms ease, transform 120ms ease, border-color 120ms ease;
 }
 
 .calendar-item-block strong,
@@ -1911,11 +1943,47 @@ select {
   color: var(--app-muted);
 }
 
+.calendar-item-block-compact {
+  padding: 0.15rem 0.35rem;
+  justify-content: center;
+}
+
+.calendar-item-block-compact strong {
+  font-size: 0.68rem;
+  line-height: 1.1;
+}
+
+.calendar-item-block-compact span {
+  display: none;
+}
+
 .calendar-item-block-meeting {
   border-color: var(--app-accent-strong-border);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 88%, white 12%) 0%, color-mix(in srgb, var(--app-surface) 70%, var(--app-accent-soft) 30%) 100%),
     var(--app-surface);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--app-accent-soft) 42%, var(--app-shadow) 58%);
+}
+
+.calendar-item-block-meeting::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  border-radius: 14px 0 0 14px;
+  background: var(--app-accent);
+}
+
+.calendar-item-block-selected,
+.calendar-item-block:hover {
+  border-color: var(--app-accent-strong-border);
+  box-shadow: 0 16px 28px var(--app-shadow-strong);
+  transform: translateY(-1px);
+}
+
+.calendar-item-block-selected {
+  outline: 2px solid color-mix(in srgb, var(--app-accent) 42%, transparent 58%);
+  outline-offset: 1px;
 }
 
 .settings-option-grid {
@@ -2461,6 +2529,14 @@ select {
 
   .notes-shell {
     grid-template-columns: 1fr;
+  }
+
+  .calendar-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-editor-card {
+    position: static;
   }
 }
 

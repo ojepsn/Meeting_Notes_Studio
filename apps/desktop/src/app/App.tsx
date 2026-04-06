@@ -156,6 +156,7 @@ export const App = () => {
     deleteActivity,
     createCalendarEntryFromText,
     moveCalendarItem,
+    updateCalendarItem,
     convertTodoToActivity,
     ensureSessionForActivity,
     saveSettings,
@@ -2158,6 +2159,9 @@ export const App = () => {
                 calendarItems={snapshot.calendarItems ?? []}
                 onCreateFromText={(date, startSlot, value) => void createCalendarEntryFromText(date, startSlot, value)}
                 onMoveItem={(id, date, startSlot) => void moveCalendarItem(id, date, startSlot)}
+                onSaveTodo={(todo) => void saveTodo(todo)}
+                onSaveActivity={(activity) => void saveActivity(activity)}
+                onUpdateCalendarItem={(id, updates) => void updateCalendarItem(id, updates)}
                 onOpenTodoWorkspace={() => setActiveWorkspace("todos")}
                 onOpenActivityWorkspace={(activityId) => openActivityFromLink(activityId)}
               />

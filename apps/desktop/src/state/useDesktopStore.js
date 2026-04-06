@@ -586,6 +586,55 @@ export const useDesktopStore = create((set, get) => ({
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);
     },
+    updateCalendarItem: async (id, updates) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const existing = snapshot.calendarItems.find((item) => item.id === id);
+        if (!existing)
+            return;
+        const normalizedSlot = clampSlotIndex(updates.startSlot);
+        const normalizedDuration = Math.max(1, Math.round(updates.durationSlots));
+        let nextSnapshot = {
+            ...snapshot,
+            calendarItems: upsertCalendarItem(snapshot.calendarItems, {
+                ...existing,
+                date: updates.date,
+                startSlot: normalizedSlot,
+                durationSlots: normalizedDuration,
+                updatedAt: new Date().toISOString(),
+            }),
+        };
+        if (existing.targetType === "todo") {
+            const todo = snapshot.todos.find((entry) => entry.id === existing.targetId);
+            if (todo) {
+                nextSnapshot = {
+                    ...nextSnapshot,
+                    todos: upsertTodo(nextSnapshot.todos, { ...todo, doOn: updates.date }),
+                };
+            }
+        }
+        else {
+            const activity = snapshot.activities.find((entry) => entry.id === existing.targetId);
+            if (activity) {
+                const nextActivity = {
+                    ...activity,
+                    doOn: updates.date,
+                    startTime: activity.type === "meeting" ? slotToTime(normalizedSlot) : activity.startTime,
+                    endTime: activity.type === "meeting" ? slotToTime(normalizedSlot + normalizedDuration) : activity.endTime,
+                };
+                nextSnapshot = {
+                    ...nextSnapshot,
+                    activities: upsertActivity(nextSnapshot.activities, nextActivity),
+                };
+                if (nextActivity.type === "meeting") {
+                    nextSnapshot = syncLinkedSessionForMeeting(nextSnapshot, nextActivity);
+                }
+            }
+        }
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
     convertTodoToActivity: async (todo) => {
         const snapshot = get().snapshot;
         if (!snapshot)
