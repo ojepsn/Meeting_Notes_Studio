@@ -3,9 +3,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 const SLOTS_PER_HOUR = 12;
 const SLOT_COUNT = 24 * SLOTS_PER_HOUR;
 const MINUTES_PER_SLOT = 5;
-const DAY_EXTENSION_COUNT = 7;
-const INITIAL_DAYS_BEFORE = 3;
-const INITIAL_DAYS_AFTER = 10;
+const RANGE_SHIFT_DAYS = 7;
+const INITIAL_DAYS_BEFORE = 7;
+const INITIAL_DAYS_AFTER = 21;
 const TIME_COLUMN_WIDTH = 82;
 const DAY_WIDTHS = [180, 220, 280];
 const SLOT_HEIGHTS = [14, 18, 24];
@@ -48,7 +48,6 @@ export const CalendarWorkspace = ({ todos = [], activities = [], calendarItems =
     const [activeCell, setActiveCell] = useState(null);
     const [cellDraft, setCellDraft] = useState("");
     const scrollRef = useRef(null);
-    const prependAdjustmentRef = useRef(null);
     const initializedScrollRef = useRef(false);
     const dayWidth = DAY_WIDTHS[dayScaleIndex];
     const slotHeight = SLOT_HEIGHTS[timeScaleIndex];
@@ -97,12 +96,6 @@ export const CalendarWorkspace = ({ todos = [], activities = [], calendarItems =
         scrollRef.current.scrollLeft = INITIAL_DAYS_BEFORE * dayWidth;
         initializedScrollRef.current = true;
     }, [dayWidth, slotHeight]);
-    useEffect(() => {
-        if (!scrollRef.current || prependAdjustmentRef.current == null)
-            return;
-        scrollRef.current.scrollLeft += prependAdjustmentRef.current;
-        prependAdjustmentRef.current = null;
-    }, [dates.length, dayWidth]);
     const commitCellDraft = () => {
         if (!activeCell || !cellDraft.trim()) {
             setActiveCell(null);
@@ -113,28 +106,19 @@ export const CalendarWorkspace = ({ todos = [], activities = [], calendarItems =
         setActiveCell(null);
         setCellDraft("");
     };
-    const handleScroll = () => {
-        const element = scrollRef.current;
-        if (!element)
-            return;
-        const threshold = dayWidth * 1.5;
-        if (element.scrollLeft < threshold) {
-            setRangeStart((current) => {
-                prependAdjustmentRef.current = dayWidth * DAY_EXTENSION_COUNT;
-                return addDays(current, -DAY_EXTENSION_COUNT);
-            });
-        }
-        else if (element.scrollWidth - element.clientWidth - element.scrollLeft < threshold) {
-            setRangeEnd((current) => addDays(current, DAY_EXTENSION_COUNT));
-        }
-    };
     return (_jsxs("div", { className: "card calendar-workspace", children: [_jsxs("div", { className: "card-header session-editor-header-minimal", children: [_jsx("div", { children: _jsx("h2", { children: "Calendar" }) }), _jsxs("div", { className: "page-actions", children: [_jsx("button", { className: "shell-button", type: "button", onClick: () => {
+                                    setRangeStart((current) => addDays(current, -RANGE_SHIFT_DAYS));
+                                    setRangeEnd((current) => addDays(current, -RANGE_SHIFT_DAYS));
+                                }, children: "Previous" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => {
                                     setRangeStart(addDays(today, -INITIAL_DAYS_BEFORE));
                                     setRangeEnd(addDays(today, INITIAL_DAYS_AFTER));
                                     setActiveCell(null);
                                     setCellDraft("");
                                     initializedScrollRef.current = false;
-                                }, children: "Today" }), _jsxs("div", { className: "capture-density-toggle", children: [_jsx("button", { className: "segment-button", type: "button", disabled: dayScaleIndex === 0, onClick: () => setDayScaleIndex((value) => Math.max(0, value - 1)), children: "Fewer days" }), _jsx("button", { className: "segment-button", type: "button", disabled: dayScaleIndex === DAY_WIDTHS.length - 1, onClick: () => setDayScaleIndex((value) => Math.min(DAY_WIDTHS.length - 1, value + 1)), children: "More detail" })] }), _jsxs("div", { className: "capture-density-toggle", children: [_jsx("button", { className: "segment-button", type: "button", disabled: timeScaleIndex === 0, onClick: () => setTimeScaleIndex((value) => Math.max(0, value - 1)), children: "More hours" }), _jsx("button", { className: "segment-button", type: "button", disabled: timeScaleIndex === SLOT_HEIGHTS.length - 1, onClick: () => setTimeScaleIndex((value) => Math.min(SLOT_HEIGHTS.length - 1, value + 1)), children: "More time detail" })] })] })] }), _jsx("div", { className: "workspace-guide-row workspace-guide-row-quiet", children: _jsx("span", { className: "tiny-text", children: "Type directly into a slot to create a todo, or use `td`, `act`, or `meet` prefixes. Drag blocks to reschedule them." }) }), _jsx("div", { className: "calendar-scroll", ref: scrollRef, onScroll: handleScroll, children: _jsxs("div", { className: "calendar-surface", style: surfaceStyle, children: [_jsx("div", { className: "calendar-corner" }), dates.map((date) => (_jsxs("div", { className: "calendar-day-header", children: [_jsx("strong", { children: date }), _jsx("span", { children: formatDayLabel(date) })] }, `header-${date}`))), _jsx("div", { className: "calendar-time-column", children: Array.from({ length: SLOT_COUNT }, (_, slot) => (_jsx("div", { className: `calendar-time-cell${slot % SLOTS_PER_HOUR === 0 ? " calendar-time-cell-hour" : ""}`, style: { height: slotHeight }, children: _jsx("span", { children: slotToTimeLabel(slot) }) }, `time-${slot}`))) }), dates.map((date) => (_jsxs("div", { className: "calendar-day-column", style: { height: SLOT_COUNT * slotHeight }, children: [_jsx("div", { className: "calendar-day-interaction-layer", style: { height: SLOT_COUNT * slotHeight }, onClick: (event) => {
+                                }, children: "Today" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => {
+                                    setRangeStart((current) => addDays(current, RANGE_SHIFT_DAYS));
+                                    setRangeEnd((current) => addDays(current, RANGE_SHIFT_DAYS));
+                                }, children: "Next" }), _jsxs("div", { className: "capture-density-toggle", children: [_jsx("button", { className: "segment-button", type: "button", disabled: dayScaleIndex === 0, onClick: () => setDayScaleIndex((value) => Math.max(0, value - 1)), children: "Fewer days" }), _jsx("button", { className: "segment-button", type: "button", disabled: dayScaleIndex === DAY_WIDTHS.length - 1, onClick: () => setDayScaleIndex((value) => Math.min(DAY_WIDTHS.length - 1, value + 1)), children: "More detail" })] }), _jsxs("div", { className: "capture-density-toggle", children: [_jsx("button", { className: "segment-button", type: "button", disabled: timeScaleIndex === 0, onClick: () => setTimeScaleIndex((value) => Math.max(0, value - 1)), children: "More hours" }), _jsx("button", { className: "segment-button", type: "button", disabled: timeScaleIndex === SLOT_HEIGHTS.length - 1, onClick: () => setTimeScaleIndex((value) => Math.min(SLOT_HEIGHTS.length - 1, value + 1)), children: "More time detail" })] })] })] }), _jsx("div", { className: "workspace-guide-row workspace-guide-row-quiet", children: _jsx("span", { className: "tiny-text", children: "Type directly into a slot to create a todo, or use `td`, `act`, or `meet` prefixes. Drag blocks to reschedule them." }) }), _jsx("div", { className: "calendar-scroll", ref: scrollRef, children: _jsxs("div", { className: "calendar-surface", style: surfaceStyle, children: [_jsx("div", { className: "calendar-corner" }), dates.map((date) => (_jsxs("div", { className: "calendar-day-header", children: [_jsx("strong", { children: date }), _jsx("span", { children: formatDayLabel(date) })] }, `header-${date}`))), _jsx("div", { className: "calendar-time-column", children: Array.from({ length: SLOT_COUNT }, (_, slot) => (_jsx("div", { className: `calendar-time-cell${slot % SLOTS_PER_HOUR === 0 ? " calendar-time-cell-hour" : ""}`, style: { height: slotHeight }, children: _jsx("span", { children: slotToTimeLabel(slot) }) }, `time-${slot}`))) }), dates.map((date) => (_jsxs("div", { className: "calendar-day-column", style: { height: SLOT_COUNT * slotHeight }, children: [_jsx("div", { className: "calendar-day-interaction-layer", style: { height: SLOT_COUNT * slotHeight }, onClick: (event) => {
                                         const target = event.currentTarget;
                                         const slot = slotFromPointer(event.clientY, target, slotHeight);
                                         setActiveCell({ date, slot });

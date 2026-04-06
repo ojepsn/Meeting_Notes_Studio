@@ -5,9 +5,9 @@ import type { ActivityRecord, CalendarItemRecord, TodoRecord } from "@notesmith/
 const SLOTS_PER_HOUR = 12;
 const SLOT_COUNT = 24 * SLOTS_PER_HOUR;
 const MINUTES_PER_SLOT = 5;
-const DAY_EXTENSION_COUNT = 7;
-const INITIAL_DAYS_BEFORE = 3;
-const INITIAL_DAYS_AFTER = 10;
+const RANGE_SHIFT_DAYS = 7;
+const INITIAL_DAYS_BEFORE = 7;
+const INITIAL_DAYS_AFTER = 21;
 const TIME_COLUMN_WIDTH = 82;
 const DAY_WIDTHS = [180, 220, 280];
 const SLOT_HEIGHTS = [14, 18, 24];
@@ -81,7 +81,6 @@ export const CalendarWorkspace = ({
   const [activeCell, setActiveCell] = useState<{ date: string; slot: number } | null>(null);
   const [cellDraft, setCellDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const prependAdjustmentRef = useRef<number | null>(null);
   const initializedScrollRef = useRef(false);
 
   const dayWidth = DAY_WIDTHS[dayScaleIndex];
@@ -140,12 +139,6 @@ export const CalendarWorkspace = ({
     initializedScrollRef.current = true;
   }, [dayWidth, slotHeight]);
 
-  useEffect(() => {
-    if (!scrollRef.current || prependAdjustmentRef.current == null) return;
-    scrollRef.current.scrollLeft += prependAdjustmentRef.current;
-    prependAdjustmentRef.current = null;
-  }, [dates.length, dayWidth]);
-
   const commitCellDraft = () => {
     if (!activeCell || !cellDraft.trim()) {
       setActiveCell(null);
@@ -157,20 +150,6 @@ export const CalendarWorkspace = ({
     setCellDraft("");
   };
 
-  const handleScroll = () => {
-    const element = scrollRef.current;
-    if (!element) return;
-    const threshold = dayWidth * 1.5;
-    if (element.scrollLeft < threshold) {
-      setRangeStart((current) => {
-        prependAdjustmentRef.current = dayWidth * DAY_EXTENSION_COUNT;
-        return addDays(current, -DAY_EXTENSION_COUNT);
-      });
-    } else if (element.scrollWidth - element.clientWidth - element.scrollLeft < threshold) {
-      setRangeEnd((current) => addDays(current, DAY_EXTENSION_COUNT));
-    }
-  };
-
   return (
     <div className="card calendar-workspace">
       <div className="card-header session-editor-header-minimal">
@@ -178,6 +157,16 @@ export const CalendarWorkspace = ({
           <h2>Calendar</h2>
         </div>
         <div className="page-actions">
+          <button
+            className="shell-button"
+            type="button"
+            onClick={() => {
+              setRangeStart((current) => addDays(current, -RANGE_SHIFT_DAYS));
+              setRangeEnd((current) => addDays(current, -RANGE_SHIFT_DAYS));
+            }}
+          >
+            Previous
+          </button>
           <button className="shell-button" type="button" onClick={() => {
             setRangeStart(addDays(today, -INITIAL_DAYS_BEFORE));
             setRangeEnd(addDays(today, INITIAL_DAYS_AFTER));
@@ -186,6 +175,16 @@ export const CalendarWorkspace = ({
             initializedScrollRef.current = false;
           }}>
             Today
+          </button>
+          <button
+            className="shell-button"
+            type="button"
+            onClick={() => {
+              setRangeStart((current) => addDays(current, RANGE_SHIFT_DAYS));
+              setRangeEnd((current) => addDays(current, RANGE_SHIFT_DAYS));
+            }}
+          >
+            Next
           </button>
           <div className="capture-density-toggle">
             <button className="segment-button" type="button" disabled={dayScaleIndex === 0} onClick={() => setDayScaleIndex((value) => Math.max(0, value - 1))}>
@@ -210,7 +209,7 @@ export const CalendarWorkspace = ({
         <span className="tiny-text">Type directly into a slot to create a todo, or use `td`, `act`, or `meet` prefixes. Drag blocks to reschedule them.</span>
       </div>
 
-      <div className="calendar-scroll" ref={scrollRef} onScroll={handleScroll}>
+      <div className="calendar-scroll" ref={scrollRef}>
         <div className="calendar-surface" style={surfaceStyle}>
           <div className="calendar-corner" />
           {dates.map((date) => (
