@@ -8,5 +8,5 @@ interface CalendarWorkspaceProps {
     onOpenTodoWorkspace: () => void;
     onOpenActivityWorkspace: (activityId: string) => void;
 }
-export declare const CalendarWorkspace: ({ todos, activities, calendarItems, onCreateFromText, onMoveItem, onOpenTodoWorkspace, onOpenActivityWorkspace, }: CalendarWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const CalendarWorkspace: ({ todos, activities, calendarItems, onOpenTodoWorkspace, onOpenActivityWorkspace, }: CalendarWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};
