@@ -151,6 +151,10 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   outputLayoutPresetId: DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
   captureWorkspaceDensity: "minimal",
   outputWorkspaceDensity: "minimal",
+  calendarDaysInView: 5,
+  calendarSlotHeight: 16,
+  calendarIsFullScreen: false,
+  calendarDetailsPaneWidth: 320,
   apiKey: "",
   textModel: "gpt-5.4-mini",
   transcriptionModel: "gpt-4o-mini-transcribe",
@@ -289,6 +293,15 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
     : DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
   captureWorkspaceDensity: settings.captureWorkspaceDensity === "minimal" ? "minimal" : "full",
   outputWorkspaceDensity: settings.outputWorkspaceDensity === "minimal" ? "minimal" : "full",
+  calendarDaysInView:
+    settings.calendarDaysInView === 3 || settings.calendarDaysInView === 7 || settings.calendarDaysInView === 14
+      ? settings.calendarDaysInView
+      : 5,
+  calendarSlotHeight: settings.calendarSlotHeight === 12 || settings.calendarSlotHeight === 22 ? settings.calendarSlotHeight : 16,
+  calendarIsFullScreen: Boolean(settings.calendarIsFullScreen),
+  calendarDetailsPaneWidth: Number.isFinite(Number(settings.calendarDetailsPaneWidth))
+    ? Math.min(520, Math.max(240, Math.round(Number(settings.calendarDetailsPaneWidth))))
+    : 320,
   textModel: normalizeTextModelId(settings.textModel),
   transcriptionModel: normalizeTranscriptionModelId(settings.transcriptionModel),
   promptProfile: normalizePromptProfile(settings.promptProfile),

@@ -2032,6 +2032,7 @@ export const App = () => {
 
         <main className={`notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}`}>
           <section className="workspace-canvas">
+            {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) ? (
             <div className="workspace-header card">
               <div className="card-header">
                 <div>
@@ -2131,6 +2132,7 @@ export const App = () => {
                 </div>
               ) : null}
             </div>
+            ) : null}
 
             {activeWorkspace === "todos" ? (
               <TodosWorkspace
@@ -2164,7 +2166,9 @@ export const App = () => {
                 todos={snapshot.todos}
                 activities={snapshot.activities}
                 calendarItems={snapshot.calendarItems ?? []}
+                settings={snapshot.settings}
                 linkedSessionIdsByActivity={linkedSessionIdsByActivity}
+                onSaveSettings={(settings) => void saveSettings(settings)}
                 onCreateFromText={(date, startSlot, value) => void createCalendarEntryFromText(date, startSlot, value)}
                 onMoveItem={(id, date, startSlot) => void moveCalendarItem(id, date, startSlot)}
                 onSaveTodo={(todo) => void saveTodo(todo)}

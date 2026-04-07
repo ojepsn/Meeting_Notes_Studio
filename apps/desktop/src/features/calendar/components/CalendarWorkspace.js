@@ -1,183 +1,121 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 const TOTAL_SLOTS = 24 * 12;
 const MINUTES_PER_SLOT = 5;
-const DEFAULT_DAYS_IN_VIEW = 3;
-const DAYS_IN_VIEW_OPTIONS = [3, 5, 7, 14];
-const SLOT_HEIGHT_OPTIONS = [12, 16, 22];
+const DAYS = [3, 5, 7, 14];
+const HEIGHTS = [12, 16, 22];
+const MIN_PANE = 240;
+const MAX_PANE = 520;
 const addDays = (date, days) => {
     const next = new Date(`${date}T00:00:00`);
     next.setDate(next.getDate() + days);
     return next.toISOString().slice(0, 10);
 };
-const formatDayLabel = (date) => {
-    const parsed = new Date(`${date}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) {
-        return date;
-    }
-    return new Intl.DateTimeFormat(undefined, {
-        weekday: "short",
-        month: "2-digit",
-        day: "2-digit",
-    }).format(parsed);
-};
-const slotToTimeLabel = (slot) => {
-    const totalMinutes = slot * MINUTES_PER_SLOT;
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+const clampSlot = (slot) => Math.max(0, Math.min(TOTAL_SLOTS - 1, slot));
+const clampPane = (width) => Math.min(MAX_PANE, Math.max(MIN_PANE, Math.round(width)));
+const durationFromTimes = (startTime, endTime) => Math.max(1, timeToSlot(endTime) - timeToSlot(startTime));
+const slotToTime = (slot) => {
+    const total = slot * MINUTES_PER_SLOT;
+    return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 };
 const timeToSlot = (time) => {
     const [hours, minutes] = time.split(":").map(Number);
-    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes))
         return 0;
-    }
     return hours * 12 + Math.floor(minutes / MINUTES_PER_SLOT);
 };
-const clampSlot = (slot) => Math.max(0, Math.min(TOTAL_SLOTS - 1, slot));
-const durationFromTimes = (startTime, endTime) => Math.max(1, timeToSlot(endTime) - timeToSlot(startTime));
-const durationLabel = (durationSlots) => {
-    const minutes = durationSlots * MINUTES_PER_SLOT;
-    if (minutes < 60) {
+const formatDay = (date) => new Intl.DateTimeFormat(undefined, { weekday: "short", month: "2-digit", day: "2-digit" }).format(new Date(`${date}T00:00:00`));
+const durationLabel = (slots) => {
+    const minutes = slots * MINUTES_PER_SLOT;
+    if (minutes < 60)
         return `${minutes} min`;
-    }
     const hours = Math.floor(minutes / 60);
-    const restMinutes = minutes % 60;
-    return restMinutes ? `${hours}h ${restMinutes}m` : `${hours}h`;
+    const rest = minutes % 60;
+    return rest ? `${hours}h ${rest}m` : `${hours}h`;
 };
-export const CalendarWorkspace = ({ todos, activities, calendarItems, linkedSessionIdsByActivity, onCreateFromText, onMoveItem, onSaveTodo, onSaveActivity, onUpdateCalendarItem, onOpenTodoWorkspace, onOpenActivityWorkspace, onOpenSession, onFullScreenChange, }) => {
+export const CalendarWorkspace = ({ todos, activities, calendarItems, settings, linkedSessionIdsByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onSaveActivity, onUpdateCalendarItem, onOpenTodoWorkspace, onOpenActivityWorkspace, onOpenSession, onFullScreenChange, }) => {
     const today = new Date().toISOString().slice(0, 10);
-    const safeTodos = Array.isArray(todos) ? todos : [];
-    const safeActivities = Array.isArray(activities) ? activities : [];
-    const safeCalendarItems = Array.isArray(calendarItems) ? calendarItems : [];
     const [anchorDate, setAnchorDate] = useState(today);
-    const [daysInView, setDaysInView] = useState(DEFAULT_DAYS_IN_VIEW);
-    const [slotHeight, setSlotHeight] = useState(16);
-    const [activeCell, setActiveCell] = useState(null);
-    const [draftText, setDraftText] = useState("");
+    const [daysInView, setDaysInView] = useState(settings.calendarDaysInView);
+    const [slotHeight, setSlotHeight] = useState(settings.calendarSlotHeight);
+    const [isFullScreen, setIsFullScreen] = useState(settings.calendarIsFullScreen);
+    const [detailsPaneWidth, setDetailsPaneWidth] = useState(settings.calendarDetailsPaneWidth);
     const [selectedItemId, setSelectedItemId] = useState(null);
     const [editorDraft, setEditorDraft] = useState(null);
     const [jumpDate, setJumpDate] = useState(today);
+    const [draftCell, setDraftCell] = useState(null);
+    const [draftText, setDraftText] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [typeFilter, setTypeFilter] = useState("all");
     const [visibilityFilter, setVisibilityFilter] = useState("all");
     const [resizeState, setResizeState] = useState(null);
-    const [isFullScreen, setIsFullScreen] = useState(false);
+    const layoutRef = useRef(null);
+    const scrollRef = useRef(null);
+    const splitterDraggingRef = useRef(false);
     useEffect(() => {
         onFullScreenChange?.(isFullScreen);
-        return () => {
-            onFullScreenChange?.(false);
-        };
+        return () => onFullScreenChange?.(false);
     }, [isFullScreen, onFullScreenChange]);
+    useEffect(() => {
+        if (settings.calendarDaysInView !== daysInView ||
+            settings.calendarSlotHeight !== slotHeight ||
+            settings.calendarIsFullScreen !== isFullScreen ||
+            settings.calendarDetailsPaneWidth !== detailsPaneWidth) {
+            onSaveSettings({
+                ...settings,
+                calendarDaysInView: daysInView,
+                calendarSlotHeight: slotHeight,
+                calendarIsFullScreen: isFullScreen,
+                calendarDetailsPaneWidth: detailsPaneWidth,
+            });
+        }
+    }, [daysInView, detailsPaneWidth, isFullScreen, onSaveSettings, settings, slotHeight]);
     const visibleDates = useMemo(() => Array.from({ length: daysInView }, (_, index) => addDays(anchorDate, index)), [anchorDate, daysInView]);
     const items = useMemo(() => {
-        const todoMap = new Map(safeTodos.map((todo) => [todo.id, todo]));
-        const activityMap = new Map(safeActivities.map((activity) => [activity.id, activity]));
-        const baseItems = safeCalendarItems
+        const todoMap = new Map((Array.isArray(todos) ? todos : []).map((todo) => [todo.id, todo]));
+        const activityMap = new Map((Array.isArray(activities) ? activities : []).map((activity) => [activity.id, activity]));
+        const base = (Array.isArray(calendarItems) ? calendarItems : [])
             .map((item) => {
             if (item.targetType === "todo") {
                 const todo = todoMap.get(item.targetId);
-                if (!todo) {
+                if (!todo)
                     return null;
-                }
-                return {
-                    id: item.id,
-                    date: item.date,
-                    startSlot: item.startSlot,
-                    durationSlots: item.durationSlots,
-                    targetType: "todo",
-                    targetId: item.targetId,
-                    title: todo.description,
-                    label: "Todo",
-                    isMeeting: false,
-                    isPrivate: todo.isPrivate,
-                    domain: todo.domain,
-                    project: todo.project,
-                    activity: todo.activity,
-                    dueDate: todo.dueDate,
-                    lane: 0,
-                    laneCount: 1,
-                };
+                return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "todo", targetId: item.targetId, title: todo.description, label: "Todo", isMeeting: false, isPrivate: todo.isPrivate, lane: 0, laneCount: 1 };
             }
             const activity = activityMap.get(item.targetId);
-            if (!activity) {
+            if (!activity)
                 return null;
-            }
-            return {
-                id: item.id,
-                date: item.date,
-                startSlot: item.startSlot,
-                durationSlots: item.durationSlots,
-                targetType: "activity",
-                targetId: item.targetId,
-                title: activity.description,
-                label: activity.type === "meeting" ? "Meeting" : "Activity",
-                isMeeting: activity.type === "meeting",
-                isPrivate: activity.isPrivate,
-                domain: activity.domain,
-                project: activity.project,
-                activity: activity.activity,
-                dueDate: activity.dueDate,
-                lane: 0,
-                laneCount: 1,
-            };
+            return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "activity", targetId: item.targetId, title: activity.description, label: activity.type === "meeting" ? "Meeting" : "Activity", isMeeting: activity.type === "meeting", isPrivate: activity.isPrivate, lane: 0, laneCount: 1 };
         })
             .filter((item) => item !== null)
-            .sort((left, right) => {
-            if (left.date !== right.date) {
-                return left.date.localeCompare(right.date);
-            }
-            if (left.startSlot !== right.startSlot) {
-                return left.startSlot - right.startSlot;
-            }
-            return left.title.localeCompare(right.title);
-        });
-        const itemsByDate = new Map();
-        baseItems.forEach((item) => {
-            const existing = itemsByDate.get(item.date) ?? [];
+            .sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.title.localeCompare(right.title));
+        const grouped = new Map();
+        base.forEach((item) => {
+            const existing = grouped.get(item.date) ?? [];
             existing.push(item);
-            itemsByDate.set(item.date, existing);
+            grouped.set(item.date, existing);
         });
-        const laidOutItems = [];
-        itemsByDate.forEach((dayItems) => {
+        const result = [];
+        grouped.forEach((dayItems) => {
             const lanesEnd = [];
             dayItems.forEach((item) => {
-                const endSlot = item.startSlot + Math.max(1, item.durationSlots);
-                let laneIndex = lanesEnd.findIndex((laneEnd) => laneEnd <= item.startSlot);
-                if (laneIndex === -1) {
-                    laneIndex = lanesEnd.length;
-                    lanesEnd.push(endSlot);
+                const itemEnd = item.startSlot + Math.max(1, item.durationSlots);
+                let lane = lanesEnd.findIndex((laneEnd) => laneEnd <= item.startSlot);
+                if (lane === -1) {
+                    lane = lanesEnd.length;
+                    lanesEnd.push(itemEnd);
                 }
                 else {
-                    lanesEnd[laneIndex] = endSlot;
+                    lanesEnd[lane] = itemEnd;
                 }
-                const overlappingCount = dayItems.filter((candidate) => {
-                    if (candidate.id === item.id) {
-                        return true;
-                    }
-                    const itemEnd = item.startSlot + Math.max(1, item.durationSlots);
-                    const candidateEnd = candidate.startSlot + Math.max(1, candidate.durationSlots);
-                    return item.startSlot < candidateEnd && candidate.startSlot < itemEnd;
-                }).length;
-                laidOutItems.push({
-                    ...item,
-                    lane: laneIndex,
-                    laneCount: Math.max(1, overlappingCount),
-                });
+                const laneCount = dayItems.filter((candidate) => item.startSlot < candidate.startSlot + Math.max(1, candidate.durationSlots) && candidate.startSlot < itemEnd).length;
+                result.push({ ...item, lane, laneCount: Math.max(1, laneCount) });
             });
         });
-        return laidOutItems.sort((left, right) => {
-            if (left.date !== right.date) {
-                return left.date.localeCompare(right.date);
-            }
-            if (left.startSlot !== right.startSlot) {
-                return left.startSlot - right.startSlot;
-            }
-            return left.lane - right.lane;
-        });
-    }, [safeActivities, safeCalendarItems, safeTodos]);
-    const visibleItems = useMemo(() => {
-        const normalizedSearch = searchQuery.trim().toLowerCase();
+        return result.sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.lane - right.lane);
+    }, [activities, calendarItems, todos]);
+    const filteredItems = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
         return items.filter((item) => {
             if (typeFilter === "todo" && item.targetType !== "todo")
                 return false;
@@ -189,118 +127,70 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, linkedSess
                 return false;
             if (visibilityFilter === "public" && item.isPrivate)
                 return false;
-            if (!normalizedSearch)
+            if (!query)
                 return true;
-            return [item.title, item.domain, item.project, item.activity, item.label].join(" ").toLowerCase().includes(normalizedSearch);
+            return `${item.title} ${item.label}`.toLowerCase().includes(query);
         });
     }, [items, searchQuery, typeFilter, visibilityFilter]);
     const itemsByDate = useMemo(() => {
         const grouped = new Map();
-        visibleItems.forEach((item) => {
+        filteredItems.forEach((item) => {
             const existing = grouped.get(item.date) ?? [];
             existing.push(item);
             grouped.set(item.date, existing);
         });
         return grouped;
-    }, [visibleItems]);
+    }, [filteredItems]);
+    useEffect(() => {
+        const scroller = scrollRef.current;
+        if (!scroller)
+            return;
+        const now = new Date();
+        const currentSlot = clampSlot(now.getHours() * 12 + Math.floor(now.getMinutes() / MINUTES_PER_SLOT));
+        scroller.scrollTop = Math.max(0, currentSlot * slotHeight - scroller.clientHeight / 2);
+        scroller.scrollLeft = 0;
+    }, [slotHeight]);
     useEffect(() => {
         if (!selectedItemId) {
             setEditorDraft(null);
             return;
         }
-        const calendarItem = safeCalendarItems.find((item) => item.id === selectedItemId);
-        if (!calendarItem) {
-            setSelectedItemId(null);
-            setEditorDraft(null);
+        const calendarItem = calendarItems.find((item) => item.id === selectedItemId);
+        if (!calendarItem)
             return;
-        }
         if (calendarItem.targetType === "todo") {
-            const todo = safeTodos.find((entry) => entry.id === calendarItem.targetId);
-            if (!todo) {
-                setSelectedItemId(null);
-                setEditorDraft(null);
+            const todo = todos.find((entry) => entry.id === calendarItem.targetId);
+            if (!todo)
                 return;
-            }
-            setEditorDraft({
-                itemId: calendarItem.id,
-                targetType: "todo",
-                targetId: todo.id,
-                title: todo.description,
-                isPrivate: todo.isPrivate,
-                domain: todo.domain,
-                project: todo.project,
-                activity: todo.activity,
-                doOn: calendarItem.date,
-                dueDate: todo.dueDate,
-                startTime: slotToTimeLabel(calendarItem.startSlot),
-                endTime: slotToTimeLabel(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)),
-                durationSlots: Math.max(1, calendarItem.durationSlots),
-                isMeeting: false,
-            });
+            setEditorDraft({ itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isMeeting: false });
             return;
         }
-        const activity = safeActivities.find((entry) => entry.id === calendarItem.targetId);
-        if (!activity) {
-            setSelectedItemId(null);
-            setEditorDraft(null);
+        const activity = activities.find((entry) => entry.id === calendarItem.targetId);
+        if (!activity)
             return;
-        }
-        setEditorDraft({
-            itemId: calendarItem.id,
-            targetType: "activity",
-            targetId: activity.id,
-            title: activity.description,
-            isPrivate: activity.isPrivate,
-            domain: activity.domain,
-            project: activity.project,
-            activity: activity.activity,
-            doOn: calendarItem.date,
-            dueDate: activity.dueDate,
-            startTime: activity.type === "meeting" ? activity.startTime || slotToTimeLabel(calendarItem.startSlot) : slotToTimeLabel(calendarItem.startSlot),
-            endTime: activity.type === "meeting"
-                ? activity.endTime || slotToTimeLabel(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots))
-                : slotToTimeLabel(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)),
-            durationSlots: Math.max(1, calendarItem.durationSlots),
-            isMeeting: activity.type === "meeting",
-        });
-    }, [safeActivities, safeCalendarItems, safeTodos, selectedItemId]);
+        setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isMeeting: activity.type === "meeting" });
+    }, [activities, calendarItems, selectedItemId, todos]);
     useEffect(() => {
-        if (!resizeState) {
+        if (!resizeState)
             return;
-        }
         const handleMouseMove = (event) => {
             const deltaSlots = Math.round(event.movementY / slotHeight);
-            if (deltaSlots === 0) {
+            if (deltaSlots === 0)
                 return;
-            }
             setResizeState((current) => {
-                if (!current) {
+                if (!current)
                     return current;
-                }
-                if (current.edge === "end") {
-                    return {
-                        ...current,
-                        currentDurationSlots: Math.max(1, current.currentDurationSlots + deltaSlots),
-                    };
-                }
-                const currentEnd = current.currentStartSlot + current.currentDurationSlots;
-                const nextStart = clampSlot(Math.min(currentEnd - 1, current.currentStartSlot + deltaSlots));
-                return {
-                    ...current,
-                    currentStartSlot: nextStart,
-                    currentDurationSlots: Math.max(1, currentEnd - nextStart),
-                };
+                if (current.edge === "end")
+                    return { ...current, durationSlots: Math.max(1, current.durationSlots + deltaSlots) };
+                const endSlot = current.startSlot + current.durationSlots;
+                const nextStart = clampSlot(Math.min(endSlot - 1, current.startSlot + deltaSlots));
+                return { ...current, startSlot: nextStart, durationSlots: Math.max(1, endSlot - nextStart) };
             });
         };
         const handleMouseUp = () => {
             setResizeState((current) => {
-                if (current) {
-                    onUpdateCalendarItem(current.itemId, {
-                        date: current.date,
-                        startSlot: current.currentStartSlot,
-                        durationSlots: current.currentDurationSlots,
-                    });
-                }
+                if (current)
+                    onUpdateCalendarItem(current.itemId, { date: current.date, startSlot: current.startSlot, durationSlots: current.durationSlots });
                 return null;
             });
         };
@@ -311,200 +201,109 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, linkedSess
             window.removeEventListener("mouseup", handleMouseUp);
         };
     }, [onUpdateCalendarItem, resizeState, slotHeight]);
-    const handleCommitActiveCell = () => {
-        if (!activeCell) {
-            return;
-        }
-        const nextValue = draftText.trim();
-        if (nextValue) {
-            onCreateFromText(activeCell.date, activeCell.slot, nextValue);
-        }
-        setDraftText("");
-        setActiveCell(null);
-    };
-    const handleActivateCell = (date, slot) => {
-        setSelectedItemId(null);
-        setActiveCell({ date, slot: clampSlot(slot) });
-        setDraftText("");
-    };
-    const moveActiveCell = (deltaDays, deltaSlots) => {
-        if (!activeCell) {
-            return;
-        }
-        const nextDate = addDays(activeCell.date, deltaDays);
-        const nextSlot = clampSlot(activeCell.slot + deltaSlots);
-        setActiveCell({ date: nextDate, slot: nextSlot });
-    };
-    const handleSaveEditor = () => {
-        if (!editorDraft) {
-            return;
-        }
-        const normalizedStartSlot = clampSlot(timeToSlot(editorDraft.startTime || "00:00"));
-        const normalizedDuration = editorDraft.isMeeting
-            ? Math.max(1, durationFromTimes(editorDraft.startTime || "00:00", editorDraft.endTime || editorDraft.startTime || "00:05"))
-            : 1;
-        if (editorDraft.targetType === "todo") {
-            const todo = safeTodos.find((entry) => entry.id === editorDraft.targetId);
-            if (!todo) {
+    useEffect(() => {
+        const handleMouseMove = (event) => {
+            if (!splitterDraggingRef.current || !layoutRef.current)
                 return;
-            }
-            onSaveTodo({
-                ...todo,
-                description: editorDraft.title.trim() || todo.description,
-                isPrivate: editorDraft.isPrivate,
-                domain: editorDraft.domain,
-                project: editorDraft.project,
-                activity: editorDraft.activity,
-                doOn: editorDraft.doOn,
-                dueDate: editorDraft.dueDate,
-            });
+            const rect = layoutRef.current.getBoundingClientRect();
+            setDetailsPaneWidth(clampPane(rect.right - event.clientX));
+        };
+        const handleMouseUp = () => {
+            splitterDraggingRef.current = false;
+            document.body.style.cursor = "";
+        };
+        window.addEventListener("mousemove", handleMouseMove);
+        window.addEventListener("mouseup", handleMouseUp);
+        return () => {
+            window.removeEventListener("mousemove", handleMouseMove);
+            window.removeEventListener("mouseup", handleMouseUp);
+        };
+    }, []);
+    const moveDraftCell = (deltaDays, deltaSlots) => {
+        if (!draftCell)
+            return;
+        setDraftCell({ date: addDays(draftCell.date, deltaDays), slot: clampSlot(draftCell.slot + deltaSlots) });
+    };
+    const commitDraftCell = () => {
+        if (!draftCell)
+            return;
+        const nextValue = draftText.trim();
+        if (nextValue)
+            onCreateFromText(draftCell.date, draftCell.slot, nextValue);
+        setDraftText("");
+        setDraftCell(null);
+    };
+    const saveEditor = () => {
+        if (!editorDraft)
+            return;
+        const startSlot = clampSlot(timeToSlot(editorDraft.startTime || "00:00"));
+        const durationSlots = editorDraft.isMeeting ? Math.max(1, durationFromTimes(editorDraft.startTime || "00:00", editorDraft.endTime || editorDraft.startTime || "00:05")) : 1;
+        if (editorDraft.targetType === "todo") {
+            const todo = todos.find((entry) => entry.id === editorDraft.targetId);
+            if (!todo)
+                return;
+            onSaveTodo({ ...todo, description: editorDraft.title.trim() || todo.description, doOn: editorDraft.doOn, dueDate: editorDraft.dueDate, domain: editorDraft.domain, project: editorDraft.project, activity: editorDraft.activity, isPrivate: editorDraft.isPrivate });
         }
         else {
-            const activity = safeActivities.find((entry) => entry.id === editorDraft.targetId);
-            if (!activity) {
+            const activity = activities.find((entry) => entry.id === editorDraft.targetId);
+            if (!activity)
                 return;
-            }
-            onSaveActivity({
-                ...activity,
-                description: editorDraft.title.trim() || activity.description,
-                isPrivate: editorDraft.isPrivate,
-                domain: editorDraft.domain,
-                project: editorDraft.project,
-                activity: editorDraft.activity,
-                doOn: editorDraft.doOn,
-                dueDate: editorDraft.dueDate,
-                startTime: editorDraft.isMeeting ? editorDraft.startTime : activity.startTime,
-                endTime: editorDraft.isMeeting ? editorDraft.endTime : activity.endTime,
-            });
+            onSaveActivity({ ...activity, description: editorDraft.title.trim() || activity.description, doOn: editorDraft.doOn, dueDate: editorDraft.dueDate, domain: editorDraft.domain, project: editorDraft.project, activity: editorDraft.activity, isPrivate: editorDraft.isPrivate, startTime: editorDraft.isMeeting ? editorDraft.startTime : activity.startTime, endTime: editorDraft.isMeeting ? editorDraft.endTime : activity.endTime });
         }
-        onUpdateCalendarItem(editorDraft.itemId, {
-            date: editorDraft.doOn,
-            startSlot: normalizedStartSlot,
-            durationSlots: normalizedDuration,
-        });
-        setSelectedItemId(editorDraft.itemId);
+        onUpdateCalendarItem(editorDraft.itemId, { date: editorDraft.doOn, startSlot, durationSlots });
     };
-    return (_jsxs("div", { className: `card calendar-workspace${isFullScreen ? " calendar-workspace-fullscreen" : ""}`, children: [_jsxs("div", { className: "card-header session-editor-header-minimal", children: [_jsxs("div", { children: [_jsx("h2", { children: "Calendar" }), _jsx("p", { className: "tiny-text", children: "Lightweight planner grid with one active input and direct in-calendar editing." })] }), _jsxs("div", { className: "page-actions wrap-row", children: [_jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, -daysInView)), children: "Previous" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate(today), children: "Today" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, daysInView)), children: "Next" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, 30)), children: "+30 days" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setIsFullScreen((current) => !current), children: isFullScreen ? "Exit full screen" : "Full screen" })] })] }), _jsxs("div", { className: "calendar-calendar-summary", children: [_jsxs("div", { className: "status-chip", children: [visibleItems.length, " scheduled items"] }), _jsx("div", { className: "capture-density-toggle", role: "group", "aria-label": "Days in view", children: DAYS_IN_VIEW_OPTIONS.map((option) => (_jsxs("button", { className: "segment-button", type: "button", "data-active": option === daysInView, onClick: () => setDaysInView(option), children: [option, " days"] }, `days-${option}`))) }), _jsx("div", { className: "capture-density-toggle", role: "group", "aria-label": "Calendar scale", children: SLOT_HEIGHT_OPTIONS.map((option) => (_jsx("button", { className: "segment-button", type: "button", "data-active": option === slotHeight, onClick: () => setSlotHeight(option), children: option === 12 ? "Compact" : option === 16 ? "Default" : "Large" }, `scale-${option}`))) })] }), _jsxs("div", { className: "calendar-toolbar", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-jump-date", children: "Jump to date" }), _jsx("input", { id: "calendar-jump-date", type: "date", value: jumpDate, onChange: (event) => setJumpDate(event.target.value) })] }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate(jumpDate || today), children: "Go" }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "calendar-search", children: "Search" }), _jsx("input", { id: "calendar-search", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "Search title, domain, project, activity" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-type-filter", children: "Type" }), _jsxs("select", { id: "calendar-type-filter", value: typeFilter, onChange: (event) => setTypeFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), _jsx("option", { value: "todo", children: "Todos" }), _jsx("option", { value: "activity", children: "Activities" }), _jsx("option", { value: "meeting", children: "Meetings" })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-visibility-filter", children: "Visibility" }), _jsxs("select", { id: "calendar-visibility-filter", value: visibilityFilter, onChange: (event) => setVisibilityFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), _jsx("option", { value: "public", children: "Public" }), _jsx("option", { value: "private", children: "Private" })] })] })] }), _jsxs("div", { className: `calendar-layout${isFullScreen ? " calendar-layout-fullscreen" : ""}`, children: [_jsxs("div", { className: "calendar-main stack", children: [_jsx("div", { className: `calendar-scroll${isFullScreen ? " calendar-scroll-fullscreen" : ""}`, style: { ["--calendar-slot-height"]: `${slotHeight}px` }, children: _jsxs("div", { className: "calendar-surface", style: {
-                                        gridTemplateColumns: `84px repeat(${visibleDates.length}, minmax(220px, 1fr))`,
-                                        gridTemplateRows: `52px repeat(${TOTAL_SLOTS}, var(--calendar-slot-height))`,
-                                    }, children: [_jsx("div", { className: "calendar-corner", style: { gridColumn: "1 / 2", gridRow: "1 / 2" } }), visibleDates.map((date, index) => (_jsxs("div", { className: "calendar-day-header", style: { gridColumn: `${index + 2} / ${index + 3}`, gridRow: "1 / 2" }, children: [_jsx("strong", { children: date }), _jsx("span", { children: formatDayLabel(date) })] }, `header-${date}`))), _jsx("div", { className: "calendar-time-column", style: { gridColumn: "1 / 2", gridRow: `2 / span ${TOTAL_SLOTS}` }, children: Array.from({ length: TOTAL_SLOTS }, (_, slot) => (_jsx("div", { className: `calendar-time-cell${slot % 12 === 0 ? " calendar-time-cell-hour" : ""}`, style: { height: "var(--calendar-slot-height)" }, children: slot % 12 === 0 ? slotToTimeLabel(slot) : "" }, `time-${slot}`))) }), visibleDates.map((date, index) => {
-                                            const dayItems = itemsByDate.get(date) ?? [];
-                                            const activeForDay = activeCell?.date === date ? activeCell : null;
-                                            return (_jsxs("div", { className: "calendar-day-column", style: {
-                                                    gridColumn: `${index + 2} / ${index + 3}`,
-                                                    gridRow: `2 / span ${TOTAL_SLOTS}`,
-                                                    height: `calc(var(--calendar-slot-height) * ${TOTAL_SLOTS})`,
-                                                }, onClick: (event) => {
-                                                    const target = event.target;
-                                                    if (target.closest(".calendar-item-block") || target.closest(".calendar-cell-input")) {
-                                                        return;
-                                                    }
-                                                    const rect = event.currentTarget.getBoundingClientRect();
-                                                    const clickedSlot = clampSlot(Math.floor((event.clientY - rect.top) / slotHeight));
-                                                    handleActivateCell(date, clickedSlot);
-                                                }, onDragOver: (event) => event.preventDefault(), onDrop: (event) => {
-                                                    const draggedId = event.dataTransfer.getData("text/plain");
-                                                    if (!draggedId) {
-                                                        return;
-                                                    }
-                                                    event.preventDefault();
-                                                    const rect = event.currentTarget.getBoundingClientRect();
-                                                    const nextSlot = clampSlot(Math.floor((event.clientY - rect.top) / slotHeight));
-                                                    onMoveItem(draggedId, date, nextSlot);
-                                                }, children: [_jsx("div", { className: "calendar-day-interaction-layer" }), activeForDay ? (_jsx("div", { className: "calendar-active-cell", style: {
-                                                            top: `calc(var(--calendar-slot-height) * ${activeForDay.slot})`,
-                                                            height: "var(--calendar-slot-height)",
-                                                        }, children: _jsx("input", { className: "calendar-cell-input", autoFocus: true, value: draftText, onChange: (event) => setDraftText(event.target.value), onBlur: handleCommitActiveCell, onKeyDown: (event) => {
-                                                                if (event.key === "Enter") {
-                                                                    event.preventDefault();
-                                                                    const commitDate = activeForDay.date;
-                                                                    const commitSlot = activeForDay.slot;
-                                                                    handleCommitActiveCell();
-                                                                    setActiveCell({ date: commitDate, slot: clampSlot(commitSlot + 1) });
-                                                                }
-                                                                if (event.key === "Escape") {
-                                                                    setDraftText("");
-                                                                    setActiveCell(null);
-                                                                }
-                                                                if (event.key === "ArrowDown") {
-                                                                    event.preventDefault();
-                                                                    moveActiveCell(0, 1);
-                                                                }
-                                                                if (event.key === "ArrowUp") {
-                                                                    event.preventDefault();
-                                                                    moveActiveCell(0, -1);
-                                                                }
-                                                                if (event.key === "Tab") {
-                                                                    event.preventDefault();
-                                                                    moveActiveCell(event.shiftKey ? -1 : 1, 0);
-                                                                }
-                                                            }, placeholder: "Type to add todo, act..., td..., or meet..." }) })) : null, dayItems.map((item) => {
-                                                        const resizePreview = resizeState?.itemId === item.id
-                                                            ? {
-                                                                startSlot: resizeState.currentStartSlot,
-                                                                durationSlots: resizeState.currentDurationSlots,
-                                                            }
-                                                            : null;
-                                                        const startSlot = resizePreview?.startSlot ?? item.startSlot;
-                                                        const durationSlots = resizePreview?.durationSlots ?? item.durationSlots;
-                                                        const visualHeight = Math.max(slotHeight * Math.max(durationSlots, item.isMeeting ? 3 : 1) - 4, 18);
-                                                        const laneWidth = 100 / Math.max(1, item.laneCount);
-                                                        return (_jsxs("button", { className: `calendar-item-block${item.isMeeting ? " calendar-item-block-meeting" : ""}${selectedItemId === item.id ? " calendar-item-block-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`, type: "button", draggable: true, style: {
-                                                                top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`,
-                                                                height: `${visualHeight}px`,
-                                                                width: `calc(${laneWidth}% - 8px)`,
-                                                                left: `calc(${item.lane * laneWidth}% + 4px)`,
-                                                                right: "auto",
-                                                            }, onDragStart: (event) => {
-                                                                event.dataTransfer.setData("text/plain", item.id);
-                                                                event.dataTransfer.effectAllowed = "move";
-                                                            }, onClick: () => {
-                                                                setActiveCell(null);
-                                                                setSelectedItemId(item.id);
-                                                            }, children: [item.isMeeting ? (_jsx("span", { className: "calendar-resize-handle calendar-resize-handle-start", onMouseDown: (event) => {
-                                                                        event.preventDefault();
-                                                                        event.stopPropagation();
-                                                                        setResizeState({
-                                                                            itemId: item.id,
-                                                                            edge: "start",
-                                                                            baseStartSlot: startSlot,
-                                                                            baseDurationSlots: durationSlots,
-                                                                            currentStartSlot: startSlot,
-                                                                            currentDurationSlots: durationSlots,
-                                                                            date: item.date,
-                                                                        });
-                                                                    } })) : null, _jsxs("strong", { children: [slotToTimeLabel(startSlot), " ", item.title] }), _jsx("span", { children: item.isMeeting ? `${item.label} • ${durationLabel(durationSlots)}` : `${item.label}${item.isPrivate ? " • Private" : ""}` }), item.isMeeting ? (_jsx("span", { className: "calendar-resize-handle calendar-resize-handle-end", onMouseDown: (event) => {
-                                                                        event.preventDefault();
-                                                                        event.stopPropagation();
-                                                                        setResizeState({
-                                                                            itemId: item.id,
-                                                                            edge: "end",
-                                                                            baseStartSlot: startSlot,
-                                                                            baseDurationSlots: durationSlots,
-                                                                            currentStartSlot: startSlot,
-                                                                            currentDurationSlots: durationSlots,
-                                                                            date: item.date,
-                                                                        });
-                                                                    } })) : null] }, item.id));
-                                                    })] }, `column-${date}`));
-                                        })] }) }), _jsx("div", { className: "calendar-agenda-list", children: visibleDates.map((date) => {
-                                    const itemsForDay = itemsByDate.get(date) ?? [];
-                                    return (_jsxs("section", { className: "calendar-agenda-day", children: [_jsxs("div", { className: "calendar-agenda-day-header", children: [_jsx("strong", { children: formatDayLabel(date) }), _jsx("span", { children: date })] }), itemsForDay.length ? (itemsForDay.map((item) => (_jsxs("button", { className: `calendar-agenda-item${item.isMeeting ? " calendar-agenda-item-meeting" : ""}`, type: "button", onClick: () => setSelectedItemId(item.id), children: [_jsxs("strong", { children: [slotToTimeLabel(item.startSlot), " ", item.title] }), _jsx("span", { children: item.isMeeting ? `${item.label} • ${durationLabel(item.durationSlots)}` : item.label })] }, `agenda-item-${item.id}`)))) : (_jsx("div", { className: "calendar-agenda-empty", children: "No scheduled items" }))] }, `agenda-${date}`));
-                                }) })] }), _jsx("aside", { className: "calendar-editor-card", children: editorDraft ? (_jsxs("div", { className: "stack", children: [_jsxs("div", { className: "card-header", children: [_jsxs("div", { children: [_jsx("h3", { children: editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity" }), _jsx("p", { children: editorDraft.isMeeting ? "Edit the meeting directly from the calendar." : "Adjust the essentials without leaving the planner." })] }), _jsx("button", { className: "small-button", type: "button", onClick: () => setSelectedItemId(null), children: "Close" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-title", children: "Title" }), _jsx("input", { id: "calendar-edit-title", value: editorDraft.title, onChange: (event) => setEditorDraft({ ...editorDraft, title: event.target.value }) })] }), _jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-date", children: "Date" }), _jsx("input", { id: "calendar-edit-date", type: "date", value: editorDraft.doOn, onChange: (event) => setEditorDraft({ ...editorDraft, doOn: event.target.value }) })] }), _jsxs("label", { className: "compact-private-toggle", children: [_jsx("input", { type: "checkbox", checked: editorDraft.isPrivate, onChange: (event) => setEditorDraft({ ...editorDraft, isPrivate: event.target.checked }) }), _jsx("span", { children: "Private" })] })] }), editorDraft.isMeeting ? (_jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-start", children: "Start" }), _jsx("input", { id: "calendar-edit-start", type: "time", step: 300, value: editorDraft.startTime, onChange: (event) => {
-                                                        const nextStart = event.target.value;
-                                                        const nextDuration = durationFromTimes(editorDraft.startTime || nextStart, editorDraft.endTime || nextStart) || editorDraft.durationSlots;
-                                                        const nextEnd = slotToTimeLabel(timeToSlot(nextStart) + Math.max(1, nextDuration));
-                                                        setEditorDraft({ ...editorDraft, startTime: nextStart, endTime: nextEnd });
-                                                    } })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-end", children: "End" }), _jsx("input", { id: "calendar-edit-end", type: "time", step: 300, value: editorDraft.endTime, onChange: (event) => setEditorDraft({ ...editorDraft, endTime: event.target.value }) })] })] })) : (_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-time", children: "Time" }), _jsx("input", { id: "calendar-edit-time", type: "time", step: 300, value: editorDraft.startTime, onChange: (event) => setEditorDraft({ ...editorDraft, startTime: event.target.value }) })] })), _jsxs("div", { className: "metadata-triplet-grid", children: [_jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-domain", children: "Domain" }), _jsx("input", { id: "calendar-edit-domain", value: editorDraft.domain, onChange: (event) => setEditorDraft({ ...editorDraft, domain: event.target.value }) })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-project", children: "Project" }), _jsx("input", { id: "calendar-edit-project", value: editorDraft.project, onChange: (event) => setEditorDraft({ ...editorDraft, project: event.target.value }) })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-activity", children: "Activity" }), _jsx("input", { id: "calendar-edit-activity", value: editorDraft.activity, onChange: (event) => setEditorDraft({ ...editorDraft, activity: event.target.value }) })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-due", children: "Due date" }), _jsx("input", { id: "calendar-edit-due", type: "date", value: editorDraft.dueDate, onChange: (event) => setEditorDraft({ ...editorDraft, dueDate: event.target.value }) })] }), _jsxs("div", { className: "calendar-editor-meta", children: [_jsx("span", { className: "status-chip", children: editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity" }), editorDraft.isPrivate ? _jsx("span", { className: "status-chip", children: "Private" }) : null, editorDraft.domain ? _jsx("span", { className: "status-chip", children: editorDraft.domain }) : null, editorDraft.project ? _jsx("span", { className: "status-chip", children: editorDraft.project }) : null] }), _jsxs("div", { className: "calendar-editor-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: handleSaveEditor, children: "Save calendar edits" }), _jsxs("button", { className: "shell-button", type: "button", onClick: () => {
-                                                if (editorDraft.targetType === "todo") {
-                                                    onOpenTodoWorkspace();
+    return (_jsxs("div", { className: `card calendar-workspace${isFullScreen ? " calendar-workspace-fullscreen" : ""}`, children: [_jsxs("div", { className: "card-header session-editor-header-minimal", children: [_jsx("div", { children: _jsx("h2", { children: "Calendar" }) }), _jsxs("div", { className: "page-actions wrap-row", children: [_jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, -daysInView)), children: "Previous" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => { setAnchorDate(today); setJumpDate(today); }, children: "Today" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, daysInView)), children: "Next" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, 30)), children: "+30 days" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setIsFullScreen((current) => !current), children: isFullScreen ? "Exit full screen" : "Full screen" })] })] }), _jsxs("div", { className: `calendar-controls${isFullScreen ? " calendar-controls-compact" : ""}`, children: [_jsxs("div", { className: "calendar-calendar-summary", children: [_jsxs("div", { className: "status-chip", children: [filteredItems.length, " scheduled items"] }), _jsx("div", { className: "capture-density-toggle", children: DAYS.map((option) => _jsxs("button", { className: "segment-button", type: "button", "data-active": option === daysInView, onClick: () => setDaysInView(option), children: [option, " days"] }, `days-${option}`)) }), _jsx("div", { className: "capture-density-toggle", children: HEIGHTS.map((option) => _jsx("button", { className: "segment-button", type: "button", "data-active": option === slotHeight, onClick: () => setSlotHeight(option), children: option === 12 ? "Compact" : option === 16 ? "Default" : "Large" }, `height-${option}`)) })] }), _jsxs("div", { className: "calendar-toolbar", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-jump-date", children: "Jump to date" }), _jsx("input", { id: "calendar-jump-date", type: "date", value: jumpDate, onChange: (event) => setJumpDate(event.target.value) })] }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate(jumpDate || today), children: "Go" }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "calendar-search", children: "Search" }), _jsx("input", { id: "calendar-search", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "Search title" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-type-filter", children: "Type" }), _jsxs("select", { id: "calendar-type-filter", value: typeFilter, onChange: (event) => setTypeFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), _jsx("option", { value: "todo", children: "Todos" }), _jsx("option", { value: "activity", children: "Activities" }), _jsx("option", { value: "meeting", children: "Meetings" })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-visibility-filter", children: "Visibility" }), _jsxs("select", { id: "calendar-visibility-filter", value: visibilityFilter, onChange: (event) => setVisibilityFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), _jsx("option", { value: "public", children: "Public" }), _jsx("option", { value: "private", children: "Private" })] })] })] })] }), _jsxs("div", { ref: layoutRef, className: `calendar-layout${isFullScreen ? " calendar-layout-fullscreen" : ""}`, style: { gridTemplateColumns: `minmax(0, 1fr) 8px ${detailsPaneWidth}px` }, children: [_jsx("div", { className: "calendar-main stack", children: _jsx("div", { ref: scrollRef, className: `calendar-scroll${isFullScreen ? " calendar-scroll-fullscreen" : ""}`, style: { ["--calendar-slot-height"]: `${slotHeight}px` }, children: _jsxs("div", { className: "calendar-surface", style: { gridTemplateColumns: `84px repeat(${visibleDates.length}, minmax(220px, 1fr))`, gridTemplateRows: `52px repeat(${TOTAL_SLOTS}, var(--calendar-slot-height))` }, children: [_jsx("div", { className: "calendar-corner", style: { gridColumn: "1 / 2", gridRow: "1 / 2" } }), visibleDates.map((date, index) => _jsxs("div", { className: "calendar-day-header", style: { gridColumn: `${index + 2} / ${index + 3}`, gridRow: "1 / 2" }, children: [_jsx("strong", { children: date }), _jsx("span", { children: formatDay(date) })] }, date)), _jsx("div", { className: "calendar-time-column", style: { gridColumn: "1 / 2", gridRow: `2 / span ${TOTAL_SLOTS}` }, children: Array.from({ length: TOTAL_SLOTS }, (_, slot) => _jsx("div", { className: `calendar-time-cell${slot % 12 === 0 ? " calendar-time-cell-hour" : ""}`, style: { height: "var(--calendar-slot-height)" }, children: slot % 12 === 0 ? slotToTime(slot) : "" }, `time-${slot}`)) }), visibleDates.map((date, index) => {
+                                        const dayItems = itemsByDate.get(date) ?? [];
+                                        const active = draftCell?.date === date ? draftCell : null;
+                                        return _jsxs("div", { className: "calendar-day-column", style: { gridColumn: `${index + 2} / ${index + 3}`, gridRow: `2 / span ${TOTAL_SLOTS}`, height: `calc(var(--calendar-slot-height) * ${TOTAL_SLOTS})` }, onClick: (event) => {
+                                                const target = event.target;
+                                                if (target.closest(".calendar-item-block") || target.closest(".calendar-cell-input"))
                                                     return;
-                                                }
-                                                onOpenActivityWorkspace(editorDraft.targetId);
-                                            }, children: ["Open full ", editorDraft.targetType === "todo" ? "todo" : "activity"] }), editorDraft.targetType === "activity" && linkedSessionIdsByActivity[editorDraft.targetId] ? (_jsx("button", { className: "shell-button", type: "button", onClick: () => {
-                                                const linkedSessionId = linkedSessionIdsByActivity[editorDraft.targetId];
-                                                if (linkedSessionId) {
-                                                    onOpenSession(linkedSessionId);
-                                                }
-                                            }, children: "Open linked meeting session" })) : null] })] })) : (_jsxs("div", { className: "stack", children: [_jsx("h3", { children: "Calendar item" }), _jsx("p", { className: "muted", children: "Select a scheduled block to edit it here. Meetings now stand out more clearly and can be adjusted directly in Calendar." })] })) })] })] }));
+                                                const rect = event.currentTarget.getBoundingClientRect();
+                                                setSelectedItemId(null);
+                                                setDraftCell({ date, slot: clampSlot(Math.floor((event.clientY - rect.top) / slotHeight)) });
+                                                setDraftText("");
+                                            }, onDragOver: (event) => {
+                                                event.preventDefault();
+                                                event.dataTransfer.dropEffect = "move";
+                                            }, onDrop: (event) => {
+                                                event.preventDefault();
+                                                const draggedId = event.dataTransfer.getData("text/plain");
+                                                if (!draggedId)
+                                                    return;
+                                                const rect = event.currentTarget.getBoundingClientRect();
+                                                onMoveItem(draggedId, date, clampSlot(Math.floor((event.clientY - rect.top) / slotHeight)));
+                                            }, children: [_jsx("div", { className: "calendar-day-interaction-layer" }), active ? _jsx("div", { className: "calendar-active-cell", style: { top: `calc(var(--calendar-slot-height) * ${active.slot})`, height: "var(--calendar-slot-height)" }, children: _jsx("input", { className: "calendar-cell-input", autoFocus: true, value: draftText, onChange: (event) => setDraftText(event.target.value), onBlur: commitDraftCell, onKeyDown: (event) => {
+                                                            if (event.key === "Enter") {
+                                                                event.preventDefault();
+                                                                const next = active.slot;
+                                                                commitDraftCell();
+                                                                setDraftCell({ date: active.date, slot: clampSlot(next + 1) });
+                                                            }
+                                                            if (event.key === "Escape") {
+                                                                setDraftText("");
+                                                                setDraftCell(null);
+                                                            }
+                                                            if (event.key === "ArrowDown") {
+                                                                event.preventDefault();
+                                                                moveDraftCell(0, 1);
+                                                            }
+                                                            if (event.key === "ArrowUp") {
+                                                                event.preventDefault();
+                                                                moveDraftCell(0, -1);
+                                                            }
+                                                            if (event.key === "Tab") {
+                                                                event.preventDefault();
+                                                                moveDraftCell(event.shiftKey ? -1 : 1, 0);
+                                                            }
+                                                        }, placeholder: "Type to add todo, act..., td..., or meet..." }) }) : null, dayItems.map((item) => {
+                                                    const preview = resizeState?.itemId === item.id ? resizeState : null;
+                                                    const startSlot = preview?.startSlot ?? item.startSlot;
+                                                    const durationSlots = preview?.durationSlots ?? item.durationSlots;
+                                                    const laneWidth = 100 / Math.max(1, item.laneCount);
+                                                    const visualHeight = Math.max(slotHeight * Math.max(durationSlots, item.isMeeting ? 3 : 1) - 4, 18);
+                                                    return _jsxs("button", { className: `calendar-item-block${item.isMeeting ? " calendar-item-block-meeting" : ""}${selectedItemId === item.id ? " calendar-item-block-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`, type: "button", draggable: true, style: { top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }, onDragStart: (event) => { event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; }, onClick: () => { setDraftCell(null); setSelectedItemId(item.id); }, children: [item.isMeeting ? _jsx("span", { className: "calendar-resize-handle calendar-resize-handle-start", onMouseDown: (event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "start", date: item.date, startSlot, durationSlots }); } }) : null, _jsxs("strong", { children: [slotToTime(startSlot), " ", item.title] }), _jsx("span", { children: item.isMeeting ? `${item.label} • ${durationLabel(durationSlots)}` : item.label }), item.isMeeting ? _jsx("span", { className: "calendar-resize-handle calendar-resize-handle-end", onMouseDown: (event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "end", date: item.date, startSlot, durationSlots }); } }) : null] }, item.id);
+                                                })] }, `col-${date}`);
+                                    })] }) }) }), _jsx("div", { className: "calendar-splitter", role: "separator", "aria-orientation": "vertical", onMouseDown: () => { splitterDraggingRef.current = true; document.body.style.cursor = "col-resize"; } }), _jsx("aside", { className: "calendar-editor-card", children: editorDraft ? _jsxs("div", { className: "stack", children: [_jsxs("div", { className: "card-header", children: [_jsx("div", { children: _jsx("h3", { children: editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity" }) }), _jsx("button", { className: "small-button", type: "button", onClick: () => setSelectedItemId(null), children: "Close" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-title", children: "Title" }), _jsx("input", { id: "calendar-edit-title", value: editorDraft.title, onChange: (event) => setEditorDraft({ ...editorDraft, title: event.target.value }) })] }), _jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-date", children: "Date" }), _jsx("input", { id: "calendar-edit-date", type: "date", value: editorDraft.doOn, onChange: (event) => setEditorDraft({ ...editorDraft, doOn: event.target.value }) })] }), _jsxs("label", { className: "compact-private-toggle", children: [_jsx("input", { type: "checkbox", checked: editorDraft.isPrivate, onChange: (event) => setEditorDraft({ ...editorDraft, isPrivate: event.target.checked }) }), _jsx("span", { children: "Private" })] })] }), editorDraft.isMeeting ? _jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-start", children: "Start" }), _jsx("input", { id: "calendar-edit-start", type: "time", step: 300, value: editorDraft.startTime, onChange: (event) => setEditorDraft({ ...editorDraft, startTime: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-end", children: "End" }), _jsx("input", { id: "calendar-edit-end", type: "time", step: 300, value: editorDraft.endTime, onChange: (event) => setEditorDraft({ ...editorDraft, endTime: event.target.value }) })] })] }) : null, _jsxs("div", { className: "metadata-triplet-grid", children: [_jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-domain", children: "Domain" }), _jsx("input", { id: "calendar-edit-domain", value: editorDraft.domain, onChange: (event) => setEditorDraft({ ...editorDraft, domain: event.target.value }) })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-project", children: "Project" }), _jsx("input", { id: "calendar-edit-project", value: editorDraft.project, onChange: (event) => setEditorDraft({ ...editorDraft, project: event.target.value }) })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-activity", children: "Activity" }), _jsx("input", { id: "calendar-edit-activity", value: editorDraft.activity, onChange: (event) => setEditorDraft({ ...editorDraft, activity: event.target.value }) })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-due", children: "Due date" }), _jsx("input", { id: "calendar-edit-due", type: "date", value: editorDraft.dueDate, onChange: (event) => setEditorDraft({ ...editorDraft, dueDate: event.target.value }) })] }), _jsxs("div", { className: "calendar-editor-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: saveEditor, children: "Save calendar edits" }), _jsxs("button", { className: "shell-button", type: "button", onClick: () => editorDraft.targetType === "todo" ? onOpenTodoWorkspace() : onOpenActivityWorkspace(editorDraft.targetId), children: ["Open full ", editorDraft.targetType === "todo" ? "todo" : "activity"] }), editorDraft.targetType === "activity" && linkedSessionIdsByActivity[editorDraft.targetId] ? _jsx("button", { className: "shell-button", type: "button", onClick: () => { const sessionId = linkedSessionIdsByActivity[editorDraft.targetId]; if (sessionId)
+                                                onOpenSession(sessionId); }, children: "Open linked meeting session" }) : null] })] }) : _jsxs("div", { className: "stack", children: [_jsx("h3", { children: "Calendar item" }), _jsx("p", { className: "muted", children: "Select a scheduled block to edit it here." })] }) })] })] }));
 };

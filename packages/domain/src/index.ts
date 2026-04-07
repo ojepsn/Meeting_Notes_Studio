@@ -154,6 +154,10 @@ export interface LocalAppSettings {
   outputLayoutPresetId: string;
   captureWorkspaceDensity: CaptureWorkspaceDensity;
   outputWorkspaceDensity: CaptureWorkspaceDensity;
+  calendarDaysInView: 3 | 5 | 7 | 14;
+  calendarSlotHeight: 12 | 16 | 22;
+  calendarIsFullScreen: boolean;
+  calendarDetailsPaneWidth: number;
   apiKey: string;
   textModel: string;
   transcriptionModel: string;
