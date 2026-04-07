@@ -7,11 +7,12 @@ This page summarizes the major desktop app capabilities at a glance.
 Current:
 
 - `Notes`
+- `Todos`
+- `Activities`
+- `Calendar`
 
 Planned:
 
-- `Tasks`
-- `Calendar`
 - `Assistant`
 - `Files`
 
@@ -83,7 +84,21 @@ Current output operations:
 - transcribe and polish
 - revise output
 - translate output
-- export text/markdown/HTML
+- export text/markdown/HTML/Word/PDF
+
+## Calendar
+
+Current calendar capabilities:
+
+- full-screen-first planner layout
+- remembered calendar UI state such as day span, scale, details width, and full-screen mode
+- today as the leftmost column on open
+- current time scrolled into view on open
+- draggable divider between the grid and details pane
+- click-to-create scheduling
+- drag-to-move scheduled items
+- resize meeting blocks in the grid
+- direct editing from the calendar details pane
 
 ## AI
 

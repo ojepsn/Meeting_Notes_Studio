@@ -157,6 +157,7 @@ export interface LocalAppSettings {
   calendarDaysInView: 3 | 5 | 7 | 14;
   calendarSlotHeight: 12 | 16 | 22;
   calendarIsFullScreen: boolean;
+  calendarFullScreenPreferenceInitialized?: boolean;
   calendarDetailsPaneWidth: number;
   apiKey: string;
   textModel: string;

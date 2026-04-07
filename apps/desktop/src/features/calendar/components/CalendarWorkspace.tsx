@@ -102,10 +102,11 @@ export const CalendarWorkspace = ({
   onFullScreenChange,
 }: CalendarWorkspaceProps) => {
   const today = new Date().toISOString().slice(0, 10);
+  const initialIsFullScreen = settings.calendarFullScreenPreferenceInitialized ? settings.calendarIsFullScreen : true;
   const [anchorDate, setAnchorDate] = useState(today);
   const [daysInView, setDaysInView] = useState<typeof DAYS[number]>(settings.calendarDaysInView);
   const [slotHeight, setSlotHeight] = useState<typeof HEIGHTS[number]>(settings.calendarSlotHeight);
-  const [isFullScreen, setIsFullScreen] = useState(settings.calendarIsFullScreen);
+  const [isFullScreen, setIsFullScreen] = useState(initialIsFullScreen);
   const [detailsPaneWidth, setDetailsPaneWidth] = useState(settings.calendarDetailsPaneWidth);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [editorDraft, setEditorDraft] = useState<EditorDraft | null>(null);
@@ -130,6 +131,7 @@ export const CalendarWorkspace = ({
       settings.calendarDaysInView !== daysInView ||
       settings.calendarSlotHeight !== slotHeight ||
       settings.calendarIsFullScreen !== isFullScreen ||
+      !settings.calendarFullScreenPreferenceInitialized ||
       settings.calendarDetailsPaneWidth !== detailsPaneWidth
     ) {
       onSaveSettings({
@@ -137,6 +139,7 @@ export const CalendarWorkspace = ({
         calendarDaysInView: daysInView,
         calendarSlotHeight: slotHeight,
         calendarIsFullScreen: isFullScreen,
+        calendarFullScreenPreferenceInitialized: true,
         calendarDetailsPaneWidth: detailsPaneWidth,
       });
     }
@@ -311,7 +314,7 @@ export const CalendarWorkspace = ({
 
   return (
     <div className={`card calendar-workspace${isFullScreen ? " calendar-workspace-fullscreen" : ""}`}>
-      <div className="card-header session-editor-header-minimal">
+      <div className="card-header session-editor-header-minimal calendar-workspace-header">
         <div><h2>Calendar</h2></div>
         <div className="page-actions wrap-row">
           <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, -daysInView))}>Previous</button>

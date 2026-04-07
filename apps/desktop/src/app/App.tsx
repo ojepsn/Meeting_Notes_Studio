@@ -224,6 +224,19 @@ export const App = () => {
   }, [activeWorkspace, isCalendarWorkspaceFullScreen]);
 
   useEffect(() => {
+    if (activeWorkspace !== "calendar" || !snapshot) {
+      return;
+    }
+
+    setIsCalendarWorkspaceFullScreen(
+      snapshot.settings.calendarFullScreenPreferenceInitialized ? snapshot.settings.calendarIsFullScreen : true,
+    );
+  }, [
+    activeWorkspace,
+    snapshot,
+  ]);
+
+  useEffect(() => {
     if (!isLoaded || loadError) {
       return;
     }
@@ -1980,7 +1993,7 @@ export const App = () => {
       </aside>
 
       <div className="workspace-shell">
-        <header className="topbar app-header">
+        <header className={`topbar app-header${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " app-header-compact" : ""}`}>
           <div className="topbar-copy">
             <div className="topbar-eyebrow">Focused workspace</div>
             <h1>{activeWorkspace === "notes" ? "Notes workspace" : `${WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}`}</h1>

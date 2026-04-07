@@ -153,7 +153,8 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   outputWorkspaceDensity: "minimal",
   calendarDaysInView: 5,
   calendarSlotHeight: 16,
-  calendarIsFullScreen: false,
+  calendarIsFullScreen: true,
+  calendarFullScreenPreferenceInitialized: false,
   calendarDetailsPaneWidth: 320,
   apiKey: "",
   textModel: "gpt-5.4-mini",
@@ -299,6 +300,7 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
       : 5,
   calendarSlotHeight: settings.calendarSlotHeight === 12 || settings.calendarSlotHeight === 22 ? settings.calendarSlotHeight : 16,
   calendarIsFullScreen: Boolean(settings.calendarIsFullScreen),
+  calendarFullScreenPreferenceInitialized: Boolean(settings.calendarFullScreenPreferenceInitialized),
   calendarDetailsPaneWidth: Number.isFinite(Number(settings.calendarDetailsPaneWidth))
     ? Math.min(520, Math.max(240, Math.round(Number(settings.calendarDetailsPaneWidth))))
     : 320,
