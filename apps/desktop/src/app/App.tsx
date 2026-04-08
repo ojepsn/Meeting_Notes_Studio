@@ -257,6 +257,8 @@ export const App = () => {
           setUpdateStatusNote(`Version ${result.version} is available to install.`);
           setStatusNote(`Update available: ${result.version}`);
         } else {
+          setAvailableUpdateVersion(null);
+          setInstallUpdate(null);
           setUpdateStatusNote("Desktop app is up to date.");
         }
       } catch (error) {
@@ -271,8 +273,19 @@ export const App = () => {
 
     void runUpdateCheck();
 
+    const intervalId = setInterval(() => {
+      void runUpdateCheck();
+    }, 15 * 60 * 1000);
+
+    const handleWindowFocus = () => {
+      void runUpdateCheck();
+    };
+    window.addEventListener("focus", handleWindowFocus);
+
     return () => {
       cancelled = true;
+      clearInterval(intervalId);
+      window.removeEventListener("focus", handleWindowFocus);
     };
   }, [isLoaded, loadError]);
 
@@ -1878,11 +1891,15 @@ export const App = () => {
             onResetTemplates={handleResetTemplates}
             onImportLegacy={handleImportLegacy}
             onCheckForUpdates={handleCheckForUpdates}
+            onInstallUpdate={handleInstallUpdate}
             onOpenDataFolder={handleOpenDataFolder}
             onOpenDatabaseFolder={handleOpenDatabaseFolder}
             onExportBackup={handleExportSnapshot}
             onCreateLocalBackup={handleCreateLocalBackup}
             updateStatusNote={updateStatusNote}
+            availableUpdateVersion={availableUpdateVersion}
+            isCheckingForUpdates={isCheckingForUpdates}
+            isInstallingUpdate={isInstallingUpdate}
             storageInfo={storageInfo}
             aiDiagnostics={aiDiagnostics}
             aiRequestHistory={aiRequestHistory}

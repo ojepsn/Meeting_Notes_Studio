@@ -158,6 +158,8 @@ export const App = () => {
                     setStatusNote(`Update available: ${result.version}`);
                 }
                 else {
+                    setAvailableUpdateVersion(null);
+                    setInstallUpdate(null);
                     setUpdateStatusNote("Desktop app is up to date.");
                 }
             }
@@ -173,8 +175,17 @@ export const App = () => {
             }
         };
         void runUpdateCheck();
+        const intervalId = setInterval(() => {
+            void runUpdateCheck();
+        }, 15 * 60 * 1000);
+        const handleWindowFocus = () => {
+            void runUpdateCheck();
+        };
+        window.addEventListener("focus", handleWindowFocus);
         return () => {
             cancelled = true;
+            clearInterval(intervalId);
+            window.removeEventListener("focus", handleWindowFocus);
         };
     }, [isLoaded, loadError]);
     useEffect(() => {
@@ -1393,7 +1404,7 @@ export const App = () => {
                                         closeOverlay();
                                     }, children: "Not now" })] })] }));
             case "settings":
-                return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onResetTemplates: handleResetTemplates, onImportLegacy: handleImportLegacy, onCheckForUpdates: handleCheckForUpdates, onOpenDataFolder: handleOpenDataFolder, onOpenDatabaseFolder: handleOpenDatabaseFolder, onExportBackup: handleExportSnapshot, onCreateLocalBackup: handleCreateLocalBackup, updateStatusNote: updateStatusNote, storageInfo: storageInfo, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
+                return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onResetTemplates: handleResetTemplates, onImportLegacy: handleImportLegacy, onCheckForUpdates: handleCheckForUpdates, onInstallUpdate: handleInstallUpdate, onOpenDataFolder: handleOpenDataFolder, onOpenDatabaseFolder: handleOpenDatabaseFolder, onExportBackup: handleExportSnapshot, onCreateLocalBackup: handleCreateLocalBackup, updateStatusNote: updateStatusNote, availableUpdateVersion: availableUpdateVersion, isCheckingForUpdates: isCheckingForUpdates, isInstallingUpdate: isInstallingUpdate, storageInfo: storageInfo, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
             case "more":
                 return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "More tools" }), _jsx("p", { children: "Secondary utilities stay grouped here so the main workspace remains calm and obvious." })] }), _jsxs("div", { className: "stack", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => setActiveWorkspace("todos"), children: "Open Todos workspace" }), _jsx("button", { className: "small-button", type: "button", onClick: () => setOpenPanel("backup"), children: "Open Back-up" }), _jsx("button", { className: "small-button", type: "button", onClick: () => openSettingsSection("other"), children: "Open Other settings" })] })] }));
             case "backup":

@@ -35,12 +35,16 @@ interface SettingsCardProps {
   onResetTemplates: () => Promise<void>;
   onImportLegacy: () => Promise<void>;
   onCheckForUpdates: () => Promise<void>;
+  onInstallUpdate?: () => Promise<void>;
   onOpenDataFolder: () => Promise<void>;
   onOpenDatabaseFolder: () => Promise<void>;
   onExportBackup: () => Promise<void>;
   onCreateLocalBackup: () => Promise<void>;
   onRefreshModelPricing: () => Promise<void> | void;
   updateStatusNote?: string | null;
+  availableUpdateVersion?: string | null;
+  isCheckingForUpdates?: boolean;
+  isInstallingUpdate?: boolean;
   storageInfo: DesktopStorageInfo | null;
   aiDiagnostics: AIDiagnosticsItem[];
   aiRequestHistory: AIRequestHistoryEntry[];
@@ -221,12 +225,16 @@ export const SettingsCard = ({
   onResetTemplates,
   onImportLegacy,
   onCheckForUpdates,
+  onInstallUpdate,
   onOpenDataFolder,
   onOpenDatabaseFolder,
   onExportBackup,
   onCreateLocalBackup,
   onRefreshModelPricing,
   updateStatusNote,
+  availableUpdateVersion,
+  isCheckingForUpdates,
+  isInstallingUpdate,
   storageInfo,
   aiDiagnostics,
   aiRequestHistory,
@@ -1351,6 +1359,14 @@ export const SettingsCard = ({
               <button className="small-button" type="button" onClick={() => void onOpenDatabaseFolder()}>
                 Open database folder
               </button>
+              <button className="small-button" type="button" onClick={() => void onCheckForUpdates()} disabled={Boolean(isCheckingForUpdates)}>
+                {isCheckingForUpdates ? "Checking updates..." : "Check for updates"}
+              </button>
+              {availableUpdateVersion && onInstallUpdate ? (
+                <button className="primary-button" type="button" onClick={() => void onInstallUpdate()} disabled={Boolean(isInstallingUpdate)}>
+                  {isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}`}
+                </button>
+              ) : null}
             </div>
             {storageInfo ? (
               <div className="section-list">
