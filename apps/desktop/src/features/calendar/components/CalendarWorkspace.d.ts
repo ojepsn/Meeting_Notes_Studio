@@ -10,7 +10,10 @@ interface CalendarWorkspaceProps {
         sessionTitle: string;
     }>;
     onSaveSettings: (settings: LocalAppSettings) => void;
-    onCreateFromText: (date: string, startSlot: number, value: string) => void;
+    onCreateFromText: (date: string, startSlot: number, value: string, options?: {
+        activityId?: string;
+        parentActivityId?: string;
+    }) => void;
     onMoveItem: (id: string, date: string, startSlot: number) => void;
     onSaveTodo: (todo: TodoRecord) => void;
     onDeleteTodo: (id: string) => void;

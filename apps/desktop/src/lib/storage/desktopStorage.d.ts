@@ -7,6 +7,17 @@ export interface DesktopStorageInfo {
     backupsDir: string;
 }
 export declare const buildSnapshotBackupFilename: (date?: Date) => string;
+export declare const saveTextFile: ({ content, defaultFilename, filters, }: {
+    content: string;
+    defaultFilename: string;
+    filters: Array<{
+        name: string;
+        extensions: string[];
+    }>;
+}) => Promise<{
+    path: string;
+    savedOutsideAppData: boolean;
+} | null>;
 export declare const getDesktopStorageInfo: () => Promise<DesktopStorageInfo | null>;
 export declare const openDesktopPath: (path: string) => Promise<void>;
 export declare const getDesktopAppVersion: () => Promise<string | null>;

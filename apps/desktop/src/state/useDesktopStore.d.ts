@@ -47,7 +47,10 @@ interface DesktopState {
     deleteTimeLog: (id: string) => Promise<void>;
     startTimeTracking: (targetType: TimeLog["targetType"], targetId: string) => Promise<void>;
     stopTimeTracking: (targetType: TimeLog["targetType"], targetId: string) => Promise<void>;
-    createCalendarEntryFromText: (date: string, startSlot: number, value: string) => Promise<void>;
+    createCalendarEntryFromText: (date: string, startSlot: number, value: string, options?: {
+        activityId?: string;
+        parentActivityId?: string;
+    }) => Promise<void>;
     moveCalendarItem: (id: string, date: string, startSlot: number) => Promise<void>;
     updateCalendarItem: (id: string, updates: {
         date: string;

@@ -69,6 +69,8 @@ type EditorDraft = {
   targetType: "todo" | "activity";
   targetId: string;
   title: string;
+  activityId: string;
+  parentActivityId: string;
   doOn: string;
   dueDate: string;
   startTime: string;
@@ -94,7 +96,12 @@ interface CalendarWorkspaceProps {
   settings: LocalAppSettings;
   linkedSessionStateByActivity: Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>;
   onSaveSettings: (settings: LocalAppSettings) => void;
-  onCreateFromText: (date: string, startSlot: number, value: string) => void;
+  onCreateFromText: (
+    date: string,
+    startSlot: number,
+    value: string,
+    options?: { activityId?: string; parentActivityId?: string },
+  ) => void;
   onMoveItem: (id: string, date: string, startSlot: number) => void;
   onSaveTodo: (todo: TodoRecord) => void;
   onDeleteTodo: (id: string) => void;
@@ -150,6 +157,7 @@ export const CalendarWorkspace = ({
   const [jumpDate, setJumpDate] = useState(today);
   const [draftCell, setDraftCell] = useState<{ date: string; slot: number } | null>(null);
   const [draftText, setDraftText] = useState("");
+  const [creationContextActivityId, setCreationContextActivityId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "todo" | "activity" | "meeting">("all");
   const [visibilityFilter, setVisibilityFilter] = useState<"all" | "public" | "private">("all");
@@ -190,6 +198,14 @@ export const CalendarWorkspace = ({
 
   const visibleDates = useMemo(() => Array.from({ length: daysInView }, (_, index) => addDays(anchorDate, index)), [anchorDate, daysInView]);
   const dayColumnWidth = useMemo(() => dayColumnWidthForView(daysInView), [daysInView]);
+  const topLevelActivities = useMemo(
+    () => activities.filter((entry) => !entry.parentActivityId).sort((left, right) => left.description.localeCompare(right.description)),
+    [activities],
+  );
+  const activityLookup = useMemo(
+    () => Object.fromEntries(activities.map((activity) => [activity.id, activity])) as Record<string, ActivityRecord>,
+    [activities],
+  );
   const items = useMemo<Item[]>(() => {
     const todoMap = new Map((Array.isArray(todos) ? todos : []).map((todo) => [todo.id, todo]));
     const activityMap = new Map((Array.isArray(activities) ? activities : []).map((activity) => [activity.id, activity]));
@@ -335,12 +351,12 @@ export const CalendarWorkspace = ({
     if (calendarItem.targetType === "todo") {
       const todo = todos.find((entry) => entry.id === calendarItem.targetId);
       if (!todo) return;
-      setEditorDraft({ itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isMeeting: false });
+      setEditorDraft({ itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, activityId: todo.activityId, parentActivityId: "", doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isMeeting: false });
       return;
     }
     const activity = activities.find((entry) => entry.id === calendarItem.targetId);
     if (!activity) return;
-    setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isMeeting: activity.type === "meeting" });
+    setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isMeeting: activity.type === "meeting" });
   }, [activities, calendarItems, selectedItemId, todos]);
 
   useEffect(() => {
@@ -403,7 +419,12 @@ export const CalendarWorkspace = ({
   const commitDraftCell = () => {
     if (!draftCell) return;
     const nextValue = draftText.trim();
-    if (nextValue) onCreateFromText(draftCell.date, draftCell.slot, nextValue);
+    if (nextValue) {
+      onCreateFromText(draftCell.date, draftCell.slot, nextValue, {
+        activityId: creationContextActivityId || undefined,
+        parentActivityId: creationContextActivityId || undefined,
+      });
+    }
     setDraftText("");
     setDraftCell(null);
   };
@@ -415,11 +436,11 @@ export const CalendarWorkspace = ({
     if (editorDraft.targetType === "todo") {
       const todo = todos.find((entry) => entry.id === editorDraft.targetId);
       if (!todo) return;
-      onSaveTodo({ ...todo, description: editorDraft.title.trim() || todo.description, doOn: editorDraft.doOn, dueDate: editorDraft.dueDate, domain: editorDraft.domain, project: editorDraft.project, activity: editorDraft.activity, isPrivate: editorDraft.isPrivate });
+      onSaveTodo({ ...todo, description: editorDraft.title.trim() || todo.description, activityId: editorDraft.activityId, doOn: editorDraft.doOn, dueDate: editorDraft.dueDate, domain: editorDraft.domain, project: editorDraft.project, activity: editorDraft.activity, isPrivate: editorDraft.isPrivate });
     } else {
       const activity = activities.find((entry) => entry.id === editorDraft.targetId);
       if (!activity) return;
-      onSaveActivity({ ...activity, description: editorDraft.title.trim() || activity.description, doOn: editorDraft.doOn, dueDate: editorDraft.dueDate, domain: editorDraft.domain, project: editorDraft.project, activity: editorDraft.activity, isPrivate: editorDraft.isPrivate, startTime: editorDraft.isMeeting ? editorDraft.startTime : activity.startTime, endTime: editorDraft.isMeeting ? editorDraft.endTime : activity.endTime });
+      onSaveActivity({ ...activity, description: editorDraft.title.trim() || activity.description, parentActivityId: editorDraft.parentActivityId, doOn: editorDraft.doOn, dueDate: editorDraft.dueDate, domain: editorDraft.domain, project: editorDraft.project, activity: editorDraft.activity, isPrivate: editorDraft.isPrivate, startTime: editorDraft.isMeeting ? editorDraft.startTime : activity.startTime, endTime: editorDraft.isMeeting ? editorDraft.endTime : activity.endTime });
     }
     onUpdateCalendarItem(editorDraft.itemId, { date: editorDraft.doOn, startSlot, durationSlots });
   };
@@ -466,6 +487,21 @@ export const CalendarWorkspace = ({
           <div className="status-chip">{filteredItems.length} scheduled items</div>
           <div className="capture-density-toggle">{DAYS.map((option) => <button key={`days-${option}`} className="segment-button" type="button" data-active={option === daysInView} onClick={() => setDaysInView(option)}>{option} days</button>)}</div>
           <div className="capture-density-toggle">{HEIGHTS.map((option) => <button key={`height-${option}`} className="segment-button" type="button" data-active={option === slotHeight} onClick={() => setSlotHeight(option)}>{option === 12 ? "Compact" : option === 16 ? "Default" : "Large"}</button>)}</div>
+          <div className="field calendar-context-field">
+            <label htmlFor="calendar-creation-context">Attach new entries</label>
+            <select
+              id="calendar-creation-context"
+              value={creationContextActivityId}
+              onChange={(event) => setCreationContextActivityId(event.target.value)}
+            >
+              <option value="">No activity context</option>
+              {topLevelActivities.map((activity) => (
+                <option key={activity.id} value={activity.id}>
+                  {activity.description}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="calendar-toolbar calendar-toolbar-dense">
           <div className="field"><label htmlFor="calendar-jump-date">Jump</label><input id="calendar-jump-date" type="date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} /></div>
@@ -653,6 +689,45 @@ export const CalendarWorkspace = ({
                 </>
               ) : null}
               <div className="metadata-triplet-grid">
+                <div className="field metadata-subfield">
+                  <label htmlFor="calendar-edit-link">
+                    {editorDraft.targetType === "todo" ? "Activity link" : "Parent activity"}
+                  </label>
+                  <select
+                    id="calendar-edit-link"
+                    value={editorDraft.targetType === "todo" ? editorDraft.activityId : editorDraft.parentActivityId}
+                    onChange={(event) => {
+                      const nextId = event.target.value;
+                      const linkedActivity = nextId ? activityLookup[nextId] : null;
+                      if (editorDraft.targetType === "todo") {
+                        setEditorDraft({
+                          ...editorDraft,
+                          activityId: nextId,
+                          domain: linkedActivity?.domain || editorDraft.domain,
+                          project: linkedActivity?.project || editorDraft.project,
+                          activity: linkedActivity?.description || editorDraft.activity,
+                        });
+                        return;
+                      }
+                      setEditorDraft({
+                        ...editorDraft,
+                        parentActivityId: nextId,
+                        domain: linkedActivity?.domain || editorDraft.domain,
+                        project: linkedActivity?.project || editorDraft.project,
+                        activity: linkedActivity?.description || editorDraft.activity,
+                      });
+                    }}
+                  >
+                    <option value="">{editorDraft.targetType === "todo" ? "Unassigned" : "No parent activity"}</option>
+                    {topLevelActivities
+                      .filter((activity) => activity.id !== editorDraft.targetId)
+                      .map((activity) => (
+                        <option key={activity.id} value={activity.id}>
+                          {activity.description}
+                        </option>
+                      ))}
+                  </select>
+                </div>
                 <div className="field metadata-subfield">
                   <label htmlFor="calendar-edit-domain">Domain</label>
                   <input

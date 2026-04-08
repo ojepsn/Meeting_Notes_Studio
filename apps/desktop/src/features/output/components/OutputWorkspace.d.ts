@@ -1,4 +1,4 @@
-import type { AttachmentRecord, CaptureWorkspaceDensity, SessionRecord } from "@notesmith/domain";
+import type { ActivityRecord, AttachmentRecord, CaptureWorkspaceDensity, SessionRecord } from "@notesmith/domain";
 interface OutputWorkspaceProps {
     session: SessionRecord;
     attachments: AttachmentRecord[];
@@ -31,6 +31,12 @@ interface OutputWorkspaceProps {
     secondaryActionLabel?: string | null;
     emptyStatePrimaryLabel?: string;
     emptyStateSecondaryLabel?: string | null;
+    linkedActivity?: ActivityRecord | null;
+    onOpenLinkedActivity?: (activityId: string) => void;
+    onAddFollowUpTodo?: (description: string, options?: {
+        activityId?: string;
+        doOn?: string;
+    }) => void;
 }
-export declare const OutputWorkspace: ({ session, attachments, presentation, showPresentationActions, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const OutputWorkspace: ({ session, attachments, presentation, showPresentationActions, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, linkedActivity, onOpenLinkedActivity, onAddFollowUpTodo, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

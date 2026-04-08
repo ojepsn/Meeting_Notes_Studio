@@ -636,7 +636,7 @@ export const useDesktopStore = create((set, get) => ({
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);
     },
-    createCalendarEntryFromText: async (date, startSlot, value) => {
+    createCalendarEntryFromText: async (date, startSlot, value, options) => {
         const snapshot = get().snapshot;
         const parsed = parseScheduledText(value);
         if (!snapshot || !parsed)
@@ -646,7 +646,7 @@ export const useDesktopStore = create((set, get) => ({
         let nextSnapshot = snapshot;
         if (parsed.kind === "todo") {
             const inherited = applyActivityInheritance(snapshot, {
-                activityId: "",
+                activityId: options?.activityId || "",
                 domain: "",
                 project: "",
                 activity: "",
@@ -657,7 +657,7 @@ export const useDesktopStore = create((set, get) => ({
                 isDone: false,
                 isPrivate: false,
                 comments: "",
-                activityId: "",
+                activityId: options?.activityId || "",
                 domain: inherited.domain,
                 project: inherited.project,
                 activity: inherited.activity,
@@ -687,14 +687,14 @@ export const useDesktopStore = create((set, get) => ({
             const activity = {
                 id: crypto.randomUUID(),
                 type: isMeeting ? "meeting" : "task",
-                parentActivityId: "",
+                parentActivityId: options?.parentActivityId || options?.activityId || "",
                 description: parsed.description,
                 isDone: false,
                 isPrivate: false,
                 comments: "",
-                domain: "",
-                project: "",
-                activity: "",
+                domain: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.domain || "",
+                project: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.project || "",
+                activity: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.description || "",
                 doOn: date,
                 dueDate: "",
                 startTime: isMeeting ? slotToTime(normalizedSlot) : "",

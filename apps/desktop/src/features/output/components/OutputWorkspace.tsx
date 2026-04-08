@@ -1,7 +1,7 @@
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
-import type { AttachmentRecord, CaptureWorkspaceDensity, SessionRecord } from "@notesmith/domain";
+import type { ActivityRecord, AttachmentRecord, CaptureWorkspaceDensity, SessionRecord } from "@notesmith/domain";
 import { useState } from "react";
 
 interface OutputWorkspaceProps {
@@ -36,6 +36,9 @@ interface OutputWorkspaceProps {
   secondaryActionLabel?: string | null;
   emptyStatePrimaryLabel?: string;
   emptyStateSecondaryLabel?: string | null;
+  linkedActivity?: ActivityRecord | null;
+  onOpenLinkedActivity?: (activityId: string) => void;
+  onAddFollowUpTodo?: (description: string, options?: { activityId?: string; doOn?: string }) => void;
 }
 
 export const OutputWorkspace = ({
@@ -70,8 +73,12 @@ export const OutputWorkspace = ({
   secondaryActionLabel = null,
   emptyStatePrimaryLabel = "Generate polished notes",
   emptyStateSecondaryLabel = null,
+  linkedActivity = null,
+  onOpenLinkedActivity,
+  onAddFollowUpTodo,
 }: OutputWorkspaceProps) => {
   const [revisionInstructions, setRevisionInstructions] = useState("");
+  const [followUpDraft, setFollowUpDraft] = useState("");
   const includedImages = attachments
     .filter((attachment) => attachment.kind === "image" && attachment.includeInOutput)
     .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt));
@@ -118,6 +125,55 @@ export const OutputWorkspace = ({
             <li>Use Translate, Revise, and Export after the first polished draft appears here.</li>
           </ol>
         </div>
+      ) : null}
+      {linkedActivity ? (
+        <details className="field field-wide workspace-disclosure" open={isMinimal}>
+          <summary>Linked activity and follow-up</summary>
+          <div className="workspace-disclosure-body stack">
+            <div className="prompt-actions-row">
+              <div className="prompt-actions-copy">
+                <strong>{linkedActivity.description}</strong>
+                <span className="muted">
+                  Keep follow-up work tied to the same activity so Calendar, Notes, and work execution stay aligned.
+                </span>
+              </div>
+              {onOpenLinkedActivity ? (
+                <button className="small-button" type="button" onClick={() => onOpenLinkedActivity(linkedActivity.id)}>
+                  Open linked activity
+                </button>
+              ) : null}
+            </div>
+            <div className="todos-workspace-input-row">
+              <div className="field field-wide">
+                <label htmlFor="output-follow-up">Add follow-up todo</label>
+                <input
+                  id="output-follow-up"
+                  value={followUpDraft}
+                  onChange={(event) => setFollowUpDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey && followUpDraft.trim() && onAddFollowUpTodo) {
+                      event.preventDefault();
+                      onAddFollowUpTodo(followUpDraft.trim(), { activityId: linkedActivity.id, doOn: session.date });
+                      setFollowUpDraft("");
+                    }
+                  }}
+                  placeholder="Add a follow-up into this activity"
+                />
+              </div>
+              <button
+                className="small-button"
+                type="button"
+                onClick={() => {
+                  if (!followUpDraft.trim() || !onAddFollowUpTodo) return;
+                  onAddFollowUpTodo(followUpDraft.trim(), { activityId: linkedActivity.id, doOn: session.date });
+                  setFollowUpDraft("");
+                }}
+              >
+                Add follow-up
+              </button>
+            </div>
+          </div>
+        </details>
       ) : null}
       <div className={`capture-top-row field field-wide${isMinimal ? " capture-top-row-minimal" : ""}`}>
         <div className={`field${isMinimal ? " capture-title-field-minimal" : ""}`}>

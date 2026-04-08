@@ -10,6 +10,7 @@ Current:
 - `Todos`
 - `Activities`
 - `Calendar`
+- `Time`
 
 Planned:
 
@@ -69,6 +70,8 @@ Current todo capabilities:
 
 - unassigned or activity-linked todos
 - quick add with optional activity context
+- split execution-focused layout with list + live detail panel
+- running timer strip for active todo work
 - convert todo to activity
 - start/stop time tracking
 - manual time-log entry
@@ -84,6 +87,9 @@ Current activity capabilities:
 - quick add child meetings from the activity detail card
 - meeting-session linking for meeting activities
 - activity-level time logs, including retrospective edits
+- split work-hub layout with list + live detail panel
+- summary cards for open todos, child meetings, and next meeting visibility
+- linked meeting-session output preview directly from the activity workspace
 
 ## Attachments
 
@@ -146,9 +152,32 @@ Current calendar capabilities:
 - drag-to-move scheduled items
 - resize meeting blocks in the grid
 - direct editing from the calendar details pane
+- optional activity context while creating items directly from the grid
+- link todos to an existing activity or set a parent activity for meetings from the details pane
 - create or open a linked meeting session from calendar meeting details
 - detect whether the linked meeting session already has output
 - preview linked session output as a formatted overlay from calendar
+
+## Time
+
+Current time capabilities:
+
+- dedicated time workspace
+- active timer summary
+- recent logs in one correction surface
+- per-day totals
+- per-activity totals
+- per-project totals
+- per-domain totals
+- direct open-back into the linked todo or activity
+- CSV and Markdown export for reporting readiness
+
+## Notes output follow-up
+
+Current output follow-up capabilities:
+
+- linked activity is visible from the Output workspace when a session belongs to a meeting activity
+- follow-up todos can be added directly from Output back into the linked activity
 
 ## AI
 

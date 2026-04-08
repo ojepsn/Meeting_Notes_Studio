@@ -61,7 +61,7 @@ const SETTINGS_SECTIONS: Array<{ id: SettingsSection; label: string; description
   { id: "diagnostics", label: "AI Diagnostics", description: "Metrics, cache, and recent AI history" },
   { id: "themes", label: "Themes", description: "Look and feel" },
   { id: "output", label: "Output formatting", description: "Language and output defaults" },
-  { id: "people", label: "People & labels", description: "Saved people, labels, and abbreviations" },
+  { id: "people", label: "People, Domains & Projects", description: "Reusable people, structure, and shorthand" },
   { id: "prompts", label: "Prompts", description: "Generation and revision instructions" },
   { id: "templates", label: "Templates for meetings/notes", description: "Built-in and custom note structures" },
   { id: "other", label: "Other upcoming settings", description: "Migration, updates, future options" },
@@ -719,10 +719,14 @@ export const SettingsCard = ({
         {activeSection === "people" ? (
           <div className="sidebar-card">
             <div>
-              <h3>People & labels</h3>
-              <p>Keep reusable People, Domains, Projects, Activities, Tags, and shorthand in one place so capture stays fast while filtering stays structured.</p>
+              <h3>People, Domains & Projects</h3>
+              <p>Manage the slower shared structure here, so the execution workspaces can stay focused on fast capture, scheduling, and time.</p>
             </div>
             <div className="section-divider">
+              <div className="settings-subsection-heading">
+                <strong>People</strong>
+                <span className="tiny-text">Reusable contacts and meeting participants.</span>
+              </div>
               <div className="inline-row">
                 <div className="field">
                   <label htmlFor="person-draft">Saved people</label>
@@ -772,6 +776,10 @@ export const SettingsCard = ({
               </div>
             </div>
             <div className="section-divider">
+              <div className="settings-subsection-heading">
+                <strong>Projects</strong>
+                <span className="tiny-text">Reusable delivery tracks and workstreams.</span>
+              </div>
               <div className="inline-row">
                 <div className="field">
                   <label htmlFor="project-draft">Saved projects</label>
@@ -821,6 +829,10 @@ export const SettingsCard = ({
               </div>
             </div>
             <div className="section-divider">
+              <div className="settings-subsection-heading">
+                <strong>Domains</strong>
+                <span className="tiny-text">Top-level business areas above projects.</span>
+              </div>
               <div className="inline-row">
                 <div className="field">
                   <label htmlFor="domain-draft">Saved domains</label>
@@ -870,6 +882,10 @@ export const SettingsCard = ({
               </div>
             </div>
             <div className="section-divider">
+              <div className="settings-subsection-heading">
+                <strong>Activity labels</strong>
+                <span className="tiny-text">Reusable labels that help with faster linking and filtering.</span>
+              </div>
               <div className="inline-row">
                 <div className="field">
                   <label htmlFor="activity-draft">Saved activities</label>
@@ -919,6 +935,10 @@ export const SettingsCard = ({
               </div>
             </div>
             <div className="section-divider">
+              <div className="settings-subsection-heading">
+                <strong>Tags</strong>
+                <span className="tiny-text">Flexible labels for cross-cutting filters and future reporting.</span>
+              </div>
               <div className="inline-row">
                 <div className="field">
                   <label htmlFor="tag-draft">Saved tags</label>
@@ -968,6 +988,10 @@ export const SettingsCard = ({
               </div>
             </div>
             <div className="section-divider">
+              <div className="settings-subsection-heading">
+                <strong>Abbreviations</strong>
+                <span className="tiny-text">Expand shorthand consistently during cleanup and output generation.</span>
+              </div>
               <div className="inline-row">
                 <div className="field">
                   <label htmlFor="abbr-short">Abbreviation</label>

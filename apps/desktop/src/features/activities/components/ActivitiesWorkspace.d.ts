@@ -3,7 +3,11 @@ interface ActivitiesWorkspaceProps {
     activities: ActivityRecord[];
     todos: TodoRecord[];
     timeLogs: TimeLogRecord[];
-    linkedSessionIdsByActivity: Record<string, string | null>;
+    linkedSessionStateByActivity: Record<string, {
+        sessionId: string | null;
+        hasOutput: boolean;
+        sessionTitle: string;
+    }>;
     requestedActivityId?: string | null;
     onEditorClose?: () => void;
     onToggle: (activity: ActivityRecord) => void;
@@ -14,11 +18,12 @@ interface ActivitiesWorkspaceProps {
     onDelete: (id: string) => void;
     onCreateLinkedMeetingSession: (activityId: string) => void;
     onOpenSession: (sessionId: string) => void;
+    onPreviewSessionOutput?: (sessionId: string) => void;
     onOpenTodoDetail: (todoId: string) => void;
     onSaveTimeLog: (timeLog: TimeLogRecord) => void;
     onDeleteTimeLog: (id: string) => void;
     onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
     onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
 }
-export declare const ActivitiesWorkspace: ({ activities, todos, timeLogs, linkedSessionIdsByActivity, requestedActivityId, onEditorClose, onToggle, onAdd, onAddChildTodo, onAddChildMeeting, onSave, onDelete, onCreateLinkedMeetingSession, onOpenSession, onOpenTodoDetail, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, }: ActivitiesWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const ActivitiesWorkspace: ({ activities, todos, timeLogs, linkedSessionStateByActivity, requestedActivityId, onEditorClose, onToggle, onAdd, onAddChildTodo, onAddChildMeeting, onSave, onDelete, onCreateLinkedMeetingSession, onOpenSession, onPreviewSessionOutput, onOpenTodoDetail, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, }: ActivitiesWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

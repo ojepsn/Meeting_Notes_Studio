@@ -7,6 +7,32 @@ export const buildSnapshotBackupFilename = (date = new Date()) => {
     const datePart = date.toISOString().slice(0, 19).replace(/[:T]/g, "-");
     return `notesmith-desktop-backup-${datePart}.json`;
 };
+export const saveTextFile = async ({ content, defaultFilename, filters, }) => {
+    if (!isTauriRuntime()) {
+        const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = defaultFilename;
+        link.click();
+        URL.revokeObjectURL(url);
+        return { path: link.download, savedOutsideAppData: true };
+    }
+    const suggestedPath = joinPath(await downloadDir(), defaultFilename);
+    const selectedPath = await save({
+        defaultPath: suggestedPath,
+        filters,
+    });
+    if (!selectedPath) {
+        return null;
+    }
+    const bytes = Array.from(new TextEncoder().encode(content));
+    await invoke("write_bytes_to_path", {
+        path: selectedPath,
+        bytes,
+    });
+    return { path: selectedPath, savedOutsideAppData: true };
+};
 export const getDesktopStorageInfo = async () => {
     if (!isTauriRuntime()) {
         return null;

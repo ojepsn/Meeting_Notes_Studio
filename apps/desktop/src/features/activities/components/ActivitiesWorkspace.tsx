@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActivityRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 
-type ActivitySortKey = "createdAt" | "description" | "type" | "domain" | "project" | "dueDate" | "actualTimeSpentMinutes";
+type ActivitySortKey = "dueDate" | "description" | "type" | "domain" | "project" | "actualTimeSpentMinutes" | "createdAt";
 
 interface ActivitiesWorkspaceProps {
   activities: ActivityRecord[];
   todos: TodoRecord[];
   timeLogs: TimeLogRecord[];
-  linkedSessionIdsByActivity: Record<string, string | null>;
+  linkedSessionStateByActivity: Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>;
   requestedActivityId?: string | null;
   onEditorClose?: () => void;
   onToggle: (activity: ActivityRecord) => void;
@@ -18,6 +18,7 @@ interface ActivitiesWorkspaceProps {
   onDelete: (id: string) => void;
   onCreateLinkedMeetingSession: (activityId: string) => void;
   onOpenSession: (sessionId: string) => void;
+  onPreviewSessionOutput?: (sessionId: string) => void;
   onOpenTodoDetail: (todoId: string) => void;
   onSaveTimeLog: (timeLog: TimeLogRecord) => void;
   onDeleteTimeLog: (id: string) => void;
@@ -72,11 +73,13 @@ const calculateDurationMinutes = (date: string, startTime: string, endTime: stri
   return Number.isFinite(diff) ? Math.max(0, diff) : 0;
 };
 
+const normalizeValue = (value: string) => value.trim().toLowerCase();
+
 export const ActivitiesWorkspace = ({
   activities,
   todos,
   timeLogs,
-  linkedSessionIdsByActivity,
+  linkedSessionStateByActivity,
   requestedActivityId,
   onEditorClose,
   onToggle,
@@ -87,6 +90,7 @@ export const ActivitiesWorkspace = ({
   onDelete,
   onCreateLinkedMeetingSession,
   onOpenSession,
+  onPreviewSessionOutput,
   onOpenTodoDetail,
   onSaveTimeLog,
   onDeleteTimeLog,
@@ -97,7 +101,7 @@ export const ActivitiesWorkspace = ({
   const [draftType, setDraftType] = useState<ActivityRecord["type"]>("task");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<ActivitySortKey>("dueDate");
-  const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<ActivityRecord>(createBlankActivityDraft());
   const [childTodoDraft, setChildTodoDraft] = useState("");
   const [childMeetingDraft, setChildMeetingDraft] = useState("");
@@ -106,68 +110,49 @@ export const ActivitiesWorkspace = ({
   const detailsEditorRef = useRef<HTMLDivElement | null>(null);
 
   const topLevelActivities = useMemo(() => activities.filter((entry) => !entry.parentActivityId), [activities]);
+
   const childActivitiesByParent = useMemo(() => {
     const grouped = new Map<string, ActivityRecord[]>();
-    activities.filter((entry) => entry.parentActivityId).forEach((entry) => {
-      grouped.set(entry.parentActivityId, [...(grouped.get(entry.parentActivityId) || []), entry]);
-    });
+    activities
+      .filter((entry) => Boolean(entry.parentActivityId))
+      .forEach((entry) => grouped.set(entry.parentActivityId, [...(grouped.get(entry.parentActivityId) || []), entry]));
     return grouped;
   }, [activities]);
+
   const childTodosByActivity = useMemo(() => {
     const grouped = new Map<string, TodoRecord[]>();
-    todos.filter((todo) => todo.activityId).forEach((todo) => {
-      grouped.set(todo.activityId, [...(grouped.get(todo.activityId) || []), todo]);
-    });
+    todos
+      .filter((todo) => Boolean(todo.activityId))
+      .forEach((todo) => grouped.set(todo.activityId, [...(grouped.get(todo.activityId) || []), todo]));
     return grouped;
   }, [todos]);
+
   const activityTimeLogsById = useMemo(() => {
     const grouped = new Map<string, TimeLogRecord[]>();
-    timeLogs.filter((entry) => entry.targetType === "activity").forEach((entry) => {
-      grouped.set(entry.targetId, [...(grouped.get(entry.targetId) || []), entry]);
-    });
+    timeLogs
+      .filter((entry) => entry.targetType === "activity")
+      .forEach((entry) => grouped.set(entry.targetId, [...(grouped.get(entry.targetId) || []), entry]));
     return grouped;
   }, [timeLogs]);
 
-  useEffect(() => {
-    if (requestedActivityId) setEditingActivityId(requestedActivityId);
-  }, [requestedActivityId]);
-
-  useEffect(() => {
-    if (!editingActivityId) return;
-    const entry = activities.find((activity) => activity.id === editingActivityId);
-    if (!entry) {
-      setEditingActivityId(null);
-      setEditingDraft(createBlankActivityDraft());
-      return;
-    }
-    setEditingDraft(entry);
-  }, [activities, editingActivityId]);
-
-  useEffect(() => {
-    if (!detailsEditorRef.current) return;
-    const nextHtml = editingDraft.detailsHtml || "<p></p>";
-    if (detailsEditorRef.current.innerHTML !== nextHtml) {
-      detailsEditorRef.current.innerHTML = nextHtml;
-    }
-  }, [editingActivityId, editingDraft.detailsHtml]);
-
   const filteredActivities = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+    const normalized = normalizeValue(query);
     const filtered = !normalized
       ? topLevelActivities
       : topLevelActivities.filter((entry) =>
           [entry.description, entry.domain, entry.project, entry.dueDate, entry.createdAt].join(" ").toLowerCase().includes(normalized),
         );
+
     const valueForSort = (entry: ActivityRecord) => {
       switch (sortKey) {
         case "description":
-          return entry.description.toLowerCase();
+          return normalizeValue(entry.description);
         case "type":
           return entry.type;
         case "domain":
-          return entry.domain.toLowerCase();
+          return normalizeValue(entry.domain);
         case "project":
-          return entry.project.toLowerCase();
+          return normalizeValue(entry.project);
         case "actualTimeSpentMinutes":
           return String(entry.actualTimeSpentMinutes).padStart(8, "0");
         case "createdAt":
@@ -177,13 +162,48 @@ export const ActivitiesWorkspace = ({
           return entry.dueDate || "9999-99-99";
       }
     };
+
     return [...filtered].sort((left, right) => valueForSort(left).localeCompare(valueForSort(right)));
   }, [query, sortKey, topLevelActivities]);
 
-  const currentChildTodos = editingActivityId ? childTodosByActivity.get(editingActivityId) || [] : [];
-  const currentChildMeetings = editingActivityId ? childActivitiesByParent.get(editingActivityId) || [] : [];
-  const currentTimeLogs = editingActivityId ? activityTimeLogsById.get(editingActivityId) || [] : [];
-  const hasOpenTimer = currentTimeLogs.some((entry) => entry.startTime === entry.endTime);
+  useEffect(() => {
+    if (requestedActivityId) {
+      setSelectedActivityId(requestedActivityId);
+    }
+  }, [requestedActivityId]);
+
+  useEffect(() => {
+    if (selectedActivityId && topLevelActivities.some((entry) => entry.id === selectedActivityId)) {
+      return;
+    }
+    if (requestedActivityId && topLevelActivities.some((entry) => entry.id === requestedActivityId)) {
+      setSelectedActivityId(requestedActivityId);
+      return;
+    }
+    setSelectedActivityId(filteredActivities[0]?.id ?? topLevelActivities[0]?.id ?? null);
+  }, [filteredActivities, requestedActivityId, selectedActivityId, topLevelActivities]);
+
+  useEffect(() => {
+    if (!selectedActivityId) {
+      setEditingDraft(createBlankActivityDraft());
+      return;
+    }
+    const entry = activities.find((activity) => activity.id === selectedActivityId);
+    if (!entry) {
+      setSelectedActivityId(null);
+      setEditingDraft(createBlankActivityDraft());
+      return;
+    }
+    setEditingDraft(entry);
+  }, [activities, selectedActivityId]);
+
+  useEffect(() => {
+    if (!detailsEditorRef.current) return;
+    const nextHtml = editingDraft.detailsHtml || "<p></p>";
+    if (detailsEditorRef.current.innerHTML !== nextHtml) {
+      detailsEditorRef.current.innerHTML = nextHtml;
+    }
+  }, [editingDraft.detailsHtml, editingDraft.id]);
 
   const submitDraft = () => {
     const nextValue = draft.trim();
@@ -193,8 +213,18 @@ export const ActivitiesWorkspace = ({
     setDraftType("task");
   };
 
-  const closeEditor = () => {
-    setEditingActivityId(null);
+  const currentChildTodos = selectedActivityId ? childTodosByActivity.get(selectedActivityId) || [] : [];
+  const currentChildMeetings = selectedActivityId ? childActivitiesByParent.get(selectedActivityId) || [] : [];
+  const currentTimeLogs = selectedActivityId ? activityTimeLogsById.get(selectedActivityId) || [] : [];
+  const hasOpenTimer = currentTimeLogs.some((entry) => entry.startTime === entry.endTime);
+  const selectedLinkedSessionState = selectedActivityId ? linkedSessionStateByActivity[selectedActivityId] : null;
+  const selectedLinkedSessionId = selectedLinkedSessionState?.sessionId ?? null;
+  const openChildTodos = currentChildTodos.filter((todo) => !todo.isDone).length;
+  const nextChildMeeting = [...currentChildMeetings]
+    .sort((left, right) => `${left.doOn} ${left.startTime}`.localeCompare(`${right.doOn} ${right.startTime}`))[0] ?? null;
+
+  const clearSelection = () => {
+    setSelectedActivityId(null);
     setChildTodoDraft("");
     setChildMeetingDraft("");
     setEditingTimeLogId(null);
@@ -203,8 +233,14 @@ export const ActivitiesWorkspace = ({
   };
 
   return (
-    <div className="card todos-workspace todos-workspace-minimal">
-      <div className="card-header session-editor-header-minimal"><div><h2>Activities</h2></div></div>
+    <div className="card todos-workspace todos-workspace-minimal activities-hub-card">
+      <div className="card-header session-editor-header-minimal">
+        <div>
+          <h2>Activities</h2>
+          <p className="muted">Work is anchored here. Add follow-up todos, meetings, session links, and time from one place.</p>
+        </div>
+      </div>
+
       <div className="todos-workspace-input-row">
         <div className="field">
           <label htmlFor="activities-workspace-type">Type</label>
@@ -215,190 +251,411 @@ export const ActivitiesWorkspace = ({
         </div>
         <div className="field field-wide">
           <label htmlFor="activities-workspace-draft">New activity</label>
-          <input id="activities-workspace-draft" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              submitDraft();
-            }
-          }} />
+          <input
+            id="activities-workspace-draft"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                submitDraft();
+              }
+            }}
+            placeholder={draftType === "meeting" ? "Add a meeting activity" : "Add an activity"}
+          />
         </div>
-        <button className="primary-button" type="button" onClick={submitDraft}>Add</button>
+        <button className="primary-button" type="button" onClick={submitDraft}>
+          Add
+        </button>
       </div>
-      <div className="todos-workspace-toolbar">
-        <div className="field field-wide">
-          <label htmlFor="activities-workspace-filter">Search</label>
-          <input id="activities-workspace-filter" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter activities" />
-        </div>
-        <div className="field">
-          <label htmlFor="activities-workspace-sort">Sort by</label>
-          <select id="activities-workspace-sort" value={sortKey} onChange={(event) => setSortKey(event.target.value as ActivitySortKey)}>
-            <option value="dueDate">Due date</option>
-            <option value="description">Title</option>
-            <option value="type">Type</option>
-            <option value="domain">Domain</option>
-            <option value="project">Project</option>
-            <option value="actualTimeSpentMinutes">Time spent</option>
-            <option value="createdAt">Created</option>
-          </select>
-        </div>
-      </div>
-      <div className="todos-workspace-table">
-        <div className="todos-workspace-row activities-workspace-row-header">
-          <span>Done</span><span>Activity</span><span>Type</span><span>Domain</span><span>Project</span><span>Todos</span><span>Meetings</span><span>Due</span><span>Time</span><span /><span />
-        </div>
-        {filteredActivities.length ? filteredActivities.map((entry) => (
-          <div key={entry.id} className="todos-workspace-row activities-workspace-row" onDoubleClick={() => setEditingActivityId(entry.id)} role="button" tabIndex={0}>
-            <span><input type="checkbox" checked={entry.isDone} onChange={() => onToggle({ ...entry, isDone: !entry.isDone })} /></span>
-            <span className="todos-cell-strong">{entry.description}</span>
-            <span>{entry.type === "meeting" ? "Meeting" : "Task"}</span>
-            <span>{entry.domain || "-"}</span>
-            <span>{entry.project || "-"}</span>
-            <span>{(childTodosByActivity.get(entry.id) || []).length}</span>
-            <span>{(childActivitiesByParent.get(entry.id) || []).length}</span>
-            <span>{entry.dueDate || "-"}</span>
-            <span>{entry.actualTimeSpentMinutes ? `${entry.actualTimeSpentMinutes}m` : "-"}</span>
-            <span>{entry.createdAt.slice(0, 10)}</span>
-            <span><button className="small-button danger-button" type="button" onClick={(event) => { event.stopPropagation(); onDelete(entry.id); }}>Delete</button></span>
+
+      <div className="activities-hub-shell">
+        <section className="activities-hub-list-panel">
+          <div className="todos-workspace-toolbar">
+            <div className="field field-wide">
+              <label htmlFor="activities-workspace-filter">Search</label>
+              <input id="activities-workspace-filter" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter activities" />
+            </div>
+            <div className="field">
+              <label htmlFor="activities-workspace-sort">Sort by</label>
+              <select id="activities-workspace-sort" value={sortKey} onChange={(event) => setSortKey(event.target.value as ActivitySortKey)}>
+                <option value="dueDate">Due date</option>
+                <option value="description">Title</option>
+                <option value="type">Type</option>
+                <option value="domain">Domain</option>
+                <option value="project">Project</option>
+                <option value="actualTimeSpentMinutes">Time spent</option>
+                <option value="createdAt">Created</option>
+              </select>
+            </div>
           </div>
-        )) : <div className="empty-state-card compact-empty-state"><h3>No activities</h3><p>Create activities here, then add todos and meetings inside them from the detail card.</p></div>}
-      </div>
-      {editingActivityId ? (
-        <div className="overlay-backdrop todos-editor-backdrop" role="presentation" onClick={closeEditor}>
-          <div className="overlay-surface todos-editor-surface" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-            <div className="overlay-header"><div><strong>Edit activity</strong></div><button className="small-button" type="button" onClick={closeEditor}>Close</button></div>
-            <div className="stack">
-              <div className="field"><label htmlFor="activity-edit-description">Activity</label><input id="activity-edit-description" value={editingDraft.description} onChange={(event) => setEditingDraft({ ...editingDraft, description: event.target.value })} /></div>
-              <div className="metadata-triplet-grid">
-                <div className="field metadata-subfield"><label htmlFor="activity-edit-type">Type</label><select id="activity-edit-type" value={editingDraft.type} onChange={(event) => setEditingDraft({ ...editingDraft, type: event.target.value === "meeting" ? "meeting" : "task" })}><option value="task">Task</option><option value="meeting">Meeting</option></select></div>
-                <div className="field metadata-subfield"><label htmlFor="activity-edit-domain">Domain</label><input id="activity-edit-domain" value={editingDraft.domain} onChange={(event) => setEditingDraft({ ...editingDraft, domain: event.target.value })} /></div>
-                <div className="field metadata-subfield"><label htmlFor="activity-edit-project">Project</label><input id="activity-edit-project" value={editingDraft.project} onChange={(event) => setEditingDraft({ ...editingDraft, project: event.target.value })} /></div>
-              </div>
-              <div className="inline-row">
-                <div className="field"><label htmlFor="activity-edit-do-on">Do on</label><input id="activity-edit-do-on" type="date" value={editingDraft.doOn} onChange={(event) => setEditingDraft({ ...editingDraft, doOn: event.target.value })} /></div>
-                <div className="field"><label htmlFor="activity-edit-due-date">Due date</label><input id="activity-edit-due-date" type="date" value={editingDraft.dueDate} onChange={(event) => setEditingDraft({ ...editingDraft, dueDate: event.target.value })} /></div>
-                <div className="field"><label htmlFor="activity-edit-time-required">Time required (min)</label><input id="activity-edit-time-required" type="number" min="0" value={editingDraft.timeRequiredMinutes || ""} onChange={(event) => setEditingDraft({ ...editingDraft, timeRequiredMinutes: Number(event.target.value) || 0 })} /></div>
-              </div>
-              {editingDraft.type === "meeting" ? <div className="inline-row">
-                <div className="field"><label htmlFor="activity-edit-start-time">Start time</label><input id="activity-edit-start-time" type="time" value={editingDraft.startTime} onChange={(event) => setEditingDraft({ ...editingDraft, startTime: event.target.value })} /></div>
-                <div className="field"><label htmlFor="activity-edit-end-time">End time</label><input id="activity-edit-end-time" type="time" value={editingDraft.endTime} onChange={(event) => setEditingDraft({ ...editingDraft, endTime: event.target.value })} /></div>
-              </div> : null}
-              {editingDraft.type === "meeting" ? <div className="field">
-                <label>Meeting session</label>
-                <div className="prompt-actions-row">
-                  {linkedSessionIdsByActivity[editingDraft.id] ? (
-                    <button className="small-button" type="button" onClick={() => onOpenSession(linkedSessionIdsByActivity[editingDraft.id] as string)}>Open linked Meeting Session</button>
-                  ) : (
-                    <button className="small-button" type="button" onClick={() => onCreateLinkedMeetingSession(editingDraft.id)}>Create linked Meeting Session</button>
-                  )}
+
+          <div className="activities-compact-list">
+            {filteredActivities.length ? filteredActivities.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                className={`activities-compact-item${selectedActivityId === entry.id ? " activities-compact-item-selected" : ""}`}
+                onClick={() => setSelectedActivityId(entry.id)}
+              >
+                <div className="activities-compact-item-main">
+                  <div className="activities-compact-item-head">
+                    <input
+                      type="checkbox"
+                      checked={entry.isDone}
+                      onChange={(event) => {
+                        event.stopPropagation();
+                        onToggle({ ...entry, isDone: !entry.isDone });
+                      }}
+                    />
+                    <strong>{entry.description}</strong>
+                  </div>
+                  <div className="activities-compact-item-meta">
+                    <span>{entry.type === "meeting" ? "Meeting" : "Task"}</span>
+                    <span>{entry.project || "No project"}</span>
+                    <span>{(childTodosByActivity.get(entry.id) || []).length} todos</span>
+                    <span>{(childActivitiesByParent.get(entry.id) || []).length} meetings</span>
+                    <span>{entry.actualTimeSpentMinutes ? `${entry.actualTimeSpentMinutes}m` : "No time"}</span>
+                  </div>
                 </div>
-              </div> : null}
-              <div className="inline-row">
-                <div className="field todo-private-field">
+                <span className="tiny-text">{entry.dueDate || entry.doOn || entry.createdAt.slice(0, 10)}</span>
+              </button>
+            )) : (
+              <div className="empty-state-card compact-empty-state">
+                <h3>No activities</h3>
+                <p>Create activities here, then run the day-to-day work from the detail area.</p>
+              </div>
+            )}
+          </div>
+        </section>
+        <section className="activities-hub-detail-panel">
+          {selectedActivityId ? (
+            <div className="stack">
+              <div className="card-header activities-detail-header">
+                <div>
+                  <h3>{editingDraft.description || "Activity"}</h3>
+                  <div className="calendar-editor-meta">
+                    <span className="status-chip">{editingDraft.type === "meeting" ? "Meeting" : "Task"}</span>
+                    {editingDraft.domain ? <span className="status-chip">{editingDraft.domain}</span> : null}
+                    {editingDraft.project ? <span className="status-chip">{editingDraft.project}</span> : null}
+                    <span className="status-chip">{editingDraft.actualTimeSpentMinutes || 0} min logged</span>
+                  </div>
+                </div>
+                <div className="page-actions">
+                  <button className="small-button" type="button" onClick={clearSelection}>
+                    Close
+                  </button>
+                  <button
+                    className="small-button danger-button"
+                    type="button"
+                    onClick={() => {
+                      onDelete(editingDraft.id);
+                      clearSelection();
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+
+              <div className="activities-detail-grid">
+                <div className="field field-wide">
+                  <label htmlFor="activity-edit-description">Activity</label>
+                  <input id="activity-edit-description" value={editingDraft.description} onChange={(event) => setEditingDraft({ ...editingDraft, description: event.target.value })} />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="activity-edit-type">Type</label>
+                  <select id="activity-edit-type" value={editingDraft.type} onChange={(event) => setEditingDraft({ ...editingDraft, type: event.target.value === "meeting" ? "meeting" : "task" })}>
+                    <option value="task">Task</option>
+                    <option value="meeting">Meeting</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="activity-edit-domain">Domain</label>
+                  <input id="activity-edit-domain" value={editingDraft.domain} onChange={(event) => setEditingDraft({ ...editingDraft, domain: event.target.value })} />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="activity-edit-project">Project</label>
+                  <input id="activity-edit-project" value={editingDraft.project} onChange={(event) => setEditingDraft({ ...editingDraft, project: event.target.value })} />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="activity-edit-do-on">Do on</label>
+                  <input id="activity-edit-do-on" type="date" value={editingDraft.doOn} onChange={(event) => setEditingDraft({ ...editingDraft, doOn: event.target.value })} />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="activity-edit-due-date">Due date</label>
+                  <input id="activity-edit-due-date" type="date" value={editingDraft.dueDate} onChange={(event) => setEditingDraft({ ...editingDraft, dueDate: event.target.value })} />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="activity-edit-time-required">Time required (min)</label>
+                  <input id="activity-edit-time-required" type="number" min="0" value={editingDraft.timeRequiredMinutes || ""} onChange={(event) => setEditingDraft({ ...editingDraft, timeRequiredMinutes: Number(event.target.value) || 0 })} />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="activity-edit-time-spent">Actual time spent (min)</label>
+                  <input id="activity-edit-time-spent" type="number" min="0" value={editingDraft.actualTimeSpentMinutes || ""} onChange={(event) => setEditingDraft({ ...editingDraft, actualTimeSpentMinutes: Number(event.target.value) || 0 })} />
+                </div>
+
+                <div className="field activity-private-field">
                   <span>Private</span>
                   <div className="compact-private-toggle">
                     <input id="activity-edit-private" type="checkbox" checked={editingDraft.isPrivate} onChange={(event) => setEditingDraft({ ...editingDraft, isPrivate: event.target.checked })} />
                     <label htmlFor="activity-edit-private" className="checkbox-label">Private</label>
                   </div>
                 </div>
-                <div className="field"><label htmlFor="activity-edit-time-spent">Actual time spent (min)</label><input id="activity-edit-time-spent" type="number" min="0" value={editingDraft.actualTimeSpentMinutes || ""} onChange={(event) => setEditingDraft({ ...editingDraft, actualTimeSpentMinutes: Number(event.target.value) || 0 })} /></div>
+
+                {editingDraft.type === "meeting" ? (
+                  <>
+                    <div className="field">
+                      <label htmlFor="activity-edit-start-time">Start time</label>
+                      <input id="activity-edit-start-time" type="time" value={editingDraft.startTime} onChange={(event) => setEditingDraft({ ...editingDraft, startTime: event.target.value })} />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="activity-edit-end-time">End time</label>
+                      <input id="activity-edit-end-time" type="time" value={editingDraft.endTime} onChange={(event) => setEditingDraft({ ...editingDraft, endTime: event.target.value })} />
+                    </div>
+                  </>
+                ) : null}
               </div>
+
+              <div className="time-summary-grid">
+                <div className="sidebar-card compact-metric-card">
+                  <span className="tiny-text">Open todos</span>
+                  <strong>{openChildTodos}</strong>
+                </div>
+                <div className="sidebar-card compact-metric-card">
+                  <span className="tiny-text">Meetings under this activity</span>
+                  <strong>{currentChildMeetings.length}</strong>
+                </div>
+                <div className="sidebar-card compact-metric-card">
+                  <span className="tiny-text">Next meeting</span>
+                  <strong>{nextChildMeeting ? nextChildMeeting.doOn || nextChildMeeting.startTime || "Planned" : "None"}</strong>
+                </div>
+              </div>
+
+              {editingDraft.type === "meeting" ? (
+                <div className="prompt-actions-row">
+                  <div className="prompt-actions-copy">
+                    <strong>Meeting session</strong>
+                    <span className="muted">
+                      {selectedLinkedSessionId
+                        ? selectedLinkedSessionState?.hasOutput
+                          ? "Linked session exists and already has polished output."
+                          : "Linked session exists. Capture and output can continue in Notes."
+                        : "Create a session when this meeting should move into Notes."}
+                    </span>
+                  </div>
+                  <div className="page-actions">
+                    {selectedLinkedSessionId ? (
+                      <>
+                        <button className="small-button" type="button" onClick={() => onOpenSession(selectedLinkedSessionId)}>
+                          Open linked Meeting Session
+                        </button>
+                        {selectedLinkedSessionState?.hasOutput && onPreviewSessionOutput ? (
+                          <button className="small-button" type="button" onClick={() => onPreviewSessionOutput(selectedLinkedSessionId)}>
+                            Preview output
+                          </button>
+                        ) : null}
+                      </>
+                    ) : (
+                      <button className="small-button" type="button" onClick={() => onCreateLinkedMeetingSession(editingDraft.id)}>
+                        Create linked Meeting Session
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="field">
                 <label htmlFor="activity-edit-details">Details</label>
                 <div id="activity-edit-details" ref={detailsEditorRef} className="rich-text-surface todo-rich-text-surface" contentEditable suppressContentEditableWarning onInput={(event) => setEditingDraft({ ...editingDraft, detailsHtml: (event.currentTarget as HTMLDivElement).innerHTML })} />
               </div>
-              <details className="workspace-disclosure" open>
-                <summary>Fast add inside this activity</summary>
-                <div className="workspace-disclosure-body stack">
-                  <div className="todos-workspace-input-row">
-                    <div className="field field-wide">
-                      <label htmlFor="child-todo-draft">Add todo</label>
-                      <input id="child-todo-draft" value={childTodoDraft} onChange={(event) => setChildTodoDraft(event.target.value)} onKeyDown={(event) => {
-                        if (event.key === "Enter" && !event.shiftKey && childTodoDraft.trim()) {
-                          event.preventDefault();
-                          onAddChildTodo(childTodoDraft.trim(), editingDraft.id);
-                          setChildTodoDraft("");
-                        }
-                      }} />
+
+              <div className="activities-detail-sections">
+                <details className="workspace-disclosure" open>
+                  <summary>Fast add inside this activity</summary>
+                  <div className="workspace-disclosure-body stack">
+                    <div className="todos-workspace-input-row">
+                      <div className="field field-wide">
+                        <label htmlFor="child-todo-draft">Add todo</label>
+                        <input
+                          id="child-todo-draft"
+                          value={childTodoDraft}
+                          onChange={(event) => setChildTodoDraft(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" && !event.shiftKey && childTodoDraft.trim()) {
+                              event.preventDefault();
+                              onAddChildTodo(childTodoDraft.trim(), editingDraft.id);
+                              setChildTodoDraft("");
+                            }
+                          }}
+                          placeholder="Add todo to this activity"
+                        />
+                      </div>
+                      <button className="small-button" type="button" onClick={() => {
+                        if (!childTodoDraft.trim()) return;
+                        onAddChildTodo(childTodoDraft.trim(), editingDraft.id);
+                        setChildTodoDraft("");
+                      }}>
+                        Add todo
+                      </button>
                     </div>
-                    <button className="small-button" type="button" onClick={() => { if (!childTodoDraft.trim()) return; onAddChildTodo(childTodoDraft.trim(), editingDraft.id); setChildTodoDraft(""); }}>Add todo</button>
-                  </div>
-                  <div className="todos-workspace-input-row">
-                    <div className="field field-wide">
-                      <label htmlFor="child-meeting-draft">Add meeting</label>
-                      <input id="child-meeting-draft" value={childMeetingDraft} onChange={(event) => setChildMeetingDraft(event.target.value)} onKeyDown={(event) => {
-                        if (event.key === "Enter" && !event.shiftKey && childMeetingDraft.trim()) {
-                          event.preventDefault();
-                          onAddChildMeeting(childMeetingDraft.trim(), editingDraft.id);
-                          setChildMeetingDraft("");
-                        }
-                      }} />
+
+                    <div className="todos-workspace-input-row">
+                      <div className="field field-wide">
+                        <label htmlFor="child-meeting-draft">Add meeting</label>
+                        <input
+                          id="child-meeting-draft"
+                          value={childMeetingDraft}
+                          onChange={(event) => setChildMeetingDraft(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" && !event.shiftKey && childMeetingDraft.trim()) {
+                              event.preventDefault();
+                              onAddChildMeeting(childMeetingDraft.trim(), editingDraft.id);
+                              setChildMeetingDraft("");
+                            }
+                          }}
+                          placeholder="Add meeting under this activity"
+                        />
+                      </div>
+                      <button className="small-button" type="button" onClick={() => {
+                        if (!childMeetingDraft.trim()) return;
+                        onAddChildMeeting(childMeetingDraft.trim(), editingDraft.id);
+                        setChildMeetingDraft("");
+                      }}>
+                        Add meeting
+                      </button>
                     </div>
-                    <button className="small-button" type="button" onClick={() => { if (!childMeetingDraft.trim()) return; onAddChildMeeting(childMeetingDraft.trim(), editingDraft.id); setChildMeetingDraft(""); }}>Add meeting</button>
                   </div>
-                </div>
-              </details>
-              <details className="workspace-disclosure" open>
-                <summary>Child todos</summary>
-                <div className="workspace-disclosure-body stack">
-                  {currentChildTodos.length ? currentChildTodos.map((todo) => (
-                    <button key={todo.id} className="list-item timelog-list-item" type="button" onClick={() => onOpenTodoDetail(todo.id)}>
-                      <strong>{todo.description}</strong>
-                      <span>{todo.isDone ? "Done" : "Open"}</span>
-                    </button>
-                  )) : <p className="muted">No todos yet inside this activity.</p>}
-                </div>
-              </details>
-              <details className="workspace-disclosure" open>
-                <summary>Child meetings</summary>
-                <div className="workspace-disclosure-body stack">
-                  {currentChildMeetings.length ? currentChildMeetings.map((activity) => (
-                    <button key={activity.id} className="list-item timelog-list-item" type="button" onClick={() => setEditingActivityId(activity.id)}>
-                      <strong>{activity.description}</strong>
-                      <span>{activity.doOn || "No date"} {activity.startTime ? `· ${activity.startTime}` : ""}</span>
-                    </button>
-                  )) : <p className="muted">No meetings yet inside this activity.</p>}
-                </div>
-              </details>
-              <details className="workspace-disclosure" open>
-                <summary>Time logs</summary>
-                <div className="workspace-disclosure-body stack">
-                  <div className="page-actions">
-                    <button className="primary-button" type="button" onClick={() => hasOpenTimer ? onStopTracking("activity", editingDraft.id) : onStartTracking("activity", editingDraft.id)}>{hasOpenTimer ? "Stop" : "Start"}</button>
-                    <button className="small-button" type="button" onClick={() => { const nextDraft = createBlankTimeLogDraft(editingDraft.id); setEditingTimeLogId(nextDraft.id); setTimeLogDraft(nextDraft); }}>Add manual log</button>
+                </details>
+
+                <details className="workspace-disclosure" open>
+                  <summary>Child todos</summary>
+                  <div className="workspace-disclosure-body stack">
+                    {currentChildTodos.length ? currentChildTodos.map((todo) => (
+                      <button key={todo.id} className="list-item timelog-list-item" type="button" onClick={() => onOpenTodoDetail(todo.id)}>
+                        <strong>{todo.description}</strong>
+                        <span>{todo.isDone ? "Done" : "Open"}</span>
+                        <span>{todo.dueDate || todo.doOn || "-"}</span>
+                      </button>
+                    )) : <p className="muted">No todos yet inside this activity.</p>}
                   </div>
-                  {timeLogDraft ? <div className="list-item timelog-editor-card">
-                    <div className="metadata-triplet-grid">
-                      <div className="field metadata-subfield"><label>Date</label><input type="date" value={timeLogDraft.date} onChange={(event) => setTimeLogDraft({ ...timeLogDraft, date: event.target.value, durationMinutes: calculateDurationMinutes(event.target.value, timeLogDraft.startTime, timeLogDraft.endTime) })} /></div>
-                      <div className="field metadata-subfield"><label>Start</label><input type="time" value={timeLogDraft.startTime} onChange={(event) => setTimeLogDraft({ ...timeLogDraft, startTime: event.target.value, durationMinutes: calculateDurationMinutes(timeLogDraft.date, event.target.value, timeLogDraft.endTime) })} /></div>
-                      <div className="field metadata-subfield"><label>End</label><input type="time" value={timeLogDraft.endTime} onChange={(event) => setTimeLogDraft({ ...timeLogDraft, endTime: event.target.value, durationMinutes: calculateDurationMinutes(timeLogDraft.date, timeLogDraft.startTime, event.target.value) })} /></div>
-                    </div>
-                    <div className="field"><label>Notes</label><input value={timeLogDraft.notes} onChange={(event) => setTimeLogDraft({ ...timeLogDraft, notes: event.target.value })} /></div>
+                </details>
+
+                <details className="workspace-disclosure" open>
+                  <summary>Child meetings</summary>
+                  <div className="workspace-disclosure-body stack">
+                    {currentChildMeetings.length ? currentChildMeetings.map((activity) => (
+                      <button key={activity.id} className="list-item timelog-list-item" type="button" onClick={() => setSelectedActivityId(activity.id)}>
+                        <strong>{activity.description}</strong>
+                        <span>{activity.doOn || "No date"}</span>
+                        <span>{activity.startTime || "-"}</span>
+                      </button>
+                    )) : <p className="muted">No meetings yet inside this activity.</p>}
+                  </div>
+                </details>
+
+                <details className="workspace-disclosure" open>
+                  <summary>Time logs</summary>
+                  <div className="workspace-disclosure-body stack">
                     <div className="page-actions">
-                      <span className="status-chip">{timeLogDraft.durationMinutes} min</span>
-                      <button className="primary-button" type="button" onClick={() => { onSaveTimeLog({ ...timeLogDraft, durationMinutes: calculateDurationMinutes(timeLogDraft.date, timeLogDraft.startTime, timeLogDraft.endTime) }); setEditingTimeLogId(null); setTimeLogDraft(null); }}>Save log</button>
-                      <button className="small-button" type="button" onClick={() => { setEditingTimeLogId(null); setTimeLogDraft(null); }}>Cancel</button>
+                      <button className="primary-button" type="button" onClick={() => (hasOpenTimer ? onStopTracking("activity", editingDraft.id) : onStartTracking("activity", editingDraft.id))}>
+                        {hasOpenTimer ? "Stop" : "Start"}
+                      </button>
+                      <button className="small-button" type="button" onClick={() => {
+                        const nextDraft = createBlankTimeLogDraft(editingDraft.id);
+                        setEditingTimeLogId(nextDraft.id);
+                        setTimeLogDraft(nextDraft);
+                      }}>
+                        Add manual log
+                      </button>
                     </div>
-                  </div> : null}
-                  {currentTimeLogs.length ? currentTimeLogs.map((entry) => (
-                    <button key={entry.id} className="list-item timelog-list-item" type="button" onClick={() => { setEditingTimeLogId(entry.id); setTimeLogDraft(entry); }}>
-                      <strong>{entry.date}</strong>
-                      <span>{entry.startTime} to {entry.endTime}</span>
-                      <span>{entry.durationMinutes} min</span>
-                    </button>
-                  )) : <p className="muted">No time logged yet for this activity.</p>}
-                  {editingTimeLogId && timeLogDraft && currentTimeLogs.some((entry) => entry.id === editingTimeLogId) ? (
-                    <div className="page-actions"><button className="danger-button small-button" type="button" onClick={() => { onDeleteTimeLog(editingTimeLogId); setEditingTimeLogId(null); setTimeLogDraft(null); }}>Delete selected log</button></div>
-                  ) : null}
-                </div>
-              </details>
+                    {timeLogDraft ? (
+                      <div className="list-item timelog-editor-card">
+                        <div className="metadata-triplet-grid">
+                          <div className="field metadata-subfield">
+                            <label>Date</label>
+                            <input type="date" value={timeLogDraft.date} onChange={(event) => setTimeLogDraft({ ...timeLogDraft, date: event.target.value, durationMinutes: calculateDurationMinutes(event.target.value, timeLogDraft.startTime, timeLogDraft.endTime) })} />
+                          </div>
+                          <div className="field metadata-subfield">
+                            <label>Start</label>
+                            <input type="time" value={timeLogDraft.startTime} onChange={(event) => setTimeLogDraft({ ...timeLogDraft, startTime: event.target.value, durationMinutes: calculateDurationMinutes(timeLogDraft.date, event.target.value, timeLogDraft.endTime) })} />
+                          </div>
+                          <div className="field metadata-subfield">
+                            <label>End</label>
+                            <input type="time" value={timeLogDraft.endTime} onChange={(event) => setTimeLogDraft({ ...timeLogDraft, endTime: event.target.value, durationMinutes: calculateDurationMinutes(timeLogDraft.date, timeLogDraft.startTime, event.target.value) })} />
+                          </div>
+                        </div>
+                        <div className="field">
+                          <label>Notes</label>
+                          <input value={timeLogDraft.notes} onChange={(event) => setTimeLogDraft({ ...timeLogDraft, notes: event.target.value })} />
+                        </div>
+                        <div className="page-actions">
+                          <span className="status-chip">{timeLogDraft.durationMinutes} min</span>
+                          <button className="primary-button" type="button" onClick={() => {
+                            onSaveTimeLog({
+                              ...timeLogDraft,
+                              durationMinutes: calculateDurationMinutes(timeLogDraft.date, timeLogDraft.startTime, timeLogDraft.endTime),
+                            });
+                            setEditingTimeLogId(null);
+                            setTimeLogDraft(null);
+                          }}>
+                            Save log
+                          </button>
+                          <button className="small-button" type="button" onClick={() => {
+                            setEditingTimeLogId(null);
+                            setTimeLogDraft(null);
+                          }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                    {currentTimeLogs.length ? currentTimeLogs.map((entry) => (
+                      <button key={entry.id} className="list-item timelog-list-item" type="button" onClick={() => {
+                        setEditingTimeLogId(entry.id);
+                        setTimeLogDraft(entry);
+                      }}>
+                        <strong>{entry.date}</strong>
+                        <span>{entry.startTime} to {entry.endTime}</span>
+                        <span>{entry.durationMinutes} min</span>
+                      </button>
+                    )) : <p className="muted">No time logged yet for this activity.</p>}
+                    {editingTimeLogId && timeLogDraft && currentTimeLogs.some((entry) => entry.id === editingTimeLogId) ? (
+                      <div className="page-actions">
+                        <button className="danger-button small-button" type="button" onClick={() => {
+                          onDeleteTimeLog(editingTimeLogId);
+                          setEditingTimeLogId(null);
+                          setTimeLogDraft(null);
+                        }}>
+                          Delete selected log
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </details>
+              </div>
+
               <div className="page-actions">
-                <button className="primary-button" type="button" onClick={() => { onSave({ ...editingDraft }); closeEditor(); }}>Save</button>
-                <button className="small-button" type="button" onClick={closeEditor}>Cancel</button>
+                <button className="primary-button" type="button" onClick={() => onSave({ ...editingDraft })}>
+                  Save
+                </button>
               </div>
             </div>
-          </div>
-        </div>
-      ) : null}
+          ) : (
+            <div className="empty-state-card compact-empty-state activities-empty-panel">
+              <h3>Select an activity</h3>
+              <p>Use the list on the left to open an activity and run todos, meetings, session links, and time reporting from one place.</p>
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 };

@@ -1368,6 +1368,189 @@ select {
   position: fixed;
 }
 
+.activities-hub-card {
+  min-height: 0;
+}
+
+.activities-hub-shell {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.95fr) minmax(0, 1.35fr);
+  gap: 1rem;
+  min-height: 0;
+}
+
+.activities-hub-list-panel,
+.activities-hub-detail-panel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.activities-compact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.activities-compact-item {
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--app-surface-soft);
+  color: var(--app-text);
+  padding: 0.8rem 0.9rem;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.activities-compact-item-selected {
+  border-color: var(--app-accent-strong-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 66%, white 34%) 0%, var(--app-surface) 100%);
+}
+
+.activities-compact-item-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.activities-compact-item-head {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+}
+
+.activities-compact-item-head input {
+  width: auto;
+  min-height: 0;
+  margin-top: 0.15rem;
+}
+
+.activities-compact-item-head strong {
+  line-height: 1.35;
+}
+
+.activities-compact-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.55rem;
+  color: var(--app-muted);
+  font-size: 0.8rem;
+}
+
+.activities-detail-header {
+  align-items: flex-start;
+}
+
+.activities-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.activities-detail-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.activity-private-field {
+  min-width: 150px;
+}
+
+.activities-empty-panel {
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.todos-hub-card {
+  min-height: 0;
+}
+
+.todos-hub-shell {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.95fr) minmax(0, 1.35fr);
+  gap: 1rem;
+  min-height: 0;
+}
+
+.todos-hub-list-panel,
+.todos-hub-detail-panel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.todos-running-strip {
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--app-surface-soft);
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.todos-running-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.todos-compact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.todos-compact-item {
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--app-surface-soft);
+  color: var(--app-text);
+  padding: 0.8rem 0.9rem;
+  text-align: left;
+}
+
+.todos-compact-item-selected {
+  border-color: var(--app-accent-strong-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 66%, white 34%) 0%, var(--app-surface) 100%);
+}
+
+.todos-compact-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.todos-compact-item-head {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+}
+
+.todos-compact-item-head input {
+  width: auto;
+  min-height: 0;
+  margin-top: 0.15rem;
+}
+
+.todos-compact-item-head strong {
+  line-height: 1.35;
+}
+
+.todos-compact-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.55rem;
+  color: var(--app-muted);
+  font-size: 0.8rem;
+}
+
 .todos-editor-surface {
   width: min(760px, calc(100vw - 3rem));
 }
@@ -2980,4 +3163,95 @@ select {
 
 .timelog-list-item strong {
   min-width: 0;
+}
+
+.list-item-button {
+  width: 100%;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: var(--app-surface-soft);
+  color: var(--app-text);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.85rem;
+  text-align: left;
+  padding: 0.8rem 0.9rem;
+}
+
+.settings-subsection-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.55rem;
+}
+
+.calendar-context-field {
+  min-width: 220px;
+}
+
+.time-workspace-card {
+  gap: 1rem;
+}
+
+.time-workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.8fr);
+  gap: 1rem;
+}
+
+.time-workspace-main,
+.time-workspace-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.time-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.time-summary-stat {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tight-stack {
+  gap: 0.5rem;
+}
+
+.time-log-table {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.time-log-row {
+  grid-template-columns: minmax(0, 1.7fr) auto auto auto;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: var(--app-surface-soft);
+  padding: 0.8rem 0.9rem;
+}
+
+.time-log-row-selected {
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
+}
+
+.compact-metric-card {
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+@media (max-width: 1280px) {
+  .time-workspace-layout,
+  .time-summary-grid {
+    grid-template-columns: 1fr;
+  }
 }

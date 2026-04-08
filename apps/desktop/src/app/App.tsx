@@ -8,6 +8,7 @@ import { ActivitiesWorkspace } from "../features/activities/components/Activitie
 import { CalendarWorkspace } from "../features/calendar/components/CalendarWorkspace";
 import { TodosRailCard } from "../features/todos/components/TodosRailCard";
 import { TodosWorkspace } from "../features/todos/components/TodosWorkspace";
+import { TimeWorkspace } from "../features/time/components/TimeWorkspace";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
 import type { SettingsSection } from "../features/settings/components/SettingsCard";
 import { generateNotes } from "../lib/ai/services/generateNotes";
@@ -63,7 +64,7 @@ import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
 
-type AppWorkspace = "notes" | "todos" | "activities" | "calendar" | "assistant" | "files";
+type AppWorkspace = "notes" | "todos" | "activities" | "calendar" | "time" | "assistant" | "files";
 type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | null;
 type CommandAction = {
   id: string;
@@ -95,6 +96,7 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
   { id: "todos", label: "Todos", description: "Focused follow-up management", available: true },
   { id: "activities", label: "Activities", description: "Tracked work with time and scheduling", available: true },
   { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: true },
+  { id: "time", label: "Time", description: "Active timers, logs, and reporting", available: true },
   { id: "assistant", label: "Assistant", description: "Future AI workflows and agents", available: false },
   { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
 ];
@@ -574,13 +576,6 @@ export const App = () => {
     const activityId = findActivityIdForSession(snapshot.entityLinks, activeSession.id);
     return snapshot.activities.find((entry) => entry.id === activityId) ?? null;
   }, [activeSession, snapshot]);
-  const linkedSessionIdsByActivity = useMemo(
-    () =>
-      Object.fromEntries(
-        (snapshot?.activities ?? []).map((activity) => [activity.id, snapshot ? findSessionIdForActivity(snapshot.entityLinks, activity.id) : null]),
-      ) as Record<string, string | null>,
-    [snapshot],
-  );
   const linkedSessionStateByActivity = useMemo(
     () =>
       Object.fromEntries(
@@ -1687,6 +1682,13 @@ export const App = () => {
         action: () => setActiveWorkspace("calendar"),
       },
       {
+        id: "time",
+        label: "Open Time",
+        description: "Review timers, logs, and time summaries.",
+        keywords: ["time logs timer reporting"],
+        action: () => setActiveWorkspace("time"),
+      },
+      {
         id: "backup",
         label: "Open Back-up",
         description: "Import or export desktop data snapshots.",
@@ -1858,6 +1860,9 @@ export const App = () => {
             secondaryActionLabel={outputActionConfig.secondaryLabel}
             emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
             emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
+            linkedActivity={activeLinkedActivity}
+            onOpenLinkedActivity={openActivityFromLink}
+            onAddFollowUpTodo={(description, options) => void addTodo(description, options)}
           />
         );
       case "calendar-output-preview": {
@@ -2354,13 +2359,14 @@ export const App = () => {
                 onDeleteTimeLog={(id) => void deleteTimeLog(id)}
                 onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
+                onOpenActivityDetail={openActivityFromLink}
               />
             ) : activeWorkspace === "activities" ? (
               <ActivitiesWorkspace
                 activities={snapshot.activities}
                 todos={snapshot.todos}
                 timeLogs={snapshot.timelogs}
-                linkedSessionIdsByActivity={linkedSessionIdsByActivity}
+                linkedSessionStateByActivity={linkedSessionStateByActivity}
                 requestedActivityId={requestedActivityId}
                 onEditorClose={returnFromLinkedDetailToCalendar}
                 onToggle={(activity) => void saveActivity(activity)}
@@ -2377,6 +2383,7 @@ export const App = () => {
                   })
                 }
                 onOpenSession={openSessionFromLink}
+                onPreviewSessionOutput={openCalendarOutputPreview}
                 onOpenTodoDetail={openTodoDetailFromLink}
                 onSaveTimeLog={(timeLog) => void saveTimeLog(timeLog)}
                 onDeleteTimeLog={(id) => void deleteTimeLog(id)}
@@ -2391,7 +2398,7 @@ export const App = () => {
                 settings={snapshot.settings}
                 linkedSessionStateByActivity={linkedSessionStateByActivity}
                 onSaveSettings={(settings) => void saveSettings(settings)}
-                onCreateFromText={(date, startSlot, value) => void createCalendarEntryFromText(date, startSlot, value)}
+                onCreateFromText={(date, startSlot, value, options) => void createCalendarEntryFromText(date, startSlot, value, options)}
                 onMoveItem={(id, date, startSlot) => void moveCalendarItem(id, date, startSlot)}
                 onSaveTodo={(todo) => void saveTodo(todo)}
                 onDeleteTodo={(id) => void deleteTodo(id)}
@@ -2420,6 +2427,18 @@ export const App = () => {
                 }
                 onPreviewSessionOutput={openCalendarOutputPreview}
                 onFullScreenChange={setIsCalendarWorkspaceFullScreen}
+              />
+            ) : activeWorkspace === "time" ? (
+              <TimeWorkspace
+                todos={snapshot.todos}
+                activities={snapshot.activities}
+                timeLogs={snapshot.timelogs}
+                onSaveTimeLog={(timeLog) => void saveTimeLog(timeLog)}
+                onDeleteTimeLog={(id) => void deleteTimeLog(id)}
+                onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
+                onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
+                onOpenTodoDetail={openTodoDetailFromLink}
+                onOpenActivityDetail={openActivityFromLink}
               />
             ) : activeWorkspace !== "notes" ? (
               <div className="card empty-state-card">
@@ -2495,6 +2514,9 @@ export const App = () => {
                 secondaryActionLabel={outputActionConfig.secondaryLabel}
                 emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
                 emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
+                linkedActivity={activeLinkedActivity}
+                onOpenLinkedActivity={openActivityFromLink}
+                onAddFollowUpTodo={(description, options) => void addTodo(description, options)}
               />
             )}
           </section>
