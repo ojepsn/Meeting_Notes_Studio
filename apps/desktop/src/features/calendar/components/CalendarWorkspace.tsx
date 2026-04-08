@@ -137,11 +137,11 @@ export const CalendarWorkspace = ({
   onFullScreenChange,
 }: CalendarWorkspaceProps) => {
   const today = new Date().toISOString().slice(0, 10);
-  const initialIsFullScreen = settings.calendarFullScreenPreferenceInitialized ? settings.calendarIsFullScreen : true;
+  const initialIsFullScreen = true;
   const [anchorDate, setAnchorDate] = useState(today);
   const [daysInView, setDaysInView] = useState<typeof DAYS[number]>(settings.calendarDaysInView);
   const [slotHeight, setSlotHeight] = useState<typeof HEIGHTS[number]>(settings.calendarSlotHeight);
-  const [isFullScreen, setIsFullScreen] = useState(initialIsFullScreen);
+  const [isFullScreen] = useState(initialIsFullScreen);
   const [detailsPaneWidth, setDetailsPaneWidth] = useState(settings.calendarDetailsPaneWidth);
   const [scrollTop, setScrollTop] = useState(settings.calendarScrollTop ?? 0);
   const [scrollLeft, setScrollLeft] = useState(settings.calendarScrollLeft ?? 0);
@@ -457,23 +457,22 @@ export const CalendarWorkspace = ({
           <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, -daysInView))}>Previous</button>
           <button className="shell-button" type="button" onClick={() => { setAnchorDate(today); setJumpDate(today); }}>Today</button>
           <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, daysInView))}>Next</button>
-          <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, 30))}>+30 days</button>
-          <button className="shell-button" type="button" onClick={() => setIsFullScreen((current) => !current)}>{isFullScreen ? "Exit full screen" : "Full screen"}</button>
+          <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, 30))}>+30d</button>
         </div>
       </div>
 
-      <div className={`calendar-controls${isFullScreen ? " calendar-controls-compact" : ""}`}>
+      <div className="calendar-controls calendar-controls-compact calendar-controls-dense">
         <div className="calendar-calendar-summary">
           <div className="status-chip">{filteredItems.length} scheduled items</div>
           <div className="capture-density-toggle">{DAYS.map((option) => <button key={`days-${option}`} className="segment-button" type="button" data-active={option === daysInView} onClick={() => setDaysInView(option)}>{option} days</button>)}</div>
           <div className="capture-density-toggle">{HEIGHTS.map((option) => <button key={`height-${option}`} className="segment-button" type="button" data-active={option === slotHeight} onClick={() => setSlotHeight(option)}>{option === 12 ? "Compact" : option === 16 ? "Default" : "Large"}</button>)}</div>
         </div>
-        <div className="calendar-toolbar">
-          <div className="field"><label htmlFor="calendar-jump-date">Jump to date</label><input id="calendar-jump-date" type="date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} /></div>
+        <div className="calendar-toolbar calendar-toolbar-dense">
+          <div className="field"><label htmlFor="calendar-jump-date">Jump</label><input id="calendar-jump-date" type="date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} /></div>
           <button className="shell-button" type="button" onClick={() => setAnchorDate(jumpDate || today)}>Go</button>
           <div className="field field-wide"><label htmlFor="calendar-search">Search</label><input id="calendar-search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search title" /></div>
           <div className="field"><label htmlFor="calendar-type-filter">Type</label><select id="calendar-type-filter" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | "todo" | "activity" | "meeting")}><option value="all">All</option><option value="todo">Todos</option><option value="activity">Activities</option><option value="meeting">Meetings</option></select></div>
-          <div className="field"><label htmlFor="calendar-visibility-filter">Visibility</label><select id="calendar-visibility-filter" value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value as "all" | "public" | "private")}><option value="all">All</option><option value="public">Public</option><option value="private">Private</option></select></div>
+          <div className="field"><label htmlFor="calendar-visibility-filter">Private</label><select id="calendar-visibility-filter" value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value as "all" | "public" | "private")}><option value="all">All</option><option value="public">Public</option><option value="private">Private</option></select></div>
         </div>
       </div>
 

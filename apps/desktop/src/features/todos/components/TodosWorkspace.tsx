@@ -1,17 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 
 type TodoSortKey = "createdAt" | "description" | "domain" | "project" | "activity" | "doOn" | "dueDate";
 
 interface TodosWorkspaceProps {
   todos: TodoRecord[];
+  activities: ActivityRecord[];
+  timeLogs: TimeLogRecord[];
   requestedTodoId?: string | null;
   onEditorClose?: () => void;
   onToggle: (todo: TodoRecord) => void;
-  onAdd: (description: string) => void;
+  onAdd: (description: string, options?: { activityId?: string }) => void;
   onSave: (todo: TodoRecord) => void;
   onDelete: (id: string) => void;
   onConvertToActivity: (todo: TodoRecord) => void;
+  onSaveTimeLog: (timeLog: TimeLogRecord) => void;
+  onDeleteTimeLog: (id: string) => void;
+  onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
+  onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
 }
 
 const createBlankTodoDraft = (description = ""): TodoRecord => ({
@@ -20,6 +26,7 @@ const createBlankTodoDraft = (description = ""): TodoRecord => ({
   isDone: false,
   isPrivate: false,
   comments: "",
+  activityId: "",
   domain: "",
   project: "",
   activity: "",
@@ -30,15 +37,77 @@ const createBlankTodoDraft = (description = ""): TodoRecord => ({
   sessionIds: [],
 });
 
+const createBlankTimeLogDraft = (targetType: "todo" | "activity", targetId: string): TimeLogRecord => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  const hours = `${now.getHours()}`.padStart(2, "0");
+  const minutes = `${now.getMinutes()}`.padStart(2, "0");
+  return {
+    id: crypto.randomUUID(),
+    targetType,
+    targetId,
+    date: `${year}-${month}-${day}`,
+    startTime: `${hours}:${minutes}`,
+    endTime: `${hours}:${minutes}`,
+    durationMinutes: 0,
+    notes: "",
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
+};
+
 const normalizeValue = (value: string) => value.trim().toLowerCase();
 
-export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle, onAdd, onSave, onDelete, onConvertToActivity }: TodosWorkspaceProps) => {
+const calculateDurationMinutes = (date: string, startTime: string, endTime: string) => {
+  const start = new Date(`${date}T${startTime || "00:00"}:00`);
+  const end = new Date(`${date}T${endTime || startTime || "00:00"}:00`);
+  const diff = Math.round((end.getTime() - start.getTime()) / 60000);
+  return Number.isFinite(diff) ? Math.max(0, diff) : 0;
+};
+
+export const TodosWorkspace = ({
+  todos,
+  activities,
+  timeLogs,
+  requestedTodoId,
+  onEditorClose,
+  onToggle,
+  onAdd,
+  onSave,
+  onDelete,
+  onConvertToActivity,
+  onSaveTimeLog,
+  onDeleteTimeLog,
+  onStartTracking,
+  onStopTracking,
+}: TodosWorkspaceProps) => {
   const [draft, setDraft] = useState("");
+  const [selectedActivityId, setSelectedActivityId] = useState("");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<TodoSortKey>("dueDate");
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<TodoRecord>(createBlankTodoDraft());
+  const [editingTimeLogId, setEditingTimeLogId] = useState<string | null>(null);
+  const [timeLogDraft, setTimeLogDraft] = useState<TimeLogRecord | null>(null);
   const detailsEditorRef = useRef<HTMLDivElement | null>(null);
+
+  const activityOptions = useMemo(
+    () =>
+      activities
+        .filter((entry) => !entry.parentActivityId)
+        .sort((left, right) => left.description.localeCompare(right.description)),
+    [activities],
+  );
+
+  const activityLookup = useMemo(
+    () =>
+      Object.fromEntries(
+        activities.map((activity) => [activity.id, activity]),
+      ) as Record<string, ActivityRecord>,
+    [activities],
+  );
 
   const openTodos = useMemo(() => todos.filter((todo) => !todo.isDone), [todos]);
   const filteredAndSortedTodos = useMemo(() => {
@@ -54,6 +123,7 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle
             todo.doOn,
             todo.dueDate,
             todo.createdAt,
+            activityLookup[todo.activityId]?.description || "",
           ]
             .join(" ")
             .toLowerCase()
@@ -69,7 +139,7 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle
         case "project":
           return normalizeValue(todo.project);
         case "activity":
-          return normalizeValue(todo.activity);
+          return normalizeValue(activityLookup[todo.activityId]?.description || todo.activity);
         case "doOn":
           return todo.doOn || "9999-99-99";
         case "dueDate":
@@ -81,9 +151,24 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle
     };
 
     return [...filtered].sort((left, right) => valueForSort(left).localeCompare(valueForSort(right)));
-  }, [openTodos, query, sortKey]);
+  }, [activityLookup, openTodos, query, sortKey]);
 
   const completedTodos = useMemo(() => todos.filter((todo) => todo.isDone).slice(0, 8), [todos]);
+
+  const todoTimeLogs = useMemo(
+    () => timeLogs.filter((entry) => entry.targetType === "todo"),
+    [timeLogs],
+  );
+
+  const timeLogsByTodoId = useMemo(() => {
+    const grouped = new Map<string, TimeLogRecord[]>();
+    todoTimeLogs.forEach((entry) => {
+      const current = grouped.get(entry.targetId) || [];
+      current.push(entry);
+      grouped.set(entry.targetId, current);
+    });
+    return grouped;
+  }, [todoTimeLogs]);
 
   useEffect(() => {
     if (requestedTodoId) {
@@ -113,12 +198,14 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle
   const submitDraft = () => {
     const nextValue = draft.trim();
     if (!nextValue) return;
-    onAdd(nextValue);
+    onAdd(nextValue, { activityId: selectedActivityId || undefined });
     setDraft("");
   };
 
   const closeEditor = () => {
     setEditingTodoId(null);
+    setEditingTimeLogId(null);
+    setTimeLogDraft(null);
     onEditorClose?.();
   };
 
@@ -132,6 +219,10 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle
     { value: "activity", label: "Activity" },
   ];
 
+  const currentTimeLogs = editingTodoId ? timeLogsByTodoId.get(editingTodoId) || [] : [];
+  const hasOpenTimer = currentTimeLogs.some((entry) => entry.startTime === entry.endTime);
+  const currentActivity = editingDraft.activityId ? activityLookup[editingDraft.activityId] : null;
+
   return (
     <div className="card todos-workspace todos-workspace-minimal">
       <div className="card-header session-editor-header-minimal">
@@ -141,6 +232,21 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle
       </div>
 
       <div className="todos-workspace-input-row">
+        <div className="field">
+          <label htmlFor="todos-workspace-activity">Activity</label>
+          <select
+            id="todos-workspace-activity"
+            value={selectedActivityId}
+            onChange={(event) => setSelectedActivityId(event.target.value)}
+          >
+            <option value="">Unassigned</option>
+            {activityOptions.map((activity) => (
+              <option key={activity.id} value={activity.id}>
+                {activity.description}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="field field-wide">
           <label htmlFor="todos-workspace-draft">New todo</label>
           <input
@@ -195,52 +301,59 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle
           <span>Activity</span>
           <span>Do on</span>
           <span>Due</span>
+          <span>Time</span>
           <span>Created</span>
           <span />
         </div>
         {filteredAndSortedTodos.length ? (
-          filteredAndSortedTodos.map((todo) => (
-            <div
-              key={todo.id}
-              className="todos-workspace-row"
-              onDoubleClick={() => setEditingTodoId(todo.id)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  setEditingTodoId(todo.id);
-                }
-              }}
-            >
-              <span>
-                <input
-                  type="checkbox"
-                  checked={todo.isDone}
-                  onChange={() => onToggle({ ...todo, isDone: !todo.isDone })}
-                />
-              </span>
-              <span className="todos-cell-strong">{todo.description}</span>
-              <span>{todo.isPrivate ? "Yes" : "No"}</span>
-              <span>{todo.domain || "—"}</span>
-              <span>{todo.project || "—"}</span>
-              <span>{todo.activity || "—"}</span>
-              <span>{todo.doOn || "—"}</span>
-              <span>{todo.dueDate || "—"}</span>
-              <span>{todo.createdAt.slice(0, 10)}</span>
-              <span>
-                <button
-                  className="small-button danger-button"
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onDelete(todo.id);
-                  }}
-                >
-                  Delete
-                </button>
-              </span>
-            </div>
-          ))
+          filteredAndSortedTodos.map((todo) => {
+            const logs = timeLogsByTodoId.get(todo.id) || [];
+            const totalMinutes = logs.reduce((sum, entry) => sum + entry.durationMinutes, 0);
+            const running = logs.some((entry) => entry.startTime === entry.endTime);
+            return (
+              <div
+                key={todo.id}
+                className="todos-workspace-row"
+                onDoubleClick={() => setEditingTodoId(todo.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    setEditingTodoId(todo.id);
+                  }
+                }}
+              >
+                <span>
+                  <input
+                    type="checkbox"
+                    checked={todo.isDone}
+                    onChange={() => onToggle({ ...todo, isDone: !todo.isDone })}
+                  />
+                </span>
+                <span className="todos-cell-strong">{todo.description}</span>
+                <span>{todo.isPrivate ? "Yes" : "-"}</span>
+                <span>{todo.domain || "-"}</span>
+                <span>{todo.project || "-"}</span>
+                <span>{activityLookup[todo.activityId]?.description || todo.activity || "-"}</span>
+                <span>{todo.doOn || "-"}</span>
+                <span>{todo.dueDate || "-"}</span>
+                <span>{running ? "Running" : totalMinutes ? `${totalMinutes}m` : "-"}</span>
+                <span>{todo.createdAt.slice(0, 10)}</span>
+                <span>
+                  <button
+                    className="small-button danger-button"
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDelete(todo.id);
+                    }}
+                  >
+                    Delete
+                  </button>
+                </span>
+              </div>
+            );
+          })
         ) : (
           <div className="empty-state-card compact-empty-state">
             <h3>No open todos</h3>
@@ -292,6 +405,30 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle
               </div>
               <div className="metadata-triplet-grid">
                 <div className="field metadata-subfield">
+                  <label htmlFor="todo-edit-linked-activity">Activity</label>
+                  <select
+                    id="todo-edit-linked-activity"
+                    value={editingDraft.activityId}
+                    onChange={(event) => {
+                      const nextActivity = activityLookup[event.target.value];
+                      setEditingDraft({
+                        ...editingDraft,
+                        activityId: event.target.value,
+                        domain: nextActivity?.domain || editingDraft.domain,
+                        project: nextActivity?.project || editingDraft.project,
+                        activity: nextActivity?.description || editingDraft.activity,
+                      });
+                    }}
+                  >
+                    <option value="">Unassigned</option>
+                    {activityOptions.map((activity) => (
+                      <option key={activity.id} value={activity.id}>
+                        {activity.description}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field metadata-subfield">
                   <label htmlFor="todo-edit-domain">Domain</label>
                   <input
                     id="todo-edit-domain"
@@ -305,14 +442,6 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle
                     id="todo-edit-project"
                     value={editingDraft.project}
                     onChange={(event) => setEditingDraft({ ...editingDraft, project: event.target.value })}
-                  />
-                </div>
-                <div className="field metadata-subfield">
-                  <label htmlFor="todo-edit-activity">Activity</label>
-                  <input
-                    id="todo-edit-activity"
-                    value={editingDraft.activity}
-                    onChange={(event) => setEditingDraft({ ...editingDraft, activity: event.target.value })}
                   />
                 </div>
               </div>
@@ -350,6 +479,9 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle
                   </div>
                 </div>
               </div>
+              {currentActivity ? (
+                <div className="status-chip">Linked activity: {currentActivity.description}</div>
+              ) : null}
               <div className="field">
                 <label htmlFor="todo-edit-details">Details</label>
                 <div
@@ -366,12 +498,180 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle
                   }
                 />
               </div>
+
+              <details className="workspace-disclosure" open>
+                <summary>Time logs</summary>
+                <div className="workspace-disclosure-body stack">
+                  <div className="page-actions">
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() =>
+                        hasOpenTimer
+                          ? onStopTracking("todo", editingDraft.id)
+                          : onStartTracking("todo", editingDraft.id)
+                      }
+                    >
+                      {hasOpenTimer ? "Stop" : "Start"}
+                    </button>
+                    <button
+                      className="small-button"
+                      type="button"
+                      onClick={() => {
+                        const draftLog = createBlankTimeLogDraft("todo", editingDraft.id);
+                        setEditingTimeLogId(draftLog.id);
+                        setTimeLogDraft(draftLog);
+                      }}
+                    >
+                      Add manual log
+                    </button>
+                  </div>
+                  {(timeLogDraft || currentTimeLogs.length) ? (
+                    <div className="stack">
+                      {timeLogDraft ? (
+                        <div className="list-item timelog-editor-card">
+                          <div className="metadata-triplet-grid">
+                            <div className="field metadata-subfield">
+                              <label>Date</label>
+                              <input
+                                type="date"
+                                value={timeLogDraft.date}
+                                onChange={(event) =>
+                                  setTimeLogDraft({
+                                    ...timeLogDraft,
+                                    date: event.target.value,
+                                    durationMinutes: calculateDurationMinutes(
+                                      event.target.value,
+                                      timeLogDraft.startTime,
+                                      timeLogDraft.endTime,
+                                    ),
+                                  })
+                                }
+                              />
+                            </div>
+                            <div className="field metadata-subfield">
+                              <label>Start</label>
+                              <input
+                                type="time"
+                                value={timeLogDraft.startTime}
+                                onChange={(event) =>
+                                  setTimeLogDraft({
+                                    ...timeLogDraft,
+                                    startTime: event.target.value,
+                                    durationMinutes: calculateDurationMinutes(
+                                      timeLogDraft.date,
+                                      event.target.value,
+                                      timeLogDraft.endTime,
+                                    ),
+                                  })
+                                }
+                              />
+                            </div>
+                            <div className="field metadata-subfield">
+                              <label>End</label>
+                              <input
+                                type="time"
+                                value={timeLogDraft.endTime}
+                                onChange={(event) =>
+                                  setTimeLogDraft({
+                                    ...timeLogDraft,
+                                    endTime: event.target.value,
+                                    durationMinutes: calculateDurationMinutes(
+                                      timeLogDraft.date,
+                                      timeLogDraft.startTime,
+                                      event.target.value,
+                                    ),
+                                  })
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="field">
+                            <label>Notes</label>
+                            <input
+                              value={timeLogDraft.notes}
+                              onChange={(event) => setTimeLogDraft({ ...timeLogDraft, notes: event.target.value })}
+                              placeholder="Optional context"
+                            />
+                          </div>
+                          <div className="page-actions">
+                            <span className="status-chip">{timeLogDraft.durationMinutes} min</span>
+                            <button
+                              className="primary-button"
+                              type="button"
+                              onClick={() => {
+                                onSaveTimeLog({
+                                  ...timeLogDraft,
+                                  durationMinutes: calculateDurationMinutes(
+                                    timeLogDraft.date,
+                                    timeLogDraft.startTime,
+                                    timeLogDraft.endTime,
+                                  ),
+                                });
+                                setEditingTimeLogId(null);
+                                setTimeLogDraft(null);
+                              }}
+                            >
+                              Save log
+                            </button>
+                            <button
+                              className="small-button"
+                              type="button"
+                              onClick={() => {
+                                setEditingTimeLogId(null);
+                                setTimeLogDraft(null);
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                      {currentTimeLogs.map((entry) => (
+                        <button
+                          key={entry.id}
+                          className="list-item timelog-list-item"
+                          type="button"
+                          onClick={() => {
+                            setEditingTimeLogId(entry.id);
+                            setTimeLogDraft(entry);
+                          }}
+                        >
+                          <strong>{entry.date}</strong>
+                          <span>
+                            {entry.startTime} to {entry.endTime}
+                          </span>
+                          <span>{entry.durationMinutes} min</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted">No time logged yet. Start a timer or add a manual entry here.</p>
+                  )}
+                  {editingTimeLogId && timeLogDraft && currentTimeLogs.some((entry) => entry.id === editingTimeLogId) ? (
+                    <div className="page-actions">
+                      <button
+                        className="danger-button small-button"
+                        type="button"
+                        onClick={() => {
+                          onDeleteTimeLog(editingTimeLogId);
+                          setEditingTimeLogId(null);
+                          setTimeLogDraft(null);
+                        }}
+                      >
+                        Delete selected log
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </details>
+
               <div className="page-actions">
                 <button
                   className="primary-button"
                   type="button"
                   onClick={() => {
-                    onSave({ ...editingDraft });
+                    onSave({ ...editingDraft, activity: currentActivity?.description || editingDraft.activity });
                     closeEditor();
                   }}
                 >

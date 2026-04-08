@@ -11,6 +11,7 @@ import {
   type LocalAppSettings,
   type SessionRecord,
   type TemplateDefinition,
+  type TimeLogRecord,
   type TodoRecord,
 } from "@notesmith/domain";
 import {
@@ -37,6 +38,7 @@ const STORAGE_KEYS = {
   templates: "notesmith-desktop-templates",
   todos: "notesmith-desktop-todos",
   activities: "notesmith-desktop-activities",
+  timelogs: "notesmith-desktop-timelogs",
   calendarItems: "notesmith-desktop-calendar-items",
   entityLinks: "notesmith-desktop-entity-links",
   attachments: "notesmith-desktop-attachments",
@@ -81,6 +83,7 @@ const normalizeTodoRecord = (todo: TodoRecord): TodoRecord => ({
   ...todo,
   isPrivate: Boolean(todo.isPrivate),
   comments: typeof todo.comments === "string" ? todo.comments : "",
+  activityId: typeof todo.activityId === "string" ? todo.activityId : "",
   domain: typeof todo.domain === "string" ? todo.domain : "",
   project: typeof todo.project === "string" ? todo.project : "",
   activity: typeof todo.activity === "string" ? todo.activity : "",
@@ -98,6 +101,7 @@ const normalizeTodoRecord = (todo: TodoRecord): TodoRecord => ({
 const normalizeActivityRecord = (activity: ActivityRecord): ActivityRecord => ({
   ...activity,
   type: activity.type === "meeting" ? "meeting" : "task",
+  parentActivityId: typeof activity.parentActivityId === "string" ? activity.parentActivityId : "",
   isPrivate: Boolean(activity.isPrivate),
   comments: typeof activity.comments === "string" ? activity.comments : "",
   domain: typeof activity.domain === "string" ? activity.domain : "",
@@ -118,6 +122,16 @@ const normalizeActivityRecord = (activity: ActivityRecord): ActivityRecord => ({
   sessionIds: Array.isArray(activity.sessionIds)
     ? activity.sessionIds.filter((value): value is string => typeof value === "string")
     : [],
+});
+
+const normalizeTimeLogRecord = (timeLog: TimeLogRecord): TimeLogRecord => ({
+  ...timeLog,
+  targetType: timeLog.targetType === "activity" ? "activity" : "todo",
+  date: typeof timeLog.date === "string" ? timeLog.date : now().slice(0, 10),
+  startTime: typeof timeLog.startTime === "string" ? timeLog.startTime : "",
+  endTime: typeof timeLog.endTime === "string" ? timeLog.endTime : "",
+  durationMinutes: Number.isFinite(Number(timeLog.durationMinutes)) ? Math.max(0, Math.round(Number(timeLog.durationMinutes))) : 0,
+  notes: typeof timeLog.notes === "string" ? timeLog.notes : "",
 });
 
 const normalizeCalendarItemRecord = (item: CalendarItemRecord): CalendarItemRecord => ({
@@ -238,6 +252,7 @@ export const createDefaultSnapshot = (): DesktopAppSnapshot => ({
   templates: BUILTIN_TEMPLATES,
   todos: [],
   activities: [],
+  timelogs: [],
   calendarItems: [],
   entityLinks: [],
   attachments: [],
@@ -253,6 +268,8 @@ export interface EntityRepository {
   saveTodos(records: TodoRecord[]): Promise<void>;
   loadActivities(): Promise<ActivityRecord[]>;
   saveActivities(records: ActivityRecord[]): Promise<void>;
+  loadTimeLogs(): Promise<TimeLogRecord[]>;
+  saveTimeLogs(records: TimeLogRecord[]): Promise<void>;
   loadCalendarItems(): Promise<CalendarItemRecord[]>;
   saveCalendarItems(records: CalendarItemRecord[]): Promise<void>;
   loadEntityLinks(): Promise<EntityLinkRecord[]>;
@@ -350,6 +367,14 @@ class BrowserEntityRepository implements AppRepository {
     writeLocalJson(STORAGE_KEYS.activities, records);
   }
 
+  async loadTimeLogs() {
+    return readLocalJson<TimeLogRecord[]>(STORAGE_KEYS.timelogs, []).map(normalizeTimeLogRecord);
+  }
+
+  async saveTimeLogs(records: TimeLogRecord[]) {
+    writeLocalJson(STORAGE_KEYS.timelogs, records);
+  }
+
   async loadCalendarItems() {
     return readLocalJson<CalendarItemRecord[]>(STORAGE_KEYS.calendarItems, []).map(normalizeCalendarItemRecord);
   }
@@ -407,11 +432,12 @@ class BrowserEntityRepository implements AppRepository {
   }
 
   async loadSnapshot(): Promise<DesktopAppSnapshot> {
-    const [sessions, templates, todos, activities, calendarItems, entityLinks, attachments, settings] = await Promise.all([
+    const [sessions, templates, todos, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
       this.loadSessions(),
       this.loadTemplates(),
       this.loadTodos(),
       this.loadActivities(),
+      this.loadTimeLogs(),
       this.loadCalendarItems(),
       this.loadEntityLinks(),
       this.loadAttachments(),
@@ -423,6 +449,7 @@ class BrowserEntityRepository implements AppRepository {
       templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
       todos,
       activities,
+      timelogs,
       calendarItems,
       entityLinks,
       attachments,
@@ -436,6 +463,7 @@ class BrowserEntityRepository implements AppRepository {
       this.saveTemplates(snapshot.templates),
       this.saveTodos(snapshot.todos),
       this.saveActivities(snapshot.activities),
+      this.saveTimeLogs(snapshot.timelogs),
       this.saveCalendarItems(snapshot.calendarItems),
       this.saveEntityLinks(snapshot.entityLinks),
       this.saveAttachments(snapshot.attachments),
@@ -472,6 +500,7 @@ class TauriSqliteRepository implements AppRepository {
         await db.execute("ALTER TABLE attachments ADD COLUMN include_in_output INTEGER NOT NULL DEFAULT 0").catch(() => {});
         await db.execute("ALTER TABLE attachments ADD COLUMN output_position INTEGER NOT NULL DEFAULT 0").catch(() => {});
         await db.execute("CREATE TABLE IF NOT EXISTS calendar_items (id TEXT PRIMARY KEY, target_type TEXT NOT NULL, target_id TEXT NOT NULL, schedule_date TEXT NOT NULL, start_slot INTEGER NOT NULL, duration_slots INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
+        await db.execute("CREATE TABLE IF NOT EXISTS timelogs (id TEXT PRIMARY KEY, target_type TEXT NOT NULL, target_id TEXT NOT NULL, log_date TEXT NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL, duration_minutes INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
         return db;
       })();
     }
@@ -638,6 +667,36 @@ class TauriSqliteRepository implements AppRepository {
     );
   }
 
+  async loadTimeLogs() {
+    const db = await this.getDb();
+    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM timelogs ORDER BY updated_at DESC");
+    return rows.map((row) => normalizeTimeLogRecord(JSON.parse(row.payload_json) as TimeLogRecord));
+  }
+
+  async saveTimeLogs(records: TimeLogRecord[]) {
+    const db = await this.getDb();
+    await db.execute("DELETE FROM timelogs");
+    await Promise.all(
+      records.map((record) =>
+        db.execute(
+          "INSERT INTO timelogs (id, target_type, target_id, log_date, start_time, end_time, duration_minutes, created_at, updated_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [
+            record.id,
+            record.targetType,
+            record.targetId,
+            record.date,
+            record.startTime,
+            record.endTime,
+            record.durationMinutes,
+            record.createdAt,
+            record.updatedAt,
+            JSON.stringify(record),
+          ],
+        ),
+      ),
+    );
+  }
+
   async loadCalendarItems() {
     const db = await this.getDb();
     const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM calendar_items ORDER BY updated_at DESC");
@@ -799,11 +858,12 @@ class TauriSqliteRepository implements AppRepository {
   }
 
   async loadSnapshot(): Promise<DesktopAppSnapshot> {
-    const [sessions, templates, todos, activities, calendarItems, entityLinks, attachments, settings] = await Promise.all([
+    const [sessions, templates, todos, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
       this.loadSessions(),
       this.loadTemplates(),
       this.loadTodos(),
       this.loadActivities(),
+      this.loadTimeLogs(),
       this.loadCalendarItems(),
       this.loadEntityLinks(),
       this.loadAttachments(),
@@ -815,6 +875,7 @@ class TauriSqliteRepository implements AppRepository {
       templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
       todos,
       activities,
+      timelogs,
       calendarItems,
       entityLinks,
       attachments,
@@ -828,6 +889,7 @@ class TauriSqliteRepository implements AppRepository {
       this.saveTemplates(snapshot.templates),
       this.saveTodos(snapshot.todos),
       this.saveActivities(snapshot.activities),
+      this.saveTimeLogs(snapshot.timelogs),
       this.saveCalendarItems(snapshot.calendarItems),
       this.saveEntityLinks(snapshot.entityLinks),
       this.saveAttachments(snapshot.attachments),
@@ -898,6 +960,11 @@ export const upsertActivity = (activities: ActivityRecord[], nextActivity: Activ
   activities.some((activity) => activity.id === nextActivity.id)
     ? activities.map((activity) => (activity.id === nextActivity.id ? nextActivity : activity))
     : [nextActivity, ...activities];
+
+export const upsertTimeLog = (timeLogs: TimeLogRecord[], nextTimeLog: TimeLogRecord) =>
+  timeLogs.some((timeLog) => timeLog.id === nextTimeLog.id)
+    ? timeLogs.map((timeLog) => (timeLog.id === nextTimeLog.id ? nextTimeLog : timeLog))
+    : [nextTimeLog, ...timeLogs];
 
 export const upsertCalendarItem = (items: CalendarItemRecord[], nextItem: CalendarItemRecord) =>
   items.some((item) => item.id === nextItem.id)

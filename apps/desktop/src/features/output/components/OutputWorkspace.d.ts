@@ -31,7 +31,6 @@ interface OutputWorkspaceProps {
     secondaryActionLabel?: string | null;
     emptyStatePrimaryLabel?: string;
     emptyStateSecondaryLabel?: string | null;
-    onOpenDetails?: () => void;
 }
-export declare const OutputWorkspace: ({ session, attachments, presentation, showPresentationActions, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, onOpenDetails, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const OutputWorkspace: ({ session, attachments, presentation, showPresentationActions, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

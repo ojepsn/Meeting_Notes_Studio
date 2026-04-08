@@ -1,4 +1,4 @@
-import { type AttachmentRecord, type ActivityRecord, type CalendarItemRecord, type CaptureMode, type DesktopAppSnapshot, type EntityLinkRecord, type LocalAppSettings, type SessionRecord, type TemplateDefinition, type TodoRecord } from "@notesmith/domain";
+import { type AttachmentRecord, type ActivityRecord, type CalendarItemRecord, type CaptureMode, type DesktopAppSnapshot, type EntityLinkRecord, type LocalAppSettings, type SessionRecord, type TemplateDefinition, type TimeLogRecord, type TodoRecord } from "@notesmith/domain";
 import type { AIRequestHistoryEntry } from "../ai/history";
 import { type AIModelPricingSnapshot } from "../ai/modelPricing";
 export declare const createDefaultSettings: () => LocalAppSettings;
@@ -12,6 +12,8 @@ export interface EntityRepository {
     saveTodos(records: TodoRecord[]): Promise<void>;
     loadActivities(): Promise<ActivityRecord[]>;
     saveActivities(records: ActivityRecord[]): Promise<void>;
+    loadTimeLogs(): Promise<TimeLogRecord[]>;
+    saveTimeLogs(records: TimeLogRecord[]): Promise<void>;
     loadCalendarItems(): Promise<CalendarItemRecord[]>;
     saveCalendarItems(records: CalendarItemRecord[]): Promise<void>;
     loadEntityLinks(): Promise<EntityLinkRecord[]>;
@@ -47,4 +49,5 @@ export declare const upsertSession: (sessions: SessionRecord[], nextSession: Ses
 export declare const upsertTemplate: (templates: TemplateDefinition[], nextTemplate: TemplateDefinition) => TemplateDefinition[];
 export declare const upsertTodo: (todos: TodoRecord[], nextTodo: TodoRecord) => TodoRecord[];
 export declare const upsertActivity: (activities: ActivityRecord[], nextActivity: ActivityRecord) => ActivityRecord[];
+export declare const upsertTimeLog: (timeLogs: TimeLogRecord[], nextTimeLog: TimeLogRecord) => TimeLogRecord[];
 export declare const upsertCalendarItem: (items: CalendarItemRecord[], nextItem: CalendarItemRecord) => CalendarItemRecord[];

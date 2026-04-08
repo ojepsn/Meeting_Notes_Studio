@@ -1,7 +1,8 @@
-import type { CaptureMode, DesktopAppSnapshot } from "@notesmith/domain";
+import type { CaptureMode, DesktopAppSnapshot, TimeLogRecord } from "@notesmith/domain";
 import { createAppRepository } from "../lib/db/repository";
 type DesktopView = "capture" | "output";
 type SaveState = "saved" | "saving" | "error";
+type TimeLog = TimeLogRecord;
 interface DesktopState {
     snapshot: DesktopAppSnapshot | null;
     activeSessionId: string | null;
@@ -23,11 +24,29 @@ interface DesktopState {
     restoreSession: (id: string) => Promise<void>;
     permanentlyDeleteSession: (id: string) => Promise<void>;
     saveTodo: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
-    addTodo: (description: string) => Promise<void>;
+    addTodo: (description: string, options?: {
+        activityId?: string;
+        domain?: string;
+        project?: string;
+        activityLabel?: string;
+        doOn?: string;
+    }) => Promise<void>;
     deleteTodo: (id: string) => Promise<void>;
     saveActivity: (activity: DesktopAppSnapshot["activities"][number]) => Promise<void>;
-    addActivity: (description: string, type?: DesktopAppSnapshot["activities"][number]["type"]) => Promise<void>;
+    addActivity: (description: string, type?: DesktopAppSnapshot["activities"][number]["type"], options?: {
+        parentActivityId?: string;
+        domain?: string;
+        project?: string;
+        activityLabel?: string;
+        doOn?: string;
+        startTime?: string;
+        endTime?: string;
+    }) => Promise<void>;
     deleteActivity: (id: string) => Promise<void>;
+    saveTimeLog: (timeLog: TimeLog) => Promise<void>;
+    deleteTimeLog: (id: string) => Promise<void>;
+    startTimeTracking: (targetType: TimeLog["targetType"], targetId: string) => Promise<void>;
+    stopTimeTracking: (targetType: TimeLog["targetType"], targetId: string) => Promise<void>;
     createCalendarEntryFromText: (date: string, startSlot: number, value: string) => Promise<void>;
     moveCalendarItem: (id: string, date: string, startSlot: number) => Promise<void>;
     updateCalendarItem: (id: string, updates: {

@@ -36,7 +36,6 @@ interface OutputWorkspaceProps {
   secondaryActionLabel?: string | null;
   emptyStatePrimaryLabel?: string;
   emptyStateSecondaryLabel?: string | null;
-  onOpenDetails?: () => void;
 }
 
 export const OutputWorkspace = ({
@@ -71,7 +70,6 @@ export const OutputWorkspace = ({
   secondaryActionLabel = null,
   emptyStatePrimaryLabel = "Generate polished notes",
   emptyStateSecondaryLabel = null,
-  onOpenDetails,
 }: OutputWorkspaceProps) => {
   const [revisionInstructions, setRevisionInstructions] = useState("");
   const includedImages = attachments
@@ -93,9 +91,6 @@ export const OutputWorkspace = ({
         {isMinimal && showPresentationActions ? (
           <div className="capture-minimal-actions">
             <span className="tiny-text">Minimal mode</span>
-            <button className="small-button" type="button" onClick={onOpenDetails}>
-              Open details
-            </button>
           </div>
         ) : (
           <div className="page-actions">
@@ -159,7 +154,6 @@ export const OutputWorkspace = ({
           </div>
         </div>
       </div>
-      {!isMinimal ? (
       <details className="field field-wide workspace-disclosure">
         <summary>{isMeetingNote ? "Meeting details" : "Optional note details"}</summary>
         <div className="workspace-disclosure-body form-grid">
@@ -262,7 +256,6 @@ export const OutputWorkspace = ({
           </div>
         </div>
       </details>
-      ) : null}
       <div className="field field-wide">
         <label htmlFor="session-output">Polished output</label>
         <textarea
@@ -291,8 +284,9 @@ export const OutputWorkspace = ({
           </div>
         </div>
       ) : null}
-      {!isMinimal ? (
-        <div className="stack">
+      <details className="field field-wide workspace-disclosure">
+        <summary>Refine and export</summary>
+        <div className="workspace-disclosure-body stack">
           <div className="field field-wide">
             <label htmlFor="revision-instructions">Revision instructions</label>
             <textarea
@@ -332,7 +326,7 @@ export const OutputWorkspace = ({
             </button>
           </div>
         </div>
-      ) : null}
+      </details>
     </div>
   );
 };

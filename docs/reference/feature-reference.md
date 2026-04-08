@@ -38,6 +38,53 @@ Planned:
 - attachments
 - capture/output split
 
+### Quick creation shortcuts
+
+- `td ...` creates a todo
+- `act ...` creates an activity
+- `meet ...` creates a meeting activity
+- from a linked meeting session, these shortcuts inherit the current work context where possible
+
+## Work Model
+
+Current work structure is now oriented around:
+
+- `Domain`
+- `Project`
+- `Activity`
+- `Todo`
+- `Time log`
+
+Current behaviors:
+
+- todos can be linked directly to an activity
+- meeting activities can sit under a parent activity
+- activities act as the main container for fast follow-up work
+- child todos and child meetings can be added from inside the activity detail card
+- time logs can be added live or edited retrospectively
+
+## Todos
+
+Current todo capabilities:
+
+- unassigned or activity-linked todos
+- quick add with optional activity context
+- convert todo to activity
+- start/stop time tracking
+- manual time-log entry
+- retrospective time-log editing and deletion
+
+## Activities
+
+Current activity capabilities:
+
+- top-level task and meeting activities
+- child meeting activities under a parent activity
+- quick add child todos from the activity detail card
+- quick add child meetings from the activity detail card
+- meeting-session linking for meeting activities
+- activity-level time logs, including retrospective edits
+
 ## Attachments
 
 Current attachment types in the desktop model:

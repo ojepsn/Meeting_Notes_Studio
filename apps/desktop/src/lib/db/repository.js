@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
     templates: "notesmith-desktop-templates",
     todos: "notesmith-desktop-todos",
     activities: "notesmith-desktop-activities",
+    timelogs: "notesmith-desktop-timelogs",
     calendarItems: "notesmith-desktop-calendar-items",
     entityLinks: "notesmith-desktop-entity-links",
     attachments: "notesmith-desktop-attachments",
@@ -47,6 +48,7 @@ const normalizeTodoRecord = (todo) => ({
     ...todo,
     isPrivate: Boolean(todo.isPrivate),
     comments: typeof todo.comments === "string" ? todo.comments : "",
+    activityId: typeof todo.activityId === "string" ? todo.activityId : "",
     domain: typeof todo.domain === "string" ? todo.domain : "",
     project: typeof todo.project === "string" ? todo.project : "",
     activity: typeof todo.activity === "string" ? todo.activity : "",
@@ -62,6 +64,7 @@ const normalizeTodoRecord = (todo) => ({
 const normalizeActivityRecord = (activity) => ({
     ...activity,
     type: activity.type === "meeting" ? "meeting" : "task",
+    parentActivityId: typeof activity.parentActivityId === "string" ? activity.parentActivityId : "",
     isPrivate: Boolean(activity.isPrivate),
     comments: typeof activity.comments === "string" ? activity.comments : "",
     domain: typeof activity.domain === "string" ? activity.domain : "",
@@ -81,6 +84,15 @@ const normalizeActivityRecord = (activity) => ({
     sessionIds: Array.isArray(activity.sessionIds)
         ? activity.sessionIds.filter((value) => typeof value === "string")
         : [],
+});
+const normalizeTimeLogRecord = (timeLog) => ({
+    ...timeLog,
+    targetType: timeLog.targetType === "activity" ? "activity" : "todo",
+    date: typeof timeLog.date === "string" ? timeLog.date : now().slice(0, 10),
+    startTime: typeof timeLog.startTime === "string" ? timeLog.startTime : "",
+    endTime: typeof timeLog.endTime === "string" ? timeLog.endTime : "",
+    durationMinutes: Number.isFinite(Number(timeLog.durationMinutes)) ? Math.max(0, Math.round(Number(timeLog.durationMinutes))) : 0,
+    notes: typeof timeLog.notes === "string" ? timeLog.notes : "",
 });
 const normalizeCalendarItemRecord = (item) => ({
     ...item,
@@ -187,6 +199,7 @@ export const createDefaultSnapshot = () => ({
     templates: BUILTIN_TEMPLATES,
     todos: [],
     activities: [],
+    timelogs: [],
     calendarItems: [],
     entityLinks: [],
     attachments: [],
@@ -258,6 +271,12 @@ class BrowserEntityRepository {
     async saveActivities(records) {
         writeLocalJson(STORAGE_KEYS.activities, records);
     }
+    async loadTimeLogs() {
+        return readLocalJson(STORAGE_KEYS.timelogs, []).map(normalizeTimeLogRecord);
+    }
+    async saveTimeLogs(records) {
+        writeLocalJson(STORAGE_KEYS.timelogs, records);
+    }
     async loadCalendarItems() {
         return readLocalJson(STORAGE_KEYS.calendarItems, []).map(normalizeCalendarItemRecord);
     }
@@ -301,11 +320,12 @@ class BrowserEntityRepository {
         writeLocalJson(STORAGE_KEYS.aiModelPricing, snapshot);
     }
     async loadSnapshot() {
-        const [sessions, templates, todos, activities, calendarItems, entityLinks, attachments, settings] = await Promise.all([
+        const [sessions, templates, todos, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
             this.loadSessions(),
             this.loadTemplates(),
             this.loadTodos(),
             this.loadActivities(),
+            this.loadTimeLogs(),
             this.loadCalendarItems(),
             this.loadEntityLinks(),
             this.loadAttachments(),
@@ -316,6 +336,7 @@ class BrowserEntityRepository {
             templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
             todos,
             activities,
+            timelogs,
             calendarItems,
             entityLinks,
             attachments,
@@ -328,6 +349,7 @@ class BrowserEntityRepository {
             this.saveTemplates(snapshot.templates),
             this.saveTodos(snapshot.todos),
             this.saveActivities(snapshot.activities),
+            this.saveTimeLogs(snapshot.timelogs),
             this.saveCalendarItems(snapshot.calendarItems),
             this.saveEntityLinks(snapshot.entityLinks),
             this.saveAttachments(snapshot.attachments),
@@ -357,6 +379,7 @@ class TauriSqliteRepository {
                 await db.execute("ALTER TABLE attachments ADD COLUMN include_in_output INTEGER NOT NULL DEFAULT 0").catch(() => { });
                 await db.execute("ALTER TABLE attachments ADD COLUMN output_position INTEGER NOT NULL DEFAULT 0").catch(() => { });
                 await db.execute("CREATE TABLE IF NOT EXISTS calendar_items (id TEXT PRIMARY KEY, target_type TEXT NOT NULL, target_id TEXT NOT NULL, schedule_date TEXT NOT NULL, start_slot INTEGER NOT NULL, duration_slots INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => { });
+                await db.execute("CREATE TABLE IF NOT EXISTS timelogs (id TEXT PRIMARY KEY, target_type TEXT NOT NULL, target_id TEXT NOT NULL, log_date TEXT NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL, duration_minutes INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => { });
                 return db;
             })();
         }
@@ -463,6 +486,27 @@ class TauriSqliteRepository {
         await db.execute("DELETE FROM activities");
         await Promise.all(records.map((record) => db.execute("INSERT INTO activities (id, description, is_done, comments, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?)", [record.id, record.description, record.isDone ? 1 : 0, record.comments, record.createdAt, JSON.stringify(record)])));
     }
+    async loadTimeLogs() {
+        const db = await this.getDb();
+        const rows = await db.select("SELECT payload_json FROM timelogs ORDER BY updated_at DESC");
+        return rows.map((row) => normalizeTimeLogRecord(JSON.parse(row.payload_json)));
+    }
+    async saveTimeLogs(records) {
+        const db = await this.getDb();
+        await db.execute("DELETE FROM timelogs");
+        await Promise.all(records.map((record) => db.execute("INSERT INTO timelogs (id, target_type, target_id, log_date, start_time, end_time, duration_minutes, created_at, updated_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+            record.id,
+            record.targetType,
+            record.targetId,
+            record.date,
+            record.startTime,
+            record.endTime,
+            record.durationMinutes,
+            record.createdAt,
+            record.updatedAt,
+            JSON.stringify(record),
+        ])));
+    }
     async loadCalendarItems() {
         const db = await this.getDb();
         const rows = await db.select("SELECT payload_json FROM calendar_items ORDER BY updated_at DESC");
@@ -560,11 +604,12 @@ class TauriSqliteRepository {
         await db.execute("INSERT OR REPLACE INTO settings_local (key, value_json) VALUES (?, ?)", ["ai-model-pricing", JSON.stringify(snapshot)]);
     }
     async loadSnapshot() {
-        const [sessions, templates, todos, activities, calendarItems, entityLinks, attachments, settings] = await Promise.all([
+        const [sessions, templates, todos, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
             this.loadSessions(),
             this.loadTemplates(),
             this.loadTodos(),
             this.loadActivities(),
+            this.loadTimeLogs(),
             this.loadCalendarItems(),
             this.loadEntityLinks(),
             this.loadAttachments(),
@@ -575,6 +620,7 @@ class TauriSqliteRepository {
             templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
             todos,
             activities,
+            timelogs,
             calendarItems,
             entityLinks,
             attachments,
@@ -587,6 +633,7 @@ class TauriSqliteRepository {
             this.saveTemplates(snapshot.templates),
             this.saveTodos(snapshot.todos),
             this.saveActivities(snapshot.activities),
+            this.saveTimeLogs(snapshot.timelogs),
             this.saveCalendarItems(snapshot.calendarItems),
             this.saveEntityLinks(snapshot.entityLinks),
             this.saveAttachments(snapshot.attachments),
@@ -641,6 +688,9 @@ export const upsertTodo = (todos, nextTodo) => todos.some((todo) => todo.id === 
 export const upsertActivity = (activities, nextActivity) => activities.some((activity) => activity.id === nextActivity.id)
     ? activities.map((activity) => (activity.id === nextActivity.id ? nextActivity : activity))
     : [nextActivity, ...activities];
+export const upsertTimeLog = (timeLogs, nextTimeLog) => timeLogs.some((timeLog) => timeLog.id === nextTimeLog.id)
+    ? timeLogs.map((timeLog) => (timeLog.id === nextTimeLog.id ? nextTimeLog : timeLog))
+    : [nextTimeLog, ...timeLogs];
 export const upsertCalendarItem = (items, nextItem) => items.some((item) => item.id === nextItem.id)
     ? items.map((item) => (item.id === nextItem.id ? nextItem : item))
     : [nextItem, ...items];

@@ -166,7 +166,7 @@ export const SessionEditor = ({
   const showMinimalVoiceCore = isMinimal && session.captureMode === "voice-note";
   const showFullAudioCard = !isMinimal && session.captureMode !== "quick-note";
   const showMinimalAudioStrip = isMinimal && session.captureMode !== "quick-note";
-  const showDetailsDisclosure = !isMinimal;
+  const showDetailsDisclosure = true;
 
   const switchMode = (captureMode: CaptureMode) => {
     const nextTemplates = getTemplatesForCaptureMode(templates, captureMode);
@@ -628,47 +628,53 @@ export const SessionEditor = ({
           </div>
         )}
 
-        {!isMinimal && showQuickHighlights ? (
-          <div className="field field-wide">
-            <label htmlFor="quick-highlights">Quick highlights</label>
-            <textarea
-              id="quick-highlights"
-              value={session.quickHighlights}
-              onChange={(event) => update("quickHighlights", event.target.value)}
-              placeholder="Short key points, names, or topics to emphasize in the final output."
-            />
-          </div>
+        {showQuickHighlights || customFields.length ? (
+          <details className="field field-wide workspace-disclosure">
+            <summary>Capture extras</summary>
+            <div className="workspace-disclosure-body form-grid">
+              {showQuickHighlights ? (
+                <div className="field field-wide">
+                  <label htmlFor="quick-highlights">Quick highlights</label>
+                  <textarea
+                    id="quick-highlights"
+                    value={session.quickHighlights}
+                    onChange={(event) => update("quickHighlights", event.target.value)}
+                    placeholder="Short key points, names, or topics to emphasize in the final output."
+                  />
+                </div>
+              ) : null}
+              {customFields.map((field) => (
+                <div key={field.id} className={field.type === "textarea" ? "field field-wide" : "field"}>
+                  <label htmlFor={`custom-field-${field.id}`}>{field.label}</label>
+                  {field.type === "textarea" ? (
+                    <textarea
+                      id={`custom-field-${field.id}`}
+                      value={session.customFieldValues[field.id] ?? ""}
+                      onChange={(event) =>
+                        update("customFieldValues", {
+                          ...session.customFieldValues,
+                          [field.id]: event.target.value,
+                        })
+                      }
+                    />
+                  ) : (
+                    <input
+                      id={`custom-field-${field.id}`}
+                      type={field.type === "number" ? "number" : field.type}
+                      value={session.customFieldValues[field.id] ?? ""}
+                      onChange={(event) =>
+                        update("customFieldValues", {
+                          ...session.customFieldValues,
+                          [field.id]: event.target.value,
+                        })
+                      }
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
         ) : null}
-
-        {!isMinimal ? customFields.map((field) => (
-          <div key={field.id} className={field.type === "textarea" ? "field field-wide" : "field"}>
-            <label htmlFor={`custom-field-${field.id}`}>{field.label}</label>
-            {field.type === "textarea" ? (
-              <textarea
-                id={`custom-field-${field.id}`}
-                value={session.customFieldValues[field.id] ?? ""}
-                onChange={(event) =>
-                  update("customFieldValues", {
-                    ...session.customFieldValues,
-                    [field.id]: event.target.value,
-                  })
-                }
-              />
-            ) : (
-              <input
-                id={`custom-field-${field.id}`}
-                type={field.type === "number" ? "number" : field.type}
-                value={session.customFieldValues[field.id] ?? ""}
-                onChange={(event) =>
-                  update("customFieldValues", {
-                    ...session.customFieldValues,
-                    [field.id]: event.target.value,
-                  })
-                }
-              />
-            )}
-          </div>
-        )) : null}
 
         {!showMinimalVoiceCore && showTranscriptField ? (
           <div className="field field-wide">
@@ -689,79 +695,74 @@ export const SessionEditor = ({
           </div>
         ) : null}
 
-        {!isMinimal ? (
-          <details className="field field-wide workspace-disclosure">
-            <summary>Advanced output controls</summary>
-            <div className="workspace-disclosure-body form-grid">
-              <div className="field">
-                <label htmlFor="detail-level">Detail level</label>
-                <select
-                  id="detail-level"
-                  value={String(session.detailLevel)}
-                  onChange={(event) => update("detailLevel", Number(event.target.value))}
-                >
-                  {Object.entries(DETAIL_LEVEL_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {value} - {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {enabledSections.length ? (
-                <div className="field field-wide">
-                  <label>Output sections for this session</label>
-                  <div className="section-list">
-                    {enabledSections.map((section) => (
-                      <label key={section.id} className="list-item checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={section.checked}
-                          onChange={(event) =>
-                            update(
-                              "excludedSectionIds",
-                              event.target.checked
-                                ? session.excludedSectionIds.filter((id) => id !== section.id)
-                                : Array.from(new Set([...session.excludedSectionIds, section.id])),
-                            )
-                          }
-                        />
-                        <span>
-                          <strong>{section.title}</strong>
-                          <span className="muted">{section.instructions}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
+        <details className="field field-wide workspace-disclosure">
+          <summary>Advanced capture tools</summary>
+          <div className="workspace-disclosure-body form-grid">
+            <div className="field">
+              <label htmlFor="detail-level">Detail level</label>
+              <select
+                id="detail-level"
+                value={String(session.detailLevel)}
+                onChange={(event) => update("detailLevel", Number(event.target.value))}
+              >
+                {Object.entries(DETAIL_LEVEL_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {value} - {label}
+                  </option>
+                ))}
+              </select>
             </div>
-          </details>
-        ) : null}
-
-        {!isMinimal ? (
-          <div className="page-actions field-wide">
-          <button className="small-button" type="button" onClick={onImportImage}>
-            Upload image
-          </button>
-          {session.captureMode !== "quick-note" ? (
-            <>
-              <button className="small-button" type="button" onClick={onImportAudio}>
-                Upload audio
+            {enabledSections.length ? (
+              <div className="field field-wide">
+                <label>Output sections for this session</label>
+                <div className="section-list">
+                  {enabledSections.map((section) => (
+                    <label key={section.id} className="list-item checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={section.checked}
+                        onChange={(event) =>
+                          update(
+                            "excludedSectionIds",
+                            event.target.checked
+                              ? session.excludedSectionIds.filter((id) => id !== section.id)
+                              : Array.from(new Set([...session.excludedSectionIds, section.id])),
+                          )
+                        }
+                      />
+                      <span>
+                        <strong>{section.title}</strong>
+                        <span className="muted">{section.instructions}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <div className="page-actions field-wide">
+              <button className="small-button" type="button" onClick={onImportImage}>
+                Upload image
               </button>
-              <button className="small-button" type="button" onClick={onTranscribeAudio}>
-                {isTranscribingAudio ? "Transcribing audio..." : "Transcribe audio"}
-              </button>
-              <button className="small-button" type="button" onClick={onImportTranscript}>
-                Upload transcript file
-              </button>
-            </>
-          ) : (
-            <button className="small-button" type="button" onClick={onImportTranscript}>
-              Upload note text
-            </button>
-          )}
+              {session.captureMode !== "quick-note" ? (
+                <>
+                  <button className="small-button" type="button" onClick={onImportAudio}>
+                    Upload audio
+                  </button>
+                  <button className="small-button" type="button" onClick={onTranscribeAudio}>
+                    {isTranscribingAudio ? "Transcribing audio..." : "Transcribe audio"}
+                  </button>
+                  <button className="small-button" type="button" onClick={onImportTranscript}>
+                    Upload transcript file
+                  </button>
+                </>
+              ) : (
+                <button className="small-button" type="button" onClick={onImportTranscript}>
+                  Upload note text
+                </button>
+              )}
+            </div>
           </div>
-        ) : null}
+        </details>
 
         {!isMinimal && imageAttachments.length ? (
           <div className="field field-wide">

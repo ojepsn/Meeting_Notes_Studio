@@ -64,6 +64,7 @@ export interface TodoRecord {
   isDone: boolean;
   isPrivate: boolean;
   comments: string;
+  activityId: string;
   domain: string;
   project: string;
   activity: string;
@@ -77,6 +78,7 @@ export interface TodoRecord {
 export interface ActivityRecord {
   id: string;
   type: "task" | "meeting";
+  parentActivityId: string;
   description: string;
   isDone: boolean;
   isPrivate: boolean;
@@ -93,6 +95,19 @@ export interface ActivityRecord {
   actualTimeSpentMinutes: number;
   createdAt: string;
   sessionIds: string[];
+}
+
+export interface TimeLogRecord {
+  id: string;
+  targetType: "todo" | "activity";
+  targetId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CalendarItemRecord {
@@ -178,6 +193,7 @@ export interface DesktopAppSnapshot {
   templates: TemplateDefinition[];
   todos: TodoRecord[];
   activities: ActivityRecord[];
+  timelogs: TimeLogRecord[];
   calendarItems: CalendarItemRecord[];
   entityLinks: EntityLinkRecord[];
   attachments: AttachmentRecord[];

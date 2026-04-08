@@ -172,6 +172,10 @@ export const App = () => {
     saveActivity,
     addActivity,
     deleteActivity,
+    saveTimeLog,
+    deleteTimeLog,
+    startTimeTracking,
+    stopTimeTracking,
     createCalendarEntryFromText,
     moveCalendarItem,
     updateCalendarItem,
@@ -668,6 +672,9 @@ export const App = () => {
   };
 
   const handleGlobalTodoShortcut = async (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!activeSession) {
+      return;
+    }
     if (
       event.key !== "Enter" ||
       event.shiftKey ||
@@ -696,7 +703,10 @@ export const App = () => {
       event.preventDefault();
       event.stopPropagation();
 
-      await addTodo(todoDescription);
+      await addTodo(todoDescription, {
+        activityId: activeLinkedActivity?.id || undefined,
+        doOn: activeSession.date || undefined,
+      });
       target.value = "";
       target.dispatchEvent(new Event("input", { bubbles: true }));
       setStatusNote(`Added to-do: ${todoDescription}`);
@@ -708,7 +718,13 @@ export const App = () => {
       event.preventDefault();
       event.stopPropagation();
 
-      await addActivity(activityDescription, "task");
+      await addActivity(activityDescription, "task", {
+        parentActivityId: activeLinkedActivity?.id || undefined,
+        domain: activeSession.domain || undefined,
+        project: activeSession.project || undefined,
+        activityLabel: activeLinkedActivity?.description || activeSession.activity || undefined,
+        doOn: activeSession.date || undefined,
+      });
       target.value = "";
       target.dispatchEvent(new Event("input", { bubbles: true }));
       setStatusNote(`Added activity: ${activityDescription}`);
@@ -720,7 +736,15 @@ export const App = () => {
       event.preventDefault();
       event.stopPropagation();
 
-      await addActivity(meetingDescription, "meeting");
+      await addActivity(meetingDescription, "meeting", {
+        parentActivityId: activeLinkedActivity?.id || undefined,
+        domain: activeSession.domain || undefined,
+        project: activeSession.project || undefined,
+        activityLabel: activeLinkedActivity?.description || activeSession.activity || undefined,
+        doOn: activeSession.date || undefined,
+        startTime: activeSession.startTime || undefined,
+        endTime: activeSession.endTime || undefined,
+      });
       target.value = "";
       target.dispatchEvent(new Event("input", { bubbles: true }));
       setStatusNote(`Added meeting activity: ${meetingDescription}`);
@@ -2262,7 +2286,7 @@ export const App = () => {
                         type="button"
                         onClick={() => handleCaptureDensityChange("minimal")}
                       >
-                        Minimal
+                        Focused
                       </button>
                       <button
                         className="segment-button"
@@ -2270,7 +2294,7 @@ export const App = () => {
                         type="button"
                         onClick={() => handleCaptureDensityChange("full")}
                       >
-                        Full
+                        Expanded
                       </button>
                     </div>
                   ) : activeWorkspace === "notes" && activeView === "output" ? (
@@ -2281,7 +2305,7 @@ export const App = () => {
                         type="button"
                         onClick={() => handleOutputDensityChange("minimal")}
                       >
-                        Minimal
+                        Focused
                       </button>
                       <button
                         className="segment-button"
@@ -2289,20 +2313,18 @@ export const App = () => {
                         type="button"
                         onClick={() => handleOutputDensityChange("full")}
                       >
-                        Full
+                        Expanded
                       </button>
                     </div>
                   ) : null}
                 </div>
               </div>
-              {activeWorkspace === "notes" || (activeWorkspace !== "todos" && activeWorkspace !== "activities") ? (
+              {activeWorkspace === "notes" ? (
                 <div className="workspace-guide-row workspace-guide-row-quiet">
                   <span className="tiny-text">
-                    {activeWorkspace === "notes"
-                      ? activeView === "capture"
-                        ? "Keep the center canvas for writing. Use the inspector and details overlays when you need more."
-                        : "Keep the document central. Use details, export, and refinement only when you need them."
-                      : "The same calm shell will carry into future workspaces."}
+                    {activeView === "capture"
+                      ? "Capture keeps the primary writing fields open first, with everything else tucked into calm sections below."
+                      : "Output keeps the document central, with details and export tools folded away until you need them."}
                   </span>
                 </div>
               ) : null}
@@ -2319,22 +2341,32 @@ export const App = () => {
             {activeWorkspace === "todos" ? (
               <TodosWorkspace
                 todos={snapshot.todos}
+                activities={snapshot.activities}
+                timeLogs={snapshot.timelogs}
                 requestedTodoId={requestedTodoId}
                 onEditorClose={returnFromLinkedDetailToCalendar}
                 onToggle={(todo) => void saveTodo(todo)}
-                onAdd={(description) => void addTodo(description)}
+                onAdd={(description, options) => void addTodo(description, options)}
                 onSave={(todo) => void saveTodo(todo)}
                 onDelete={(id) => void deleteTodo(id)}
                 onConvertToActivity={(todo) => void convertTodoToActivity(todo)}
+                onSaveTimeLog={(timeLog) => void saveTimeLog(timeLog)}
+                onDeleteTimeLog={(id) => void deleteTimeLog(id)}
+                onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
+                onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
               />
             ) : activeWorkspace === "activities" ? (
               <ActivitiesWorkspace
                 activities={snapshot.activities}
+                todos={snapshot.todos}
+                timeLogs={snapshot.timelogs}
                 linkedSessionIdsByActivity={linkedSessionIdsByActivity}
                 requestedActivityId={requestedActivityId}
                 onEditorClose={returnFromLinkedDetailToCalendar}
                 onToggle={(activity) => void saveActivity(activity)}
                 onAdd={(description, type) => void addActivity(description, type)}
+                onAddChildTodo={(description, activityId) => void addTodo(description, { activityId })}
+                onAddChildMeeting={(description, activityId) => void addActivity(description, "meeting", { parentActivityId: activityId })}
                 onSave={(activity) => void saveActivity(activity)}
                 onDelete={(id) => void deleteActivity(id)}
                 onCreateLinkedMeetingSession={(activityId) =>
@@ -2345,6 +2377,11 @@ export const App = () => {
                   })
                 }
                 onOpenSession={openSessionFromLink}
+                onOpenTodoDetail={openTodoDetailFromLink}
+                onSaveTimeLog={(timeLog) => void saveTimeLog(timeLog)}
+                onDeleteTimeLog={(id) => void deleteTimeLog(id)}
+                onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
+                onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
               />
             ) : activeWorkspace === "calendar" ? (
               <CalendarWorkspace
@@ -2458,7 +2495,6 @@ export const App = () => {
                 secondaryActionLabel={outputActionConfig.secondaryLabel}
                 emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
                 emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
-                onOpenDetails={() => openOverlay("output-details")}
               />
             )}
           </section>
