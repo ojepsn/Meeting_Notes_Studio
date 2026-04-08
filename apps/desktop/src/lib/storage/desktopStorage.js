@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { appConfigDir, appDataDir, downloadDir } from "@tauri-apps/api/path";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { isTauriRuntime } from "./environment";
 const joinPath = (base, child) => `${base.replace(/[\\\/]+$/, "")}/${child}`;
 export const buildSnapshotBackupFilename = (date = new Date()) => {
@@ -25,6 +25,13 @@ export const openDesktopPath = async (path) => {
         return;
     }
     await invoke("open_path_in_file_manager", { path });
+};
+export const getDesktopAppVersion = async () => {
+    if (!isTauriRuntime()) {
+        return null;
+    }
+    const app = await import("@tauri-apps/api/app");
+    return app.getVersion();
 };
 export const exportSnapshotBackup = async (snapshot) => {
     const content = JSON.stringify(snapshot, null, 2);
@@ -62,4 +69,24 @@ export const createLocalSnapshotBackup = async (snapshot) => {
         filename: buildSnapshotBackupFilename(),
         bytes,
     });
+};
+export const importSnapshotBackup = async () => {
+    const selectedPath = await open({
+        multiple: false,
+        filters: [{ name: "JSON backup", extensions: ["json"] }],
+    });
+    if (!selectedPath || Array.isArray(selectedPath)) {
+        return null;
+    }
+    let content = "";
+    if (isTauriRuntime()) {
+        const bytes = await invoke("read_file_bytes", {
+            path: selectedPath,
+        });
+        content = new TextDecoder().decode(new Uint8Array(bytes));
+    }
+    else {
+        content = await fetch(selectedPath).then((response) => response.text());
+    }
+    return JSON.parse(content);
 };

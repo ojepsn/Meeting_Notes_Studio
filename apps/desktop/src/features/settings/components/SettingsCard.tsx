@@ -34,6 +34,7 @@ interface SettingsCardProps {
   onSaveTemplate: (template: TemplateDefinition) => void;
   onResetTemplates: () => Promise<void>;
   onImportLegacy: () => Promise<void>;
+  onImportBackup: () => Promise<void>;
   onCheckForUpdates: () => Promise<void>;
   onInstallUpdate?: () => Promise<void>;
   onOpenDataFolder: () => Promise<void>;
@@ -42,6 +43,7 @@ interface SettingsCardProps {
   onCreateLocalBackup: () => Promise<void>;
   onRefreshModelPricing: () => Promise<void> | void;
   updateStatusNote?: string | null;
+  desktopVersion?: string | null;
   availableUpdateVersion?: string | null;
   isCheckingForUpdates?: boolean;
   isInstallingUpdate?: boolean;
@@ -224,6 +226,7 @@ export const SettingsCard = ({
   onSaveTemplate,
   onResetTemplates,
   onImportLegacy,
+  onImportBackup,
   onCheckForUpdates,
   onInstallUpdate,
   onOpenDataFolder,
@@ -232,6 +235,7 @@ export const SettingsCard = ({
   onCreateLocalBackup,
   onRefreshModelPricing,
   updateStatusNote,
+  desktopVersion,
   availableUpdateVersion,
   isCheckingForUpdates,
   isInstallingUpdate,
@@ -1341,11 +1345,11 @@ export const SettingsCard = ({
               </select>
             </div>
             <div className="inline-row">
-              <button className="small-button" type="button" onClick={() => void onCheckForUpdates()}>
-                Check for updates
-              </button>
               <button className="small-button" type="button" onClick={() => void onImportLegacy()}>
                 Import current browser app data
+              </button>
+              <button className="small-button" type="button" onClick={() => void onImportBackup()}>
+                Import backup file
               </button>
               <button className="small-button" type="button" onClick={() => void onExportBackup()}>
                 Export backup file
@@ -1370,6 +1374,10 @@ export const SettingsCard = ({
             </div>
             {storageInfo ? (
               <div className="section-list">
+                <div className="list-item">
+                  <strong>Desktop version</strong>
+                  <span className="muted">{desktopVersion || "Unknown"}</span>
+                </div>
                 <div className="list-item">
                   <strong>Data folder</strong>
                   <span className="muted">{storageInfo.appDataDir}</span>

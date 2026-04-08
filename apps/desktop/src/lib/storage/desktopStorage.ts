@@ -1,7 +1,7 @@
 import type { DesktopAppSnapshot } from "@notesmith/domain";
 import { invoke } from "@tauri-apps/api/core";
 import { appConfigDir, appDataDir, downloadDir } from "@tauri-apps/api/path";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { isTauriRuntime } from "./environment";
 
 export interface DesktopStorageInfo {
@@ -40,6 +40,15 @@ export const openDesktopPath = async (path: string) => {
   }
 
   await invoke("open_path_in_file_manager", { path });
+};
+
+export const getDesktopAppVersion = async () => {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  const app = await import("@tauri-apps/api/app");
+  return app.getVersion();
 };
 
 export const exportSnapshotBackup = async (snapshot: DesktopAppSnapshot) => {
@@ -85,4 +94,27 @@ export const createLocalSnapshotBackup = async (snapshot: DesktopAppSnapshot) =>
     filename: buildSnapshotBackupFilename(),
     bytes,
   });
+};
+
+export const importSnapshotBackup = async (): Promise<DesktopAppSnapshot | null> => {
+  const selectedPath = await open({
+    multiple: false,
+    filters: [{ name: "JSON backup", extensions: ["json"] }],
+  });
+
+  if (!selectedPath || Array.isArray(selectedPath)) {
+    return null;
+  }
+
+  let content = "";
+  if (isTauriRuntime()) {
+    const bytes = await invoke<number[]>("read_file_bytes", {
+      path: selectedPath,
+    });
+    content = new TextDecoder().decode(new Uint8Array(bytes));
+  } else {
+    content = await fetch(selectedPath).then((response) => response.text());
+  }
+
+  return JSON.parse(content) as DesktopAppSnapshot;
 };

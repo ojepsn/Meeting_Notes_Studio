@@ -46,6 +46,7 @@ interface DesktopState {
     saveTemplate: (template: DesktopAppSnapshot["templates"][number]) => Promise<void>;
     resetTemplates: () => Promise<void>;
     importLegacyBrowserData: () => Promise<"imported" | "missing">;
+    importBackupSnapshot: (snapshot: DesktopAppSnapshot) => Promise<void>;
     saveAttachments: (attachments: DesktopAppSnapshot["attachments"]) => Promise<void>;
 }
 export declare const useDesktopStore: import("zustand").UseBoundStore<import("zustand").StoreApi<DesktopState>>;

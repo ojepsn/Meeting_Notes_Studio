@@ -245,6 +245,7 @@ interface DesktopState {
   saveTemplate: (template: DesktopAppSnapshot["templates"][number]) => Promise<void>;
   resetTemplates: () => Promise<void>;
   importLegacyBrowserData: () => Promise<"imported" | "missing">;
+  importBackupSnapshot: (snapshot: DesktopAppSnapshot) => Promise<void>;
   saveAttachments: (attachments: DesktopAppSnapshot["attachments"]) => Promise<void>;
 }
 
@@ -845,5 +846,20 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     });
     await flushSnapshotPersist(get().repository, migrated, set);
     return "imported";
+  },
+  importBackupSnapshot: async (snapshot) => {
+    const nextSnapshot = {
+      ...snapshot,
+      sessions:
+        Array.isArray(snapshot.sessions) && snapshot.sessions.length
+          ? snapshot.sessions
+          : [createSessionRecord(snapshot.settings?.preferredDesktopTemplateId || "meeting", "meeting-note")],
+    } as DesktopAppSnapshot;
+    set({
+      snapshot: nextSnapshot,
+      activeSessionId: getFirstActiveSessionId(nextSnapshot.sessions),
+      activeView: "capture",
+    });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
   },
 }));

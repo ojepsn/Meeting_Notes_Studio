@@ -52,7 +52,9 @@ import {
 import {
   createLocalSnapshotBackup,
   exportSnapshotBackup,
+  getDesktopAppVersion,
   getDesktopStorageInfo,
+  importSnapshotBackup,
   openDesktopPath,
   type DesktopStorageInfo,
 } from "../lib/storage/desktopStorage";
@@ -163,6 +165,7 @@ export const App = () => {
     saveTemplate,
     resetTemplates,
     importLegacyBrowserData,
+    importBackupSnapshot: restoreBackupSnapshot,
     saveAttachments,
   } = useDesktopStore();
   const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("notes");
@@ -187,6 +190,7 @@ export const App = () => {
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
   const [updateStatusNote, setUpdateStatusNote] = useState<string | null>(null);
+  const [desktopVersion, setDesktopVersion] = useState<string | null>(null);
   const [storageInfo, setStorageInfo] = useState<DesktopStorageInfo | null>(null);
   const [aiDiagnostics, setAIDiagnostics] = useState(() => getAIDiagnosticsItems());
   const [aiRequestHistory, setAIRequestHistory] = useState(() => getAIRequestHistory());
@@ -286,6 +290,24 @@ export const App = () => {
       cancelled = true;
       clearInterval(intervalId);
       window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [isLoaded, loadError]);
+
+  useEffect(() => {
+    if (!isLoaded || loadError) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const version = await getDesktopAppVersion();
+      if (!cancelled) {
+        setDesktopVersion(version);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
     };
   }, [isLoaded, loadError]);
 
@@ -902,6 +924,21 @@ export const App = () => {
       setStatusNote(`Created a local safety backup at ${backupPath}.`);
     } catch (error) {
       setStatusNote(error instanceof Error ? error.message : "Could not create the local safety backup.");
+    }
+  };
+
+  const handleImportBackup = async () => {
+    try {
+      const imported = await importSnapshotBackup();
+      if (!imported) {
+        setStatusNote("Backup import was cancelled.");
+        return;
+      }
+      await restoreBackupSnapshot(imported);
+      setStatusNote("Imported the selected desktop backup file.");
+      setOpenPanel(null);
+    } catch (error) {
+      setStatusNote(error instanceof Error ? error.message : "Could not import the desktop backup file.");
     }
   };
 
@@ -1890,6 +1927,7 @@ export const App = () => {
             onSaveTemplate={(template) => void saveTemplate(template)}
             onResetTemplates={handleResetTemplates}
             onImportLegacy={handleImportLegacy}
+            onImportBackup={handleImportBackup}
             onCheckForUpdates={handleCheckForUpdates}
             onInstallUpdate={handleInstallUpdate}
             onOpenDataFolder={handleOpenDataFolder}
@@ -1897,6 +1935,7 @@ export const App = () => {
             onExportBackup={handleExportSnapshot}
             onCreateLocalBackup={handleCreateLocalBackup}
             updateStatusNote={updateStatusNote}
+            desktopVersion={desktopVersion}
             availableUpdateVersion={availableUpdateVersion}
             isCheckingForUpdates={isCheckingForUpdates}
             isInstallingUpdate={isInstallingUpdate}
@@ -1941,6 +1980,9 @@ export const App = () => {
               <button className="small-button" type="button" onClick={() => void handleImportLegacy()}>
                 Import current browser data
               </button>
+              <button className="small-button" type="button" onClick={() => void handleImportBackup()}>
+                Import backup file
+              </button>
               <button className="small-button" type="button" onClick={() => void handleExportSnapshot()}>
                 Export backup file
               </button>
@@ -1953,6 +1995,10 @@ export const App = () => {
             </div>
             {storageInfo ? (
               <div className="section-list">
+                <div className="list-item">
+                  <strong>Desktop version</strong>
+                  <span className="muted">{desktopVersion || "Unknown"}</span>
+                </div>
                 <div className="list-item">
                   <strong>Database path</strong>
                   <span className="muted">{storageInfo.databasePath}</span>
@@ -2016,6 +2062,7 @@ export const App = () => {
             <h1>{activeWorkspace === "notes" ? "Notes workspace" : `${WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}`}</h1>
             <div className="topbar-status-strip">
               <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
+              <span className="status-chip">{desktopVersion ? `v${desktopVersion}` : "Desktop"}</span>
               <span className="status-chip">{aiActivityLabel}</span>
               <span className="status-chip">{selectedTextModelOption?.label || snapshot.settings.textModel}</span>
               <span className="status-chip">{selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel}</span>
@@ -2032,6 +2079,9 @@ export const App = () => {
             <div className="topbar-secondary-cluster">
               <button className="shell-button" type="button" onClick={openCommandPalette}>
                 Command palette
+              </button>
+              <button className="shell-button" type="button" onClick={() => void (availableUpdateVersion ? handleInstallUpdate() : handleCheckForUpdates())}>
+                {availableUpdateVersion ? `Install ${availableUpdateVersion}` : "Check updates"}
               </button>
               <button className="shell-button" type="button" onClick={() => openOverlay("sessions")}>
                 All Sessions
