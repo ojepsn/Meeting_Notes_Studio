@@ -17,19 +17,30 @@ jobs:
     runs-on: windows-latest
     env:
       CI: true
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       GITHUB_REPOSITORY: ${{ github.repository }}
       GITHUB_REF_NAME: ${{ github.ref_name }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
+
+      - name: Validate updater signing secrets
+        shell: pwsh
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            Write-Error "Missing TAURI_SIGNING_PRIVATE_KEY secret."
+          }
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
+            Write-Error "Missing TAURI_SIGNING_PRIVATE_KEY_PASSWORD secret."
+          }
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -42,6 +53,15 @@ jobs:
 
       - name: Prepare release assets
         run: node ./scripts/prepare-desktop-release.mjs
+
+      - name: Show prepared release assets
+        shell: pwsh
+        run: |
+          $releaseAssets = "apps/desktop/src-tauri/target/release/release-assets"
+          if (-not (Test-Path $releaseAssets)) {
+            Write-Error "Release assets directory was not created: $releaseAssets"
+          }
+          Get-ChildItem $releaseAssets -Recurse | Select-Object FullName, Length
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
