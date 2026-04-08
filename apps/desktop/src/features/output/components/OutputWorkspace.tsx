@@ -4,6 +4,45 @@ import { AttachmentImagePreview } from "../../../components/AttachmentImagePrevi
 import type { ActivityRecord, AttachmentRecord, CaptureWorkspaceDensity, SessionRecord } from "@notesmith/domain";
 import { useState } from "react";
 
+type FollowUpKind = "todo" | "meeting";
+
+const parseFollowUpCandidate = (value: string) => {
+  const trimmed = value.trim();
+  const ownerMatch = trimmed.match(/(?:^|[\s(])@([A-Za-z][\w .-]{1,40})/);
+  const explicitOwnerMatch = trimmed.match(/owner:\s*([A-Za-z][\w .-]{1,40})/i);
+  const isoDateMatch = trimmed.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
+  const todayMatch = trimmed.match(/\btoday\b/i);
+  const tomorrowMatch = trimmed.match(/\btomorrow\b/i);
+
+  const nextDate = (() => {
+    if (isoDateMatch) return isoDateMatch[1];
+    if (todayMatch) return new Date().toISOString().slice(0, 10);
+    if (tomorrowMatch) {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return tomorrow.toISOString().slice(0, 10);
+    }
+    return "";
+  })();
+
+  const owner = explicitOwnerMatch?.[1]?.trim() || ownerMatch?.[1]?.trim() || "";
+  const cleaned = trimmed
+    .replace(/\b(20\d{2}-\d{2}-\d{2})\b/, "")
+    .replace(/\btoday\b/i, "")
+    .replace(/\btomorrow\b/i, "")
+    .replace(/owner:\s*[A-Za-z][\w .-]{1,40}/i, "")
+    .replace(/(?:^|[\s(])@[A-Za-z][\w .-]{1,40}/, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .replace(/^[-*]\s+/, "");
+
+  return {
+    description: cleaned,
+    owner,
+    date: nextDate,
+  };
+};
+
 interface OutputWorkspaceProps {
   session: SessionRecord;
   attachments: AttachmentRecord[];
@@ -38,7 +77,8 @@ interface OutputWorkspaceProps {
   emptyStateSecondaryLabel?: string | null;
   linkedActivity?: ActivityRecord | null;
   onOpenLinkedActivity?: (activityId: string) => void;
-  onAddFollowUpTodo?: (description: string, options?: { activityId?: string; doOn?: string }) => void;
+  onAddFollowUpTodo?: (description: string, options?: { activityId?: string; doOn?: string; comments?: string }) => void;
+  onAddFollowUpMeeting?: (description: string, options?: { parentActivityId?: string; doOn?: string; comments?: string }) => void;
 }
 
 export const OutputWorkspace = ({
@@ -76,15 +116,41 @@ export const OutputWorkspace = ({
   linkedActivity = null,
   onOpenLinkedActivity,
   onAddFollowUpTodo,
+  onAddFollowUpMeeting,
 }: OutputWorkspaceProps) => {
   const [revisionInstructions, setRevisionInstructions] = useState("");
   const [followUpDraft, setFollowUpDraft] = useState("");
+  const [selectedFollowUps, setSelectedFollowUps] = useState<string[]>([]);
+  const [selectedExcerpt, setSelectedExcerpt] = useState("");
+  const [reviewKind, setReviewKind] = useState<FollowUpKind>("todo");
+  const [reviewDescription, setReviewDescription] = useState("");
+  const [reviewOwner, setReviewOwner] = useState("");
+  const [reviewDate, setReviewDate] = useState("");
   const includedImages = attachments
     .filter((attachment) => attachment.kind === "image" && attachment.includeInOutput)
     .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt));
   const hasOutput = Boolean(session.output.trim());
   const isMeetingNote = session.captureMode === "meeting-note";
   const isMinimal = presentation === "minimal";
+  const followUpSuggestions = session.output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^([-*]\s+|\d+[.)]\s+)/.test(line))
+    .map((line) => line.replace(/^([-*]\s+|\d+[.)]\s+)/, "").trim())
+    .filter((line) => line.length >= 6)
+    .slice(0, 8);
+  const excerptPreview =
+    selectedExcerpt.length > 180 ? `${selectedExcerpt.slice(0, 177).trimEnd()}...` : selectedExcerpt;
+
+  const applyReviewSeed = (value: string, kind: FollowUpKind = "todo") => {
+    const parsed = parseFollowUpCandidate(value);
+    setReviewKind(kind);
+    setReviewDescription(parsed.description || value.trim());
+    setReviewOwner(parsed.owner);
+    setReviewDate(parsed.date || session.date);
+  };
+
+  const ownerComment = reviewOwner ? `Owner: ${reviewOwner}` : "";
 
   return (
     <div className={`card output-workspace${isMinimal ? " output-workspace-minimal" : ""}`}>
@@ -172,6 +238,219 @@ export const OutputWorkspace = ({
                 Add follow-up
               </button>
             </div>
+            {selectedExcerpt && (onAddFollowUpTodo || onAddFollowUpMeeting) ? (
+              <div className="selected-output-excerpt-card">
+                <div className="prompt-actions-row">
+                  <div className="prompt-actions-copy">
+                    <strong>Selected output text</strong>
+                    <span className="muted">Turn any selected output text into a follow-up item, not only bullet suggestions.</span>
+                  </div>
+                  <button className="small-button" type="button" onClick={() => setSelectedExcerpt("")}>
+                    Clear selection
+                  </button>
+                </div>
+                <p>{excerptPreview}</p>
+                <div className="page-actions">
+                  <button
+                    className="small-button"
+                    type="button"
+                    onClick={() => applyReviewSeed(selectedExcerpt, "todo")}
+                  >
+                    Review selected text
+                  </button>
+                  {onAddFollowUpTodo ? (
+                    <button
+                      className="small-button"
+                      type="button"
+                      onClick={() => onAddFollowUpTodo(selectedExcerpt, { activityId: linkedActivity.id, doOn: session.date })}
+                    >
+                      Add selected as todo
+                    </button>
+                  ) : null}
+                  {onAddFollowUpMeeting ? (
+                    <button
+                      className="small-button"
+                      type="button"
+                      onClick={() => onAddFollowUpMeeting(selectedExcerpt, { parentActivityId: linkedActivity.id, doOn: session.date })}
+                    >
+                      Add selected as meeting
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+            {reviewDescription ? (
+              <div className="selected-output-excerpt-card">
+                <div className="prompt-actions-row">
+                  <div className="prompt-actions-copy">
+                    <strong>Follow-up review</strong>
+                    <span className="muted">Adjust the parsed description, suggested date, and optional owner note before creating the follow-up.</span>
+                  </div>
+                  <button
+                    className="small-button"
+                    type="button"
+                    onClick={() => {
+                      setReviewDescription("");
+                      setReviewOwner("");
+                      setReviewDate("");
+                    }}
+                  >
+                    Clear review
+                  </button>
+                </div>
+                <div className="form-grid">
+                  <div className="field">
+                    <label htmlFor="follow-up-kind">Type</label>
+                    <select id="follow-up-kind" value={reviewKind} onChange={(event) => setReviewKind(event.target.value as FollowUpKind)}>
+                      <option value="todo">Todo</option>
+                      <option value="meeting">Meeting</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="follow-up-date">Date</label>
+                    <input id="follow-up-date" type="date" value={reviewDate} onChange={(event) => setReviewDate(event.target.value)} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="follow-up-owner">Owner note</label>
+                    <PeoplePicker
+                      value={reviewOwner}
+                      savedPeople={savedPeople}
+                      suggestedPeople={suggestedPeople}
+                      placeholder="Optional owner"
+                      mode="single"
+                      onChange={setReviewOwner}
+                    />
+                  </div>
+                  <div className="field field-wide">
+                    <label htmlFor="follow-up-review-description">Description</label>
+                    <textarea
+                      id="follow-up-review-description"
+                      rows={4}
+                      value={reviewDescription}
+                      onChange={(event) => setReviewDescription(event.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="page-actions">
+                  {reviewKind === "todo" && onAddFollowUpTodo ? (
+                    <button
+                      className="small-button"
+                      type="button"
+                      onClick={() => {
+                        if (!reviewDescription.trim()) return;
+                        onAddFollowUpTodo(reviewDescription.trim(), {
+                          activityId: linkedActivity.id,
+                          doOn: reviewDate || session.date,
+                          comments: ownerComment || undefined,
+                        });
+                        setReviewDescription("");
+                        setReviewOwner("");
+                        setReviewDate("");
+                      }}
+                    >
+                      Create reviewed todo
+                    </button>
+                  ) : null}
+                  {reviewKind === "meeting" && onAddFollowUpMeeting ? (
+                    <button
+                      className="small-button"
+                      type="button"
+                      onClick={() => {
+                        if (!reviewDescription.trim()) return;
+                        onAddFollowUpMeeting(reviewDescription.trim(), {
+                          parentActivityId: linkedActivity.id,
+                          doOn: reviewDate || session.date,
+                          comments: ownerComment || undefined,
+                        });
+                        setReviewDescription("");
+                        setReviewOwner("");
+                        setReviewDate("");
+                      }}
+                    >
+                      Create reviewed meeting
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+            {followUpSuggestions.length && onAddFollowUpTodo ? (
+              <div className="stack">
+                <div className="prompt-actions-row">
+                  <label>Suggested follow-up actions from this output</label>
+                  <button
+                    className="small-button"
+                    type="button"
+                    onClick={() => {
+                      selectedFollowUps.forEach((suggestion) => {
+                        onAddFollowUpTodo?.(suggestion, { activityId: linkedActivity.id, doOn: session.date });
+                      });
+                      setSelectedFollowUps([]);
+                    }}
+                    disabled={!selectedFollowUps.length || !onAddFollowUpTodo}
+                  >
+                    Add selected as todo
+                  </button>
+                  <button
+                    className="small-button"
+                    type="button"
+                    onClick={() => {
+                      selectedFollowUps.forEach((suggestion) => {
+                        onAddFollowUpMeeting?.(suggestion, { parentActivityId: linkedActivity.id, doOn: session.date });
+                      });
+                      setSelectedFollowUps([]);
+                    }}
+                    disabled={!selectedFollowUps.length || !onAddFollowUpMeeting}
+                  >
+                    Add selected as meeting
+                  </button>
+                </div>
+                <div className="section-list">
+                  {followUpSuggestions.map((suggestion) => (
+                    <div key={suggestion} className="list-item">
+                      <label className="todos-workspace-main">
+                        <input
+                          type="checkbox"
+                          checked={selectedFollowUps.includes(suggestion)}
+                          onChange={(event) =>
+                            setSelectedFollowUps((current) =>
+                              event.target.checked
+                                ? [...current, suggestion]
+                                : current.filter((entry) => entry !== suggestion),
+                            )
+                          }
+                        />
+                        <span className="todos-workspace-copy">
+                          <strong>{suggestion}</strong>
+                        </span>
+                      </label>
+                      <div className="page-actions">
+                        <button
+                          className="small-button"
+                          type="button"
+                          onClick={() => onAddFollowUpTodo?.(suggestion, { activityId: linkedActivity.id, doOn: session.date })}
+                        >
+                          Add todo
+                        </button>
+                        <button
+                          className="small-button"
+                          type="button"
+                          onClick={() => applyReviewSeed(suggestion, "todo")}
+                        >
+                          Review
+                        </button>
+                        <button
+                          className="small-button"
+                          type="button"
+                          onClick={() => onAddFollowUpMeeting?.(suggestion, { parentActivityId: linkedActivity.id, doOn: session.date })}
+                        >
+                          Add meeting
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </details>
       ) : null}
@@ -319,6 +598,12 @@ export const OutputWorkspace = ({
           id="session-output"
           value={session.output}
           onChange={(event) => onChange({ ...session, output: event.target.value })}
+          onSelect={(event) => {
+            const nextExcerpt = event.currentTarget.value
+              .slice(event.currentTarget.selectionStart ?? 0, event.currentTarget.selectionEnd ?? 0)
+              .trim();
+            setSelectedExcerpt(nextExcerpt);
+          }}
           placeholder="Generated notes will appear here. In the Tauri app this will later be backed by AI jobs, versioned outputs, and editable drafts."
         />
       </div>

@@ -137,6 +137,8 @@ export const createDefaultSettings = () => ({
     savedDomains: [],
     savedActivities: [],
     savedTags: [],
+    projectLinks: [],
+    timeReportPresets: [],
     abbreviations: [],
     promptProfile: {
         meetingMinutesSystem: DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
@@ -244,6 +246,42 @@ const normalizeSettings = (settings) => ({
         : 0,
     textModel: normalizeTextModelId(settings.textModel),
     transcriptionModel: normalizeTranscriptionModelId(settings.transcriptionModel),
+    savedParticipants: Array.isArray(settings.savedParticipants)
+        ? settings.savedParticipants.filter((value) => typeof value === "string")
+        : [],
+    savedProjects: Array.isArray(settings.savedProjects)
+        ? settings.savedProjects.filter((value) => typeof value === "string")
+        : [],
+    savedDomains: Array.isArray(settings.savedDomains)
+        ? settings.savedDomains.filter((value) => typeof value === "string")
+        : [],
+    savedActivities: Array.isArray(settings.savedActivities)
+        ? settings.savedActivities.filter((value) => typeof value === "string")
+        : [],
+    savedTags: Array.isArray(settings.savedTags)
+        ? settings.savedTags.filter((value) => typeof value === "string")
+        : [],
+    projectLinks: Array.isArray(settings.projectLinks)
+        ? settings.projectLinks
+            .map((entry) => ({
+            id: typeof entry?.id === "string" && entry.id.trim() ? entry.id : crypto.randomUUID(),
+            project: typeof entry?.project === "string" ? entry.project.trim() : "",
+            domain: typeof entry?.domain === "string" ? entry.domain.trim() : "",
+        }))
+            .filter((entry) => entry.project)
+        : [],
+    timeReportPresets: Array.isArray(settings.timeReportPresets)
+        ? settings.timeReportPresets
+            .map((entry) => ({
+            id: typeof entry?.id === "string" && entry.id.trim() ? entry.id : crypto.randomUUID(),
+            label: typeof entry?.label === "string" ? entry.label.trim() : "",
+            fromDate: typeof entry?.fromDate === "string" ? entry.fromDate : "",
+            toDate: typeof entry?.toDate === "string" ? entry.toDate : "",
+            domain: typeof entry?.domain === "string" ? entry.domain.trim() : "",
+            project: typeof entry?.project === "string" ? entry.project.trim() : "",
+        }))
+            .filter((entry) => entry.label && entry.fromDate && entry.toDate)
+        : [],
     promptProfile: normalizePromptProfile(settings.promptProfile),
 });
 class BrowserEntityRepository {

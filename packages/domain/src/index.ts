@@ -148,6 +148,21 @@ export interface PromptProfile {
   extraBlocks: PromptBlock[];
 }
 
+export interface TimeReportPreset {
+  id: string;
+  label: string;
+  fromDate: string;
+  toDate: string;
+  domain: string;
+  project: string;
+}
+
+export interface ProjectLinkRecord {
+  id: string;
+  project: string;
+  domain: string;
+}
+
 export interface AttachmentRecord {
   id: string;
   sessionId: string;
@@ -184,6 +199,8 @@ export interface LocalAppSettings {
   savedDomains: string[];
   savedActivities: string[];
   savedTags: string[];
+  projectLinks: ProjectLinkRecord[];
+  timeReportPresets: TimeReportPreset[];
   abbreviations: Array<{ id: string; shortForm: string; fullForm: string }>;
   promptProfile: PromptProfile;
 }

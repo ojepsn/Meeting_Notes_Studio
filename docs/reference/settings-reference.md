@@ -83,11 +83,12 @@ Includes:
 - saved people
 - saved domains
 - saved projects
+- explicit project-to-domain links
 - saved activities
 - saved tags
 - abbreviations
 
-These saved values are used by session capture and suggestion flows.
+These saved values are used by session capture, work structure, and suggestion flows.
 
 ## Other Upcoming Settings
 
@@ -160,3 +161,17 @@ Currently includes:
   - database
   - attachments
   - local backups
+
+## Persisted Workspace State
+
+Some workspace behavior is also persisted locally so the app reopens in a familiar state.
+
+This currently includes:
+
+- saved `Time` report presets
+- calendar day span and scale
+- calendar full-screen preference
+- calendar scroll position
+- calendar details-pane width
+
+These values are local desktop preferences, not shared note content.

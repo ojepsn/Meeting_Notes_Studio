@@ -9,6 +9,7 @@ import { CalendarWorkspace } from "../features/calendar/components/CalendarWorks
 import { TodosRailCard } from "../features/todos/components/TodosRailCard";
 import { TodosWorkspace } from "../features/todos/components/TodosWorkspace";
 import { TimeWorkspace } from "../features/time/components/TimeWorkspace";
+import { StructureWorkspace } from "../features/structure/components/StructureWorkspace";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
 import type { SettingsSection } from "../features/settings/components/SettingsCard";
 import { generateNotes } from "../lib/ai/services/generateNotes";
@@ -64,7 +65,7 @@ import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
 
-type AppWorkspace = "notes" | "todos" | "activities" | "calendar" | "time" | "assistant" | "files";
+type AppWorkspace = "notes" | "todos" | "activities" | "calendar" | "time" | "structure" | "assistant" | "files";
 type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | null;
 type CommandAction = {
   id: string;
@@ -97,6 +98,7 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
   { id: "activities", label: "Activities", description: "Tracked work with time and scheduling", available: true },
   { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: true },
   { id: "time", label: "Time", description: "Active timers, logs, and reporting", available: true },
+  { id: "structure", label: "Structure", description: "Domains and projects as operational views", available: true },
   { id: "assistant", label: "Assistant", description: "Future AI workflows and agents", available: false },
   { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
 ];
@@ -184,6 +186,8 @@ export const App = () => {
     convertTodoToActivity,
     ensureSessionForActivity,
     saveSettings,
+    renameDomainValue,
+    renameProjectValue,
     saveTemplate,
     resetTemplates,
     importLegacyBrowserData,
@@ -197,6 +201,13 @@ export const App = () => {
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
   const [requestedActivityId, setRequestedActivityId] = useState<string | null>(null);
   const [requestedTodoId, setRequestedTodoId] = useState<string | null>(null);
+  const [requestedActivityDomain, setRequestedActivityDomain] = useState<string | null>(null);
+  const [requestedActivityProject, setRequestedActivityProject] = useState<string | null>(null);
+  const [requestedTodoDomain, setRequestedTodoDomain] = useState<string | null>(null);
+  const [requestedTodoProject, setRequestedTodoProject] = useState<string | null>(null);
+  const [requestedTimeDomain, setRequestedTimeDomain] = useState<string | null>(null);
+  const [requestedTimeProject, setRequestedTimeProject] = useState<string | null>(null);
+  const [linkedDetailReturnWorkspace, setLinkedDetailReturnWorkspace] = useState<AppWorkspace | null>(null);
   const [isCalendarWorkspaceFullScreen, setIsCalendarWorkspaceFullScreen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
@@ -1137,7 +1148,7 @@ export const App = () => {
           : "Generated structured output with the desktop AI service.",
       );
       openMetadataReviewIfNeeded(sessionForGeneration);
-      setActiveView("output");
+      openNotesTarget({ sessionId: sessionForGeneration.id, view: "output" });
     } catch (error) {
       setStatusNote(formatAIErrorMessage(error, "Generation failed."));
     } finally {
@@ -1168,7 +1179,7 @@ export const App = () => {
         await saveSession({ ...nextSession, output: rawOutput });
         setStatusNote("Transcribed the voice note into Output without AI polishing.");
         openMetadataReviewIfNeeded(nextSession);
-        setActiveView("output");
+        openNotesTarget({ sessionId: nextSession.id, view: "output" });
       } catch (error) {
         setStatusNote(formatAIErrorMessage(error, "Audio transcription failed."));
       } finally {
@@ -1190,7 +1201,7 @@ export const App = () => {
         : "Created Output from the current note without AI polishing.",
     );
     openMetadataReviewIfNeeded(activeSession);
-    setActiveView("output");
+    openNotesTarget({ sessionId: activeSession.id, view: "output" });
   };
 
   const handleTranslate = async () => {
@@ -1570,38 +1581,120 @@ export const App = () => {
   const handleWorkspaceSelection = (workspaceId: AppWorkspace, available: boolean) => {
     setRequestedActivityId(null);
     setRequestedTodoId(null);
+    setRequestedActivityDomain(null);
+    setRequestedActivityProject(null);
+    setRequestedTodoDomain(null);
+    setRequestedTodoProject(null);
+    setRequestedTimeDomain(null);
+    setRequestedTimeProject(null);
+    setLinkedDetailReturnWorkspace(null);
     setActiveWorkspace(workspaceId);
     if (!available) {
       setStatusNote(`${WORKSPACE_ITEMS.find((item) => item.id === workspaceId)?.label ?? "Workspace"} is planned next. The shell already keeps its place so the app can grow without changing navigation patterns.`);
     }
   };
-  const openSessionFromLink = (sessionId: string) => {
+  const clearRequestedFilters = () => {
     setRequestedActivityId(null);
     setRequestedTodoId(null);
+    setRequestedActivityDomain(null);
+    setRequestedActivityProject(null);
+    setRequestedTodoDomain(null);
+    setRequestedTodoProject(null);
+    setRequestedTimeDomain(null);
+    setRequestedTimeProject(null);
+  };
+  const openLinkedDestination = ({
+    workspace,
+    activityId = null,
+    todoId = null,
+    activityDomain = null,
+    activityProject = null,
+    todoDomain = null,
+    todoProject = null,
+    timeDomain = null,
+    timeProject = null,
+    returnWorkspace = null,
+    status,
+  }: {
+    workspace: AppWorkspace;
+    activityId?: string | null;
+    todoId?: string | null;
+    activityDomain?: string | null;
+    activityProject?: string | null;
+    todoDomain?: string | null;
+    todoProject?: string | null;
+    timeDomain?: string | null;
+    timeProject?: string | null;
+    returnWorkspace?: AppWorkspace | null;
+    status?: string;
+  }) => {
+    clearRequestedFilters();
+    setRequestedActivityId(activityId);
+    setRequestedTodoId(todoId);
+    setRequestedActivityDomain(activityDomain);
+    setRequestedActivityProject(activityProject);
+    setRequestedTodoDomain(todoDomain);
+    setRequestedTodoProject(todoProject);
+    setRequestedTimeDomain(timeDomain);
+    setRequestedTimeProject(timeProject);
+    setLinkedDetailReturnWorkspace(returnWorkspace);
+    setActiveWorkspace(workspace);
+    if (status) {
+      setStatusNote(status);
+    }
+  };
+  const openNotesTarget = ({
+    sessionId,
+    view = "capture",
+    returnWorkspace = null,
+    status,
+  }: {
+    sessionId: string;
+    view?: "capture" | "output";
+    returnWorkspace?: AppWorkspace | null;
+    status?: string;
+  }) => {
+    clearRequestedFilters();
+    setLinkedDetailReturnWorkspace(returnWorkspace);
     setActiveSessionId(sessionId);
     setActiveWorkspace("notes");
-    setActiveView("capture");
+    setActiveView(view);
+    if (status) {
+      setStatusNote(status);
+    }
   };
-  const openActivityFromLink = (activityId: string) => {
-    setRequestedTodoId(null);
-    setRequestedActivityId(activityId);
-    setActiveWorkspace("activities");
-    setStatusNote("Opened linked activity.");
-  };
-  const openTodoDetailFromLink = (todoId: string) => {
-    setRequestedActivityId(null);
-    setRequestedTodoId(todoId);
-    setActiveWorkspace("todos");
-    setStatusNote("Opened linked todo.");
-  };
-  const returnFromLinkedDetailToCalendar = () => {
-    if (!requestedActivityId && !requestedTodoId) {
+  const openSessionFromLink = (sessionId: string, returnWorkspace: AppWorkspace | null = null) =>
+    openNotesTarget({ sessionId, view: "capture", returnWorkspace, status: "Opened linked session." });
+  const openActivityFromLink = (activityId: string, returnWorkspace: AppWorkspace | null = null) =>
+    openLinkedDestination({
+      workspace: "activities",
+      activityId,
+      returnWorkspace,
+      status: "Opened linked activity.",
+    });
+  const openTodoDetailFromLink = (todoId: string, returnWorkspace: AppWorkspace | null = null) =>
+    openLinkedDestination({
+      workspace: "todos",
+      todoId,
+      returnWorkspace,
+      status: "Opened linked todo.",
+    });
+  const returnFromLinkedDetail = () => {
+    if (!requestedActivityId && !requestedTodoId && !linkedDetailReturnWorkspace) {
       return;
     }
+    const nextWorkspace = linkedDetailReturnWorkspace ?? "calendar";
     setRequestedActivityId(null);
     setRequestedTodoId(null);
-    setActiveWorkspace("calendar");
-    setStatusNote("Returned to Calendar.");
+    setRequestedActivityDomain(null);
+    setRequestedActivityProject(null);
+    setRequestedTodoDomain(null);
+    setRequestedTodoProject(null);
+    setRequestedTimeDomain(null);
+    setRequestedTimeProject(null);
+    setLinkedDetailReturnWorkspace(null);
+    setActiveWorkspace(nextWorkspace);
+    setStatusNote(`Returned to ${nextWorkspace === "time" ? "Time" : nextWorkspace === "calendar" ? "Calendar" : "the previous workspace"}.`);
   };
   const openCalendarOutputPreview = (sessionId: string) => {
     setCalendarOutputPreviewSessionId(sessionId);
@@ -1687,6 +1780,13 @@ export const App = () => {
         description: "Review timers, logs, and time summaries.",
         keywords: ["time logs timer reporting"],
         action: () => setActiveWorkspace("time"),
+      },
+      {
+        id: "structure",
+        label: "Open Structure",
+        description: "Inspect domains and projects as work views.",
+        keywords: ["domain project structure work"],
+        action: () => setActiveWorkspace("structure"),
       },
       {
         id: "backup",
@@ -1861,8 +1961,9 @@ export const App = () => {
             emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
             emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
             linkedActivity={activeLinkedActivity}
-            onOpenLinkedActivity={openActivityFromLink}
+            onOpenLinkedActivity={(activityId) => openActivityFromLink(activityId, "notes")}
             onAddFollowUpTodo={(description, options) => void addTodo(description, options)}
+            onAddFollowUpMeeting={(description, options) => void addActivity(description, "meeting", options)}
           />
         );
       case "calendar-output-preview": {
@@ -2333,9 +2434,16 @@ export const App = () => {
                   </span>
                 </div>
               ) : null}
+              {activeWorkspace === "notes" && linkedDetailReturnWorkspace ? (
+                <div className="workspace-guide-row workspace-guide-row-quiet">
+                  <button className="shell-button" type="button" onClick={returnFromLinkedDetail}>
+                    Back to {linkedDetailReturnWorkspace === "calendar" ? "Calendar" : linkedDetailReturnWorkspace === "activities" ? "Activities" : linkedDetailReturnWorkspace === "time" ? "Time" : linkedDetailReturnWorkspace === "structure" ? "Structure" : "previous workspace"}
+                  </button>
+                </div>
+              ) : null}
               {activeWorkspace === "notes" && activeLinkedActivity ? (
                 <div className="workspace-guide-row workspace-guide-row-quiet">
-                  <button className="shell-button" type="button" onClick={() => openActivityFromLink(activeLinkedActivity.id)}>
+                  <button className="shell-button" type="button" onClick={() => openActivityFromLink(activeLinkedActivity.id, "notes")}>
                     Linked activity: {activeLinkedActivity.description}
                   </button>
                 </div>
@@ -2349,7 +2457,9 @@ export const App = () => {
                 activities={snapshot.activities}
                 timeLogs={snapshot.timelogs}
                 requestedTodoId={requestedTodoId}
-                onEditorClose={returnFromLinkedDetailToCalendar}
+                requestedDomain={requestedTodoDomain}
+                requestedProject={requestedTodoProject}
+                onEditorClose={returnFromLinkedDetail}
                 onToggle={(todo) => void saveTodo(todo)}
                 onAdd={(description, options) => void addTodo(description, options)}
                 onSave={(todo) => void saveTodo(todo)}
@@ -2359,7 +2469,7 @@ export const App = () => {
                 onDeleteTimeLog={(id) => void deleteTimeLog(id)}
                 onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
-                onOpenActivityDetail={openActivityFromLink}
+                onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "todos")}
               />
             ) : activeWorkspace === "activities" ? (
               <ActivitiesWorkspace
@@ -2368,7 +2478,9 @@ export const App = () => {
                 timeLogs={snapshot.timelogs}
                 linkedSessionStateByActivity={linkedSessionStateByActivity}
                 requestedActivityId={requestedActivityId}
-                onEditorClose={returnFromLinkedDetailToCalendar}
+                requestedDomain={requestedActivityDomain}
+                requestedProject={requestedActivityProject}
+                onEditorClose={returnFromLinkedDetail}
                 onToggle={(activity) => void saveActivity(activity)}
                 onAdd={(description, type) => void addActivity(description, type)}
                 onAddChildTodo={(description, activityId) => void addTodo(description, { activityId })}
@@ -2378,13 +2490,13 @@ export const App = () => {
                 onCreateLinkedMeetingSession={(activityId) =>
                   void ensureSessionForActivity(activityId).then((sessionId) => {
                     if (sessionId) {
-                      openSessionFromLink(sessionId);
+                      openSessionFromLink(sessionId, "activities");
                     }
                   })
                 }
-                onOpenSession={openSessionFromLink}
+                onOpenSession={(sessionId) => openSessionFromLink(sessionId, "activities")}
                 onPreviewSessionOutput={openCalendarOutputPreview}
-                onOpenTodoDetail={openTodoDetailFromLink}
+                onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "activities")}
                 onSaveTimeLog={(timeLog) => void saveTimeLog(timeLog)}
                 onDeleteTimeLog={(id) => void deleteTimeLog(id)}
                 onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
@@ -2414,10 +2526,10 @@ export const App = () => {
                 }
                 onUpdateCalendarItem={(id, updates) => void updateCalendarItem(id, updates)}
                 onOpenTodoWorkspace={() => setActiveWorkspace("todos")}
-                onOpenTodoDetail={openTodoDetailFromLink}
-                onOpenActivityWorkspace={(activityId) => openActivityFromLink(activityId)}
-                onOpenActivityDetail={openActivityFromLink}
-                onOpenSession={openSessionFromLink}
+                onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "calendar")}
+                onOpenActivityWorkspace={(activityId) => openActivityFromLink(activityId, "calendar")}
+                onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "calendar")}
+                onOpenSession={(sessionId) => openSessionFromLink(sessionId, "calendar")}
                 onCreateLinkedMeetingSession={(activityId) =>
                   void ensureSessionForActivity(activityId).then((sessionId) => {
                     if (sessionId) {
@@ -2433,12 +2545,120 @@ export const App = () => {
                 todos={snapshot.todos}
                 activities={snapshot.activities}
                 timeLogs={snapshot.timelogs}
+                requestedDomain={requestedTimeDomain}
+                requestedProject={requestedTimeProject}
+                reportPresets={snapshot.settings.timeReportPresets}
                 onSaveTimeLog={(timeLog) => void saveTimeLog(timeLog)}
                 onDeleteTimeLog={(id) => void deleteTimeLog(id)}
                 onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
-                onOpenTodoDetail={openTodoDetailFromLink}
-                onOpenActivityDetail={openActivityFromLink}
+                onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "time")}
+                onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "time")}
+                onSaveReportPreset={(preset) =>
+                  void saveSettings({
+                    ...snapshot.settings,
+                    timeReportPresets: [
+                      ...snapshot.settings.timeReportPresets.filter((entry) => entry.label !== preset.label),
+                      { ...preset, id: crypto.randomUUID() },
+                    ].sort((left, right) => left.label.localeCompare(right.label)),
+                  })
+                }
+                onDeleteReportPreset={(presetId) =>
+                  void saveSettings({
+                    ...snapshot.settings,
+                    timeReportPresets: snapshot.settings.timeReportPresets.filter((entry) => entry.id !== presetId),
+                  })
+                }
+              />
+            ) : activeWorkspace === "structure" ? (
+              <StructureWorkspace
+                activities={snapshot.activities}
+                todos={snapshot.todos}
+                timeLogs={snapshot.timelogs}
+                savedDomains={snapshot.settings.savedDomains}
+                savedProjects={snapshot.settings.savedProjects}
+                projectLinks={snapshot.settings.projectLinks}
+                onAddDomain={(domain) =>
+                  void saveSettings({
+                    ...snapshot.settings,
+                    savedDomains: Array.from(new Set([...snapshot.settings.savedDomains, domain.trim()].filter(Boolean))).sort(),
+                  })
+                }
+                onRenameDomain={(previousValue, nextValue) => void renameDomainValue(previousValue, nextValue)}
+                onAddProject={(project, domain) =>
+                  void saveSettings({
+                    ...snapshot.settings,
+                    savedProjects: Array.from(new Set([...snapshot.settings.savedProjects, project.trim()].filter(Boolean))).sort(),
+                    projectLinks: domain.trim()
+                      ? [
+                          ...snapshot.settings.projectLinks.filter((entry) => entry.project !== project.trim()),
+                          { id: crypto.randomUUID(), project: project.trim(), domain: domain.trim() },
+                        ]
+                      : snapshot.settings.projectLinks.filter((entry) => entry.project !== project.trim()),
+                  })
+                }
+                onRenameProject={(previousValue, nextValue) => void renameProjectValue(previousValue, nextValue)}
+                onAssignProjectDomain={(project, domain) =>
+                  void saveSettings({
+                    ...snapshot.settings,
+                    projectLinks: domain.trim()
+                      ? [
+                          ...snapshot.settings.projectLinks.filter((entry) => entry.project !== project.trim()),
+                          { id: crypto.randomUUID(), project: project.trim(), domain: domain.trim() },
+                        ]
+                      : snapshot.settings.projectLinks.filter((entry) => entry.project !== project.trim()),
+                  })
+                }
+                onOpenActivitiesForDomain={(domain) => {
+                  openLinkedDestination({
+                    workspace: "activities",
+                    activityDomain: domain || null,
+                    returnWorkspace: "structure",
+                    status: domain ? `Opened Activities filtered to ${domain}.` : "Opened Activities.",
+                  });
+                }}
+                onOpenActivitiesForProject={(project) => {
+                  openLinkedDestination({
+                    workspace: "activities",
+                    activityProject: project || null,
+                    returnWorkspace: "structure",
+                    status: project ? `Opened Activities filtered to ${project}.` : "Opened Activities.",
+                  });
+                }}
+                onOpenTodosForDomain={(domain) =>
+                  openLinkedDestination({
+                    workspace: "todos",
+                    todoDomain: domain || null,
+                    returnWorkspace: "structure",
+                    status: domain ? `Opened Todos filtered to ${domain}.` : "Opened Todos.",
+                  })
+                }
+                onOpenTodosForProject={(project) =>
+                  openLinkedDestination({
+                    workspace: "todos",
+                    todoProject: project || null,
+                    returnWorkspace: "structure",
+                    status: project ? `Opened Todos filtered to ${project}.` : "Opened Todos.",
+                  })
+                }
+                onOpenTimeForDomain={(domain) =>
+                  openLinkedDestination({
+                    workspace: "time",
+                    timeDomain: domain || null,
+                    returnWorkspace: "structure",
+                    status: domain ? `Opened Time filtered to ${domain}.` : "Opened Time.",
+                  })
+                }
+                onOpenTimeForProject={(project) =>
+                  openLinkedDestination({
+                    workspace: "time",
+                    timeProject: project || null,
+                    returnWorkspace: "structure",
+                    status: project ? `Opened Time filtered to ${project}.` : "Opened Time.",
+                  })
+                }
+                onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "structure")}
+                onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "structure")}
               />
             ) : activeWorkspace !== "notes" ? (
               <div className="card empty-state-card">
@@ -2515,8 +2735,9 @@ export const App = () => {
                 emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
                 emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
                 linkedActivity={activeLinkedActivity}
-                onOpenLinkedActivity={openActivityFromLink}
+                onOpenLinkedActivity={(activityId) => openActivityFromLink(activityId, "notes")}
                 onAddFollowUpTodo={(description, options) => void addTodo(description, options)}
+                onAddFollowUpMeeting={(description, options) => void addActivity(description, "meeting", options)}
               />
             )}
           </section>

@@ -9,6 +9,8 @@ interface ActivitiesWorkspaceProps {
   timeLogs: TimeLogRecord[];
   linkedSessionStateByActivity: Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>;
   requestedActivityId?: string | null;
+  requestedDomain?: string | null;
+  requestedProject?: string | null;
   onEditorClose?: () => void;
   onToggle: (activity: ActivityRecord) => void;
   onAdd: (description: string, type: ActivityRecord["type"]) => void;
@@ -81,6 +83,8 @@ export const ActivitiesWorkspace = ({
   timeLogs,
   linkedSessionStateByActivity,
   requestedActivityId,
+  requestedDomain,
+  requestedProject,
   onEditorClose,
   onToggle,
   onAdd,
@@ -101,6 +105,8 @@ export const ActivitiesWorkspace = ({
   const [draftType, setDraftType] = useState<ActivityRecord["type"]>("task");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<ActivitySortKey>("dueDate");
+  const [domainFilter, setDomainFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<ActivityRecord>(createBlankActivityDraft());
   const [childTodoDraft, setChildTodoDraft] = useState("");
@@ -110,6 +116,14 @@ export const ActivitiesWorkspace = ({
   const detailsEditorRef = useRef<HTMLDivElement | null>(null);
 
   const topLevelActivities = useMemo(() => activities.filter((entry) => !entry.parentActivityId), [activities]);
+  const domainOptions = useMemo(
+    () => Array.from(new Set(topLevelActivities.map((entry) => entry.domain).filter(Boolean))).sort(),
+    [topLevelActivities],
+  );
+  const projectOptions = useMemo(
+    () => Array.from(new Set(topLevelActivities.map((entry) => entry.project).filter(Boolean))).sort(),
+    [topLevelActivities],
+  );
 
   const childActivitiesByParent = useMemo(() => {
     const grouped = new Map<string, ActivityRecord[]>();
@@ -137,9 +151,14 @@ export const ActivitiesWorkspace = ({
 
   const filteredActivities = useMemo(() => {
     const normalized = normalizeValue(query);
+    const structureFiltered = topLevelActivities.filter((entry) => {
+      if (domainFilter !== "all" && entry.domain !== domainFilter) return false;
+      if (projectFilter !== "all" && entry.project !== projectFilter) return false;
+      return true;
+    });
     const filtered = !normalized
-      ? topLevelActivities
-      : topLevelActivities.filter((entry) =>
+      ? structureFiltered
+      : structureFiltered.filter((entry) =>
           [entry.description, entry.domain, entry.project, entry.dueDate, entry.createdAt].join(" ").toLowerCase().includes(normalized),
         );
 
@@ -164,7 +183,19 @@ export const ActivitiesWorkspace = ({
     };
 
     return [...filtered].sort((left, right) => valueForSort(left).localeCompare(valueForSort(right)));
-  }, [query, sortKey, topLevelActivities]);
+  }, [domainFilter, projectFilter, query, sortKey, topLevelActivities]);
+
+  useEffect(() => {
+    if (requestedDomain) {
+      setDomainFilter(requestedDomain);
+    }
+  }, [requestedDomain]);
+
+  useEffect(() => {
+    if (requestedProject) {
+      setProjectFilter(requestedProject);
+    }
+  }, [requestedProject]);
 
   useEffect(() => {
     if (requestedActivityId) {
@@ -275,6 +306,28 @@ export const ActivitiesWorkspace = ({
             <div className="field field-wide">
               <label htmlFor="activities-workspace-filter">Search</label>
               <input id="activities-workspace-filter" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter activities" />
+            </div>
+            <div className="field">
+              <label htmlFor="activities-workspace-domain">Domain</label>
+              <select id="activities-workspace-domain" value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}>
+                <option value="all">All</option>
+                {domainOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="activities-workspace-project">Project</label>
+              <select id="activities-workspace-project" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+                <option value="all">All</option>
+                {projectOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="field">
               <label htmlFor="activities-workspace-sort">Sort by</label>

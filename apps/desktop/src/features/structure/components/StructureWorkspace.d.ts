@@ -1,0 +1,24 @@
+import type { ActivityRecord, ProjectLinkRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+type StructureWorkspaceProps = {
+    activities: ActivityRecord[];
+    todos: TodoRecord[];
+    timeLogs: TimeLogRecord[];
+    savedDomains: string[];
+    savedProjects: string[];
+    projectLinks: ProjectLinkRecord[];
+    onAddDomain: (domain: string) => void;
+    onRenameDomain: (previousValue: string, nextValue: string) => void;
+    onAddProject: (project: string, domain: string) => void;
+    onRenameProject: (previousValue: string, nextValue: string) => void;
+    onAssignProjectDomain: (project: string, domain: string) => void;
+    onOpenActivitiesForDomain: (domain: string) => void;
+    onOpenActivitiesForProject: (project: string) => void;
+    onOpenTodosForDomain: (domain: string) => void;
+    onOpenTodosForProject: (project: string) => void;
+    onOpenTimeForDomain: (domain: string) => void;
+    onOpenTimeForProject: (project: string) => void;
+    onOpenActivityDetail: (activityId: string) => void;
+    onOpenTodoDetail: (todoId: string) => void;
+};
+export declare const StructureWorkspace: ({ activities, todos, timeLogs, savedDomains, savedProjects, projectLinks, onAddDomain, onRenameDomain, onAddProject, onRenameProject, onAssignProjectDomain, onOpenActivitiesForDomain, onOpenActivitiesForProject, onOpenTodosForDomain, onOpenTodosForProject, onOpenTimeForDomain, onOpenTimeForProject, onOpenActivityDetail, onOpenTodoDetail, }: StructureWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export {};

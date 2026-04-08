@@ -320,14 +320,14 @@ interface DesktopState {
   saveTodo: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
   addTodo: (
     description: string,
-    options?: { activityId?: string; domain?: string; project?: string; activityLabel?: string; doOn?: string },
+    options?: { activityId?: string; domain?: string; project?: string; activityLabel?: string; doOn?: string; comments?: string },
   ) => Promise<void>;
   deleteTodo: (id: string) => Promise<void>;
   saveActivity: (activity: DesktopAppSnapshot["activities"][number]) => Promise<void>;
   addActivity: (
     description: string,
     type?: DesktopAppSnapshot["activities"][number]["type"],
-    options?: { parentActivityId?: string; domain?: string; project?: string; activityLabel?: string; doOn?: string; startTime?: string; endTime?: string },
+    options?: { parentActivityId?: string; domain?: string; project?: string; activityLabel?: string; doOn?: string; startTime?: string; endTime?: string; comments?: string },
   ) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
   saveTimeLog: (timeLog: TimeLog) => Promise<void>;
@@ -353,6 +353,8 @@ interface DesktopState {
   ) => Promise<string | null>;
   ensureSessionForActivity: (activityId: string) => Promise<string | null>;
   saveSettings: (settings: DesktopAppSnapshot["settings"]) => Promise<void>;
+  renameDomainValue: (previousValue: string, nextValue: string) => Promise<void>;
+  renameProjectValue: (previousValue: string, nextValue: string) => Promise<void>;
   saveTemplate: (template: DesktopAppSnapshot["templates"][number]) => Promise<void>;
   resetTemplates: () => Promise<void>;
   importLegacyBrowserData: () => Promise<"imported" | "missing">;
@@ -584,7 +586,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
           description: description.trim(),
           isDone: false,
           isPrivate: false,
-          comments: "",
+          comments: options?.comments || "",
           activityId: inherited.activityId,
           domain: inherited.domain,
           project: inherited.project,
@@ -643,7 +645,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       description: description.trim(),
       isDone: false,
       isPrivate: false,
-      comments: "",
+      comments: options?.comments || "",
       domain: options?.domain || parentActivity?.domain || "",
       project: options?.project || parentActivity?.project || "",
       activity: options?.activityLabel || parentActivity?.description || "",
@@ -1061,6 +1063,66 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     const nextSnapshot = { ...snapshot, settings };
     set({ snapshot: nextSnapshot });
     scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+  },
+  renameDomainValue: async (previousValue, nextValue) => {
+    const snapshot = get().snapshot;
+    const previous = previousValue.trim();
+    const next = nextValue.trim();
+    if (!snapshot || !previous || !next || previous === next) return;
+    const nextSnapshot: DesktopAppSnapshot = {
+      ...snapshot,
+      sessions: snapshot.sessions.map((session) =>
+        session.domain === previous ? { ...session, domain: next, updatedAt: new Date().toISOString() } : session,
+      ),
+      todos: snapshot.todos.map((todo) => (todo.domain === previous ? { ...todo, domain: next } : todo)),
+      activities: snapshot.activities.map((activity) =>
+        activity.domain === previous ? { ...activity, domain: next } : activity,
+      ),
+      settings: {
+        ...snapshot.settings,
+        savedDomains: Array.from(
+          new Set(snapshot.settings.savedDomains.map((entry) => (entry === previous ? next : entry)).concat(next)),
+        ).sort((left, right) => left.localeCompare(right)),
+        projectLinks: snapshot.settings.projectLinks.map((entry) =>
+          entry.domain === previous ? { ...entry, domain: next } : entry,
+        ),
+        timeReportPresets: snapshot.settings.timeReportPresets.map((entry) =>
+          entry.domain === previous ? { ...entry, domain: next } : entry,
+        ),
+      },
+    };
+    set({ snapshot: nextSnapshot });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
+  },
+  renameProjectValue: async (previousValue, nextValue) => {
+    const snapshot = get().snapshot;
+    const previous = previousValue.trim();
+    const next = nextValue.trim();
+    if (!snapshot || !previous || !next || previous === next) return;
+    const nextSnapshot: DesktopAppSnapshot = {
+      ...snapshot,
+      sessions: snapshot.sessions.map((session) =>
+        session.project === previous ? { ...session, project: next, updatedAt: new Date().toISOString() } : session,
+      ),
+      todos: snapshot.todos.map((todo) => (todo.project === previous ? { ...todo, project: next } : todo)),
+      activities: snapshot.activities.map((activity) =>
+        activity.project === previous ? { ...activity, project: next } : activity,
+      ),
+      settings: {
+        ...snapshot.settings,
+        savedProjects: Array.from(
+          new Set(snapshot.settings.savedProjects.map((entry) => (entry === previous ? next : entry)).concat(next)),
+        ).sort((left, right) => left.localeCompare(right)),
+        projectLinks: snapshot.settings.projectLinks.map((entry) =>
+          entry.project === previous ? { ...entry, project: next } : entry,
+        ),
+        timeReportPresets: snapshot.settings.timeReportPresets.map((entry) =>
+          entry.project === previous ? { ...entry, project: next } : entry,
+        ),
+      },
+    };
+    set({ snapshot: nextSnapshot });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
   },
   saveTemplate: async (template) => {
     const snapshot = get().snapshot;

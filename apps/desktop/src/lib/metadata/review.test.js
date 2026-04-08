@@ -21,6 +21,8 @@ const settings = {
     savedDomains: ["Finance"],
     savedActivities: ["Planning"],
     savedTags: [],
+    projectLinks: [],
+    timeReportPresets: [],
     abbreviations: [],
     promptProfile: {
         meetingMinutesSystem: "",

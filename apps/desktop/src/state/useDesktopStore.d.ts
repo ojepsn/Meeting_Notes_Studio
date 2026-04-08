@@ -30,6 +30,7 @@ interface DesktopState {
         project?: string;
         activityLabel?: string;
         doOn?: string;
+        comments?: string;
     }) => Promise<void>;
     deleteTodo: (id: string) => Promise<void>;
     saveActivity: (activity: DesktopAppSnapshot["activities"][number]) => Promise<void>;
@@ -41,6 +42,7 @@ interface DesktopState {
         doOn?: string;
         startTime?: string;
         endTime?: string;
+        comments?: string;
     }) => Promise<void>;
     deleteActivity: (id: string) => Promise<void>;
     saveTimeLog: (timeLog: TimeLog) => Promise<void>;
@@ -65,6 +67,8 @@ interface DesktopState {
     }) => Promise<string | null>;
     ensureSessionForActivity: (activityId: string) => Promise<string | null>;
     saveSettings: (settings: DesktopAppSnapshot["settings"]) => Promise<void>;
+    renameDomainValue: (previousValue: string, nextValue: string) => Promise<void>;
+    renameProjectValue: (previousValue: string, nextValue: string) => Promise<void>;
     saveTemplate: (template: DesktopAppSnapshot["templates"][number]) => Promise<void>;
     resetTemplates: () => Promise<void>;
     importLegacyBrowserData: () => Promise<"imported" | "missing">;

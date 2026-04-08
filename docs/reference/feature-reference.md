@@ -11,6 +11,7 @@ Current:
 - `Activities`
 - `Calendar`
 - `Time`
+- `Structure`
 
 Planned:
 
@@ -158,6 +159,21 @@ Current calendar capabilities:
 - detect whether the linked meeting session already has output
 - preview linked session output as a formatted overlay from calendar
 
+## Structure
+
+Current structure capabilities:
+
+- domain-level operational view
+- project-level operational view
+- create domains and projects directly from the Structure workspace
+- assign projects to an explicit parent domain from the Structure workspace
+- rename existing saved domains and projects from the Structure workspace
+- inspect a focused domain or project inside the Structure workspace before drilling further
+- activity and todo counts per domain/project
+- logged-time totals per domain/project
+- inline linked activity and todo previews on domain/project cards
+- jump from a domain or project into filtered Activities, Todos, or Time workspaces
+
 ## Time
 
 Current time capabilities:
@@ -165,12 +181,23 @@ Current time capabilities:
 - dedicated time workspace
 - active timer summary
 - recent logs in one correction surface
+- date presets for `today`, `this week`, `this month`, and `custom`
+- period comparison against the previous matching range
+- visual daily trend bars
+- stacked summary view for workspace and work-type effort
+- date-range filtering
+- project filtering
+- domain filtering
 - per-day totals
 - per-activity totals
 - per-project totals
 - per-domain totals
+- totals by workspace
+- totals by work type
+- grouped dashboard tables
+- saved report presets for reusable date/domain/project reporting views
 - direct open-back into the linked todo or activity
-- CSV and Markdown export for reporting readiness
+- CSV, Markdown, and JSON export for reporting readiness
 
 ## Notes output follow-up
 
@@ -178,6 +205,9 @@ Current output follow-up capabilities:
 
 - linked activity is visible from the Output workspace when a session belongs to a meeting activity
 - follow-up todos can be added directly from Output back into the linked activity
+- bullet-style action lines in output can be turned into follow-up todos or meeting activities quickly
+- arbitrary selected output text can also be turned into a follow-up todo or meeting
+- selected output text can be reviewed before creation, with parsed owner/date hints, People-based owner selection, and editable follow-up type/details
 
 ## AI
 
@@ -205,3 +235,12 @@ Desktop updating uses:
 - GitHub Releases
 - Tauri updater flow
 - in-app update checking
+
+## Navigation context
+
+Current cross-workspace navigation capabilities:
+
+- linked detail opens keep a return workspace context
+- opening linked Todos or Activities from Calendar, Time, Structure, and Notes can return the user to where they came from
+- linked session opens can now expose a direct route back to the source workspace from Notes
+- the shared app-shell open/return helper now also covers Notes capture/output opens more consistently across linked flows

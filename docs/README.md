@@ -17,6 +17,7 @@ It is intentionally split by audience and task:
 ## User Guides
 
 - [Notes workspace](./user-guides/notes-workspace.md)
+- [Work, structure, and time](./user-guides/work-structure-and-time.md)
 - [Audio recording and transcription](./user-guides/audio-and-transcription.md)
 - [Output, AI, and export](./user-guides/output-ai-and-export.md)
 

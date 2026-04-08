@@ -4,6 +4,8 @@ interface TodosWorkspaceProps {
     activities: ActivityRecord[];
     timeLogs: TimeLogRecord[];
     requestedTodoId?: string | null;
+    requestedDomain?: string | null;
+    requestedProject?: string | null;
     onEditorClose?: () => void;
     onToggle: (todo: TodoRecord) => void;
     onAdd: (description: string, options?: {
@@ -18,5 +20,5 @@ interface TodosWorkspaceProps {
     onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
     onOpenActivityDetail?: (activityId: string) => void;
 }
-export declare const TodosWorkspace: ({ todos, activities, timeLogs, requestedTodoId, onEditorClose, onToggle, onAdd, onSave, onDelete, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }: TodosWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const TodosWorkspace: ({ todos, activities, timeLogs, requestedTodoId, requestedDomain, requestedProject, onEditorClose, onToggle, onAdd, onSave, onDelete, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }: TodosWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

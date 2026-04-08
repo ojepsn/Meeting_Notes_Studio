@@ -42,6 +42,10 @@ Feature areas include:
 - sessions
 - output
 - todos
+- activities
+- calendar
+- time
+- structure
 - templates
 - settings
 
@@ -49,6 +53,7 @@ Responsibilities:
 
 - task-specific workflows
 - UI and feature logic close together
+- linked-workflow behavior between Calendar, Notes, Activities, Todos, and Time
 
 ### AI layer
 
@@ -78,6 +83,7 @@ Responsibilities:
 - SQLite schema and access
 - settings normalization
 - compatibility with earlier saved data
+- relationship persistence such as linked sessions, calendar items, project-domain links, and saved report presets
 
 ### File/attachment layer
 
@@ -102,6 +108,14 @@ The desktop app uses a stable shell:
 - overlay panels for secondary tools
 
 This shell is designed to stay consistent as future workspaces are added.
+
+The current app shell also carries a reusable linked-navigation pattern:
+
+- open a linked item in another workspace
+- keep return context
+- return the user to the originating workspace after close/save
+
+That pattern is now part of the app-shell design rather than being handled separately inside each workspace.
 
 ## Why Local-First
 

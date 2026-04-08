@@ -217,6 +217,8 @@ export const loadLegacyBrowserSnapshot = () => {
                 savedDomains: [],
                 savedActivities: [],
                 savedTags: [],
+                projectLinks: [],
+                timeReportPresets: [],
                 abbreviations: Array.isArray(parsedSettings?.abbreviationDirectory)
                     ? parsedSettings.abbreviationDirectory
                         .map((entry) => ({

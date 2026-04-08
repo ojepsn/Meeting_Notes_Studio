@@ -10,6 +10,13 @@ It is designed around one stable shell:
 
 Secondary tools such as Settings, Sessions, To-dos, and Back-up open as overlays so the main workspace stays focused.
 
+The most common daily path is now:
+
+- create or open a meeting in `Calendar`
+- create or open its linked session in `Notes`
+- capture and polish the session
+- create follow-up work back into the linked activity
+
 The Capture view now supports two presentation densities:
 
 - `Full` keeps the current complete desktop editor visible.
@@ -20,6 +27,8 @@ The Output view supports the same pattern:
 - `Full` keeps revision, translation, export, and note details visible in the main workspace.
 - `Minimal` turns Output into a calmer document-first editor, with `Open details` available for the complete output workspace.
 
+`Minimal` is now the intended default Notes experience. The working fields stay open first, while the less frequently used tools remain available through disclosures, overlays, or details views.
+
 ## Quick Todo Capture
 
 From text inputs and text areas across the desktop app, you can create a to-do instantly:
@@ -28,6 +37,13 @@ From text inputs and text areas across the desktop app, you can create a to-do i
 - press `Enter`
 
 The app converts that text into a to-do item and clears the field so you can keep working.
+
+Other quick creation shortcuts:
+
+- type `act` followed by text and press `Enter` to create an activity
+- type `meet` followed by text and press `Enter` to create a meeting activity
+
+When the current note belongs to a linked activity or meeting flow, these shortcuts can inherit that work context.
 
 The main desktop shell also includes a compact `To-dos` card in the right inspector so current items stay visible while you work. The full to-do manager remains available as a separate overlay.
 
@@ -142,6 +158,15 @@ This is where the session's document is shaped:
 - translation
 - revision
 - export
+- linked activity follow-up creation
+
+If the session belongs to a linked meeting activity, Output can also:
+
+- show the linked activity
+- create follow-up todos directly into that activity
+- create follow-up meetings directly into that activity
+- review selected output text before turning it into a todo or meeting
+- parse owner and date hints from that selected text
 
 ## Templates
 
@@ -225,3 +250,11 @@ These fields use the same modern picker pattern as `People`:
 - click recent/frequent suggestions from an expandable mini-card
 - add new values directly from the input
 - save newly used values for reuse after Output is created
+
+These same structure fields are also used by:
+
+- `Calendar`
+- `Activities`
+- `Todos`
+- `Time`
+- `Structure`

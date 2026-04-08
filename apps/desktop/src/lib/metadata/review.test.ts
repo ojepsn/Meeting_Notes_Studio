@@ -23,6 +23,8 @@ const settings: LocalAppSettings = {
   savedDomains: ["Finance"],
   savedActivities: ["Planning"],
   savedTags: [],
+  projectLinks: [],
+  timeReportPresets: [],
   abbreviations: [],
   promptProfile: {
     meetingMinutesSystem: "",

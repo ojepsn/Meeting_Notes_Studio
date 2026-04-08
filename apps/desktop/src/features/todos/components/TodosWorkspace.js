@@ -40,11 +40,13 @@ const calculateDurationMinutes = (date, startTime, endTime) => {
     const diff = Math.round((end.getTime() - start.getTime()) / 60000);
     return Number.isFinite(diff) ? Math.max(0, diff) : 0;
 };
-export const TodosWorkspace = ({ todos, activities, timeLogs, requestedTodoId, onEditorClose, onToggle, onAdd, onSave, onDelete, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }) => {
+export const TodosWorkspace = ({ todos, activities, timeLogs, requestedTodoId, requestedDomain, requestedProject, onEditorClose, onToggle, onAdd, onSave, onDelete, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }) => {
     const [draft, setDraft] = useState("");
     const [selectedActivityId, setSelectedActivityId] = useState("");
     const [query, setQuery] = useState("");
     const [sortKey, setSortKey] = useState("dueDate");
+    const [domainFilter, setDomainFilter] = useState("all");
+    const [projectFilter, setProjectFilter] = useState("all");
     const [selectedTodoId, setSelectedTodoId] = useState(null);
     const [editingDraft, setEditingDraft] = useState(createBlankTodoDraft());
     const [editingTimeLogId, setEditingTimeLogId] = useState(null);
@@ -52,6 +54,8 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, requestedTodoId, o
     const detailsEditorRef = useRef(null);
     const activityOptions = useMemo(() => activities.filter((entry) => !entry.parentActivityId).sort((left, right) => left.description.localeCompare(right.description)), [activities]);
     const activityLookup = useMemo(() => Object.fromEntries(activities.map((activity) => [activity.id, activity])), [activities]);
+    const domainOptions = useMemo(() => Array.from(new Set(todos.map((todo) => todo.domain).filter(Boolean))).sort(), [todos]);
+    const projectOptions = useMemo(() => Array.from(new Set(todos.map((todo) => todo.project).filter(Boolean))).sort(), [todos]);
     const openTodos = useMemo(() => todos.filter((todo) => !todo.isDone), [todos]);
     const completedTodos = useMemo(() => todos.filter((todo) => todo.isDone).slice(0, 8), [todos]);
     const todoTimeLogs = useMemo(() => timeLogs.filter((entry) => entry.targetType === "todo"), [timeLogs]);
@@ -63,9 +67,16 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, requestedTodoId, o
     const runningTodos = useMemo(() => openTodos.filter((todo) => (timeLogsByTodoId.get(todo.id) || []).some((entry) => entry.startTime === entry.endTime)), [openTodos, timeLogsByTodoId]);
     const filteredTodos = useMemo(() => {
         const normalized = normalizeValue(query);
+        const structureFiltered = openTodos.filter((todo) => {
+            if (domainFilter !== "all" && todo.domain !== domainFilter)
+                return false;
+            if (projectFilter !== "all" && todo.project !== projectFilter)
+                return false;
+            return true;
+        });
         const filtered = !normalized
-            ? openTodos
-            : openTodos.filter((todo) => [
+            ? structureFiltered
+            : structureFiltered.filter((todo) => [
                 todo.description,
                 todo.domain,
                 todo.project,
@@ -98,7 +109,17 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, requestedTodoId, o
             }
         };
         return [...filtered].sort((left, right) => valueForSort(left).localeCompare(valueForSort(right)));
-    }, [activityLookup, openTodos, query, sortKey]);
+    }, [activityLookup, domainFilter, openTodos, projectFilter, query, sortKey]);
+    useEffect(() => {
+        if (requestedDomain !== undefined && requestedDomain !== null) {
+            setDomainFilter(requestedDomain || "all");
+        }
+    }, [requestedDomain]);
+    useEffect(() => {
+        if (requestedProject !== undefined && requestedProject !== null) {
+            setProjectFilter(requestedProject || "all");
+        }
+    }, [requestedProject]);
     useEffect(() => {
         if (requestedTodoId) {
             setSelectedTodoId(requestedTodoId);
@@ -156,7 +177,7 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, requestedTodoId, o
                                         event.preventDefault();
                                         submitDraft();
                                     }
-                                }, placeholder: "Add a focused next action" })] }), _jsx("button", { className: "primary-button", type: "button", onClick: submitDraft, children: "Add" })] }), _jsxs("div", { className: "todos-hub-shell", children: [_jsxs("section", { className: "todos-hub-list-panel", children: [_jsxs("div", { className: "todos-workspace-toolbar", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "todos-workspace-filter", children: "Search" }), _jsx("input", { id: "todos-workspace-filter", value: query, onChange: (event) => setQuery(event.target.value), placeholder: "Filter todos" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todos-workspace-sort", children: "Sort by" }), _jsxs("select", { id: "todos-workspace-sort", value: sortKey, onChange: (event) => setSortKey(event.target.value), children: [_jsx("option", { value: "dueDate", children: "Due date" }), _jsx("option", { value: "doOn", children: "Do on" }), _jsx("option", { value: "createdAt", children: "Created" }), _jsx("option", { value: "description", children: "Title" }), _jsx("option", { value: "domain", children: "Domain" }), _jsx("option", { value: "project", children: "Project" }), _jsx("option", { value: "activity", children: "Activity" })] })] })] }), runningTodos.length ? (_jsxs("div", { className: "todos-running-strip", children: [_jsx("strong", { children: "Running now" }), _jsx("div", { className: "todos-running-list", children: runningTodos.map((todo) => (_jsx("button", { type: "button", className: "status-chip", onClick: () => setSelectedTodoId(todo.id), children: todo.description }, todo.id))) })] })) : null, _jsx("div", { className: "todos-compact-list", children: filteredTodos.length ? (filteredTodos.map((todo) => {
+                                }, placeholder: "Add a focused next action" })] }), _jsx("button", { className: "primary-button", type: "button", onClick: submitDraft, children: "Add" })] }), _jsxs("div", { className: "todos-hub-shell", children: [_jsxs("section", { className: "todos-hub-list-panel", children: [_jsxs("div", { className: "todos-workspace-toolbar", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "todos-workspace-filter", children: "Search" }), _jsx("input", { id: "todos-workspace-filter", value: query, onChange: (event) => setQuery(event.target.value), placeholder: "Filter todos" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todos-workspace-domain", children: "Domain" }), _jsxs("select", { id: "todos-workspace-domain", value: domainFilter, onChange: (event) => setDomainFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), domainOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todos-workspace-project", children: "Project" }), _jsxs("select", { id: "todos-workspace-project", value: projectFilter, onChange: (event) => setProjectFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), projectOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todos-workspace-sort", children: "Sort by" }), _jsxs("select", { id: "todos-workspace-sort", value: sortKey, onChange: (event) => setSortKey(event.target.value), children: [_jsx("option", { value: "dueDate", children: "Due date" }), _jsx("option", { value: "doOn", children: "Do on" }), _jsx("option", { value: "createdAt", children: "Created" }), _jsx("option", { value: "description", children: "Title" }), _jsx("option", { value: "domain", children: "Domain" }), _jsx("option", { value: "project", children: "Project" }), _jsx("option", { value: "activity", children: "Activity" })] })] })] }), runningTodos.length ? (_jsxs("div", { className: "todos-running-strip", children: [_jsx("strong", { children: "Running now" }), _jsx("div", { className: "todos-running-list", children: runningTodos.map((todo) => (_jsx("button", { type: "button", className: "status-chip", onClick: () => setSelectedTodoId(todo.id), children: todo.description }, todo.id))) })] })) : null, _jsx("div", { className: "todos-compact-list", children: filteredTodos.length ? (filteredTodos.map((todo) => {
                                     const logs = timeLogsByTodoId.get(todo.id) || [];
                                     const totalMinutes = logs.reduce((sum, entry) => sum + entry.durationMinutes, 0);
                                     const running = logs.some((entry) => entry.startTime === entry.endTime);

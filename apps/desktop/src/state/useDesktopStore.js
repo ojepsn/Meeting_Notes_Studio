@@ -454,7 +454,7 @@ export const useDesktopStore = create((set, get) => ({
                     description: description.trim(),
                     isDone: false,
                     isPrivate: false,
-                    comments: "",
+                    comments: options?.comments || "",
                     activityId: inherited.activityId,
                     domain: inherited.domain,
                     project: inherited.project,
@@ -516,7 +516,7 @@ export const useDesktopStore = create((set, get) => ({
             description: description.trim(),
             isDone: false,
             isPrivate: false,
-            comments: "",
+            comments: options?.comments || "",
             domain: options?.domain || parentActivity?.domain || "",
             project: options?.project || parentActivity?.project || "",
             activity: options?.activityLabel || parentActivity?.description || "",
@@ -917,6 +917,48 @@ export const useDesktopStore = create((set, get) => ({
         const nextSnapshot = { ...snapshot, settings };
         set({ snapshot: nextSnapshot });
         scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    renameDomainValue: async (previousValue, nextValue) => {
+        const snapshot = get().snapshot;
+        const previous = previousValue.trim();
+        const next = nextValue.trim();
+        if (!snapshot || !previous || !next || previous === next)
+            return;
+        const nextSnapshot = {
+            ...snapshot,
+            sessions: snapshot.sessions.map((session) => session.domain === previous ? { ...session, domain: next, updatedAt: new Date().toISOString() } : session),
+            todos: snapshot.todos.map((todo) => (todo.domain === previous ? { ...todo, domain: next } : todo)),
+            activities: snapshot.activities.map((activity) => activity.domain === previous ? { ...activity, domain: next } : activity),
+            settings: {
+                ...snapshot.settings,
+                savedDomains: Array.from(new Set(snapshot.settings.savedDomains.map((entry) => (entry === previous ? next : entry)).concat(next))).sort((left, right) => left.localeCompare(right)),
+                projectLinks: snapshot.settings.projectLinks.map((entry) => entry.domain === previous ? { ...entry, domain: next } : entry),
+                timeReportPresets: snapshot.settings.timeReportPresets.map((entry) => entry.domain === previous ? { ...entry, domain: next } : entry),
+            },
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    renameProjectValue: async (previousValue, nextValue) => {
+        const snapshot = get().snapshot;
+        const previous = previousValue.trim();
+        const next = nextValue.trim();
+        if (!snapshot || !previous || !next || previous === next)
+            return;
+        const nextSnapshot = {
+            ...snapshot,
+            sessions: snapshot.sessions.map((session) => session.project === previous ? { ...session, project: next, updatedAt: new Date().toISOString() } : session),
+            todos: snapshot.todos.map((todo) => (todo.project === previous ? { ...todo, project: next } : todo)),
+            activities: snapshot.activities.map((activity) => activity.project === previous ? { ...activity, project: next } : activity),
+            settings: {
+                ...snapshot.settings,
+                savedProjects: Array.from(new Set(snapshot.settings.savedProjects.map((entry) => (entry === previous ? next : entry)).concat(next))).sort((left, right) => left.localeCompare(right)),
+                projectLinks: snapshot.settings.projectLinks.map((entry) => entry.project === previous ? { ...entry, project: next } : entry),
+                timeReportPresets: snapshot.settings.timeReportPresets.map((entry) => entry.project === previous ? { ...entry, project: next } : entry),
+            },
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
     },
     saveTemplate: async (template) => {
         const snapshot = get().snapshot;

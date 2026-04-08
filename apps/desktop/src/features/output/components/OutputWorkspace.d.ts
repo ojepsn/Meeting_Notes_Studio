@@ -36,7 +36,13 @@ interface OutputWorkspaceProps {
     onAddFollowUpTodo?: (description: string, options?: {
         activityId?: string;
         doOn?: string;
+        comments?: string;
+    }) => void;
+    onAddFollowUpMeeting?: (description: string, options?: {
+        parentActivityId?: string;
+        doOn?: string;
+        comments?: string;
     }) => void;
 }
-export declare const OutputWorkspace: ({ session, attachments, presentation, showPresentationActions, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, linkedActivity, onOpenLinkedActivity, onAddFollowUpTodo, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const OutputWorkspace: ({ session, attachments, presentation, showPresentationActions, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, linkedActivity, onOpenLinkedActivity, onAddFollowUpTodo, onAddFollowUpMeeting, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

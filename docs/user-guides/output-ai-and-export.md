@@ -49,6 +49,14 @@ Current AI-driven workflows include:
 - translation
 - audio transcription
 
+Output also now supports reviewed follow-up creation:
+
+- create follow-up todos into the linked activity
+- create follow-up meetings into the linked activity
+- review bullet-style suggestions before creation
+- review arbitrary selected output text before creation
+- carry parsed owner/date hints into that review step
+
 ## AI Settings
 
 AI behavior is controlled in `Settings`:
@@ -99,6 +107,18 @@ The selected preset is used by:
 - Word export (`.docx`)
 - PDF export (`.pdf`)
 - HTML export (`.html`)
+
+## Follow-up Review
+
+When a session belongs to a linked meeting activity, Output can act as a bridge back into work execution.
+
+Current behavior:
+
+- selected text can be reviewed as either a `Todo` or a `Meeting`
+- the user can edit the description before creation
+- the user can set a date before creation
+- the user can add an owner hint using the same People picker pattern used elsewhere in the app
+- created follow-ups stay tied to the linked activity so Calendar, Activities, Todos, and Time remain aligned
 
 ## Prompt Families
 

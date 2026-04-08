@@ -5,6 +5,7 @@ interface PeoplePickerProps {
   savedPeople: string[];
   suggestedPeople: string[];
   placeholder?: string;
+  mode?: "single" | "multi";
   onChange: (value: string) => void;
 }
 
@@ -13,6 +14,7 @@ export const PeoplePicker = ({
   savedPeople,
   suggestedPeople,
   placeholder = "Search or add people",
+  mode = "multi",
   onChange,
 }: PeoplePickerProps) => (
   <TokenPicker
@@ -22,6 +24,7 @@ export const PeoplePicker = ({
     placeholder={placeholder}
     suggestionSummary="Recent people"
     suggestionBadgeText="From saved People"
+    mode={mode}
     onChange={onChange}
   />
 );

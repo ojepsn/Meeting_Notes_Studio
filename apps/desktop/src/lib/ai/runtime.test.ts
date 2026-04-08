@@ -25,6 +25,8 @@ const settings: LocalAppSettings = {
   savedDomains: [],
   savedActivities: [],
   savedTags: [],
+  projectLinks: [],
+  timeReportPresets: [],
   abbreviations: [],
   promptProfile: {
     meetingMinutesSystem: "Meeting system",

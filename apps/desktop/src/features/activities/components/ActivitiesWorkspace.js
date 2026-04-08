@@ -45,11 +45,13 @@ const calculateDurationMinutes = (date, startTime, endTime) => {
     return Number.isFinite(diff) ? Math.max(0, diff) : 0;
 };
 const normalizeValue = (value) => value.trim().toLowerCase();
-export const ActivitiesWorkspace = ({ activities, todos, timeLogs, linkedSessionStateByActivity, requestedActivityId, onEditorClose, onToggle, onAdd, onAddChildTodo, onAddChildMeeting, onSave, onDelete, onCreateLinkedMeetingSession, onOpenSession, onPreviewSessionOutput, onOpenTodoDetail, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, }) => {
+export const ActivitiesWorkspace = ({ activities, todos, timeLogs, linkedSessionStateByActivity, requestedActivityId, requestedDomain, requestedProject, onEditorClose, onToggle, onAdd, onAddChildTodo, onAddChildMeeting, onSave, onDelete, onCreateLinkedMeetingSession, onOpenSession, onPreviewSessionOutput, onOpenTodoDetail, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, }) => {
     const [draft, setDraft] = useState("");
     const [draftType, setDraftType] = useState("task");
     const [query, setQuery] = useState("");
     const [sortKey, setSortKey] = useState("dueDate");
+    const [domainFilter, setDomainFilter] = useState("all");
+    const [projectFilter, setProjectFilter] = useState("all");
     const [selectedActivityId, setSelectedActivityId] = useState(null);
     const [editingDraft, setEditingDraft] = useState(createBlankActivityDraft());
     const [childTodoDraft, setChildTodoDraft] = useState("");
@@ -58,6 +60,8 @@ export const ActivitiesWorkspace = ({ activities, todos, timeLogs, linkedSession
     const [timeLogDraft, setTimeLogDraft] = useState(null);
     const detailsEditorRef = useRef(null);
     const topLevelActivities = useMemo(() => activities.filter((entry) => !entry.parentActivityId), [activities]);
+    const domainOptions = useMemo(() => Array.from(new Set(topLevelActivities.map((entry) => entry.domain).filter(Boolean))).sort(), [topLevelActivities]);
+    const projectOptions = useMemo(() => Array.from(new Set(topLevelActivities.map((entry) => entry.project).filter(Boolean))).sort(), [topLevelActivities]);
     const childActivitiesByParent = useMemo(() => {
         const grouped = new Map();
         activities
@@ -81,9 +85,16 @@ export const ActivitiesWorkspace = ({ activities, todos, timeLogs, linkedSession
     }, [timeLogs]);
     const filteredActivities = useMemo(() => {
         const normalized = normalizeValue(query);
+        const structureFiltered = topLevelActivities.filter((entry) => {
+            if (domainFilter !== "all" && entry.domain !== domainFilter)
+                return false;
+            if (projectFilter !== "all" && entry.project !== projectFilter)
+                return false;
+            return true;
+        });
         const filtered = !normalized
-            ? topLevelActivities
-            : topLevelActivities.filter((entry) => [entry.description, entry.domain, entry.project, entry.dueDate, entry.createdAt].join(" ").toLowerCase().includes(normalized));
+            ? structureFiltered
+            : structureFiltered.filter((entry) => [entry.description, entry.domain, entry.project, entry.dueDate, entry.createdAt].join(" ").toLowerCase().includes(normalized));
         const valueForSort = (entry) => {
             switch (sortKey) {
                 case "description":
@@ -104,7 +115,17 @@ export const ActivitiesWorkspace = ({ activities, todos, timeLogs, linkedSession
             }
         };
         return [...filtered].sort((left, right) => valueForSort(left).localeCompare(valueForSort(right)));
-    }, [query, sortKey, topLevelActivities]);
+    }, [domainFilter, projectFilter, query, sortKey, topLevelActivities]);
+    useEffect(() => {
+        if (requestedDomain) {
+            setDomainFilter(requestedDomain);
+        }
+    }, [requestedDomain]);
+    useEffect(() => {
+        if (requestedProject) {
+            setProjectFilter(requestedProject);
+        }
+    }, [requestedProject]);
     useEffect(() => {
         if (requestedActivityId) {
             setSelectedActivityId(requestedActivityId);
@@ -171,7 +192,7 @@ export const ActivitiesWorkspace = ({ activities, todos, timeLogs, linkedSession
                                         event.preventDefault();
                                         submitDraft();
                                     }
-                                }, placeholder: draftType === "meeting" ? "Add a meeting activity" : "Add an activity" })] }), _jsx("button", { className: "primary-button", type: "button", onClick: submitDraft, children: "Add" })] }), _jsxs("div", { className: "activities-hub-shell", children: [_jsxs("section", { className: "activities-hub-list-panel", children: [_jsxs("div", { className: "todos-workspace-toolbar", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "activities-workspace-filter", children: "Search" }), _jsx("input", { id: "activities-workspace-filter", value: query, onChange: (event) => setQuery(event.target.value), placeholder: "Filter activities" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "activities-workspace-sort", children: "Sort by" }), _jsxs("select", { id: "activities-workspace-sort", value: sortKey, onChange: (event) => setSortKey(event.target.value), children: [_jsx("option", { value: "dueDate", children: "Due date" }), _jsx("option", { value: "description", children: "Title" }), _jsx("option", { value: "type", children: "Type" }), _jsx("option", { value: "domain", children: "Domain" }), _jsx("option", { value: "project", children: "Project" }), _jsx("option", { value: "actualTimeSpentMinutes", children: "Time spent" }), _jsx("option", { value: "createdAt", children: "Created" })] })] })] }), _jsx("div", { className: "activities-compact-list", children: filteredActivities.length ? filteredActivities.map((entry) => (_jsxs("button", { type: "button", className: `activities-compact-item${selectedActivityId === entry.id ? " activities-compact-item-selected" : ""}`, onClick: () => setSelectedActivityId(entry.id), children: [_jsxs("div", { className: "activities-compact-item-main", children: [_jsxs("div", { className: "activities-compact-item-head", children: [_jsx("input", { type: "checkbox", checked: entry.isDone, onChange: (event) => {
+                                }, placeholder: draftType === "meeting" ? "Add a meeting activity" : "Add an activity" })] }), _jsx("button", { className: "primary-button", type: "button", onClick: submitDraft, children: "Add" })] }), _jsxs("div", { className: "activities-hub-shell", children: [_jsxs("section", { className: "activities-hub-list-panel", children: [_jsxs("div", { className: "todos-workspace-toolbar", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "activities-workspace-filter", children: "Search" }), _jsx("input", { id: "activities-workspace-filter", value: query, onChange: (event) => setQuery(event.target.value), placeholder: "Filter activities" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "activities-workspace-domain", children: "Domain" }), _jsxs("select", { id: "activities-workspace-domain", value: domainFilter, onChange: (event) => setDomainFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), domainOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "activities-workspace-project", children: "Project" }), _jsxs("select", { id: "activities-workspace-project", value: projectFilter, onChange: (event) => setProjectFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), projectOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "activities-workspace-sort", children: "Sort by" }), _jsxs("select", { id: "activities-workspace-sort", value: sortKey, onChange: (event) => setSortKey(event.target.value), children: [_jsx("option", { value: "dueDate", children: "Due date" }), _jsx("option", { value: "description", children: "Title" }), _jsx("option", { value: "type", children: "Type" }), _jsx("option", { value: "domain", children: "Domain" }), _jsx("option", { value: "project", children: "Project" }), _jsx("option", { value: "actualTimeSpentMinutes", children: "Time spent" }), _jsx("option", { value: "createdAt", children: "Created" })] })] })] }), _jsx("div", { className: "activities-compact-list", children: filteredActivities.length ? filteredActivities.map((entry) => (_jsxs("button", { type: "button", className: `activities-compact-item${selectedActivityId === entry.id ? " activities-compact-item-selected" : ""}`, onClick: () => setSelectedActivityId(entry.id), children: [_jsxs("div", { className: "activities-compact-item-main", children: [_jsxs("div", { className: "activities-compact-item-head", children: [_jsx("input", { type: "checkbox", checked: entry.isDone, onChange: (event) => {
                                                                 event.stopPropagation();
                                                                 onToggle({ ...entry, isDone: !entry.isDone });
                                                             } }), _jsx("strong", { children: entry.description })] }), _jsxs("div", { className: "activities-compact-item-meta", children: [_jsx("span", { children: entry.type === "meeting" ? "Meeting" : "Task" }), _jsx("span", { children: entry.project || "No project" }), _jsxs("span", { children: [(childTodosByActivity.get(entry.id) || []).length, " todos"] }), _jsxs("span", { children: [(childActivitiesByParent.get(entry.id) || []).length, " meetings"] }), _jsx("span", { children: entry.actualTimeSpentMinutes ? `${entry.actualTimeSpentMinutes}m` : "No time" })] })] }), _jsx("span", { className: "tiny-text", children: entry.dueDate || entry.doOn || entry.createdAt.slice(0, 10) })] }, entry.id))) : (_jsxs("div", { className: "empty-state-card compact-empty-state", children: [_jsx("h3", { children: "No activities" }), _jsx("p", { children: "Create activities here, then run the day-to-day work from the detail area." })] })) })] }), _jsx("section", { className: "activities-hub-detail-panel", children: selectedActivityId ? (_jsxs("div", { className: "stack", children: [_jsxs("div", { className: "card-header activities-detail-header", children: [_jsxs("div", { children: [_jsx("h3", { children: editingDraft.description || "Activity" }), _jsxs("div", { className: "calendar-editor-meta", children: [_jsx("span", { className: "status-chip", children: editingDraft.type === "meeting" ? "Meeting" : "Task" }), editingDraft.domain ? _jsx("span", { className: "status-chip", children: editingDraft.domain }) : null, editingDraft.project ? _jsx("span", { className: "status-chip", children: editingDraft.project }) : null, _jsxs("span", { className: "status-chip", children: [editingDraft.actualTimeSpentMinutes || 0, " min logged"] })] })] }), _jsxs("div", { className: "page-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: clearSelection, children: "Close" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => {

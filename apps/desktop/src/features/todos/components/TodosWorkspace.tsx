@@ -8,6 +8,8 @@ interface TodosWorkspaceProps {
   activities: ActivityRecord[];
   timeLogs: TimeLogRecord[];
   requestedTodoId?: string | null;
+  requestedDomain?: string | null;
+  requestedProject?: string | null;
   onEditorClose?: () => void;
   onToggle: (todo: TodoRecord) => void;
   onAdd: (description: string, options?: { activityId?: string }) => void;
@@ -70,6 +72,8 @@ export const TodosWorkspace = ({
   activities,
   timeLogs,
   requestedTodoId,
+  requestedDomain,
+  requestedProject,
   onEditorClose,
   onToggle,
   onAdd,
@@ -86,6 +90,8 @@ export const TodosWorkspace = ({
   const [selectedActivityId, setSelectedActivityId] = useState("");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<TodoSortKey>("dueDate");
+  const [domainFilter, setDomainFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<TodoRecord>(createBlankTodoDraft());
   const [editingTimeLogId, setEditingTimeLogId] = useState<string | null>(null);
@@ -100,6 +106,14 @@ export const TodosWorkspace = ({
   const activityLookup = useMemo(
     () => Object.fromEntries(activities.map((activity) => [activity.id, activity])) as Record<string, ActivityRecord>,
     [activities],
+  );
+  const domainOptions = useMemo(
+    () => Array.from(new Set(todos.map((todo) => todo.domain).filter(Boolean))).sort(),
+    [todos],
+  );
+  const projectOptions = useMemo(
+    () => Array.from(new Set(todos.map((todo) => todo.project).filter(Boolean))).sort(),
+    [todos],
   );
 
   const openTodos = useMemo(() => todos.filter((todo) => !todo.isDone), [todos]);
@@ -123,9 +137,14 @@ export const TodosWorkspace = ({
 
   const filteredTodos = useMemo(() => {
     const normalized = normalizeValue(query);
+    const structureFiltered = openTodos.filter((todo) => {
+      if (domainFilter !== "all" && todo.domain !== domainFilter) return false;
+      if (projectFilter !== "all" && todo.project !== projectFilter) return false;
+      return true;
+    });
     const filtered = !normalized
-      ? openTodos
-      : openTodos.filter((todo) =>
+      ? structureFiltered
+      : structureFiltered.filter((todo) =>
           [
             todo.description,
             todo.domain,
@@ -162,7 +181,19 @@ export const TodosWorkspace = ({
     };
 
     return [...filtered].sort((left, right) => valueForSort(left).localeCompare(valueForSort(right)));
-  }, [activityLookup, openTodos, query, sortKey]);
+  }, [activityLookup, domainFilter, openTodos, projectFilter, query, sortKey]);
+
+  useEffect(() => {
+    if (requestedDomain !== undefined && requestedDomain !== null) {
+      setDomainFilter(requestedDomain || "all");
+    }
+  }, [requestedDomain]);
+
+  useEffect(() => {
+    if (requestedProject !== undefined && requestedProject !== null) {
+      setProjectFilter(requestedProject || "all");
+    }
+  }, [requestedProject]);
 
   useEffect(() => {
     if (requestedTodoId) {
@@ -268,6 +299,28 @@ export const TodosWorkspace = ({
             <div className="field field-wide">
               <label htmlFor="todos-workspace-filter">Search</label>
               <input id="todos-workspace-filter" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter todos" />
+            </div>
+            <div className="field">
+              <label htmlFor="todos-workspace-domain">Domain</label>
+              <select id="todos-workspace-domain" value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}>
+                <option value="all">All</option>
+                {domainOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="todos-workspace-project">Project</label>
+              <select id="todos-workspace-project" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+                <option value="all">All</option>
+                {projectOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="field">
               <label htmlFor="todos-workspace-sort">Sort by</label>

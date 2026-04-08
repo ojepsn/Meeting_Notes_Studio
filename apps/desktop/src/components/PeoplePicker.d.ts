@@ -3,7 +3,8 @@ interface PeoplePickerProps {
     savedPeople: string[];
     suggestedPeople: string[];
     placeholder?: string;
+    mode?: "single" | "multi";
     onChange: (value: string) => void;
 }
-export declare const PeoplePicker: ({ value, savedPeople, suggestedPeople, placeholder, onChange, }: PeoplePickerProps) => import("react/jsx-runtime").JSX.Element;
+export declare const PeoplePicker: ({ value, savedPeople, suggestedPeople, placeholder, mode, onChange, }: PeoplePickerProps) => import("react/jsx-runtime").JSX.Element;
 export {};

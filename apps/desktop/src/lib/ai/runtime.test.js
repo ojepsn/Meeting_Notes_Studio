@@ -22,6 +22,8 @@ const settings = {
     savedDomains: [],
     savedActivities: [],
     savedTags: [],
+    projectLinks: [],
+    timeReportPresets: [],
     abbreviations: [],
     promptProfile: {
         meetingMinutesSystem: "Meeting system",
