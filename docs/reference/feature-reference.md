@@ -99,6 +99,9 @@ Current calendar capabilities:
 - drag-to-move scheduled items
 - resize meeting blocks in the grid
 - direct editing from the calendar details pane
+- create or open a linked meeting session from calendar meeting details
+- detect whether the linked meeting session already has output
+- preview linked session output as a formatted overlay from calendar
 
 ## AI
 

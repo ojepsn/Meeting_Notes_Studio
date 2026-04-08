@@ -1811,6 +1811,10 @@ select {
   background: var(--app-surface-soft);
   padding: 1rem;
   box-shadow: 0 16px 30px var(--app-shadow);
+  max-height: calc(100vh - 7rem);
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-gutter: stable;
 }
 
 .calendar-splitter {
@@ -1828,10 +1832,143 @@ select {
   margin: 0;
 }
 
+.calendar-editor-stack-compact {
+  gap: 0.75rem;
+}
+
+.calendar-editor-card-compact {
+  padding: 0.75rem;
+  border-radius: 20px;
+}
+
+.calendar-editor-card-compact .card-header {
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.calendar-editor-card-compact .card-header h3 {
+  font-size: 1.02rem;
+}
+
+.calendar-editor-card-compact .field label,
+.calendar-editor-card-compact .compact-private-toggle span,
+.calendar-editor-card-compact .calendar-linked-session-status span,
+.calendar-editor-card-compact .muted,
+.calendar-editor-card-compact .tiny-text {
+  font-size: 0.76rem;
+}
+
+.calendar-editor-card-compact input,
+.calendar-editor-card-compact select,
+.calendar-editor-card-compact textarea,
+.calendar-editor-card-compact .shell-button,
+.calendar-editor-card-compact .small-button,
+.calendar-editor-card-compact .primary-button {
+  min-height: 2.45rem;
+  padding: 0.58rem 0.72rem;
+  font-size: 0.88rem;
+}
+
+.calendar-editor-card-compact .inline-row,
+.calendar-editor-card-compact .metadata-triplet-grid,
+.calendar-editor-card-compact .calendar-editor-actions,
+.calendar-editor-card-compact .calendar-delete-confirmation-actions {
+  gap: 0.55rem;
+}
+
+.calendar-editor-card-compact .calendar-linked-session-card,
+.calendar-editor-card-compact .calendar-delete-confirmation {
+  padding: 0.72rem 0.78rem;
+  gap: 0.65rem;
+}
+
+.calendar-editor-card-compact .calendar-linked-session-status strong,
+.calendar-editor-card-compact .calendar-delete-confirmation strong {
+  font-size: 0.88rem;
+}
+
 .calendar-editor-actions {
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
+}
+
+.calendar-linked-session-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--app-surface);
+  padding: 0.85rem 0.95rem;
+}
+
+.calendar-linked-session-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.calendar-linked-session-status strong {
+  font-size: 0.95rem;
+}
+
+.calendar-linked-session-status span {
+  color: var(--app-muted);
+  font-size: 0.82rem;
+}
+
+.calendar-delete-confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--app-danger, #c85a5a) 35%, var(--app-border) 65%);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--app-surface) 82%, #5b1f1f 18%);
+  padding: 0.85rem 0.95rem;
+}
+
+.calendar-delete-confirmation strong {
+  font-size: 0.95rem;
+}
+
+.calendar-delete-confirmation p {
+  margin: 0;
+}
+
+.calendar-delete-confirmation-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.calendar-output-preview-card {
+  gap: 1rem;
+}
+
+.calendar-output-preview-header {
+  padding-bottom: 0;
+}
+
+.calendar-output-preview-body {
+  border: 1px solid var(--app-border);
+  border-radius: 22px;
+  background: var(--app-surface);
+  padding: 1.2rem 1.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.calendar-output-preview-body h4 {
+  margin: 0.35rem 0 0;
+  font-size: 1rem;
+}
+
+.calendar-output-preview-body p {
+  margin: 0;
+  color: var(--app-text);
+  line-height: 1.6;
 }
 
 .calendar-editor-meta {

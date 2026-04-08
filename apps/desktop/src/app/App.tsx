@@ -64,7 +64,7 @@ import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "
 import { parseTokenList } from "../components/peoplePickerUtils";
 
 type AppWorkspace = "notes" | "todos" | "activities" | "calendar" | "assistant" | "files";
-type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | null;
+type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | null;
 type CommandAction = {
   id: string;
   label: string;
@@ -72,6 +72,22 @@ type CommandAction = {
   keywords: string[];
   shortcut?: string;
   action: () => void;
+};
+
+const splitStructuredOutput = (output: string) =>
+  output
+    .replace(/\r\n/g, "\n")
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .flatMap((block) => block.split("\n").map((line) => line.trim()).filter(Boolean));
+
+const isStructuredHeading = (line: string) => {
+  if (!line || line.length > 80) return false;
+  if (/^[-*•]/.test(line)) return false;
+  if (/^\d+[.)]\s/.test(line)) return false;
+  if (/[.!?]$/.test(line)) return false;
+  return /^[\p{L}\p{N}&/(),:'" -]+:?$/u.test(line);
 };
 
 const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: string; available: boolean }> = [
@@ -174,6 +190,7 @@ export const App = () => {
   const [outputDensityOverride, setOutputDensityOverride] = useState<CaptureWorkspaceDensity | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
   const [requestedActivityId, setRequestedActivityId] = useState<string | null>(null);
+  const [requestedTodoId, setRequestedTodoId] = useState<string | null>(null);
   const [isCalendarWorkspaceFullScreen, setIsCalendarWorkspaceFullScreen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
@@ -192,6 +209,7 @@ export const App = () => {
   const [updateStatusNote, setUpdateStatusNote] = useState<string | null>(null);
   const [desktopVersion, setDesktopVersion] = useState<string | null>(null);
   const [storageInfo, setStorageInfo] = useState<DesktopStorageInfo | null>(null);
+  const [calendarOutputPreviewSessionId, setCalendarOutputPreviewSessionId] = useState<string | null>(null);
   const [aiDiagnostics, setAIDiagnostics] = useState(() => getAIDiagnosticsItems());
   const [aiRequestHistory, setAIRequestHistory] = useState(() => getAIRequestHistory());
   const [modelPricingSnapshot, setModelPricingSnapshot] = useState<AIModelPricingSnapshot>(createDefaultModelPricingSnapshot);
@@ -558,6 +576,31 @@ export const App = () => {
         (snapshot?.activities ?? []).map((activity) => [activity.id, snapshot ? findSessionIdForActivity(snapshot.entityLinks, activity.id) : null]),
       ) as Record<string, string | null>,
     [snapshot],
+  );
+  const linkedSessionStateByActivity = useMemo(
+    () =>
+      Object.fromEntries(
+        (snapshot?.activities ?? []).map((activity) => {
+          const sessionId = snapshot ? findSessionIdForActivity(snapshot.entityLinks, activity.id) : null;
+          const session = sessionId ? snapshot?.sessions.find((entry) => entry.id === sessionId) ?? null : null;
+          return [
+            activity.id,
+            {
+              sessionId,
+              hasOutput: Boolean(session?.output.trim()),
+              sessionTitle: session?.title ?? "",
+            },
+          ];
+        }),
+      ) as Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>,
+    [snapshot],
+  );
+  const calendarPreviewSession = useMemo(
+    () =>
+      calendarOutputPreviewSessionId
+        ? snapshot?.sessions.find((session) => session.id === calendarOutputPreviewSessionId) ?? null
+        : null,
+    [calendarOutputPreviewSessionId, snapshot],
   );
   const activeAudioAttachment = useMemo(
     () => activeAttachments.find((attachment) => attachment.kind === "audio") ?? null,
@@ -1507,24 +1550,41 @@ export const App = () => {
 
   const handleWorkspaceSelection = (workspaceId: AppWorkspace, available: boolean) => {
     setRequestedActivityId(null);
+    setRequestedTodoId(null);
     setActiveWorkspace(workspaceId);
     if (!available) {
       setStatusNote(`${WORKSPACE_ITEMS.find((item) => item.id === workspaceId)?.label ?? "Workspace"} is planned next. The shell already keeps its place so the app can grow without changing navigation patterns.`);
     }
   };
   const openSessionFromLink = (sessionId: string) => {
+    setRequestedActivityId(null);
+    setRequestedTodoId(null);
     setActiveSessionId(sessionId);
     setActiveWorkspace("notes");
     setActiveView("capture");
   };
   const openActivityFromLink = (activityId: string) => {
+    setRequestedTodoId(null);
     setRequestedActivityId(activityId);
     setActiveWorkspace("activities");
     setStatusNote("Opened linked activity.");
   };
+  const openTodoDetailFromLink = (todoId: string) => {
+    setRequestedActivityId(null);
+    setRequestedTodoId(todoId);
+    setActiveWorkspace("todos");
+    setStatusNote("Opened linked todo.");
+  };
+  const openCalendarOutputPreview = (sessionId: string) => {
+    setCalendarOutputPreviewSessionId(sessionId);
+    setOpenPanel("calendar-output-preview");
+  };
 
   const openOverlay = (panel: OverlayPanel) => setOpenPanel(panel);
-  const closeOverlay = () => setOpenPanel(null);
+  const closeOverlay = () => {
+    setOpenPanel(null);
+    setCalendarOutputPreviewSessionId(null);
+  };
   const handleCreateSessionFromMode = async (captureMode: CaptureMode) => {
     await createNewSession({
       captureMode,
@@ -1767,6 +1827,39 @@ export const App = () => {
             emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
           />
         );
+      case "calendar-output-preview": {
+        const previewLines = calendarPreviewSession ? splitStructuredOutput(calendarPreviewSession.output) : [];
+        return (
+          <div className="sidebar-card overlay-card calendar-output-preview-card">
+            <div className="overlay-header calendar-output-preview-header">
+              <div>
+                <h3>{calendarPreviewSession?.title || "Session output"}</h3>
+                <p className="tiny-text">
+                  {calendarPreviewSession
+                    ? `${calendarPreviewSession.date} • ${calendarPreviewSession.startTime} to ${calendarPreviewSession.endTime}`
+                    : "Linked session preview"}
+                </p>
+              </div>
+            </div>
+            {calendarPreviewSession && calendarPreviewSession.output.trim() ? (
+              <div className="calendar-output-preview-body">
+                {previewLines.map((line, index) =>
+                  isStructuredHeading(line) ? (
+                    <h4 key={`${line}-${index}`}>{line.replace(/:$/, "")}</h4>
+                  ) : (
+                    <p key={`${line}-${index}`}>{line}</p>
+                  ),
+                )}
+              </div>
+            ) : (
+              <div className="card">
+                <h4>No output yet</h4>
+                <p className="muted">Generate output in the linked session first, then return here to preview it.</p>
+              </div>
+            )}
+          </div>
+        );
+      }
       case "sessions":
         return (
           <SessionsSidebar
@@ -2217,6 +2310,7 @@ export const App = () => {
             {activeWorkspace === "todos" ? (
               <TodosWorkspace
                 todos={snapshot.todos}
+                requestedTodoId={requestedTodoId}
                 onToggle={(todo) => void saveTodo(todo)}
                 onAdd={(description) => void addTodo(description)}
                 onSave={(todo) => void saveTodo(todo)}
@@ -2247,12 +2341,14 @@ export const App = () => {
                 activities={snapshot.activities}
                 calendarItems={snapshot.calendarItems ?? []}
                 settings={snapshot.settings}
-                linkedSessionIdsByActivity={linkedSessionIdsByActivity}
+                linkedSessionStateByActivity={linkedSessionStateByActivity}
                 onSaveSettings={(settings) => void saveSettings(settings)}
                 onCreateFromText={(date, startSlot, value) => void createCalendarEntryFromText(date, startSlot, value)}
                 onMoveItem={(id, date, startSlot) => void moveCalendarItem(id, date, startSlot)}
                 onSaveTodo={(todo) => void saveTodo(todo)}
+                onDeleteTodo={(id) => void deleteTodo(id)}
                 onSaveActivity={(activity) => void saveActivity(activity)}
+                onDeleteActivity={(id) => void deleteActivity(id)}
                 onConvertTodoToMeeting={(todo, options) =>
                   void convertTodoToActivity(todo, {
                     type: "meeting",
@@ -2263,8 +2359,18 @@ export const App = () => {
                 }
                 onUpdateCalendarItem={(id, updates) => void updateCalendarItem(id, updates)}
                 onOpenTodoWorkspace={() => setActiveWorkspace("todos")}
+                onOpenTodoDetail={openTodoDetailFromLink}
                 onOpenActivityWorkspace={(activityId) => openActivityFromLink(activityId)}
+                onOpenActivityDetail={openActivityFromLink}
                 onOpenSession={openSessionFromLink}
+                onCreateLinkedMeetingSession={(activityId) =>
+                  void ensureSessionForActivity(activityId).then((sessionId) => {
+                    if (sessionId) {
+                      setStatusNote("Created linked meeting session.");
+                    }
+                  })
+                }
+                onPreviewSessionOutput={openCalendarOutputPreview}
                 onFullScreenChange={setIsCalendarWorkspaceFullScreen}
               />
             ) : activeWorkspace !== "notes" ? (
@@ -2542,6 +2648,8 @@ export const App = () => {
                     ? "Capture details"
                     : openPanel === "output-details"
                     ? "Output details"
+                    : openPanel === "calendar-output-preview"
+                    ? "Session output"
                     : openPanel === "sessions"
                     ? "All Sessions"
                     : openPanel === "new-note"

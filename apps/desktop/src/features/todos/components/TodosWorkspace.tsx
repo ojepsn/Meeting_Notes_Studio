@@ -5,6 +5,7 @@ type TodoSortKey = "createdAt" | "description" | "domain" | "project" | "activit
 
 interface TodosWorkspaceProps {
   todos: TodoRecord[];
+  requestedTodoId?: string | null;
   onToggle: (todo: TodoRecord) => void;
   onAdd: (description: string) => void;
   onSave: (todo: TodoRecord) => void;
@@ -30,7 +31,7 @@ const createBlankTodoDraft = (description = ""): TodoRecord => ({
 
 const normalizeValue = (value: string) => value.trim().toLowerCase();
 
-export const TodosWorkspace = ({ todos, onToggle, onAdd, onSave, onDelete, onConvertToActivity }: TodosWorkspaceProps) => {
+export const TodosWorkspace = ({ todos, requestedTodoId, onToggle, onAdd, onSave, onDelete, onConvertToActivity }: TodosWorkspaceProps) => {
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<TodoSortKey>("dueDate");
@@ -82,6 +83,12 @@ export const TodosWorkspace = ({ todos, onToggle, onAdd, onSave, onDelete, onCon
   }, [openTodos, query, sortKey]);
 
   const completedTodos = useMemo(() => todos.filter((todo) => todo.isDone).slice(0, 8), [todos]);
+
+  useEffect(() => {
+    if (requestedTodoId) {
+      setEditingTodoId(requestedTodoId);
+    }
+  }, [requestedTodoId]);
 
   useEffect(() => {
     if (!editingTodoId) return;

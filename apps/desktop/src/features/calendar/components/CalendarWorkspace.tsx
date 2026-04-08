@@ -67,22 +67,35 @@ type EditorDraft = {
   isMeeting: boolean;
 };
 
+type PendingDeleteState = {
+  itemId: string;
+  targetType: "todo" | "activity";
+  targetId: string;
+  title: string;
+};
+
 interface CalendarWorkspaceProps {
   todos: TodoRecord[];
   activities: ActivityRecord[];
   calendarItems: CalendarItemRecord[];
   settings: LocalAppSettings;
-  linkedSessionIdsByActivity: Record<string, string | null>;
+  linkedSessionStateByActivity: Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>;
   onSaveSettings: (settings: LocalAppSettings) => void;
   onCreateFromText: (date: string, startSlot: number, value: string) => void;
   onMoveItem: (id: string, date: string, startSlot: number) => void;
   onSaveTodo: (todo: TodoRecord) => void;
+  onDeleteTodo: (id: string) => void;
   onSaveActivity: (activity: ActivityRecord) => void;
+  onDeleteActivity: (id: string) => void;
   onConvertTodoToMeeting: (todo: TodoRecord, options: { date: string; startTime: string; endTime: string }) => void;
   onUpdateCalendarItem: (id: string, updates: { date: string; startSlot: number; durationSlots: number }) => void;
   onOpenTodoWorkspace: () => void;
+  onOpenTodoDetail: (todoId: string) => void;
   onOpenActivityWorkspace: (activityId: string) => void;
+  onOpenActivityDetail: (activityId: string) => void;
   onOpenSession: (sessionId: string) => void;
+  onCreateLinkedMeetingSession: (activityId: string) => void;
+  onPreviewSessionOutput: (sessionId: string) => void;
   onFullScreenChange?: (isFullScreen: boolean) => void;
 }
 
@@ -91,17 +104,23 @@ export const CalendarWorkspace = ({
   activities,
   calendarItems,
   settings,
-  linkedSessionIdsByActivity,
+  linkedSessionStateByActivity,
   onSaveSettings,
   onCreateFromText,
   onMoveItem,
   onSaveTodo,
+  onDeleteTodo,
   onSaveActivity,
+  onDeleteActivity,
   onConvertTodoToMeeting,
   onUpdateCalendarItem,
   onOpenTodoWorkspace,
+  onOpenTodoDetail,
   onOpenActivityWorkspace,
+  onOpenActivityDetail,
   onOpenSession,
+  onCreateLinkedMeetingSession,
+  onPreviewSessionOutput,
   onFullScreenChange,
 }: CalendarWorkspaceProps) => {
   const today = new Date().toISOString().slice(0, 10);
@@ -120,6 +139,7 @@ export const CalendarWorkspace = ({
   const [typeFilter, setTypeFilter] = useState<"all" | "todo" | "activity" | "meeting">("all");
   const [visibilityFilter, setVisibilityFilter] = useState<"all" | "public" | "private">("all");
   const [resizeState, setResizeState] = useState<null | { itemId: string; edge: "start" | "end"; date: string; startSlot: number; durationSlots: number }>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDeleteState | null>(null);
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const splitterDraggingRef = useRef(false);
@@ -214,6 +234,11 @@ export const CalendarWorkspace = ({
     return grouped;
   }, [filteredItems]);
 
+  const selectedItem = useMemo(
+    () => (selectedItemId ? items.find((item) => item.id === selectedItemId) ?? null : null),
+    [items, selectedItemId],
+  );
+
   useEffect(() => {
     const scroller = scrollRef.current;
     if (!scroller) return;
@@ -222,6 +247,34 @@ export const CalendarWorkspace = ({
     scroller.scrollTop = Math.max(0, currentSlot * slotHeight - scroller.clientHeight / 2);
     scroller.scrollLeft = 0;
   }, [slotHeight]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Delete" || !selectedItem) {
+        return;
+      }
+      const activeElement = document.activeElement as HTMLElement | null;
+      const tagName = activeElement?.tagName?.toLowerCase();
+      const isTextInput =
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select" ||
+        Boolean(activeElement?.isContentEditable);
+      if (isTextInput) {
+        return;
+      }
+      event.preventDefault();
+      setPendingDelete({
+        itemId: selectedItem.id,
+        targetType: selectedItem.targetType,
+        targetId: selectedItem.targetId,
+        title: selectedItem.title,
+      });
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedItem]);
 
   useEffect(() => {
     if (!selectedItemId) {
@@ -240,6 +293,13 @@ export const CalendarWorkspace = ({
     if (!activity) return;
     setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isMeeting: activity.type === "meeting" });
   }, [activities, calendarItems, selectedItemId, todos]);
+
+  useEffect(() => {
+    if (!pendingDelete) return;
+    if (!selectedItemId || pendingDelete.itemId !== selectedItemId) {
+      setPendingDelete(null);
+    }
+  }, [pendingDelete, selectedItemId]);
 
   useEffect(() => {
     if (!resizeState) return;
@@ -328,6 +388,18 @@ export const CalendarWorkspace = ({
     });
   };
 
+  const confirmDeleteSelectedItem = () => {
+    if (!pendingDelete) return;
+    if (pendingDelete.targetType === "todo") {
+      onDeleteTodo(pendingDelete.targetId);
+    } else {
+      onDeleteActivity(pendingDelete.targetId);
+    }
+    setPendingDelete(null);
+    setSelectedItemId(null);
+    setEditorDraft(null);
+  };
+
   return (
     <div className={`card calendar-workspace${isFullScreen ? " calendar-workspace-fullscreen" : ""}`}>
       <div className="card-header session-editor-header-minimal calendar-workspace-header">
@@ -397,7 +469,7 @@ export const CalendarWorkspace = ({
                     const durationSlots = preview?.durationSlots ?? item.durationSlots;
                     const laneWidth = 100 / Math.max(1, item.laneCount);
                     const visualHeight = Math.max(slotHeight * Math.max(durationSlots, item.isMeeting ? 3 : 1) - 4, 18);
-                    return <button key={item.id} className={`calendar-item-block${item.isMeeting ? " calendar-item-block-meeting" : ""}${selectedItemId === item.id ? " calendar-item-block-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`} type="button" draggable style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onDragStart={(event) => { event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; }} onClick={() => { setDraftCell(null); setSelectedItemId(item.id); }}>
+                    return <button key={item.id} className={`calendar-item-block${item.isMeeting ? " calendar-item-block-meeting" : ""}${selectedItemId === item.id ? " calendar-item-block-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`} type="button" draggable style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onDragStart={(event) => { event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; }} onClick={() => { setDraftCell(null); setSelectedItemId(item.id); }} onDoubleClick={() => { if (item.targetType === "todo") { onOpenTodoDetail(item.targetId); return; } onOpenActivityDetail(item.targetId); }}>
                       {item.isMeeting ? <span className="calendar-resize-handle calendar-resize-handle-start" onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "start", date: item.date, startSlot, durationSlots }); }} /> : null}
                       <strong>{slotToTime(startSlot)} {item.title}</strong>
                       <span>{item.isMeeting ? `${item.label} • ${durationLabel(durationSlots)}` : item.label}</span>
@@ -410,8 +482,201 @@ export const CalendarWorkspace = ({
           </div>
         </div>
         <div className="calendar-splitter" role="separator" aria-orientation="vertical" onMouseDown={() => { splitterDraggingRef.current = true; document.body.style.cursor = "col-resize"; }} />
-        <aside className="calendar-editor-card">
-          {editorDraft ? <div className="stack"><div className="card-header"><div><h3>{editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity"}</h3></div><button className="small-button" type="button" onClick={() => setSelectedItemId(null)}>Close</button></div><div className="field"><label htmlFor="calendar-edit-title">Title</label><input id="calendar-edit-title" value={editorDraft.title} onChange={(event) => setEditorDraft({ ...editorDraft, title: event.target.value })} /></div><div className="inline-row"><div className="field"><label htmlFor="calendar-edit-date">Date</label><input id="calendar-edit-date" type="date" value={editorDraft.doOn} onChange={(event) => setEditorDraft({ ...editorDraft, doOn: event.target.value })} /></div><label className="compact-private-toggle"><input type="checkbox" checked={editorDraft.isPrivate} onChange={(event) => setEditorDraft({ ...editorDraft, isPrivate: event.target.checked })} /><span>Private</span></label></div>{editorDraft.isMeeting ? <div className="inline-row"><div className="field"><label htmlFor="calendar-edit-start">Start</label><input id="calendar-edit-start" type="time" step={300} value={editorDraft.startTime} onChange={(event) => setEditorDraft({ ...editorDraft, startTime: event.target.value })} /></div><div className="field"><label htmlFor="calendar-edit-end">End</label><input id="calendar-edit-end" type="time" step={300} value={editorDraft.endTime} onChange={(event) => setEditorDraft({ ...editorDraft, endTime: event.target.value })} /></div></div> : null}<div className="metadata-triplet-grid"><div className="field metadata-subfield"><label htmlFor="calendar-edit-domain">Domain</label><input id="calendar-edit-domain" value={editorDraft.domain} onChange={(event) => setEditorDraft({ ...editorDraft, domain: event.target.value })} /></div><div className="field metadata-subfield"><label htmlFor="calendar-edit-project">Project</label><input id="calendar-edit-project" value={editorDraft.project} onChange={(event) => setEditorDraft({ ...editorDraft, project: event.target.value })} /></div><div className="field metadata-subfield"><label htmlFor="calendar-edit-activity">Activity</label><input id="calendar-edit-activity" value={editorDraft.activity} onChange={(event) => setEditorDraft({ ...editorDraft, activity: event.target.value })} /></div></div><div className="field"><label htmlFor="calendar-edit-due">Due date</label><input id="calendar-edit-due" type="date" value={editorDraft.dueDate} onChange={(event) => setEditorDraft({ ...editorDraft, dueDate: event.target.value })} /></div><div className="calendar-editor-actions"><button className="primary-button" type="button" onClick={saveEditor}>Save calendar edits</button>{editorDraft.targetType === "todo" ? <button className="shell-button" type="button" onClick={convertEditorTodoToMeeting}>Convert to meeting</button> : null}<button className="shell-button" type="button" onClick={() => editorDraft.targetType === "todo" ? onOpenTodoWorkspace() : onOpenActivityWorkspace(editorDraft.targetId)}>Open full {editorDraft.targetType === "todo" ? "todo" : "activity"}</button>{editorDraft.targetType === "activity" && linkedSessionIdsByActivity[editorDraft.targetId] ? <button className="shell-button" type="button" onClick={() => { const sessionId = linkedSessionIdsByActivity[editorDraft.targetId]; if (sessionId) onOpenSession(sessionId); }}>Open linked meeting session</button> : null}</div></div> : <div className="stack"><h3>Calendar item</h3><p className="muted">Select a scheduled block to edit it here.</p></div>}
+        <aside className={`calendar-editor-card${detailsPaneWidth <= 280 ? " calendar-editor-card-compact" : ""}`}>
+          {editorDraft ? (
+            <div className={`stack${detailsPaneWidth <= 280 ? " calendar-editor-stack-compact" : ""}`}>
+              <div className="card-header">
+                <div>
+                  <h3>{editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity"}</h3>
+                </div>
+                <button className="small-button" type="button" onClick={() => setSelectedItemId(null)}>
+                  Close
+                </button>
+              </div>
+              <div className="field">
+                <label htmlFor="calendar-edit-title">Title</label>
+                <input
+                  id="calendar-edit-title"
+                  value={editorDraft.title}
+                  onChange={(event) => setEditorDraft({ ...editorDraft, title: event.target.value })}
+                />
+              </div>
+              <div className="inline-row">
+                <div className="field">
+                  <label htmlFor="calendar-edit-date">Date</label>
+                  <input
+                    id="calendar-edit-date"
+                    type="date"
+                    value={editorDraft.doOn}
+                    onChange={(event) => setEditorDraft({ ...editorDraft, doOn: event.target.value })}
+                  />
+                </div>
+                <label className="compact-private-toggle">
+                  <input
+                    type="checkbox"
+                    checked={editorDraft.isPrivate}
+                    onChange={(event) => setEditorDraft({ ...editorDraft, isPrivate: event.target.checked })}
+                  />
+                  <span>Private</span>
+                </label>
+              </div>
+              {editorDraft.isMeeting ? (
+                <>
+                  <div className="inline-row">
+                    <div className="field">
+                      <label htmlFor="calendar-edit-start">Start</label>
+                      <input
+                        id="calendar-edit-start"
+                        type="time"
+                        step={300}
+                        value={editorDraft.startTime}
+                        onChange={(event) => setEditorDraft({ ...editorDraft, startTime: event.target.value })}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="calendar-edit-end">End</label>
+                      <input
+                        id="calendar-edit-end"
+                        type="time"
+                        step={300}
+                        value={editorDraft.endTime}
+                        onChange={(event) => setEditorDraft({ ...editorDraft, endTime: event.target.value })}
+                      />
+                    </div>
+                  </div>
+                  {editorDraft.targetType === "activity" ? (
+                    <div className="field">
+                      <label>Meeting session</label>
+                      <div className="calendar-linked-session-card">
+                        <div className="calendar-linked-session-status">
+                          {linkedSessionStateByActivity[editorDraft.targetId]?.sessionId ? (
+                            <>
+                              <strong>{linkedSessionStateByActivity[editorDraft.targetId]?.sessionTitle || "Linked meeting session"}</strong>
+                              <span>
+                                {linkedSessionStateByActivity[editorDraft.targetId]?.hasOutput ? "Output available" : "No output yet"}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <strong>No linked meeting session</strong>
+                              <span>Create one when this calendar meeting should become a working notes session.</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="calendar-editor-actions">
+                          {linkedSessionStateByActivity[editorDraft.targetId]?.sessionId ? (
+                            <>
+                              <button
+                                className="shell-button"
+                                type="button"
+                                onClick={() => {
+                                  const sessionId = linkedSessionStateByActivity[editorDraft.targetId]?.sessionId;
+                                  if (sessionId) onOpenSession(sessionId);
+                                }}
+                              >
+                                Open linked meeting session
+                              </button>
+                              {linkedSessionStateByActivity[editorDraft.targetId]?.hasOutput ? (
+                                <button
+                                  className="shell-button"
+                                  type="button"
+                                  onClick={() => {
+                                    const sessionId = linkedSessionStateByActivity[editorDraft.targetId]?.sessionId;
+                                    if (sessionId) onPreviewSessionOutput(sessionId);
+                                  }}
+                                >
+                                  Open session output
+                                </button>
+                              ) : null}
+                            </>
+                          ) : (
+                            <button
+                              className="shell-button"
+                              type="button"
+                              onClick={() => onCreateLinkedMeetingSession(editorDraft.targetId)}
+                            >
+                              Create linked meeting session
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+              <div className="metadata-triplet-grid">
+                <div className="field metadata-subfield">
+                  <label htmlFor="calendar-edit-domain">Domain</label>
+                  <input
+                    id="calendar-edit-domain"
+                    value={editorDraft.domain}
+                    onChange={(event) => setEditorDraft({ ...editorDraft, domain: event.target.value })}
+                  />
+                </div>
+                <div className="field metadata-subfield">
+                  <label htmlFor="calendar-edit-project">Project</label>
+                  <input
+                    id="calendar-edit-project"
+                    value={editorDraft.project}
+                    onChange={(event) => setEditorDraft({ ...editorDraft, project: event.target.value })}
+                  />
+                </div>
+                <div className="field metadata-subfield">
+                  <label htmlFor="calendar-edit-activity">Activity</label>
+                  <input
+                    id="calendar-edit-activity"
+                    value={editorDraft.activity}
+                    onChange={(event) => setEditorDraft({ ...editorDraft, activity: event.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="field">
+                <label htmlFor="calendar-edit-due">Due date</label>
+                <input
+                  id="calendar-edit-due"
+                  type="date"
+                  value={editorDraft.dueDate}
+                  onChange={(event) => setEditorDraft({ ...editorDraft, dueDate: event.target.value })}
+                />
+              </div>
+              {pendingDelete && pendingDelete.itemId === editorDraft.itemId ? (
+                <div className="calendar-delete-confirmation">
+                  <strong>Delete this {editorDraft.isMeeting ? "meeting" : editorDraft.targetType}?</strong>
+                  <p className="muted">"{pendingDelete.title}" will be removed from the app and from the calendar.</p>
+                  <div className="calendar-delete-confirmation-actions">
+                    <button className="small-button danger-button" type="button" onClick={confirmDeleteSelectedItem}>
+                      Delete
+                    </button>
+                    <button className="small-button" type="button" onClick={() => setPendingDelete(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="calendar-editor-actions">
+                <button className="primary-button" type="button" onClick={saveEditor}>
+                  Save calendar edits
+                </button>
+                {editorDraft.targetType === "todo" ? (
+                  <button className="shell-button" type="button" onClick={convertEditorTodoToMeeting}>
+                    Convert to meeting
+                  </button>
+                ) : null}
+                <button
+                  className="shell-button"
+                  type="button"
+                  onClick={() => (editorDraft.targetType === "todo" ? onOpenTodoWorkspace() : onOpenActivityWorkspace(editorDraft.targetId))}
+                >
+                  Open full {editorDraft.targetType === "todo" ? "todo" : "activity"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="stack">
+              <h3>Calendar item</h3>
+              <p className="muted">Select a scheduled block to edit it here.</p>
+            </div>
+          )}
         </aside>
       </div>
     </div>

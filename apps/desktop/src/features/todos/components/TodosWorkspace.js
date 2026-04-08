@@ -16,7 +16,7 @@ const createBlankTodoDraft = (description = "") => ({
     sessionIds: [],
 });
 const normalizeValue = (value) => value.trim().toLowerCase();
-export const TodosWorkspace = ({ todos, onToggle, onAdd, onSave, onDelete, onConvertToActivity }) => {
+export const TodosWorkspace = ({ todos, requestedTodoId, onToggle, onAdd, onSave, onDelete, onConvertToActivity }) => {
     const [draft, setDraft] = useState("");
     const [query, setQuery] = useState("");
     const [sortKey, setSortKey] = useState("dueDate");
@@ -62,6 +62,11 @@ export const TodosWorkspace = ({ todos, onToggle, onAdd, onSave, onDelete, onCon
         return [...filtered].sort((left, right) => valueForSort(left).localeCompare(valueForSort(right)));
     }, [openTodos, query, sortKey]);
     const completedTodos = useMemo(() => todos.filter((todo) => todo.isDone).slice(0, 8), [todos]);
+    useEffect(() => {
+        if (requestedTodoId) {
+            setEditingTodoId(requestedTodoId);
+        }
+    }, [requestedTodoId]);
     useEffect(() => {
         if (!editingTodoId)
             return;
