@@ -3,6 +3,7 @@ import type { ActivityRecord, CalendarItemRecord, LocalAppSettings, TodoRecord }
 
 const TOTAL_SLOTS = 24 * 12;
 const MINUTES_PER_SLOT = 5;
+const DEFAULT_MEETING_DURATION_SLOTS = 12;
 const DAYS = [3, 5, 7, 14] as const;
 const HEIGHTS = [12, 16, 22] as const;
 const MIN_PANE = 240;
@@ -77,6 +78,7 @@ interface CalendarWorkspaceProps {
   onMoveItem: (id: string, date: string, startSlot: number) => void;
   onSaveTodo: (todo: TodoRecord) => void;
   onSaveActivity: (activity: ActivityRecord) => void;
+  onConvertTodoToMeeting: (todo: TodoRecord, options: { date: string; startTime: string; endTime: string }) => void;
   onUpdateCalendarItem: (id: string, updates: { date: string; startSlot: number; durationSlots: number }) => void;
   onOpenTodoWorkspace: () => void;
   onOpenActivityWorkspace: (activityId: string) => void;
@@ -95,6 +97,7 @@ export const CalendarWorkspace = ({
   onMoveItem,
   onSaveTodo,
   onSaveActivity,
+  onConvertTodoToMeeting,
   onUpdateCalendarItem,
   onOpenTodoWorkspace,
   onOpenActivityWorkspace,
@@ -230,7 +233,7 @@ export const CalendarWorkspace = ({
     if (calendarItem.targetType === "todo") {
       const todo = todos.find((entry) => entry.id === calendarItem.targetId);
       if (!todo) return;
-      setEditorDraft({ itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isMeeting: false });
+      setEditorDraft({ itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isMeeting: false });
       return;
     }
     const activity = activities.find((entry) => entry.id === calendarItem.targetId);
@@ -310,6 +313,19 @@ export const CalendarWorkspace = ({
       onSaveActivity({ ...activity, description: editorDraft.title.trim() || activity.description, doOn: editorDraft.doOn, dueDate: editorDraft.dueDate, domain: editorDraft.domain, project: editorDraft.project, activity: editorDraft.activity, isPrivate: editorDraft.isPrivate, startTime: editorDraft.isMeeting ? editorDraft.startTime : activity.startTime, endTime: editorDraft.isMeeting ? editorDraft.endTime : activity.endTime });
     }
     onUpdateCalendarItem(editorDraft.itemId, { date: editorDraft.doOn, startSlot, durationSlots });
+  };
+
+  const convertEditorTodoToMeeting = () => {
+    if (!editorDraft || editorDraft.targetType !== "todo") return;
+    const todo = todos.find((entry) => entry.id === editorDraft.targetId);
+    if (!todo) return;
+    onConvertTodoToMeeting(todo, {
+      date: editorDraft.doOn,
+      startTime: editorDraft.startTime || "09:00",
+      endTime:
+        editorDraft.endTime ||
+        slotToTime(timeToSlot(editorDraft.startTime || "09:00") + DEFAULT_MEETING_DURATION_SLOTS),
+    });
   };
 
   return (
@@ -395,7 +411,7 @@ export const CalendarWorkspace = ({
         </div>
         <div className="calendar-splitter" role="separator" aria-orientation="vertical" onMouseDown={() => { splitterDraggingRef.current = true; document.body.style.cursor = "col-resize"; }} />
         <aside className="calendar-editor-card">
-          {editorDraft ? <div className="stack"><div className="card-header"><div><h3>{editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity"}</h3></div><button className="small-button" type="button" onClick={() => setSelectedItemId(null)}>Close</button></div><div className="field"><label htmlFor="calendar-edit-title">Title</label><input id="calendar-edit-title" value={editorDraft.title} onChange={(event) => setEditorDraft({ ...editorDraft, title: event.target.value })} /></div><div className="inline-row"><div className="field"><label htmlFor="calendar-edit-date">Date</label><input id="calendar-edit-date" type="date" value={editorDraft.doOn} onChange={(event) => setEditorDraft({ ...editorDraft, doOn: event.target.value })} /></div><label className="compact-private-toggle"><input type="checkbox" checked={editorDraft.isPrivate} onChange={(event) => setEditorDraft({ ...editorDraft, isPrivate: event.target.checked })} /><span>Private</span></label></div>{editorDraft.isMeeting ? <div className="inline-row"><div className="field"><label htmlFor="calendar-edit-start">Start</label><input id="calendar-edit-start" type="time" step={300} value={editorDraft.startTime} onChange={(event) => setEditorDraft({ ...editorDraft, startTime: event.target.value })} /></div><div className="field"><label htmlFor="calendar-edit-end">End</label><input id="calendar-edit-end" type="time" step={300} value={editorDraft.endTime} onChange={(event) => setEditorDraft({ ...editorDraft, endTime: event.target.value })} /></div></div> : null}<div className="metadata-triplet-grid"><div className="field metadata-subfield"><label htmlFor="calendar-edit-domain">Domain</label><input id="calendar-edit-domain" value={editorDraft.domain} onChange={(event) => setEditorDraft({ ...editorDraft, domain: event.target.value })} /></div><div className="field metadata-subfield"><label htmlFor="calendar-edit-project">Project</label><input id="calendar-edit-project" value={editorDraft.project} onChange={(event) => setEditorDraft({ ...editorDraft, project: event.target.value })} /></div><div className="field metadata-subfield"><label htmlFor="calendar-edit-activity">Activity</label><input id="calendar-edit-activity" value={editorDraft.activity} onChange={(event) => setEditorDraft({ ...editorDraft, activity: event.target.value })} /></div></div><div className="field"><label htmlFor="calendar-edit-due">Due date</label><input id="calendar-edit-due" type="date" value={editorDraft.dueDate} onChange={(event) => setEditorDraft({ ...editorDraft, dueDate: event.target.value })} /></div><div className="calendar-editor-actions"><button className="primary-button" type="button" onClick={saveEditor}>Save calendar edits</button><button className="shell-button" type="button" onClick={() => editorDraft.targetType === "todo" ? onOpenTodoWorkspace() : onOpenActivityWorkspace(editorDraft.targetId)}>Open full {editorDraft.targetType === "todo" ? "todo" : "activity"}</button>{editorDraft.targetType === "activity" && linkedSessionIdsByActivity[editorDraft.targetId] ? <button className="shell-button" type="button" onClick={() => { const sessionId = linkedSessionIdsByActivity[editorDraft.targetId]; if (sessionId) onOpenSession(sessionId); }}>Open linked meeting session</button> : null}</div></div> : <div className="stack"><h3>Calendar item</h3><p className="muted">Select a scheduled block to edit it here.</p></div>}
+          {editorDraft ? <div className="stack"><div className="card-header"><div><h3>{editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity"}</h3></div><button className="small-button" type="button" onClick={() => setSelectedItemId(null)}>Close</button></div><div className="field"><label htmlFor="calendar-edit-title">Title</label><input id="calendar-edit-title" value={editorDraft.title} onChange={(event) => setEditorDraft({ ...editorDraft, title: event.target.value })} /></div><div className="inline-row"><div className="field"><label htmlFor="calendar-edit-date">Date</label><input id="calendar-edit-date" type="date" value={editorDraft.doOn} onChange={(event) => setEditorDraft({ ...editorDraft, doOn: event.target.value })} /></div><label className="compact-private-toggle"><input type="checkbox" checked={editorDraft.isPrivate} onChange={(event) => setEditorDraft({ ...editorDraft, isPrivate: event.target.checked })} /><span>Private</span></label></div>{editorDraft.isMeeting ? <div className="inline-row"><div className="field"><label htmlFor="calendar-edit-start">Start</label><input id="calendar-edit-start" type="time" step={300} value={editorDraft.startTime} onChange={(event) => setEditorDraft({ ...editorDraft, startTime: event.target.value })} /></div><div className="field"><label htmlFor="calendar-edit-end">End</label><input id="calendar-edit-end" type="time" step={300} value={editorDraft.endTime} onChange={(event) => setEditorDraft({ ...editorDraft, endTime: event.target.value })} /></div></div> : null}<div className="metadata-triplet-grid"><div className="field metadata-subfield"><label htmlFor="calendar-edit-domain">Domain</label><input id="calendar-edit-domain" value={editorDraft.domain} onChange={(event) => setEditorDraft({ ...editorDraft, domain: event.target.value })} /></div><div className="field metadata-subfield"><label htmlFor="calendar-edit-project">Project</label><input id="calendar-edit-project" value={editorDraft.project} onChange={(event) => setEditorDraft({ ...editorDraft, project: event.target.value })} /></div><div className="field metadata-subfield"><label htmlFor="calendar-edit-activity">Activity</label><input id="calendar-edit-activity" value={editorDraft.activity} onChange={(event) => setEditorDraft({ ...editorDraft, activity: event.target.value })} /></div></div><div className="field"><label htmlFor="calendar-edit-due">Due date</label><input id="calendar-edit-due" type="date" value={editorDraft.dueDate} onChange={(event) => setEditorDraft({ ...editorDraft, dueDate: event.target.value })} /></div><div className="calendar-editor-actions"><button className="primary-button" type="button" onClick={saveEditor}>Save calendar edits</button>{editorDraft.targetType === "todo" ? <button className="shell-button" type="button" onClick={convertEditorTodoToMeeting}>Convert to meeting</button> : null}<button className="shell-button" type="button" onClick={() => editorDraft.targetType === "todo" ? onOpenTodoWorkspace() : onOpenActivityWorkspace(editorDraft.targetId)}>Open full {editorDraft.targetType === "todo" ? "todo" : "activity"}</button>{editorDraft.targetType === "activity" && linkedSessionIdsByActivity[editorDraft.targetId] ? <button className="shell-button" type="button" onClick={() => { const sessionId = linkedSessionIdsByActivity[editorDraft.targetId]; if (sessionId) onOpenSession(sessionId); }}>Open linked meeting session</button> : null}</div></div> : <div className="stack"><h3>Calendar item</h3><p className="muted">Select a scheduled block to edit it here.</p></div>}
         </aside>
       </div>
     </div>

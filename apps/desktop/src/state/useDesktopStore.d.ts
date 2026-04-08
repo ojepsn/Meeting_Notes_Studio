@@ -35,7 +35,12 @@ interface DesktopState {
         startSlot: number;
         durationSlots: number;
     }) => Promise<void>;
-    convertTodoToActivity: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
+    convertTodoToActivity: (todo: DesktopAppSnapshot["todos"][number], options?: {
+        type?: DesktopAppSnapshot["activities"][number]["type"];
+        date?: string;
+        startTime?: string;
+        endTime?: string;
+    }) => Promise<string | null>;
     ensureSessionForActivity: (activityId: string) => Promise<string | null>;
     saveSettings: (settings: DesktopAppSnapshot["settings"]) => Promise<void>;
     saveTemplate: (template: DesktopAppSnapshot["templates"][number]) => Promise<void>;

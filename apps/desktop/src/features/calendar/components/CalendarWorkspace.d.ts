@@ -10,6 +10,11 @@ interface CalendarWorkspaceProps {
     onMoveItem: (id: string, date: string, startSlot: number) => void;
     onSaveTodo: (todo: TodoRecord) => void;
     onSaveActivity: (activity: ActivityRecord) => void;
+    onConvertTodoToMeeting: (todo: TodoRecord, options: {
+        date: string;
+        startTime: string;
+        endTime: string;
+    }) => void;
     onUpdateCalendarItem: (id: string, updates: {
         date: string;
         startSlot: number;
@@ -20,5 +25,5 @@ interface CalendarWorkspaceProps {
     onOpenSession: (sessionId: string) => void;
     onFullScreenChange?: (isFullScreen: boolean) => void;
 }
-export declare const CalendarWorkspace: ({ todos, activities, calendarItems, settings, linkedSessionIdsByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onSaveActivity, onUpdateCalendarItem, onOpenTodoWorkspace, onOpenActivityWorkspace, onOpenSession, onFullScreenChange, }: CalendarWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const CalendarWorkspace: ({ todos, activities, calendarItems, settings, linkedSessionIdsByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onSaveActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onOpenTodoWorkspace, onOpenActivityWorkspace, onOpenSession, onFullScreenChange, }: CalendarWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

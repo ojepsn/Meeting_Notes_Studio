@@ -2186,6 +2186,14 @@ export const App = () => {
                 onMoveItem={(id, date, startSlot) => void moveCalendarItem(id, date, startSlot)}
                 onSaveTodo={(todo) => void saveTodo(todo)}
                 onSaveActivity={(activity) => void saveActivity(activity)}
+                onConvertTodoToMeeting={(todo, options) =>
+                  void convertTodoToActivity(todo, {
+                    type: "meeting",
+                    date: options.date,
+                    startTime: options.startTime,
+                    endTime: options.endTime,
+                  })
+                }
                 onUpdateCalendarItem={(id, updates) => void updateCalendarItem(id, updates)}
                 onOpenTodoWorkspace={() => setActiveWorkspace("todos")}
                 onOpenActivityWorkspace={(activityId) => openActivityFromLink(activityId)}

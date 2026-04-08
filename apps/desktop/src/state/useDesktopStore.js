@@ -635,13 +635,19 @@ export const useDesktopStore = create((set, get) => ({
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);
     },
-    convertTodoToActivity: async (todo) => {
+    convertTodoToActivity: async (todo, options) => {
         const snapshot = get().snapshot;
         if (!snapshot)
-            return;
+            return null;
+        const nextType = options?.type ?? "task";
+        const nextDate = options?.date ?? todo.doOn;
+        const nextStartTime = nextType === "meeting" ? options?.startTime || "09:00" : "";
+        const nextEndTime = nextType === "meeting"
+            ? options?.endTime || slotToTime(timeToSlot(nextStartTime) + DEFAULT_MEETING_DURATION_SLOTS)
+            : "";
         const nextActivity = {
             id: crypto.randomUUID(),
-            type: "task",
+            type: nextType,
             description: todo.description,
             isDone: false,
             isPrivate: todo.isPrivate,
@@ -649,17 +655,17 @@ export const useDesktopStore = create((set, get) => ({
             domain: todo.domain,
             project: todo.project,
             activity: todo.activity,
-            doOn: todo.doOn,
+            doOn: nextDate,
             dueDate: todo.dueDate,
-            startTime: "",
-            endTime: "",
+            startTime: nextStartTime,
+            endTime: nextEndTime,
             detailsHtml: todo.detailsHtml,
             timeRequiredMinutes: 0,
             actualTimeSpentMinutes: 0,
             createdAt: new Date().toISOString(),
             sessionIds: todo.sessionIds,
         };
-        const nextSnapshot = {
+        let nextSnapshot = {
             ...snapshot,
             todos: snapshot.todos.filter((entry) => entry.id !== todo.id),
             activities: [nextActivity, ...snapshot.activities],
@@ -672,8 +678,12 @@ export const useDesktopStore = create((set, get) => ({
                 }
                 : item),
         };
+        if (nextType === "meeting") {
+            nextSnapshot = syncCalendarItemForMeeting(nextSnapshot, nextActivity);
+        }
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        return nextActivity.id;
     },
     ensureSessionForActivity: async (activityId) => {
         const snapshot = get().snapshot;
