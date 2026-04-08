@@ -156,6 +156,8 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   calendarIsFullScreen: true,
   calendarFullScreenPreferenceInitialized: false,
   calendarDetailsPaneWidth: 320,
+  calendarScrollTop: 0,
+  calendarScrollLeft: 0,
   apiKey: "",
   textModel: "gpt-5.4-mini",
   transcriptionModel: "gpt-4o-mini-transcribe",
@@ -304,6 +306,12 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
   calendarDetailsPaneWidth: Number.isFinite(Number(settings.calendarDetailsPaneWidth))
     ? Math.min(520, Math.max(240, Math.round(Number(settings.calendarDetailsPaneWidth))))
     : 320,
+  calendarScrollTop: Number.isFinite(Number(settings.calendarScrollTop))
+    ? Math.max(0, Math.round(Number(settings.calendarScrollTop)))
+    : 0,
+  calendarScrollLeft: Number.isFinite(Number(settings.calendarScrollLeft))
+    ? Math.max(0, Math.round(Number(settings.calendarScrollLeft)))
+    : 0,
   textModel: normalizeTextModelId(settings.textModel),
   transcriptionModel: normalizeTranscriptionModelId(settings.transcriptionModel),
   promptProfile: normalizePromptProfile(settings.promptProfile),

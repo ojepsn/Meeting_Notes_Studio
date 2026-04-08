@@ -159,6 +159,8 @@ export interface LocalAppSettings {
   calendarIsFullScreen: boolean;
   calendarFullScreenPreferenceInitialized?: boolean;
   calendarDetailsPaneWidth: number;
+  calendarScrollTop: number;
+  calendarScrollLeft: number;
   apiKey: string;
   textModel: string;
   transcriptionModel: string;

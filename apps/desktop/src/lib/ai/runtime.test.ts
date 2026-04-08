@@ -15,6 +15,8 @@ const settings: LocalAppSettings = {
   calendarSlotHeight: 16,
   calendarIsFullScreen: false,
   calendarDetailsPaneWidth: 320,
+  calendarScrollTop: 0,
+  calendarScrollLeft: 0,
   apiKey: "test-key",
   textModel: "gpt-5-mini",
   transcriptionModel: "gpt-4o-mini-transcribe",

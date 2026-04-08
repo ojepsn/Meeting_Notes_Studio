@@ -17,6 +17,7 @@ interface ActivitiesWorkspaceProps {
   activities: ActivityRecord[];
   linkedSessionIdsByActivity: Record<string, string | null>;
   requestedActivityId?: string | null;
+  onEditorClose?: () => void;
   onToggle: (activity: ActivityRecord) => void;
   onAdd: (description: string, type: ActivityRecord["type"]) => void;
   onSave: (activity: ActivityRecord) => void;
@@ -52,6 +53,7 @@ export const ActivitiesWorkspace = ({
   activities,
   linkedSessionIdsByActivity,
   requestedActivityId,
+  onEditorClose,
   onToggle,
   onAdd,
   onSave,
@@ -151,6 +153,11 @@ export const ActivitiesWorkspace = ({
     onAdd(nextValue, draftType);
     setDraft("");
     setDraftType("task");
+  };
+
+  const closeEditor = () => {
+    setEditingActivityId(null);
+    onEditorClose?.();
   };
 
   const sortOptions: Array<{ value: ActivitySortKey; label: string }> = [
@@ -322,13 +329,13 @@ export const ActivitiesWorkspace = ({
       ) : null}
 
       {editingActivityId ? (
-        <div className="overlay-backdrop todos-editor-backdrop" role="presentation" onClick={() => setEditingActivityId(null)}>
+        <div className="overlay-backdrop todos-editor-backdrop" role="presentation" onClick={closeEditor}>
           <div className="overlay-surface todos-editor-surface" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             <div className="overlay-header">
               <div>
                 <strong>Edit activity</strong>
               </div>
-              <button className="small-button" type="button" onClick={() => setEditingActivityId(null)}>
+              <button className="small-button" type="button" onClick={closeEditor}>
                 Close
               </button>
             </div>
@@ -475,10 +482,10 @@ export const ActivitiesWorkspace = ({
                 />
               </div>
               <div className="page-actions">
-                <button className="primary-button" type="button" onClick={() => { onSave({ ...editingDraft }); setEditingActivityId(null); }}>
+                <button className="primary-button" type="button" onClick={() => { onSave({ ...editingDraft }); closeEditor(); }}>
                   Save
                 </button>
-                <button className="small-button" type="button" onClick={() => setEditingActivityId(null)}>
+                <button className="small-button" type="button" onClick={closeEditor}>
                   Cancel
                 </button>
               </div>

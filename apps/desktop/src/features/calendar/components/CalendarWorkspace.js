@@ -34,6 +34,19 @@ const durationLabel = (slots) => {
     const rest = minutes % 60;
     return rest ? `${hours}h ${rest}m` : `${hours}h`;
 };
+const dayColumnWidthForView = (daysInView) => {
+    switch (daysInView) {
+        case 14:
+            return 118;
+        case 7:
+            return 156;
+        case 5:
+            return 220;
+        case 3:
+        default:
+            return 280;
+    }
+};
 export const CalendarWorkspace = ({ todos, activities, calendarItems, settings, linkedSessionStateByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, onCreateLinkedMeetingSession, onPreviewSessionOutput, onFullScreenChange, }) => {
     const today = new Date().toISOString().slice(0, 10);
     const initialIsFullScreen = settings.calendarFullScreenPreferenceInitialized ? settings.calendarIsFullScreen : true;
@@ -42,6 +55,8 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, settings, 
     const [slotHeight, setSlotHeight] = useState(settings.calendarSlotHeight);
     const [isFullScreen, setIsFullScreen] = useState(initialIsFullScreen);
     const [detailsPaneWidth, setDetailsPaneWidth] = useState(settings.calendarDetailsPaneWidth);
+    const [scrollTop, setScrollTop] = useState(settings.calendarScrollTop ?? 0);
+    const [scrollLeft, setScrollLeft] = useState(settings.calendarScrollLeft ?? 0);
     const [selectedItemId, setSelectedItemId] = useState(null);
     const [editorDraft, setEditorDraft] = useState(null);
     const [jumpDate, setJumpDate] = useState(today);
@@ -55,6 +70,7 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, settings, 
     const layoutRef = useRef(null);
     const scrollRef = useRef(null);
     const splitterDraggingRef = useRef(false);
+    const scrollPersistTimerRef = useRef(null);
     useEffect(() => {
         onFullScreenChange?.(isFullScreen);
         return () => onFullScreenChange?.(false);
@@ -64,7 +80,9 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, settings, 
             settings.calendarSlotHeight !== slotHeight ||
             settings.calendarIsFullScreen !== isFullScreen ||
             !settings.calendarFullScreenPreferenceInitialized ||
-            settings.calendarDetailsPaneWidth !== detailsPaneWidth) {
+            settings.calendarDetailsPaneWidth !== detailsPaneWidth ||
+            settings.calendarScrollTop !== scrollTop ||
+            settings.calendarScrollLeft !== scrollLeft) {
             onSaveSettings({
                 ...settings,
                 calendarDaysInView: daysInView,
@@ -72,10 +90,13 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, settings, 
                 calendarIsFullScreen: isFullScreen,
                 calendarFullScreenPreferenceInitialized: true,
                 calendarDetailsPaneWidth: detailsPaneWidth,
+                calendarScrollTop: scrollTop,
+                calendarScrollLeft: scrollLeft,
             });
         }
-    }, [daysInView, detailsPaneWidth, isFullScreen, onSaveSettings, settings, slotHeight]);
+    }, [daysInView, detailsPaneWidth, isFullScreen, onSaveSettings, scrollLeft, scrollTop, settings, slotHeight]);
     const visibleDates = useMemo(() => Array.from({ length: daysInView }, (_, index) => addDays(anchorDate, index)), [anchorDate, daysInView]);
+    const dayColumnWidth = useMemo(() => dayColumnWidthForView(daysInView), [daysInView]);
     const items = useMemo(() => {
         const todoMap = new Map((Array.isArray(todos) ? todos : []).map((todo) => [todo.id, todo]));
         const activityMap = new Map((Array.isArray(activities) ? activities : []).map((activity) => [activity.id, activity]));
@@ -151,11 +172,39 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, settings, 
         const scroller = scrollRef.current;
         if (!scroller)
             return;
+        const hasSavedViewport = (settings.calendarScrollTop ?? 0) > 0 || (settings.calendarScrollLeft ?? 0) > 0;
+        if (hasSavedViewport) {
+            scroller.scrollTop = Math.max(0, settings.calendarScrollTop ?? 0);
+            scroller.scrollLeft = Math.max(0, settings.calendarScrollLeft ?? 0);
+            return;
+        }
         const now = new Date();
         const currentSlot = clampSlot(now.getHours() * 12 + Math.floor(now.getMinutes() / MINUTES_PER_SLOT));
         scroller.scrollTop = Math.max(0, currentSlot * slotHeight - scroller.clientHeight / 2);
         scroller.scrollLeft = 0;
-    }, [slotHeight]);
+    }, [settings.calendarScrollLeft, settings.calendarScrollTop, slotHeight]);
+    useEffect(() => {
+        const scroller = scrollRef.current;
+        if (!scroller)
+            return;
+        const handleScroll = () => {
+            if (scrollPersistTimerRef.current) {
+                clearTimeout(scrollPersistTimerRef.current);
+            }
+            scrollPersistTimerRef.current = setTimeout(() => {
+                setScrollTop(Math.max(0, Math.round(scroller.scrollTop)));
+                setScrollLeft(Math.max(0, Math.round(scroller.scrollLeft)));
+            }, 120);
+        };
+        scroller.addEventListener("scroll", handleScroll, { passive: true });
+        return () => {
+            scroller.removeEventListener("scroll", handleScroll);
+            if (scrollPersistTimerRef.current) {
+                clearTimeout(scrollPersistTimerRef.current);
+                scrollPersistTimerRef.current = null;
+            }
+        };
+    }, []);
     useEffect(() => {
         const handleKeyDown = (event) => {
             if (event.key !== "Delete" || !selectedItem) {
@@ -316,7 +365,7 @@ export const CalendarWorkspace = ({ todos, activities, calendarItems, settings, 
         setSelectedItemId(null);
         setEditorDraft(null);
     };
-    return (_jsxs("div", { className: `card calendar-workspace${isFullScreen ? " calendar-workspace-fullscreen" : ""}`, children: [_jsxs("div", { className: "card-header session-editor-header-minimal calendar-workspace-header", children: [_jsx("div", { children: _jsx("h2", { children: "Calendar" }) }), _jsxs("div", { className: "page-actions wrap-row", children: [_jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, -daysInView)), children: "Previous" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => { setAnchorDate(today); setJumpDate(today); }, children: "Today" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, daysInView)), children: "Next" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, 30)), children: "+30 days" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setIsFullScreen((current) => !current), children: isFullScreen ? "Exit full screen" : "Full screen" })] })] }), _jsxs("div", { className: `calendar-controls${isFullScreen ? " calendar-controls-compact" : ""}`, children: [_jsxs("div", { className: "calendar-calendar-summary", children: [_jsxs("div", { className: "status-chip", children: [filteredItems.length, " scheduled items"] }), _jsx("div", { className: "capture-density-toggle", children: DAYS.map((option) => _jsxs("button", { className: "segment-button", type: "button", "data-active": option === daysInView, onClick: () => setDaysInView(option), children: [option, " days"] }, `days-${option}`)) }), _jsx("div", { className: "capture-density-toggle", children: HEIGHTS.map((option) => _jsx("button", { className: "segment-button", type: "button", "data-active": option === slotHeight, onClick: () => setSlotHeight(option), children: option === 12 ? "Compact" : option === 16 ? "Default" : "Large" }, `height-${option}`)) })] }), _jsxs("div", { className: "calendar-toolbar", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-jump-date", children: "Jump to date" }), _jsx("input", { id: "calendar-jump-date", type: "date", value: jumpDate, onChange: (event) => setJumpDate(event.target.value) })] }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate(jumpDate || today), children: "Go" }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "calendar-search", children: "Search" }), _jsx("input", { id: "calendar-search", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "Search title" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-type-filter", children: "Type" }), _jsxs("select", { id: "calendar-type-filter", value: typeFilter, onChange: (event) => setTypeFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), _jsx("option", { value: "todo", children: "Todos" }), _jsx("option", { value: "activity", children: "Activities" }), _jsx("option", { value: "meeting", children: "Meetings" })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-visibility-filter", children: "Visibility" }), _jsxs("select", { id: "calendar-visibility-filter", value: visibilityFilter, onChange: (event) => setVisibilityFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), _jsx("option", { value: "public", children: "Public" }), _jsx("option", { value: "private", children: "Private" })] })] })] })] }), _jsxs("div", { ref: layoutRef, className: `calendar-layout${isFullScreen ? " calendar-layout-fullscreen" : ""}`, style: { gridTemplateColumns: `minmax(0, 1fr) 8px ${detailsPaneWidth}px` }, children: [_jsx("div", { className: "calendar-main stack", children: _jsx("div", { ref: scrollRef, className: `calendar-scroll${isFullScreen ? " calendar-scroll-fullscreen" : ""}`, style: { ["--calendar-slot-height"]: `${slotHeight}px` }, children: _jsxs("div", { className: "calendar-surface", style: { gridTemplateColumns: `84px repeat(${visibleDates.length}, minmax(220px, 1fr))`, gridTemplateRows: `52px repeat(${TOTAL_SLOTS}, var(--calendar-slot-height))` }, children: [_jsx("div", { className: "calendar-corner", style: { gridColumn: "1 / 2", gridRow: "1 / 2" } }), visibleDates.map((date, index) => _jsxs("div", { className: "calendar-day-header", style: { gridColumn: `${index + 2} / ${index + 3}`, gridRow: "1 / 2" }, children: [_jsx("strong", { children: date }), _jsx("span", { children: formatDay(date) })] }, date)), _jsx("div", { className: "calendar-time-column", style: { gridColumn: "1 / 2", gridRow: `2 / span ${TOTAL_SLOTS}` }, children: Array.from({ length: TOTAL_SLOTS }, (_, slot) => _jsx("div", { className: `calendar-time-cell${slot % 12 === 0 ? " calendar-time-cell-hour" : ""}`, style: { height: "var(--calendar-slot-height)" }, children: slot % 12 === 0 ? slotToTime(slot) : "" }, `time-${slot}`)) }), visibleDates.map((date, index) => {
+    return (_jsxs("div", { className: `card calendar-workspace${isFullScreen ? " calendar-workspace-fullscreen" : ""}`, children: [_jsxs("div", { className: "card-header session-editor-header-minimal calendar-workspace-header", children: [_jsx("div", { children: _jsx("h2", { children: "Calendar" }) }), _jsxs("div", { className: "page-actions wrap-row", children: [_jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, -daysInView)), children: "Previous" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => { setAnchorDate(today); setJumpDate(today); }, children: "Today" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, daysInView)), children: "Next" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate((current) => addDays(current, 30)), children: "+30 days" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setIsFullScreen((current) => !current), children: isFullScreen ? "Exit full screen" : "Full screen" })] })] }), _jsxs("div", { className: `calendar-controls${isFullScreen ? " calendar-controls-compact" : ""}`, children: [_jsxs("div", { className: "calendar-calendar-summary", children: [_jsxs("div", { className: "status-chip", children: [filteredItems.length, " scheduled items"] }), _jsx("div", { className: "capture-density-toggle", children: DAYS.map((option) => _jsxs("button", { className: "segment-button", type: "button", "data-active": option === daysInView, onClick: () => setDaysInView(option), children: [option, " days"] }, `days-${option}`)) }), _jsx("div", { className: "capture-density-toggle", children: HEIGHTS.map((option) => _jsx("button", { className: "segment-button", type: "button", "data-active": option === slotHeight, onClick: () => setSlotHeight(option), children: option === 12 ? "Compact" : option === 16 ? "Default" : "Large" }, `height-${option}`)) })] }), _jsxs("div", { className: "calendar-toolbar", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-jump-date", children: "Jump to date" }), _jsx("input", { id: "calendar-jump-date", type: "date", value: jumpDate, onChange: (event) => setJumpDate(event.target.value) })] }), _jsx("button", { className: "shell-button", type: "button", onClick: () => setAnchorDate(jumpDate || today), children: "Go" }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "calendar-search", children: "Search" }), _jsx("input", { id: "calendar-search", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "Search title" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-type-filter", children: "Type" }), _jsxs("select", { id: "calendar-type-filter", value: typeFilter, onChange: (event) => setTypeFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), _jsx("option", { value: "todo", children: "Todos" }), _jsx("option", { value: "activity", children: "Activities" }), _jsx("option", { value: "meeting", children: "Meetings" })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-visibility-filter", children: "Visibility" }), _jsxs("select", { id: "calendar-visibility-filter", value: visibilityFilter, onChange: (event) => setVisibilityFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), _jsx("option", { value: "public", children: "Public" }), _jsx("option", { value: "private", children: "Private" })] })] })] })] }), _jsxs("div", { ref: layoutRef, className: `calendar-layout${isFullScreen ? " calendar-layout-fullscreen" : ""}`, style: { gridTemplateColumns: `minmax(0, 1fr) 8px ${detailsPaneWidth}px` }, children: [_jsx("div", { className: "calendar-main stack", children: _jsx("div", { ref: scrollRef, className: `calendar-scroll${isFullScreen ? " calendar-scroll-fullscreen" : ""}`, style: { ["--calendar-slot-height"]: `${slotHeight}px` }, children: _jsxs("div", { className: "calendar-surface", style: { gridTemplateColumns: `84px repeat(${visibleDates.length}, minmax(${dayColumnWidth}px, 1fr))`, gridTemplateRows: `52px repeat(${TOTAL_SLOTS}, var(--calendar-slot-height))` }, children: [_jsx("div", { className: "calendar-corner", style: { gridColumn: "1 / 2", gridRow: "1 / 2" } }), visibleDates.map((date, index) => _jsxs("div", { className: "calendar-day-header", style: { gridColumn: `${index + 2} / ${index + 3}`, gridRow: "1 / 2" }, children: [_jsx("strong", { children: date }), _jsx("span", { children: formatDay(date) })] }, date)), _jsx("div", { className: "calendar-time-column", style: { gridColumn: "1 / 2", gridRow: `2 / span ${TOTAL_SLOTS}` }, children: Array.from({ length: TOTAL_SLOTS }, (_, slot) => _jsx("div", { className: `calendar-time-cell${slot % 12 === 0 ? " calendar-time-cell-hour" : ""}`, style: { height: "var(--calendar-slot-height)" }, children: slot % 12 === 0 ? slotToTime(slot) : "" }, `time-${slot}`)) }), visibleDates.map((date, index) => {
                                         const dayItems = itemsByDate.get(date) ?? [];
                                         const active = draftCell?.date === date ? draftCell : null;
                                         return _jsxs("div", { className: "calendar-day-column", style: { gridColumn: `${index + 2} / ${index + 3}`, gridRow: `2 / span ${TOTAL_SLOTS}`, height: `calc(var(--calendar-slot-height) * ${TOTAL_SLOTS})` }, onClick: (event) => {

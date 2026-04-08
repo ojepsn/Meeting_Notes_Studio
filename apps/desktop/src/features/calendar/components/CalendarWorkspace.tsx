@@ -35,6 +35,19 @@ const durationLabel = (slots: number) => {
   const rest = minutes % 60;
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 };
+const dayColumnWidthForView = (daysInView: typeof DAYS[number]) => {
+  switch (daysInView) {
+    case 14:
+      return 118;
+    case 7:
+      return 156;
+    case 5:
+      return 220;
+    case 3:
+    default:
+      return 280;
+  }
+};
 
 type Item = {
   id: string;
@@ -130,6 +143,8 @@ export const CalendarWorkspace = ({
   const [slotHeight, setSlotHeight] = useState<typeof HEIGHTS[number]>(settings.calendarSlotHeight);
   const [isFullScreen, setIsFullScreen] = useState(initialIsFullScreen);
   const [detailsPaneWidth, setDetailsPaneWidth] = useState(settings.calendarDetailsPaneWidth);
+  const [scrollTop, setScrollTop] = useState(settings.calendarScrollTop ?? 0);
+  const [scrollLeft, setScrollLeft] = useState(settings.calendarScrollLeft ?? 0);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [editorDraft, setEditorDraft] = useState<EditorDraft | null>(null);
   const [jumpDate, setJumpDate] = useState(today);
@@ -143,6 +158,7 @@ export const CalendarWorkspace = ({
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const splitterDraggingRef = useRef(false);
+  const scrollPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     onFullScreenChange?.(isFullScreen);
@@ -155,7 +171,9 @@ export const CalendarWorkspace = ({
       settings.calendarSlotHeight !== slotHeight ||
       settings.calendarIsFullScreen !== isFullScreen ||
       !settings.calendarFullScreenPreferenceInitialized ||
-      settings.calendarDetailsPaneWidth !== detailsPaneWidth
+      settings.calendarDetailsPaneWidth !== detailsPaneWidth ||
+      settings.calendarScrollTop !== scrollTop ||
+      settings.calendarScrollLeft !== scrollLeft
     ) {
       onSaveSettings({
         ...settings,
@@ -164,11 +182,14 @@ export const CalendarWorkspace = ({
         calendarIsFullScreen: isFullScreen,
         calendarFullScreenPreferenceInitialized: true,
         calendarDetailsPaneWidth: detailsPaneWidth,
+        calendarScrollTop: scrollTop,
+        calendarScrollLeft: scrollLeft,
       });
     }
-  }, [daysInView, detailsPaneWidth, isFullScreen, onSaveSettings, settings, slotHeight]);
+  }, [daysInView, detailsPaneWidth, isFullScreen, onSaveSettings, scrollLeft, scrollTop, settings, slotHeight]);
 
   const visibleDates = useMemo(() => Array.from({ length: daysInView }, (_, index) => addDays(anchorDate, index)), [anchorDate, daysInView]);
+  const dayColumnWidth = useMemo(() => dayColumnWidthForView(daysInView), [daysInView]);
   const items = useMemo<Item[]>(() => {
     const todoMap = new Map((Array.isArray(todos) ? todos : []).map((todo) => [todo.id, todo]));
     const activityMap = new Map((Array.isArray(activities) ? activities : []).map((activity) => [activity.id, activity]));
@@ -242,11 +263,39 @@ export const CalendarWorkspace = ({
   useEffect(() => {
     const scroller = scrollRef.current;
     if (!scroller) return;
+    const hasSavedViewport = (settings.calendarScrollTop ?? 0) > 0 || (settings.calendarScrollLeft ?? 0) > 0;
+    if (hasSavedViewport) {
+      scroller.scrollTop = Math.max(0, settings.calendarScrollTop ?? 0);
+      scroller.scrollLeft = Math.max(0, settings.calendarScrollLeft ?? 0);
+      return;
+    }
     const now = new Date();
     const currentSlot = clampSlot(now.getHours() * 12 + Math.floor(now.getMinutes() / MINUTES_PER_SLOT));
     scroller.scrollTop = Math.max(0, currentSlot * slotHeight - scroller.clientHeight / 2);
     scroller.scrollLeft = 0;
-  }, [slotHeight]);
+  }, [settings.calendarScrollLeft, settings.calendarScrollTop, slotHeight]);
+
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const handleScroll = () => {
+      if (scrollPersistTimerRef.current) {
+        clearTimeout(scrollPersistTimerRef.current);
+      }
+      scrollPersistTimerRef.current = setTimeout(() => {
+        setScrollTop(Math.max(0, Math.round(scroller.scrollTop)));
+        setScrollLeft(Math.max(0, Math.round(scroller.scrollLeft)));
+      }, 120);
+    };
+    scroller.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", handleScroll);
+      if (scrollPersistTimerRef.current) {
+        clearTimeout(scrollPersistTimerRef.current);
+        scrollPersistTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -431,7 +480,7 @@ export const CalendarWorkspace = ({
       <div ref={layoutRef} className={`calendar-layout${isFullScreen ? " calendar-layout-fullscreen" : ""}`} style={{ gridTemplateColumns: `minmax(0, 1fr) 8px ${detailsPaneWidth}px` }}>
         <div className="calendar-main stack">
           <div ref={scrollRef} className={`calendar-scroll${isFullScreen ? " calendar-scroll-fullscreen" : ""}`} style={{ ["--calendar-slot-height" as string]: `${slotHeight}px` }}>
-            <div className="calendar-surface" style={{ gridTemplateColumns: `84px repeat(${visibleDates.length}, minmax(220px, 1fr))`, gridTemplateRows: `52px repeat(${TOTAL_SLOTS}, var(--calendar-slot-height))` }}>
+            <div className="calendar-surface" style={{ gridTemplateColumns: `84px repeat(${visibleDates.length}, minmax(${dayColumnWidth}px, 1fr))`, gridTemplateRows: `52px repeat(${TOTAL_SLOTS}, var(--calendar-slot-height))` }}>
               <div className="calendar-corner" style={{ gridColumn: "1 / 2", gridRow: "1 / 2" }} />
               {visibleDates.map((date, index) => <div key={date} className="calendar-day-header" style={{ gridColumn: `${index + 2} / ${index + 3}`, gridRow: "1 / 2" }}><strong>{date}</strong><span>{formatDay(date)}</span></div>)}
               <div className="calendar-time-column" style={{ gridColumn: "1 / 2", gridRow: `2 / span ${TOTAL_SLOTS}` }}>{Array.from({ length: TOTAL_SLOTS }, (_, slot) => <div key={`time-${slot}`} className={`calendar-time-cell${slot % 12 === 0 ? " calendar-time-cell-hour" : ""}`} style={{ height: "var(--calendar-slot-height)" }}>{slot % 12 === 0 ? slotToTime(slot) : ""}</div>)}</div>

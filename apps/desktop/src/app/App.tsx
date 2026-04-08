@@ -1575,6 +1575,15 @@ export const App = () => {
     setActiveWorkspace("todos");
     setStatusNote("Opened linked todo.");
   };
+  const returnFromLinkedDetailToCalendar = () => {
+    if (!requestedActivityId && !requestedTodoId) {
+      return;
+    }
+    setRequestedActivityId(null);
+    setRequestedTodoId(null);
+    setActiveWorkspace("calendar");
+    setStatusNote("Returned to Calendar.");
+  };
   const openCalendarOutputPreview = (sessionId: string) => {
     setCalendarOutputPreviewSessionId(sessionId);
     setOpenPanel("calendar-output-preview");
@@ -2311,6 +2320,7 @@ export const App = () => {
               <TodosWorkspace
                 todos={snapshot.todos}
                 requestedTodoId={requestedTodoId}
+                onEditorClose={returnFromLinkedDetailToCalendar}
                 onToggle={(todo) => void saveTodo(todo)}
                 onAdd={(description) => void addTodo(description)}
                 onSave={(todo) => void saveTodo(todo)}
@@ -2322,6 +2332,7 @@ export const App = () => {
                 activities={snapshot.activities}
                 linkedSessionIdsByActivity={linkedSessionIdsByActivity}
                 requestedActivityId={requestedActivityId}
+                onEditorClose={returnFromLinkedDetailToCalendar}
                 onToggle={(activity) => void saveActivity(activity)}
                 onAdd={(description, type) => void addActivity(description, type)}
                 onSave={(activity) => void saveActivity(activity)}

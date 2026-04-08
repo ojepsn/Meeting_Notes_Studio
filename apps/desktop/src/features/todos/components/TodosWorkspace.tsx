@@ -6,6 +6,7 @@ type TodoSortKey = "createdAt" | "description" | "domain" | "project" | "activit
 interface TodosWorkspaceProps {
   todos: TodoRecord[];
   requestedTodoId?: string | null;
+  onEditorClose?: () => void;
   onToggle: (todo: TodoRecord) => void;
   onAdd: (description: string) => void;
   onSave: (todo: TodoRecord) => void;
@@ -31,7 +32,7 @@ const createBlankTodoDraft = (description = ""): TodoRecord => ({
 
 const normalizeValue = (value: string) => value.trim().toLowerCase();
 
-export const TodosWorkspace = ({ todos, requestedTodoId, onToggle, onAdd, onSave, onDelete, onConvertToActivity }: TodosWorkspaceProps) => {
+export const TodosWorkspace = ({ todos, requestedTodoId, onEditorClose, onToggle, onAdd, onSave, onDelete, onConvertToActivity }: TodosWorkspaceProps) => {
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<TodoSortKey>("dueDate");
@@ -114,6 +115,11 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onToggle, onAdd, onSave
     if (!nextValue) return;
     onAdd(nextValue);
     setDraft("");
+  };
+
+  const closeEditor = () => {
+    setEditingTodoId(null);
+    onEditorClose?.();
   };
 
   const sortOptions: Array<{ value: TodoSortKey; label: string }> = [
@@ -265,13 +271,13 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onToggle, onAdd, onSave
       ) : null}
 
       {editingTodoId ? (
-        <div className="overlay-backdrop todos-editor-backdrop" role="presentation" onClick={() => setEditingTodoId(null)}>
+        <div className="overlay-backdrop todos-editor-backdrop" role="presentation" onClick={closeEditor}>
           <div className="overlay-surface todos-editor-surface" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             <div className="overlay-header">
               <div>
                 <strong>Edit todo</strong>
               </div>
-              <button className="small-button" type="button" onClick={() => setEditingTodoId(null)}>
+              <button className="small-button" type="button" onClick={closeEditor}>
                 Close
               </button>
             </div>
@@ -366,7 +372,7 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onToggle, onAdd, onSave
                   type="button"
                   onClick={() => {
                     onSave({ ...editingDraft });
-                    setEditingTodoId(null);
+                    closeEditor();
                   }}
                 >
                   Save
@@ -376,12 +382,12 @@ export const TodosWorkspace = ({ todos, requestedTodoId, onToggle, onAdd, onSave
                   type="button"
                   onClick={() => {
                     onConvertToActivity(editingDraft);
-                    setEditingTodoId(null);
+                    closeEditor();
                   }}
                 >
                   Convert to activity
                 </button>
-                <button className="small-button" type="button" onClick={() => setEditingTodoId(null)}>
+                <button className="small-button" type="button" onClick={closeEditor}>
                   Cancel
                 </button>
               </div>
