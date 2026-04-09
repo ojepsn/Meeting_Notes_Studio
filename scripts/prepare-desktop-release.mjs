@@ -45,11 +45,6 @@ async function listFiles(dir) {
 const nsisFiles = await listFiles(nsisDir);
 const msiFiles = await listFiles(msiDir);
 
-const nsisZip = findRequiredFile(
-  nsisFiles,
-  (entry) => entry.isFile() && entry.name.endsWith(".nsis.zip"),
-  "NSIS updater zip",
-).name;
 const nsisExe = findRequiredFile(
   nsisFiles,
   (entry) => entry.isFile() && entry.name.endsWith("-setup.exe"),
@@ -71,20 +66,25 @@ const msiSig = findRequiredFile(
   "MSI installer signature",
 ).name;
 
-const normalizedNsisZip = normalizeAssetName(nsisZip);
 const normalizedNsisExe = normalizeAssetName(nsisExe);
 const normalizedNsisExeSig = normalizeAssetName(nsisExeSig);
 const normalizedMsi = normalizeAssetName(msiInstaller);
 const normalizedMsiSig = normalizeAssetName(msiSig);
+const optionalNsisZip = nsisFiles.find(
+  (entry) => entry.isFile() && entry.name.endsWith(".nsis.zip"),
+)?.name;
+const normalizedNsisZip = optionalNsisZip ? normalizeAssetName(optionalNsisZip) : null;
 
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
 
-await cp(path.join(nsisDir, nsisZip), path.join(outputDir, normalizedNsisZip));
 await cp(path.join(nsisDir, nsisExe), path.join(outputDir, normalizedNsisExe));
 await cp(path.join(nsisDir, nsisExeSig), path.join(outputDir, normalizedNsisExeSig));
 await cp(path.join(msiDir, msiInstaller), path.join(outputDir, normalizedMsi));
 await cp(path.join(msiDir, msiSig), path.join(outputDir, normalizedMsiSig));
+if (optionalNsisZip && normalizedNsisZip) {
+  await cp(path.join(nsisDir, optionalNsisZip), path.join(outputDir, normalizedNsisZip));
+}
 
 const signature = (await readFile(path.join(nsisDir, nsisExeSig), "utf8")).trim();
 const latestManifest = {
@@ -109,10 +109,12 @@ const assetList = [
   "latest.json",
   normalizedNsisExe,
   normalizedNsisExeSig,
-  normalizedNsisZip,
   normalizedMsi,
   normalizedMsiSig,
 ];
+if (normalizedNsisZip) {
+  assetList.push(normalizedNsisZip);
+}
 
 await writeFile(
   path.join(outputDir, "release-assets.txt"),
