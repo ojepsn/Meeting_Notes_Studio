@@ -50,36 +50,43 @@ const nsisZip = findRequiredFile(
   (entry) => entry.isFile() && entry.name.endsWith(".nsis.zip"),
   "NSIS updater zip",
 ).name;
-const nsisSig = findRequiredFile(
-  nsisFiles,
-  (entry) => entry.isFile() && entry.name.endsWith(".nsis.zip.sig"),
-  "NSIS updater signature",
-).name;
 const nsisExe = findRequiredFile(
   nsisFiles,
   (entry) => entry.isFile() && entry.name.endsWith("-setup.exe"),
   "NSIS installer executable",
+).name;
+const nsisExeSig = findRequiredFile(
+  nsisFiles,
+  (entry) => entry.isFile() && entry.name.endsWith("-setup.exe.sig"),
+  "NSIS installer signature",
 ).name;
 const msiInstaller = findRequiredFile(
   msiFiles,
   (entry) => entry.isFile() && entry.name.endsWith(".msi") && !entry.name.endsWith(".msi.zip"),
   "MSI installer",
 ).name;
+const msiSig = findRequiredFile(
+  msiFiles,
+  (entry) => entry.isFile() && entry.name.endsWith(".msi.sig"),
+  "MSI installer signature",
+).name;
 
 const normalizedNsisZip = normalizeAssetName(nsisZip);
-const normalizedNsisSig = normalizeAssetName(nsisSig);
 const normalizedNsisExe = normalizeAssetName(nsisExe);
+const normalizedNsisExeSig = normalizeAssetName(nsisExeSig);
 const normalizedMsi = normalizeAssetName(msiInstaller);
+const normalizedMsiSig = normalizeAssetName(msiSig);
 
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
 
 await cp(path.join(nsisDir, nsisZip), path.join(outputDir, normalizedNsisZip));
-await cp(path.join(nsisDir, nsisSig), path.join(outputDir, normalizedNsisSig));
 await cp(path.join(nsisDir, nsisExe), path.join(outputDir, normalizedNsisExe));
+await cp(path.join(nsisDir, nsisExeSig), path.join(outputDir, normalizedNsisExeSig));
 await cp(path.join(msiDir, msiInstaller), path.join(outputDir, normalizedMsi));
+await cp(path.join(msiDir, msiSig), path.join(outputDir, normalizedMsiSig));
 
-const signature = (await readFile(path.join(nsisDir, nsisSig), "utf8")).trim();
+const signature = (await readFile(path.join(nsisDir, nsisExeSig), "utf8")).trim();
 const latestManifest = {
   version,
   notes: releaseNotes,
@@ -87,7 +94,7 @@ const latestManifest = {
   platforms: {
     "windows-x86_64": {
       signature,
-      url: `https://github.com/${repository}/releases/download/${tag}/${normalizedNsisZip}`,
+      url: `https://github.com/${repository}/releases/download/${tag}/${normalizedNsisExe}`,
     },
   },
 };
@@ -101,9 +108,10 @@ await writeFile(
 const assetList = [
   "latest.json",
   normalizedNsisExe,
+  normalizedNsisExeSig,
   normalizedNsisZip,
-  normalizedNsisSig,
   normalizedMsi,
+  normalizedMsiSig,
 ];
 
 await writeFile(

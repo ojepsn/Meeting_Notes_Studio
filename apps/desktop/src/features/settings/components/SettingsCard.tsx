@@ -37,6 +37,7 @@ interface SettingsCardProps {
   onImportBackup: () => Promise<void>;
   onCheckForUpdates: () => Promise<void>;
   onInstallUpdate?: () => Promise<void>;
+  onOpenManualUpdate?: () => Promise<void>;
   onOpenDataFolder: () => Promise<void>;
   onOpenDatabaseFolder: () => Promise<void>;
   onExportBackup: () => Promise<void>;
@@ -44,7 +45,9 @@ interface SettingsCardProps {
   onRefreshModelPricing: () => Promise<void> | void;
   updateStatusNote?: string | null;
   desktopVersion?: string | null;
+  desktopBundleType?: string | null;
   availableUpdateVersion?: string | null;
+  manualUpdateUrl?: string | null;
   isCheckingForUpdates?: boolean;
   isInstallingUpdate?: boolean;
   storageInfo: DesktopStorageInfo | null;
@@ -229,6 +232,7 @@ export const SettingsCard = ({
   onImportBackup,
   onCheckForUpdates,
   onInstallUpdate,
+  onOpenManualUpdate,
   onOpenDataFolder,
   onOpenDatabaseFolder,
   onExportBackup,
@@ -236,7 +240,9 @@ export const SettingsCard = ({
   onRefreshModelPricing,
   updateStatusNote,
   desktopVersion,
+  desktopBundleType,
   availableUpdateVersion,
+  manualUpdateUrl,
   isCheckingForUpdates,
   isInstallingUpdate,
   storageInfo,
@@ -1395,12 +1401,21 @@ export const SettingsCard = ({
                   {isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}`}
                 </button>
               ) : null}
+              {!availableUpdateVersion && manualUpdateUrl && onOpenManualUpdate ? (
+                <button className="small-button" type="button" onClick={() => void onOpenManualUpdate()}>
+                  Download latest installer
+                </button>
+              ) : null}
             </div>
             {storageInfo ? (
               <div className="section-list">
                 <div className="list-item">
                   <strong>Desktop version</strong>
                   <span className="muted">{desktopVersion || "Unknown"}</span>
+                </div>
+                <div className="list-item">
+                  <strong>Bundle type</strong>
+                  <span className="muted">{desktopBundleType || "Unknown"}</span>
                 </div>
                 <div className="list-item">
                   <strong>Data folder</strong>

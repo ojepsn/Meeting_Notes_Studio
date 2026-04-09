@@ -54,6 +54,7 @@ import {
 import {
   createLocalSnapshotBackup,
   exportSnapshotBackup,
+  getDesktopBundleType,
   getDesktopAppVersion,
   getDesktopStorageInfo,
   importSnapshotBackup,
@@ -225,7 +226,9 @@ export const App = () => {
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
   const [updateStatusNote, setUpdateStatusNote] = useState<string | null>(null);
   const [desktopVersion, setDesktopVersion] = useState<string | null>(null);
+  const [desktopBundleType, setDesktopBundleType] = useState<string | null>(null);
   const [storageInfo, setStorageInfo] = useState<DesktopStorageInfo | null>(null);
+  const [manualUpdateUrl, setManualUpdateUrl] = useState<string | null>(null);
   const [calendarOutputPreviewSessionId, setCalendarOutputPreviewSessionId] = useState<string | null>(null);
   const [aiDiagnostics, setAIDiagnostics] = useState(() => getAIDiagnosticsItems());
   const [aiRequestHistory, setAIRequestHistory] = useState(() => getAIRequestHistory());
@@ -293,12 +296,14 @@ export const App = () => {
         if (result.available) {
           setAvailableUpdateVersion(result.version);
           setInstallUpdate(() => result.install);
+          setManualUpdateUrl(null);
           setUpdateStatusNote(`Version ${result.version} is available to install.`);
           setStatusNote(`Update available: ${result.version}`);
         } else {
           setAvailableUpdateVersion(null);
           setInstallUpdate(null);
-          setUpdateStatusNote("Desktop app is up to date.");
+          setManualUpdateUrl("downloadUrl" in result && result.downloadUrl ? result.downloadUrl : null);
+          setUpdateStatusNote(result.note ?? "Desktop app is up to date.");
         }
       } catch (error) {
         if (cancelled) return;
@@ -338,6 +343,24 @@ export const App = () => {
       const version = await getDesktopAppVersion();
       if (!cancelled) {
         setDesktopVersion(version);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, loadError]);
+
+  useEffect(() => {
+    if (!isLoaded || loadError) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const bundleType = await getDesktopBundleType();
+      if (!cancelled) {
+        setDesktopBundleType(bundleType);
       }
     })();
 
@@ -1049,13 +1072,15 @@ export const App = () => {
       if (result.available) {
         setAvailableUpdateVersion(result.version);
         setInstallUpdate(() => result.install);
+        setManualUpdateUrl(null);
         setUpdateStatusNote(`Version ${result.version} is available to install.`);
         setStatusNote(`Update available: ${result.version}`);
       } else {
         setAvailableUpdateVersion(null);
         setInstallUpdate(null);
-        setUpdateStatusNote("Desktop app is already up to date.");
-        setStatusNote("Desktop app is already up to date.");
+        setManualUpdateUrl("downloadUrl" in result && result.downloadUrl ? result.downloadUrl : null);
+        setUpdateStatusNote(result.note ?? "Desktop app is already up to date.");
+        setStatusNote(result.note ?? "Desktop app is already up to date.");
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not check for updates.";
@@ -1086,6 +1111,18 @@ export const App = () => {
       setStatusNote(message);
     } finally {
       setIsInstallingUpdate(false);
+    }
+  };
+
+  const handleOpenManualUpdate = async () => {
+    if (!manualUpdateUrl) {
+      return;
+    }
+    try {
+      await openDesktopPath(manualUpdateUrl);
+      setStatusNote("Opened the GitHub release page for manual update download.");
+    } catch (error) {
+      setStatusNote(error instanceof Error ? error.message : "Could not open the GitHub release page.");
     }
   };
 
@@ -2162,13 +2199,16 @@ export const App = () => {
             onImportBackup={handleImportBackup}
             onCheckForUpdates={handleCheckForUpdates}
             onInstallUpdate={handleInstallUpdate}
+            onOpenManualUpdate={handleOpenManualUpdate}
             onOpenDataFolder={handleOpenDataFolder}
             onOpenDatabaseFolder={handleOpenDatabaseFolder}
             onExportBackup={handleExportSnapshot}
             onCreateLocalBackup={handleCreateLocalBackup}
             updateStatusNote={updateStatusNote}
             desktopVersion={desktopVersion}
+            desktopBundleType={desktopBundleType}
             availableUpdateVersion={availableUpdateVersion}
+            manualUpdateUrl={manualUpdateUrl}
             isCheckingForUpdates={isCheckingForUpdates}
             isInstallingUpdate={isInstallingUpdate}
             storageInfo={storageInfo}
@@ -2338,6 +2378,13 @@ export const App = () => {
               disabled={isInstallingUpdate}
             >
               {isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}`}
+            </button>
+          </div>
+        ) : manualUpdateUrl ? (
+          <div className="workspace-alert-bar">
+            <span>{updateStatusNote || "A newer desktop version is available on GitHub Releases."}</span>
+            <button className="primary-button" type="button" onClick={() => void handleOpenManualUpdate()}>
+              Download latest installer
             </button>
           </div>
         ) : null}

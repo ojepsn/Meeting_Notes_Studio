@@ -90,6 +90,15 @@ export const getDesktopAppVersion = async () => {
   return app.getVersion();
 };
 
+export const getDesktopBundleType = async () => {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  const app = await import("@tauri-apps/api/app");
+  return app.getBundleType();
+};
+
 export const exportSnapshotBackup = async (snapshot: DesktopAppSnapshot) => {
   const content = JSON.stringify(snapshot, null, 2);
 

@@ -23,9 +23,21 @@ The desktop release flow is automated by [desktop-release.yml](../.github/workfl
 
 - `latest.json`
 - `NoteSmith.Desktop_<version>_x64-setup.exe`
+- `NoteSmith.Desktop_<version>_x64-setup.exe.sig`
 - `NoteSmith.Desktop_<version>_x64-setup.nsis.zip`
-- `NoteSmith.Desktop_<version>_x64-setup.nsis.zip.sig`
 - `NoteSmith.Desktop_<version>_x64_en-US.msi`
+- `NoteSmith.Desktop_<version>_x64_en-US.msi.sig`
+
+## Self-update path
+
+The desktop app now publishes the updater manifest against the signed Windows `setup.exe` artifact.
+
+That is the intended in-place self-update path for Windows desktop installs.
+
+Important practical note:
+
+- users who are already on an older MSI-installed build may need one manual reinstall using the current `setup.exe`
+- after that, future in-app self-updates should follow the updater manifest instead of requiring repeated MSI installs
 
 ## Local Dry Run
 
