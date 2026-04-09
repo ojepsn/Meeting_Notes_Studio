@@ -15,6 +15,7 @@ interface SettingsCardProps {
     onImportBackup: () => Promise<void>;
     onCheckForUpdates: () => Promise<void>;
     onInstallUpdate?: () => Promise<void>;
+    onOpenManualUpdate?: () => Promise<void>;
     onOpenDataFolder: () => Promise<void>;
     onOpenDatabaseFolder: () => Promise<void>;
     onExportBackup: () => Promise<void>;
@@ -22,7 +23,9 @@ interface SettingsCardProps {
     onRefreshModelPricing: () => Promise<void> | void;
     updateStatusNote?: string | null;
     desktopVersion?: string | null;
+    desktopBundleType?: string | null;
     availableUpdateVersion?: string | null;
+    manualUpdateUrl?: string | null;
     isCheckingForUpdates?: boolean;
     isInstallingUpdate?: boolean;
     storageInfo: DesktopStorageInfo | null;
@@ -33,5 +36,5 @@ interface SettingsCardProps {
     modelPricingStatus: string;
     isRefreshingModelPricing: boolean;
 }
-export declare const SettingsCard: ({ settings, templates, initialSection, onChange, onSaveTemplate, onResetTemplates, onImportLegacy, onImportBackup, onCheckForUpdates, onInstallUpdate, onOpenDataFolder, onOpenDatabaseFolder, onExportBackup, onCreateLocalBackup, onRefreshModelPricing, updateStatusNote, desktopVersion, availableUpdateVersion, isCheckingForUpdates, isInstallingUpdate, storageInfo, aiDiagnostics, aiRequestHistory, textModelOptions, transcriptionModelOptions, modelPricingStatus, isRefreshingModelPricing, }: SettingsCardProps) => import("react/jsx-runtime").JSX.Element;
+export declare const SettingsCard: ({ settings, templates, initialSection, onChange, onSaveTemplate, onResetTemplates, onImportLegacy, onImportBackup, onCheckForUpdates, onInstallUpdate, onOpenManualUpdate, onOpenDataFolder, onOpenDatabaseFolder, onExportBackup, onCreateLocalBackup, onRefreshModelPricing, updateStatusNote, desktopVersion, desktopBundleType, availableUpdateVersion, manualUpdateUrl, isCheckingForUpdates, isInstallingUpdate, storageInfo, aiDiagnostics, aiRequestHistory, textModelOptions, transcriptionModelOptions, modelPricingStatus, isRefreshingModelPricing, }: SettingsCardProps) => import("react/jsx-runtime").JSX.Element;
 export {};

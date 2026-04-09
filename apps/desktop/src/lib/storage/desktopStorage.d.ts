@@ -21,6 +21,7 @@ export declare const saveTextFile: ({ content, defaultFilename, filters, }: {
 export declare const getDesktopStorageInfo: () => Promise<DesktopStorageInfo | null>;
 export declare const openDesktopPath: (path: string) => Promise<void>;
 export declare const getDesktopAppVersion: () => Promise<string | null>;
+export declare const getDesktopBundleType: () => Promise<import("@tauri-apps/api/app").BundleType | null>;
 export declare const exportSnapshotBackup: (snapshot: DesktopAppSnapshot) => Promise<{
     path: string;
     savedOutsideAppData: boolean;

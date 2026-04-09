@@ -25,7 +25,7 @@ import { checkForDesktopUpdates } from "../lib/ai/updater";
 import { exportOutputAsDocx, exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsPdf, exportOutputAsText } from "../lib/export/exportService";
 import { fileToAttachmentRecord, loadPersistedAttachmentFile, pickAudioFile, pickImageFile, pickTranscriptFile, persistGeneratedAttachment, persistSelectedAttachment, readTranscriptFile, removePersistedAttachment, } from "../lib/files/attachmentStore";
 import { buildRecordingFilename, getSupportedRecordingMimeType, getSystemAudioDisplayOptions, RECORDING_MODE_LABELS, } from "../lib/files/recording";
-import { createLocalSnapshotBackup, exportSnapshotBackup, getDesktopAppVersion, getDesktopStorageInfo, importSnapshotBackup, openDesktopPath, } from "../lib/storage/desktopStorage";
+import { createLocalSnapshotBackup, exportSnapshotBackup, getDesktopBundleType, getDesktopAppVersion, getDesktopStorageInfo, importSnapshotBackup, openDesktopPath, } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW } from "../lib/metadata/review";
 import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links/entityLinks";
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
@@ -127,7 +127,9 @@ export const App = () => {
     const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
     const [updateStatusNote, setUpdateStatusNote] = useState(null);
     const [desktopVersion, setDesktopVersion] = useState(null);
+    const [desktopBundleType, setDesktopBundleType] = useState(null);
     const [storageInfo, setStorageInfo] = useState(null);
+    const [manualUpdateUrl, setManualUpdateUrl] = useState(null);
     const [calendarOutputPreviewSessionId, setCalendarOutputPreviewSessionId] = useState(null);
     const [aiDiagnostics, setAIDiagnostics] = useState(() => getAIDiagnosticsItems());
     const [aiRequestHistory, setAIRequestHistory] = useState(() => getAIRequestHistory());
@@ -185,13 +187,15 @@ export const App = () => {
                 if (result.available) {
                     setAvailableUpdateVersion(result.version);
                     setInstallUpdate(() => result.install);
+                    setManualUpdateUrl(null);
                     setUpdateStatusNote(`Version ${result.version} is available to install.`);
                     setStatusNote(`Update available: ${result.version}`);
                 }
                 else {
                     setAvailableUpdateVersion(null);
                     setInstallUpdate(null);
-                    setUpdateStatusNote("Desktop app is up to date.");
+                    setManualUpdateUrl("downloadUrl" in result && result.downloadUrl ? result.downloadUrl : null);
+                    setUpdateStatusNote(result.note ?? "Desktop app is up to date.");
                 }
             }
             catch (error) {
@@ -228,6 +232,21 @@ export const App = () => {
             const version = await getDesktopAppVersion();
             if (!cancelled) {
                 setDesktopVersion(version);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [isLoaded, loadError]);
+    useEffect(() => {
+        if (!isLoaded || loadError) {
+            return;
+        }
+        let cancelled = false;
+        void (async () => {
+            const bundleType = await getDesktopBundleType();
+            if (!cancelled) {
+                setDesktopBundleType(bundleType);
             }
         })();
         return () => {
@@ -787,14 +806,16 @@ export const App = () => {
             if (result.available) {
                 setAvailableUpdateVersion(result.version);
                 setInstallUpdate(() => result.install);
+                setManualUpdateUrl(null);
                 setUpdateStatusNote(`Version ${result.version} is available to install.`);
                 setStatusNote(`Update available: ${result.version}`);
             }
             else {
                 setAvailableUpdateVersion(null);
                 setInstallUpdate(null);
-                setUpdateStatusNote("Desktop app is already up to date.");
-                setStatusNote("Desktop app is already up to date.");
+                setManualUpdateUrl("downloadUrl" in result && result.downloadUrl ? result.downloadUrl : null);
+                setUpdateStatusNote(result.note ?? "Desktop app is already up to date.");
+                setStatusNote(result.note ?? "Desktop app is already up to date.");
             }
         }
         catch (error) {
@@ -827,6 +848,18 @@ export const App = () => {
         }
         finally {
             setIsInstallingUpdate(false);
+        }
+    };
+    const handleOpenManualUpdate = async () => {
+        if (!manualUpdateUrl) {
+            return;
+        }
+        try {
+            await openDesktopPath(manualUpdateUrl);
+            setStatusNote("Opened the GitHub release page for manual update download.");
+        }
+        catch (error) {
+            setStatusNote(error instanceof Error ? error.message : "Could not open the GitHub release page.");
         }
     };
     const handleResetTemplates = async () => {
@@ -1590,7 +1623,7 @@ export const App = () => {
                                         closeOverlay();
                                     }, children: "Not now" })] })] }));
             case "settings":
-                return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onResetTemplates: handleResetTemplates, onImportLegacy: handleImportLegacy, onImportBackup: handleImportBackup, onCheckForUpdates: handleCheckForUpdates, onInstallUpdate: handleInstallUpdate, onOpenDataFolder: handleOpenDataFolder, onOpenDatabaseFolder: handleOpenDatabaseFolder, onExportBackup: handleExportSnapshot, onCreateLocalBackup: handleCreateLocalBackup, updateStatusNote: updateStatusNote, desktopVersion: desktopVersion, availableUpdateVersion: availableUpdateVersion, isCheckingForUpdates: isCheckingForUpdates, isInstallingUpdate: isInstallingUpdate, storageInfo: storageInfo, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
+                return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onResetTemplates: handleResetTemplates, onImportLegacy: handleImportLegacy, onImportBackup: handleImportBackup, onCheckForUpdates: handleCheckForUpdates, onInstallUpdate: handleInstallUpdate, onOpenManualUpdate: handleOpenManualUpdate, onOpenDataFolder: handleOpenDataFolder, onOpenDatabaseFolder: handleOpenDatabaseFolder, onExportBackup: handleExportSnapshot, onCreateLocalBackup: handleCreateLocalBackup, updateStatusNote: updateStatusNote, desktopVersion: desktopVersion, desktopBundleType: desktopBundleType, availableUpdateVersion: availableUpdateVersion, manualUpdateUrl: manualUpdateUrl, isCheckingForUpdates: isCheckingForUpdates, isInstallingUpdate: isInstallingUpdate, storageInfo: storageInfo, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
             case "more":
                 return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "More tools" }), _jsx("p", { children: "Secondary utilities stay grouped here so the main workspace remains calm and obvious." })] }), _jsxs("div", { className: "stack", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => setActiveWorkspace("todos"), children: "Open Todos workspace" }), _jsx("button", { className: "small-button", type: "button", onClick: () => setOpenPanel("backup"), children: "Open Back-up" }), _jsx("button", { className: "small-button", type: "button", onClick: () => openSettingsSection("other"), children: "Open Other settings" })] })] }));
             case "backup":
@@ -1599,7 +1632,7 @@ export const App = () => {
                 return null;
         }
     };
-    return (_jsxs("div", { className: "app-shell desktop-shell", "data-theme": snapshot.settings.theme, onKeyDownCapture: (event) => void handleGlobalTodoShortcut(event), children: [_jsxs("aside", { className: "workspace-rail", children: [_jsxs("div", { className: "workspace-rail-brand", children: [_jsx("strong", { children: "NoteSmith" }), _jsx("span", { className: "tiny-text", children: "Desktop" })] }), _jsxs("nav", { className: "workspace-nav", children: [PRIMARY_WORKSPACE_ITEMS.map((item) => (_jsxs("button", { type: "button", className: "workspace-nav-button", "data-active": activeWorkspace === item.id, "data-available": item.available, onClick: () => handleWorkspaceSelection(item.id, item.available), children: [_jsx("span", { children: item.label }), _jsx("small", { children: item.available ? item.description : "Coming later" })] }, item.id))), _jsx(TodosRailCard, { active: activeWorkspace === "todos", onOpen: () => setActiveWorkspace("todos") }), SECONDARY_WORKSPACE_ITEMS.map((item) => (_jsxs("button", { type: "button", className: "workspace-nav-button", "data-active": activeWorkspace === item.id, "data-available": item.available, onClick: () => handleWorkspaceSelection(item.id, item.available), children: [_jsx("span", { children: item.label }), _jsx("small", { children: item.available ? item.description : "Coming later" })] }, item.id)))] })] }), _jsxs("div", { className: "workspace-shell", children: [_jsxs("header", { className: `topbar app-header${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " app-header-compact" : ""}`, children: [_jsxs("div", { className: "topbar-copy", children: [_jsx("div", { className: "topbar-eyebrow", children: "Focused workspace" }), _jsx("h1", { children: activeWorkspace === "notes" ? "Notes workspace" : `${WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}` }), _jsxs("div", { className: "topbar-status-strip", children: [_jsx("span", { className: `status-chip status-chip-${saveState}`, children: saveStatusLabel }), _jsx("span", { className: "status-chip", children: desktopVersion ? `v${desktopVersion}` : "Desktop" }), _jsx("span", { className: "status-chip", children: aiActivityLabel }), _jsx("span", { className: "status-chip", children: selectedTextModelOption?.label || snapshot.settings.textModel }), _jsx("span", { className: "status-chip", children: selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel }), isCheckingForUpdates ? _jsx("span", { className: "status-chip", children: "Checking updates..." }) : null] }), _jsx("span", { className: "tiny-text topbar-status-note", children: statusNote })] }), _jsxs("div", { className: "topbar-actions topbar-actions-split", children: [activeWorkspace === "notes" ? (_jsx("button", { className: "primary-button", type: "button", onClick: () => openOverlay("new-note"), children: "New note" })) : null, _jsxs("div", { className: "topbar-secondary-cluster", children: [_jsx("button", { className: "shell-button", type: "button", onClick: openCommandPalette, children: "Command palette" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => void (availableUpdateVersion ? handleInstallUpdate() : handleCheckForUpdates()), children: availableUpdateVersion ? `Install ${availableUpdateVersion}` : "Check updates" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => openOverlay("sessions"), children: "All Sessions" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => openSettingsSection("ai"), children: "Settings" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => openOverlay("more"), children: "More" })] })] })] }), availableUpdateVersion ? (_jsxs("div", { className: "workspace-alert-bar", children: [_jsxs("span", { children: ["Desktop update ", availableUpdateVersion, " is available from GitHub Releases."] }), _jsx("button", { className: "primary-button", type: "button", onClick: () => void handleInstallUpdate(), disabled: isInstallingUpdate, children: isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}` })] })) : null, _jsxs("main", { className: `notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}`, children: [_jsxs("section", { className: "workspace-canvas", children: [!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) ? (_jsxs("div", { className: "workspace-header card", children: [_jsxs("div", { className: "card-header", children: [_jsxs("div", { children: [_jsx("div", { className: "topbar-eyebrow", children: activeWorkspace === "notes"
+    return (_jsxs("div", { className: "app-shell desktop-shell", "data-theme": snapshot.settings.theme, onKeyDownCapture: (event) => void handleGlobalTodoShortcut(event), children: [_jsxs("aside", { className: "workspace-rail", children: [_jsxs("div", { className: "workspace-rail-brand", children: [_jsx("strong", { children: "NoteSmith" }), _jsx("span", { className: "tiny-text", children: "Desktop" })] }), _jsxs("nav", { className: "workspace-nav", children: [PRIMARY_WORKSPACE_ITEMS.map((item) => (_jsxs("button", { type: "button", className: "workspace-nav-button", "data-active": activeWorkspace === item.id, "data-available": item.available, onClick: () => handleWorkspaceSelection(item.id, item.available), children: [_jsx("span", { children: item.label }), _jsx("small", { children: item.available ? item.description : "Coming later" })] }, item.id))), _jsx(TodosRailCard, { active: activeWorkspace === "todos", onOpen: () => setActiveWorkspace("todos") }), SECONDARY_WORKSPACE_ITEMS.map((item) => (_jsxs("button", { type: "button", className: "workspace-nav-button", "data-active": activeWorkspace === item.id, "data-available": item.available, onClick: () => handleWorkspaceSelection(item.id, item.available), children: [_jsx("span", { children: item.label }), _jsx("small", { children: item.available ? item.description : "Coming later" })] }, item.id)))] })] }), _jsxs("div", { className: "workspace-shell", children: [_jsxs("header", { className: `topbar app-header${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " app-header-compact" : ""}`, children: [_jsxs("div", { className: "topbar-copy", children: [_jsx("div", { className: "topbar-eyebrow", children: "Focused workspace" }), _jsx("h1", { children: activeWorkspace === "notes" ? "Notes workspace" : `${WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}` }), _jsxs("div", { className: "topbar-status-strip", children: [_jsx("span", { className: `status-chip status-chip-${saveState}`, children: saveStatusLabel }), _jsx("span", { className: "status-chip", children: desktopVersion ? `v${desktopVersion}` : "Desktop" }), _jsx("span", { className: "status-chip", children: aiActivityLabel }), _jsx("span", { className: "status-chip", children: selectedTextModelOption?.label || snapshot.settings.textModel }), _jsx("span", { className: "status-chip", children: selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel }), isCheckingForUpdates ? _jsx("span", { className: "status-chip", children: "Checking updates..." }) : null] }), _jsx("span", { className: "tiny-text topbar-status-note", children: statusNote })] }), _jsxs("div", { className: "topbar-actions topbar-actions-split", children: [activeWorkspace === "notes" ? (_jsx("button", { className: "primary-button", type: "button", onClick: () => openOverlay("new-note"), children: "New note" })) : null, _jsxs("div", { className: "topbar-secondary-cluster", children: [_jsx("button", { className: "shell-button", type: "button", onClick: openCommandPalette, children: "Command palette" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => void (availableUpdateVersion ? handleInstallUpdate() : handleCheckForUpdates()), children: availableUpdateVersion ? `Install ${availableUpdateVersion}` : "Check updates" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => openOverlay("sessions"), children: "All Sessions" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => openSettingsSection("ai"), children: "Settings" }), _jsx("button", { className: "shell-button", type: "button", onClick: () => openOverlay("more"), children: "More" })] })] })] }), availableUpdateVersion ? (_jsxs("div", { className: "workspace-alert-bar", children: [_jsxs("span", { children: ["Desktop update ", availableUpdateVersion, " is available from GitHub Releases."] }), _jsx("button", { className: "primary-button", type: "button", onClick: () => void handleInstallUpdate(), disabled: isInstallingUpdate, children: isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}` })] })) : manualUpdateUrl ? (_jsxs("div", { className: "workspace-alert-bar", children: [_jsx("span", { children: updateStatusNote || "A newer desktop version is available on GitHub Releases." }), _jsx("button", { className: "primary-button", type: "button", onClick: () => void handleOpenManualUpdate(), children: "Download latest installer" })] })) : null, _jsxs("main", { className: `notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}`, children: [_jsxs("section", { className: "workspace-canvas", children: [!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) ? (_jsxs("div", { className: "workspace-header card", children: [_jsxs("div", { className: "card-header", children: [_jsxs("div", { children: [_jsx("div", { className: "topbar-eyebrow", children: activeWorkspace === "notes"
                                                                     ? activeView === "capture"
                                                                         ? "Capture surface"
                                                                         : "Output surface"

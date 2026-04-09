@@ -1,18 +1,94 @@
 import { isTauriRuntime } from "../storage/environment";
+const UPDATE_MANIFEST_URL = "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest/download/latest.json";
+const normalizeVersion = (value) => value.trim().replace(/^v/i, "");
+const compareVersions = (left, right) => {
+    const leftParts = normalizeVersion(left).split(".").map((entry) => Number(entry) || 0);
+    const rightParts = normalizeVersion(right).split(".").map((entry) => Number(entry) || 0);
+    const length = Math.max(leftParts.length, rightParts.length);
+    for (let index = 0; index < length; index += 1) {
+        const leftValue = leftParts[index] ?? 0;
+        const rightValue = rightParts[index] ?? 0;
+        if (leftValue !== rightValue) {
+            return leftValue - rightValue;
+        }
+    }
+    return 0;
+};
+const loadPublishedVersion = async () => {
+    const response = await fetch(UPDATE_MANIFEST_URL, { cache: "no-store" });
+    if (!response.ok) {
+        throw new Error(`Could not load the published update manifest (${response.status}).`);
+    }
+    const manifest = (await response.json());
+    if (!manifest.version) {
+        throw new Error("Published update manifest did not include a version.");
+    }
+    return normalizeVersion(manifest.version);
+};
 export const checkForDesktopUpdates = async () => {
     if (!isTauriRuntime()) {
-        return { available: false };
+        return { available: false, note: "Desktop updates are only available in the installed app." };
     }
-    const updater = await import("@tauri-apps/plugin-updater");
-    const update = await updater.check();
-    if (!update) {
-        return { available: false };
+    const app = await import("@tauri-apps/api/app");
+    const currentVersion = normalizeVersion(await app.getVersion());
+    const bundleType = await app.getBundleType().catch(() => null);
+    let nativeErrorMessage = null;
+    try {
+        const updater = await import("@tauri-apps/plugin-updater");
+        const update = await updater.check();
+        if (update) {
+            return {
+                available: true,
+                version: normalizeVersion(update.version),
+                currentVersion,
+                bundleType,
+                source: "native",
+                install: async () => {
+                    await update.downloadAndInstall();
+                },
+            };
+        }
+    }
+    catch (error) {
+        nativeErrorMessage = error instanceof Error ? error.message : "Could not check for updates.";
+    }
+    try {
+        const publishedVersion = await loadPublishedVersion();
+        if (compareVersions(publishedVersion, currentVersion) > 0) {
+            const manualReason = bundleType === "msi"
+                ? "This installed MSI build may require one manual reinstall using the setup.exe installer before future in-place self-updates work."
+                : nativeErrorMessage || "A newer version is published, but automatic install is not available in this check.";
+            return {
+                available: false,
+                currentVersion,
+                bundleType,
+                source: "manifest",
+                publishedVersion,
+                downloadUrl: "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest",
+                note: `Version ${publishedVersion} is published on GitHub. ${manualReason}`,
+            };
+        }
+    }
+    catch (error) {
+        if (nativeErrorMessage) {
+            return {
+                available: false,
+                currentVersion,
+                bundleType,
+                note: nativeErrorMessage,
+            };
+        }
+        return {
+            available: false,
+            currentVersion,
+            bundleType,
+            note: error instanceof Error ? error.message : "Could not check for updates.",
+        };
     }
     return {
-        available: true,
-        version: update.version,
-        install: async () => {
-            await update.downloadAndInstall();
-        },
+        available: false,
+        currentVersion,
+        bundleType,
+        note: nativeErrorMessage || "Desktop app is already up to date.",
     };
 };
