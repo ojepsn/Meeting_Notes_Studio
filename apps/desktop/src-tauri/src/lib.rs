@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -18,6 +19,91 @@ fn ensure_parent_dir(path: &Path) -> Result<(), String> {
         Some(parent) => fs::create_dir_all(parent).map_err(|error| error.to_string()),
         None => Ok(()),
     }
+}
+
+fn copy_file_if_missing(source: &Path, destination: &Path) -> Result<(), String> {
+    if destination.exists() || !source.exists() {
+        return Ok(());
+    }
+
+    ensure_parent_dir(destination)?;
+    fs::copy(source, destination).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn copy_dir_contents_if_missing(source_dir: &Path, destination_dir: &Path) -> Result<(), String> {
+    if !source_dir.exists() {
+        return Ok(());
+    }
+
+    fs::create_dir_all(destination_dir).map_err(|error| error.to_string())?;
+    for entry in fs::read_dir(source_dir).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let source_path = entry.path();
+        let destination_path = destination_dir.join(entry.file_name());
+
+        if source_path.is_dir() {
+            copy_dir_contents_if_missing(&source_path, &destination_path)?;
+        } else if !destination_path.exists() {
+            ensure_parent_dir(&destination_path)?;
+            fs::copy(&source_path, &destination_path).map_err(|error| error.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopStorageInfo {
+    app_config_dir: String,
+    app_data_dir: String,
+    database_path: String,
+    attachments_dir: String,
+    backups_dir: String,
+}
+
+fn prepare_storage(app: &tauri::AppHandle) -> Result<DesktopStorageInfo, String> {
+    let app_config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?;
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+
+    fs::create_dir_all(&app_config_dir).map_err(|error| error.to_string())?;
+    fs::create_dir_all(&app_data_dir).map_err(|error| error.to_string())?;
+
+    let database_path = app_config_dir.join("notesmith.db");
+    let attachments_dir = app_data_dir.join("attachments");
+    let backups_dir = app_data_dir.join("backups");
+
+    fs::create_dir_all(&attachments_dir).map_err(|error| error.to_string())?;
+    fs::create_dir_all(&backups_dir).map_err(|error| error.to_string())?;
+
+    let legacy_database_path = app_data_dir.join("notesmith.db");
+    copy_file_if_missing(&legacy_database_path, &database_path)?;
+    copy_file_if_missing(
+        &app_data_dir.join("notesmith.db-wal"),
+        &app_config_dir.join("notesmith.db-wal"),
+    )?;
+    copy_file_if_missing(
+        &app_data_dir.join("notesmith.db-shm"),
+        &app_config_dir.join("notesmith.db-shm"),
+    )?;
+
+    copy_dir_contents_if_missing(&app_config_dir.join("attachments"), &attachments_dir)?;
+    copy_dir_contents_if_missing(&app_config_dir.join("backups"), &backups_dir)?;
+
+    Ok(DesktopStorageInfo {
+        app_config_dir: app_config_dir.to_string_lossy().to_string(),
+        app_data_dir: app_data_dir.to_string_lossy().to_string(),
+        database_path: database_path.to_string_lossy().to_string(),
+        attachments_dir: attachments_dir.to_string_lossy().to_string(),
+        backups_dir: backups_dir.to_string_lossy().to_string(),
+    })
 }
 
 #[tauri::command]
@@ -86,6 +172,47 @@ fn write_backup_snapshot(
     fs::write(&destination, bytes).map_err(|error| error.to_string())?;
 
     Ok(destination.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn get_desktop_storage_info(app: tauri::AppHandle) -> Result<DesktopStorageInfo, String> {
+    prepare_storage(&app)
+}
+
+#[tauri::command]
+fn load_latest_local_backup(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let storage = prepare_storage(&app)?;
+    let backups_dir = PathBuf::from(storage.backups_dir);
+    if !backups_dir.exists() {
+        return Ok(None);
+    }
+
+    let mut latest_file: Option<(std::time::SystemTime, PathBuf)> = None;
+    for entry in fs::read_dir(&backups_dir).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        if !path.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+
+        let modified = entry
+            .metadata()
+            .map_err(|error| error.to_string())?
+            .modified()
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+
+        match &latest_file {
+            Some((current_modified, _)) if modified <= *current_modified => {}
+            _ => latest_file = Some((modified, path)),
+        }
+    }
+
+    match latest_file {
+        Some((_, path)) => fs::read_to_string(path)
+            .map(Some)
+            .map_err(|error| error.to_string()),
+        None => Ok(None),
+    }
 }
 
 #[tauri::command]
@@ -199,6 +326,8 @@ pub fn run() {
             write_bytes_into_app_data,
             write_bytes_to_path,
             write_backup_snapshot,
+            get_desktop_storage_info,
+            load_latest_local_backup,
             delete_persisted_file,
             open_path_in_file_manager,
             load_update_manifest

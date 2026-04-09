@@ -31,6 +31,7 @@ import {
 } from "../ai/modelPricing";
 import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, isOutputLayoutPresetId } from "../export/outputLayouts";
 import { isTauriRuntime } from "../storage/environment";
+import { getDesktopStorageInfo } from "../storage/desktopStorage";
 import { sqliteBootstrapStatements } from "./schema";
 
 const STORAGE_KEYS = {
@@ -522,7 +523,9 @@ class TauriSqliteRepository implements AppRepository {
     if (!this.dbPromise) {
       this.dbPromise = (async () => {
         const DatabaseModule = await import("@tauri-apps/plugin-sql");
-        const db = await DatabaseModule.default.load("sqlite:notesmith.db");
+        const storageInfo = await getDesktopStorageInfo();
+        const dbLocation = storageInfo?.databasePath ? `sqlite:${storageInfo.databasePath}` : "sqlite:notesmith.db";
+        const db = await DatabaseModule.default.load(dbLocation);
         await Promise.all(sqliteBootstrapStatements.map((statement) => db.execute(statement)));
         await db.execute("ALTER TABLE sessions ADD COLUMN detail_level INTEGER NOT NULL DEFAULT 3").catch(() => {});
         await db.execute("ALTER TABLE sessions ADD COLUMN custom_field_values TEXT NOT NULL DEFAULT '{}'").catch(() => {});

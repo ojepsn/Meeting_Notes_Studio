@@ -1,6 +1,6 @@
 import type { DesktopAppSnapshot } from "@notesmith/domain";
 import { invoke } from "@tauri-apps/api/core";
-import { appConfigDir, appDataDir, downloadDir } from "@tauri-apps/api/path";
+import { downloadDir } from "@tauri-apps/api/path";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { isTauriRuntime } from "./environment";
 
@@ -13,6 +13,7 @@ export interface DesktopStorageInfo {
 }
 
 const joinPath = (base: string, child: string) => `${base.replace(/[\\\/]+$/, "")}/${child}`;
+let desktopStorageInfoPromise: Promise<DesktopStorageInfo | null> | null = null;
 
 export const buildSnapshotBackupFilename = (date = new Date()) => {
   const datePart = date.toISOString().slice(0, 19).replace(/[:T]/g, "-");
@@ -63,14 +64,14 @@ export const getDesktopStorageInfo = async (): Promise<DesktopStorageInfo | null
     return null;
   }
 
-  const [configDir, dataDir] = await Promise.all([appConfigDir(), appDataDir()]);
-  return {
-    appConfigDir: configDir,
-    appDataDir: dataDir,
-    databasePath: joinPath(configDir, "notesmith.db"),
-    attachmentsDir: joinPath(dataDir, "attachments"),
-    backupsDir: joinPath(dataDir, "backups"),
-  };
+  if (!desktopStorageInfoPromise) {
+    desktopStorageInfoPromise = invoke<DesktopStorageInfo>("get_desktop_storage_info").catch((error) => {
+      desktopStorageInfoPromise = null;
+      throw error;
+    });
+  }
+
+  return desktopStorageInfoPromise;
 };
 
 export const openDesktopPath = async (path: string) => {
@@ -162,6 +163,19 @@ export const importSnapshotBackup = async (): Promise<DesktopAppSnapshot | null>
     content = new TextDecoder().decode(new Uint8Array(bytes));
   } else {
     content = await fetch(selectedPath).then((response) => response.text());
+  }
+
+  return JSON.parse(content) as DesktopAppSnapshot;
+};
+
+export const loadLatestLocalSnapshotBackup = async (): Promise<DesktopAppSnapshot | null> => {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  const content = await invoke<string | null>("load_latest_local_backup");
+  if (!content) {
+    return null;
   }
 
   return JSON.parse(content) as DesktopAppSnapshot;

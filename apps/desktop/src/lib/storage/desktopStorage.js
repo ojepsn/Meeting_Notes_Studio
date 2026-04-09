@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import { appConfigDir, appDataDir, downloadDir } from "@tauri-apps/api/path";
+import { downloadDir } from "@tauri-apps/api/path";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { isTauriRuntime } from "./environment";
 const joinPath = (base, child) => `${base.replace(/[\\\/]+$/, "")}/${child}`;
+let desktopStorageInfoPromise = null;
 export const buildSnapshotBackupFilename = (date = new Date()) => {
     const datePart = date.toISOString().slice(0, 19).replace(/[:T]/g, "-");
     return `notesmith-desktop-backup-${datePart}.json`;
@@ -37,14 +38,13 @@ export const getDesktopStorageInfo = async () => {
     if (!isTauriRuntime()) {
         return null;
     }
-    const [configDir, dataDir] = await Promise.all([appConfigDir(), appDataDir()]);
-    return {
-        appConfigDir: configDir,
-        appDataDir: dataDir,
-        databasePath: joinPath(configDir, "notesmith.db"),
-        attachmentsDir: joinPath(dataDir, "attachments"),
-        backupsDir: joinPath(dataDir, "backups"),
-    };
+    if (!desktopStorageInfoPromise) {
+        desktopStorageInfoPromise = invoke("get_desktop_storage_info").catch((error) => {
+            desktopStorageInfoPromise = null;
+            throw error;
+        });
+    }
+    return desktopStorageInfoPromise;
 };
 export const openDesktopPath = async (path) => {
     if (!isTauriRuntime() || !path) {
@@ -120,6 +120,16 @@ export const importSnapshotBackup = async () => {
     }
     else {
         content = await fetch(selectedPath).then((response) => response.text());
+    }
+    return JSON.parse(content);
+};
+export const loadLatestLocalSnapshotBackup = async () => {
+    if (!isTauriRuntime()) {
+        return null;
+    }
+    const content = await invoke("load_latest_local_backup");
+    if (!content) {
+        return null;
     }
     return JSON.parse(content);
 };

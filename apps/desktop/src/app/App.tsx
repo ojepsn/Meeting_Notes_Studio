@@ -1117,6 +1117,10 @@ export const App = () => {
     setUpdateStatusNote(`Downloading and installing version ${availableUpdateVersion}...`);
     setStatusNote(`Installing update ${availableUpdateVersion}...`);
     try {
+      const backupPath = await createLocalSnapshotBackup(snapshot);
+      if (backupPath) {
+        setStatusNote(`Created a local safety backup at ${backupPath} before installing ${availableUpdateVersion}.`);
+      }
       await installUpdate();
       setUpdateStatusNote(`Version ${availableUpdateVersion} was installed. Restart the app to finish updating.`);
       setStatusNote(`Update ${availableUpdateVersion} installed. Restart the app to finish updating.`);

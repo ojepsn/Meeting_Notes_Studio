@@ -5,6 +5,7 @@ import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from ".
 import { createAppRepository, createSessionRecord, upsertActivity, upsertCalendarItem, upsertTimeLog, upsertSession, upsertTemplate, upsertTodo, } from "../lib/db/repository";
 import { removePersistedAttachment } from "../lib/files/attachmentStore";
 import { findSessionIdForActivity, upsertEntityLink } from "../lib/links/entityLinks";
+import { loadLatestLocalSnapshotBackup } from "../lib/storage/desktopStorage";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 const PERSIST_DEBOUNCE_MS = 300;
 const TRASH_RETENTION_DAYS = 7;
@@ -61,6 +62,23 @@ const calculateDurationMinutes = (date, startTime, endTime) => {
 const computeTrackedMinutes = (timeLogs, targetType, targetId) => timeLogs
     .filter((entry) => entry.targetType === targetType && entry.targetId === targetId)
     .reduce((sum, entry) => sum + (Number.isFinite(entry.durationMinutes) ? entry.durationMinutes : 0), 0);
+const hasMeaningfulSnapshotData = (snapshot) => snapshot.todos.length > 0 ||
+    snapshot.activities.length > 0 ||
+    snapshot.timelogs.length > 0 ||
+    snapshot.calendarItems.length > 0 ||
+    snapshot.entityLinks.length > 0 ||
+    snapshot.attachments.length > 0 ||
+    snapshot.sessions.some((session) => Boolean(session.title.trim()) ||
+        Boolean(session.participantText.trim()) ||
+        Boolean(session.project.trim()) ||
+        Boolean(session.domain.trim()) ||
+        Boolean(session.activity.trim()) ||
+        Boolean(session.tagsText.trim()) ||
+        Boolean(session.quickHighlights.trim()) ||
+        Boolean(session.manualNotes.trim()) ||
+        Boolean(session.liveTranscript.trim()) ||
+        Boolean(session.uploadedTranscript.trim()) ||
+        Boolean(session.output.trim()));
 const buildTimeLog = (targetType, targetId, overrides) => {
     const now = new Date();
     const date = overrides?.date || formatLocalDate(now);
@@ -242,11 +260,18 @@ export const useDesktopStore = create((set, get) => ({
     repository: createAppRepository(),
     load: async () => {
         try {
-            const [loadedSnapshot, aiTextCache, aiRequestHistory] = await Promise.all([
+            let [loadedSnapshot, aiTextCache, aiRequestHistory] = await Promise.all([
                 get().repository.loadSnapshot(),
                 get().repository.loadAITextCache(),
                 get().repository.loadAIRequestHistory(),
             ]);
+            if (!hasMeaningfulSnapshotData(loadedSnapshot)) {
+                const latestBackupSnapshot = await loadLatestLocalSnapshotBackup();
+                if (latestBackupSnapshot && hasMeaningfulSnapshotData(latestBackupSnapshot)) {
+                    loadedSnapshot = latestBackupSnapshot;
+                    await get().repository.saveSnapshot(latestBackupSnapshot);
+                }
+            }
             const nowMs = Date.now();
             const expiredSessionIds = new Set(loadedSnapshot.sessions.filter((session) => isSessionExpired(session, nowMs)).map((session) => session.id));
             const remainingSessions = loadedSnapshot.sessions.filter((session) => !expiredSessionIds.has(session.id));

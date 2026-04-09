@@ -28,3 +28,4 @@ export declare const exportSnapshotBackup: (snapshot: DesktopAppSnapshot) => Pro
 } | null>;
 export declare const createLocalSnapshotBackup: (snapshot: DesktopAppSnapshot) => Promise<string | null>;
 export declare const importSnapshotBackup: () => Promise<DesktopAppSnapshot | null>;
+export declare const loadLatestLocalSnapshotBackup: () => Promise<DesktopAppSnapshot | null>;
