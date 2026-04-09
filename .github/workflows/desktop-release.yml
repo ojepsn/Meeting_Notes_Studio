@@ -48,6 +48,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify desktop release version
+        run: node ./scripts/verify-desktop-release-version.mjs
+
       - name: Build signed desktop release
         run: npm run desktop:tauri:build
 

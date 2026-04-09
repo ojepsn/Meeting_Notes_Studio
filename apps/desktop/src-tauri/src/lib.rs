@@ -63,6 +63,29 @@ struct DesktopStorageInfo {
     backups_dir: String,
 }
 
+fn candidate_database_paths(app_config_dir: &Path, app_data_dir: &Path) -> Vec<PathBuf> {
+    vec![
+        app_config_dir.join("notesmith.db"),
+        app_data_dir.join("notesmith.db"),
+        app_config_dir.join("databases").join("notesmith.db"),
+        app_data_dir.join("databases").join("notesmith.db"),
+    ]
+}
+
+fn candidate_database_sidecar_paths(source: &Path) -> Vec<PathBuf> {
+    let source_text = source.to_string_lossy().to_string();
+    [".db-wal", ".db-shm", ".sqlite-wal", ".sqlite-shm"]
+        .iter()
+        .map(|suffix| {
+            if source_text.ends_with(".db") {
+                PathBuf::from(source_text.replace(".db", suffix))
+            } else {
+                PathBuf::from(format!("{source_text}{suffix}"))
+            }
+        })
+        .collect()
+}
+
 fn prepare_storage(app: &tauri::AppHandle) -> Result<DesktopStorageInfo, String> {
     let app_config_dir = app
         .path()
@@ -72,34 +95,47 @@ fn prepare_storage(app: &tauri::AppHandle) -> Result<DesktopStorageInfo, String>
         .path()
         .app_data_dir()
         .map_err(|error| error.to_string())?;
+    let local_data_dir = app
+        .path()
+        .local_data_dir()
+        .map_err(|error| error.to_string())?;
+
+    let stable_root_dir = local_data_dir.join("NoteSmith Desktop Data");
 
     fs::create_dir_all(&app_config_dir).map_err(|error| error.to_string())?;
     fs::create_dir_all(&app_data_dir).map_err(|error| error.to_string())?;
+    fs::create_dir_all(&stable_root_dir).map_err(|error| error.to_string())?;
 
-    let database_path = app_config_dir.join("notesmith.db");
-    let attachments_dir = app_data_dir.join("attachments");
-    let backups_dir = app_data_dir.join("backups");
+    let database_path = stable_root_dir.join("notesmith.db");
+    let attachments_dir = stable_root_dir.join("attachments");
+    let backups_dir = stable_root_dir.join("backups");
 
     fs::create_dir_all(&attachments_dir).map_err(|error| error.to_string())?;
     fs::create_dir_all(&backups_dir).map_err(|error| error.to_string())?;
 
-    let legacy_database_path = app_data_dir.join("notesmith.db");
-    copy_file_if_missing(&legacy_database_path, &database_path)?;
-    copy_file_if_missing(
-        &app_data_dir.join("notesmith.db-wal"),
-        &app_config_dir.join("notesmith.db-wal"),
-    )?;
-    copy_file_if_missing(
-        &app_data_dir.join("notesmith.db-shm"),
-        &app_config_dir.join("notesmith.db-shm"),
-    )?;
+    for candidate in candidate_database_paths(&app_config_dir, &app_data_dir) {
+        if !database_path.exists() {
+            copy_file_if_missing(&candidate, &database_path)?;
+        }
+        for sidecar in candidate_database_sidecar_paths(&candidate) {
+            let destination = stable_root_dir.join(
+                sidecar
+                    .file_name()
+                    .map(|name| name.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+            );
+            copy_file_if_missing(&sidecar, &destination)?;
+        }
+    }
 
     copy_dir_contents_if_missing(&app_config_dir.join("attachments"), &attachments_dir)?;
+    copy_dir_contents_if_missing(&app_data_dir.join("attachments"), &attachments_dir)?;
     copy_dir_contents_if_missing(&app_config_dir.join("backups"), &backups_dir)?;
+    copy_dir_contents_if_missing(&app_data_dir.join("backups"), &backups_dir)?;
 
     Ok(DesktopStorageInfo {
-        app_config_dir: app_config_dir.to_string_lossy().to_string(),
-        app_data_dir: app_data_dir.to_string_lossy().to_string(),
+        app_config_dir: stable_root_dir.to_string_lossy().to_string(),
+        app_data_dir: stable_root_dir.to_string_lossy().to_string(),
         database_path: database_path.to_string_lossy().to_string(),
         attachments_dir: attachments_dir.to_string_lossy().to_string(),
         backups_dir: backups_dir.to_string_lossy().to_string(),
