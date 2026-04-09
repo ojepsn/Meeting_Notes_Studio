@@ -196,7 +196,7 @@ export const App = () => {
     importBackupSnapshot: restoreBackupSnapshot,
     saveAttachments,
   } = useDesktopStore();
-  const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("notes");
+  const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("calendar");
   const [openPanel, setOpenPanel] = useState<OverlayPanel>(null);
   const [captureDensityOverride, setCaptureDensityOverride] = useState<CaptureWorkspaceDensity | null>(null);
   const [outputDensityOverride, setOutputDensityOverride] = useState<CaptureWorkspaceDensity | null>(null);
@@ -1743,7 +1743,12 @@ export const App = () => {
     }
   };
   const openSessionFromLink = (sessionId: string, returnWorkspace: AppWorkspace | null = null) =>
-    openNotesTarget({ sessionId, view: "capture", returnWorkspace, status: "Opened linked session." });
+    openNotesTarget({
+      sessionId,
+      view: "capture",
+      returnWorkspace,
+      status: returnWorkspace === "calendar" ? "Opened linked session from Calendar. Return to Calendar when you are done." : "Opened linked session.",
+    });
   const openActivityFromLink = (activityId: string, returnWorkspace: AppWorkspace | null = null) =>
     openLinkedDestination({
       workspace: "activities",
@@ -2377,16 +2382,20 @@ export const App = () => {
       </aside>
 
       <div className="workspace-shell">
-        <header className={`topbar app-header${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " app-header-compact" : ""}`}>
+        <header className={`topbar app-header${activeWorkspace === "calendar" ? " app-header-compact app-header-calendar-home" : ""}${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " app-header-compact" : ""}`}>
           <div className="topbar-copy">
             <div className="topbar-eyebrow">Focused workspace</div>
             <h1>{activeWorkspace === "notes" ? "Notes workspace" : `${WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}`}</h1>
             <div className="topbar-status-strip">
               <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
               <span className="status-chip">{desktopVersion ? `v${desktopVersion}` : "Desktop"}</span>
-              <span className="status-chip">{aiActivityLabel}</span>
-              <span className="status-chip">{selectedTextModelOption?.label || snapshot.settings.textModel}</span>
-              <span className="status-chip">{selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel}</span>
+              {activeWorkspace !== "calendar" ? <span className="status-chip">{aiActivityLabel}</span> : null}
+              {activeWorkspace !== "calendar" ? (
+                <>
+                  <span className="status-chip">{selectedTextModelOption?.label || snapshot.settings.textModel}</span>
+                  <span className="status-chip">{selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel}</span>
+                </>
+              ) : null}
               {isCheckingForUpdates ? <span className="status-chip">Checking updates...</span> : null}
             </div>
             <span className="tiny-text topbar-status-note">{statusNote}</span>
@@ -2398,21 +2407,30 @@ export const App = () => {
               </button>
             ) : null}
             <div className="topbar-secondary-cluster">
+              {activeWorkspace === "notes" && linkedDetailReturnWorkspace === "calendar" ? (
+                <button className="primary-button" type="button" onClick={returnFromLinkedDetail}>
+                  Return to Calendar
+                </button>
+              ) : null}
               <button className="shell-button" type="button" onClick={openCommandPalette}>
                 Command palette
               </button>
               <button className="shell-button" type="button" onClick={() => void (availableUpdateVersion ? handleInstallUpdate() : handleCheckForUpdates())}>
                 {availableUpdateVersion ? `Install ${availableUpdateVersion}` : "Check updates"}
               </button>
-              <button className="shell-button" type="button" onClick={() => openOverlay("sessions")}>
-                All Sessions
-              </button>
               <button className="shell-button" type="button" onClick={() => openSettingsSection("ai")}>
                 Settings
               </button>
-              <button className="shell-button" type="button" onClick={() => openOverlay("more")}>
-                More
-              </button>
+              {activeWorkspace !== "calendar" ? (
+                <>
+                  <button className="shell-button" type="button" onClick={() => openOverlay("sessions")}>
+                    All Sessions
+                  </button>
+                  <button className="shell-button" type="button" onClick={() => openOverlay("more")}>
+                    More
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
         </header>
@@ -2440,7 +2458,7 @@ export const App = () => {
 
         <main className={`notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}`}>
           <section className="workspace-canvas">
-            {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) ? (
+            {!(activeWorkspace === "calendar") ? (
             <div className="workspace-header card">
               <div className="card-header">
                 <div>

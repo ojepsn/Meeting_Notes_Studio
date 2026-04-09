@@ -181,6 +181,9 @@ export const CalendarWorkspace = ({
   const splitterDraggingRef = useRef(false);
   const scrollPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggedItemIdRef = useRef<string | null>(null);
+  const pointerDragCandidateRef = useRef<null | { itemId: string; startX: number; startY: number }>(null);
+  const pointerDraggingItemRef = useRef<string | null>(null);
+  const suppressClickItemIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     onFullScreenChange?.(isFullScreen);
@@ -468,6 +471,45 @@ export const CalendarWorkspace = ({
     };
   }, []);
 
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      const candidate = pointerDragCandidateRef.current;
+      if (!candidate) return;
+      const deltaX = Math.abs(event.clientX - candidate.startX);
+      const deltaY = Math.abs(event.clientY - candidate.startY);
+      if (deltaX < 5 && deltaY < 5) return;
+      pointerDraggingItemRef.current = candidate.itemId;
+      document.body.classList.add("calendar-pointer-dragging");
+    };
+
+    const handleMouseUp = (event: MouseEvent) => {
+      const draggingItemId = pointerDraggingItemRef.current;
+      const candidate = pointerDragCandidateRef.current;
+      pointerDragCandidateRef.current = null;
+      pointerDraggingItemRef.current = null;
+      document.body.classList.remove("calendar-pointer-dragging");
+      if (!candidate || !draggingItemId) return;
+      const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+      const column = target?.closest(".calendar-day-column") as HTMLElement | null;
+      const date = column?.dataset.date;
+      if (!column || !date) return;
+      const rect = column.getBoundingClientRect();
+      onMoveItem(draggingItemId, date, clampSlot(Math.floor((event.clientY - rect.top) / slotHeight)));
+      suppressClickItemIdRef.current = draggingItemId;
+      window.setTimeout(() => {
+        if (suppressClickItemIdRef.current === draggingItemId) suppressClickItemIdRef.current = null;
+      }, 0);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      document.body.classList.remove("calendar-pointer-dragging");
+    };
+  }, [onMoveItem, slotHeight]);
+
   const moveDraftCell = (deltaDays: number, deltaSlots: number) => {
     if (!draftCell) return;
     setDraftCell({ date: addDays(draftCell.date, deltaDays), slot: clampSlot(draftCell.slot + deltaSlots) });
@@ -576,11 +618,10 @@ export const CalendarWorkspace = ({
     <div className={`card calendar-workspace${isFullScreen ? " calendar-workspace-fullscreen" : ""}`}>
       <div className="card-header session-editor-header-minimal calendar-workspace-header">
         <div><h2>Calendar</h2></div>
-        <div className="page-actions wrap-row">
+        <div className="page-actions wrap-row calendar-primary-actions">
           <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, -daysInView))}>Previous</button>
           <button className="shell-button" type="button" onClick={() => { setAnchorDate(today); setJumpDate(today); }}>Today</button>
           <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, daysInView))}>Next</button>
-          <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, 30))}>+30d</button>
         </div>
       </div>
 
@@ -589,29 +630,34 @@ export const CalendarWorkspace = ({
           <div className="status-chip">{filteredItems.length} scheduled items</div>
           <div className="capture-density-toggle">{DAYS.map((option) => <button key={`days-${option}`} className="segment-button" type="button" data-active={option === daysInView} onClick={() => setDaysInView(option)}>{option} days</button>)}</div>
           <div className="capture-density-toggle">{HEIGHTS.map((option) => <button key={`height-${option}`} className="segment-button" type="button" data-active={option === slotHeight} onClick={() => setSlotHeight(option)}>{option === 12 ? "Compact" : option === 16 ? "Default" : "Large"}</button>)}</div>
-          <div className="field calendar-context-field">
-            <label htmlFor="calendar-creation-context">Attach new entries</label>
-            <select
-              id="calendar-creation-context"
-              value={creationContextActivityId}
-              onChange={(event) => setCreationContextActivityId(event.target.value)}
-            >
-              <option value="">No activity context</option>
-              {topLevelActivities.map((activity) => (
-                <option key={activity.id} value={activity.id}>
-                  {activity.description}
-                </option>
-              ))}
-            </select>
+        </div>
+        <details className="workspace-disclosure calendar-secondary-controls">
+          <summary>More calendar controls</summary>
+          <div className="workspace-disclosure-body">
+            <div className="calendar-toolbar calendar-toolbar-dense">
+              <div className="field"><label htmlFor="calendar-jump-date">Jump</label><DateInput id="calendar-jump-date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} /></div>
+              <button className="shell-button" type="button" onClick={() => setAnchorDate(jumpDate || today)}>Go</button>
+              <div className="field field-wide"><label htmlFor="calendar-search">Search</label><input id="calendar-search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search title" /></div>
+              <div className="field"><label htmlFor="calendar-type-filter">Type</label><select id="calendar-type-filter" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | "todo" | "activity" | "meeting")}><option value="all">All</option><option value="todo">Todos</option><option value="activity">Activities</option><option value="meeting">Meetings</option></select></div>
+              <div className="field"><label htmlFor="calendar-visibility-filter">Private</label><select id="calendar-visibility-filter" value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value as "all" | "public" | "private")}><option value="all">All</option><option value="public">Public</option><option value="private">Private</option></select></div>
+              <div className="field calendar-context-field">
+                <label htmlFor="calendar-creation-context">Attach new entries</label>
+                <select
+                  id="calendar-creation-context"
+                  value={creationContextActivityId}
+                  onChange={(event) => setCreationContextActivityId(event.target.value)}
+                >
+                  <option value="">No activity context</option>
+                  {topLevelActivities.map((activity) => (
+                    <option key={activity.id} value={activity.id}>
+                      {activity.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="calendar-toolbar calendar-toolbar-dense">
-          <div className="field"><label htmlFor="calendar-jump-date">Jump</label><DateInput id="calendar-jump-date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} /></div>
-          <button className="shell-button" type="button" onClick={() => setAnchorDate(jumpDate || today)}>Go</button>
-          <div className="field field-wide"><label htmlFor="calendar-search">Search</label><input id="calendar-search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search title" /></div>
-          <div className="field"><label htmlFor="calendar-type-filter">Type</label><select id="calendar-type-filter" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | "todo" | "activity" | "meeting")}><option value="all">All</option><option value="todo">Todos</option><option value="activity">Activities</option><option value="meeting">Meetings</option></select></div>
-          <div className="field"><label htmlFor="calendar-visibility-filter">Private</label><select id="calendar-visibility-filter" value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value as "all" | "public" | "private")}><option value="all">All</option><option value="public">Public</option><option value="private">Private</option></select></div>
-        </div>
+        </details>
       </div>
 
       <div ref={layoutRef} className={`calendar-layout${isFullScreen ? " calendar-layout-fullscreen" : ""}`} style={{ gridTemplateColumns: `minmax(0, 1fr) 8px ${detailsPaneWidth}px` }}>
@@ -624,7 +670,7 @@ export const CalendarWorkspace = ({
               {visibleDates.map((date, index) => {
                 const dayItems = itemsByDate.get(date) ?? [];
                 const active = draftCell?.date === date ? draftCell : null;
-                return <div key={`col-${date}`} className="calendar-day-column" style={{ gridColumn: `${index + 2} / ${index + 3}`, gridRow: `2 / span ${TOTAL_SLOTS}`, height: `calc(var(--calendar-slot-height) * ${TOTAL_SLOTS})` }} onClick={(event) => {
+                return <div key={`col-${date}`} data-date={date} className="calendar-day-column" style={{ gridColumn: `${index + 2} / ${index + 3}`, gridRow: `2 / span ${TOTAL_SLOTS}`, height: `calc(var(--calendar-slot-height) * ${TOTAL_SLOTS})` }} onClick={(event) => {
                   const target = event.target as HTMLElement;
                   if (target.closest(".calendar-item-block") || target.closest(".calendar-cell-input")) return;
                   const rect = event.currentTarget.getBoundingClientRect();
@@ -657,11 +703,87 @@ export const CalendarWorkspace = ({
                     const laneWidth = 100 / Math.max(1, item.laneCount);
                     const visualHeight = Math.max(slotHeight * Math.max(durationSlots, item.isMeeting ? 3 : 1) - 4, 18);
                     const runningLog = getRunningTimeLog(timeLogsByTarget.get(`${item.targetType}:${item.targetId}`) || []);
+                    const linkedSessionState =
+                      item.isMeeting && item.targetType === "activity" ? linkedSessionStateByActivity[item.targetId] : undefined;
                     const runningLabel = runningLog ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now)) : "";
-                    return <button key={item.id} className={`calendar-item-block${item.isMeeting ? " calendar-item-block-meeting" : ""}${selectedItemId === item.id ? " calendar-item-block-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`} type="button" draggable style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onDragStart={(event) => { draggedItemIdRef.current = item.id; event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { draggedItemIdRef.current = null; }} onClick={() => { setDraftCell(null); setSelectedItemId(item.id); }} onDoubleClick={() => { if (item.targetType === "todo") { onOpenTodoDetail(item.targetId); return; } onOpenActivityDetail(item.targetId); }}>
+                    return <button key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${selectedItemId === item.id ? " calendar-item-block-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`} type="button" draggable style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
+                      const target = event.target as HTMLElement;
+                      if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle")) return;
+                      pointerDragCandidateRef.current = { itemId: item.id, startX: event.clientX, startY: event.clientY };
+                    }} onDragStart={(event) => { draggedItemIdRef.current = item.id; event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { draggedItemIdRef.current = null; }} onClick={() => { if (suppressClickItemIdRef.current === item.id) return; setDraftCell(null); setSelectedItemId(item.id); }} onDoubleClick={() => { if (item.targetType === "todo") { onOpenTodoDetail(item.targetId); return; } onOpenActivityDetail(item.targetId); }}>
                       {item.isMeeting ? <span className="calendar-resize-handle calendar-resize-handle-start" onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "start", date: item.date, startSlot, durationSlots }); }} /> : null}
+                      <span className="calendar-item-kicker">
+                        {item.isMeeting ? "Meeting" : item.targetType === "todo" ? "Todo" : "Activity"}
+                        {item.isPrivate ? " • Private" : ""}
+                      </span>
                       <strong>{slotToTime(startSlot)} {item.title}</strong>
-                      <span>{item.isMeeting ? `${item.label} • ${durationLabel(durationSlots)}` : item.label}{runningLog ? ` • Running ${runningLabel}` : ""}</span>
+                      <span>{item.isMeeting ? durationLabel(durationSlots) : item.label}{runningLog ? ` • Running ${runningLabel}` : ""}</span>
+                      {linkedSessionState?.sessionId ? (
+                        <span className={`calendar-item-link-state${linkedSessionState.hasOutput ? " calendar-item-link-state-output" : ""}`}>
+                          {linkedSessionState.hasOutput ? "Output ready" : "Session linked"}
+                        </span>
+                      ) : item.isMeeting ? (
+                        <span className="calendar-item-link-state calendar-item-link-state-empty">No session</span>
+                      ) : null}
+                      {item.isMeeting ? (
+                        <div className="calendar-item-launcher-row">
+                          {linkedSessionState?.sessionId ? (
+                            <>
+                              <span
+                                className="calendar-item-inline-action calendar-item-inline-action-secondary"
+                                role="button"
+                                tabIndex={-1}
+                                onMouseDown={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                }}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  onOpenSession(linkedSessionState.sessionId!);
+                                }}
+                              >
+                                Open session
+                              </span>
+                              {linkedSessionState.hasOutput ? (
+                                <span
+                                  className="calendar-item-inline-action calendar-item-inline-action-secondary"
+                                  role="button"
+                                  tabIndex={-1}
+                                  onMouseDown={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                  }}
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    onPreviewSessionOutput(linkedSessionState.sessionId!);
+                                  }}
+                                >
+                                  Output
+                                </span>
+                              ) : null}
+                            </>
+                          ) : (
+                            <span
+                              className="calendar-item-inline-action calendar-item-inline-action-secondary"
+                              role="button"
+                              tabIndex={-1}
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                              }}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                onCreateLinkedMeetingSession(item.targetId);
+                              }}
+                            >
+                              Create session
+                            </span>
+                          )}
+                        </div>
+                      ) : null}
                       <span
                         className={`calendar-item-inline-action${runningLog ? " calendar-item-inline-action-active" : ""}`}
                         role="button"
@@ -697,11 +819,17 @@ export const CalendarWorkspace = ({
               <div className="card-header">
                 <div>
                   <h3>{editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity"}</h3>
+                  <div className="calendar-editor-meta">
+                    <span className="status-chip">{editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity"}</span>
+                    {editorDraft.project ? <span className="status-chip">{editorDraft.project}</span> : null}
+                    {editorDraft.domain ? <span className="status-chip">{editorDraft.domain}</span> : null}
+                  </div>
                 </div>
                 <button className="small-button" type="button" onClick={() => setSelectedItemId(null)}>
                   Close
                 </button>
               </div>
+              <div className="calendar-inspector-section-label">Schedule</div>
               <div className="field">
                 <label htmlFor="calendar-edit-title">Title</label>
                 <input
@@ -710,26 +838,53 @@ export const CalendarWorkspace = ({
                   onChange={(event) => setEditorDraft({ ...editorDraft, title: event.target.value })}
                 />
               </div>
-              <div className="inline-row">
-                <div className="field">
-                  <label htmlFor="calendar-edit-date">Date</label>
-                  <DateInput
-                    id="calendar-edit-date"
-                    value={editorDraft.doOn}
-                    onChange={(event) => setEditorDraft({ ...editorDraft, doOn: event.target.value })}
-                  />
+              {editorDraft.isMeeting ? (
+                <div className="inline-row">
+                  <div className="field">
+                    <label htmlFor="calendar-edit-date">Date</label>
+                    <DateInput
+                      id="calendar-edit-date"
+                      value={editorDraft.doOn}
+                      onChange={(event) => setEditorDraft({ ...editorDraft, doOn: event.target.value })}
+                    />
+                  </div>
+                  <label className="compact-private-toggle">
+                    <input
+                      type="checkbox"
+                      checked={editorDraft.isPrivate}
+                      onChange={(event) => setEditorDraft({ ...editorDraft, isPrivate: event.target.checked })}
+                    />
+                    <span>Private</span>
+                  </label>
                 </div>
-                <label className="compact-private-toggle">
-                  <input
-                    type="checkbox"
-                    checked={editorDraft.isPrivate}
-                    onChange={(event) => setEditorDraft({ ...editorDraft, isPrivate: event.target.checked })}
-                  />
-                  <span>Private</span>
-                </label>
-              </div>
+              ) : (
+                <details className="workspace-disclosure calendar-inspector-disclosure">
+                  <summary>Schedule details</summary>
+                  <div className="workspace-disclosure-body">
+                    <div className="inline-row">
+                      <div className="field">
+                        <label htmlFor="calendar-edit-date">Date</label>
+                        <DateInput
+                          id="calendar-edit-date"
+                          value={editorDraft.doOn}
+                          onChange={(event) => setEditorDraft({ ...editorDraft, doOn: event.target.value })}
+                        />
+                      </div>
+                      <label className="compact-private-toggle">
+                        <input
+                          type="checkbox"
+                          checked={editorDraft.isPrivate}
+                          onChange={(event) => setEditorDraft({ ...editorDraft, isPrivate: event.target.checked })}
+                        />
+                        <span>Private</span>
+                      </label>
+                    </div>
+                  </div>
+                </details>
+              )}
               {editorDraft.isMeeting ? (
                 <>
+                  <div className="calendar-inspector-section-label">Linked session</div>
                   <div className="inline-row">
                     <div className="field">
                       <label htmlFor="calendar-edit-start">Start</label>
@@ -812,6 +967,9 @@ export const CalendarWorkspace = ({
                   ) : null}
                 </>
               ) : null}
+              <details className="workspace-disclosure calendar-inspector-disclosure">
+                <summary>{editorDraft.isMeeting ? "Structure and advanced details" : "More details"}</summary>
+                <div className="workspace-disclosure-body stack">
               <div className="metadata-triplet-grid">
                 <div className="field metadata-subfield">
                   <label htmlFor="calendar-edit-link">
@@ -898,20 +1056,9 @@ export const CalendarWorkspace = ({
                   onChange={(event) => setEditorDraft({ ...editorDraft, dueDate: event.target.value })}
                 />
               </div>
-              {pendingDelete && pendingDelete.itemId === editorDraft.itemId ? (
-                <div className="calendar-delete-confirmation">
-                  <strong>Delete this {editorDraft.isMeeting ? "meeting" : editorDraft.targetType}?</strong>
-                  <p className="muted">"{pendingDelete.title}" will be removed from the app and from the calendar.</p>
-                  <div className="calendar-delete-confirmation-actions">
-                    <button className="small-button danger-button" type="button" onClick={confirmDeleteSelectedItem}>
-                      Delete
-                    </button>
-                    <button className="small-button" type="button" onClick={() => setPendingDelete(null)}>
-                      Cancel
-                    </button>
-                  </div>
                 </div>
-              ) : null}
+              </details>
+              <div className="calendar-inspector-section-label">Time</div>
               <div className="calendar-editor-actions">
                 {(() => {
                   const runningLog = getRunningTimeLog(timeLogsByTarget.get(`${editorDraft.targetType}:${editorDraft.targetId}`) || []);
@@ -937,15 +1084,11 @@ export const CalendarWorkspace = ({
                   );
                 })()}
               </div>
+              <div className="calendar-inspector-section-label">Actions</div>
               <div className="calendar-editor-actions">
                 <button className="primary-button" type="button" onClick={saveEditor}>
                   Save calendar edits
                 </button>
-                {editorDraft.targetType === "todo" ? (
-                  <button className="shell-button" type="button" onClick={convertEditorTodoToMeeting}>
-                    Convert to meeting
-                  </button>
-                ) : null}
                 <button
                   className="shell-button"
                   type="button"
@@ -954,6 +1097,34 @@ export const CalendarWorkspace = ({
                   Open full {editorDraft.targetType === "todo" ? "todo" : "activity"}
                 </button>
               </div>
+              <details className="workspace-disclosure calendar-inspector-disclosure">
+                <summary>More actions</summary>
+                <div className="workspace-disclosure-body stack">
+                  {editorDraft.targetType === "todo" ? (
+                    <button className="shell-button" type="button" onClick={convertEditorTodoToMeeting}>
+                      Convert to meeting
+                    </button>
+                  ) : null}
+                  {pendingDelete && pendingDelete.itemId === editorDraft.itemId ? (
+                    <div className="calendar-delete-confirmation">
+                      <strong>Delete this {editorDraft.isMeeting ? "meeting" : editorDraft.targetType}?</strong>
+                      <p className="muted">"{pendingDelete.title}" will be removed from the app and from the calendar.</p>
+                      <div className="calendar-delete-confirmation-actions">
+                        <button className="small-button danger-button" type="button" onClick={confirmDeleteSelectedItem}>
+                          Delete
+                        </button>
+                        <button className="small-button" type="button" onClick={() => setPendingDelete(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button className="small-button danger-button" type="button" onClick={() => setPendingDelete({ itemId: editorDraft.itemId, targetType: editorDraft.targetType, targetId: editorDraft.targetId, title: editorDraft.title })}>
+                      Delete from calendar
+                    </button>
+                  )}
+                </div>
+              </details>
             </div>
           ) : (
             <div className="stack">
