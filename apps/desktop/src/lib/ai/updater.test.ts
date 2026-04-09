@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { checkForDesktopUpdates, compareVersions, loadPublishedVersion, normalizeVersion } from "./updater";
+import {
+  checkForDesktopUpdates,
+  compareVersions,
+  loadPublishedManifest,
+  loadPublishedVersion,
+  normalizeVersion,
+} from "./updater";
 
 vi.mock("../storage/environment", () => ({
   isTauriRuntime: vi.fn(),
@@ -8,10 +14,15 @@ vi.mock("../storage/environment", () => ({
 const getVersion = vi.fn();
 const getBundleType = vi.fn();
 const updaterCheck = vi.fn();
+const invoke = vi.fn();
 
 vi.mock("@tauri-apps/api/app", () => ({
   getVersion,
   getBundleType,
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke,
 }));
 
 vi.mock("@tauri-apps/plugin-updater", () => ({
@@ -37,23 +48,36 @@ describe("loadPublishedVersion", () => {
   });
 
   it("loads and normalizes the published manifest version", async () => {
+    const environment = await import("../storage/environment");
+    vi.mocked(environment.isTauriRuntime).mockReturnValue(false);
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ version: "v0.1.19" }),
+        text: async () => JSON.stringify({ version: "v0.1.19" }),
       }),
     );
 
     await expect(loadPublishedVersion()).resolves.toBe("0.1.19");
   });
 
+  it("uses the native manifest loader in the Tauri runtime", async () => {
+    const environment = await import("../storage/environment");
+    vi.mocked(environment.isTauriRuntime).mockReturnValue(true);
+    invoke.mockResolvedValue(JSON.stringify({ version: "0.1.21" }));
+
+    await expect(loadPublishedManifest()).resolves.toMatchObject({ version: "0.1.21" });
+    expect(invoke).toHaveBeenCalledWith("load_update_manifest", expect.any(Object));
+  });
+
   it("fails when the manifest does not include a version", async () => {
+    const environment = await import("../storage/environment");
+    vi.mocked(environment.isTauriRuntime).mockReturnValue(false);
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({}),
+        text: async () => JSON.stringify({}),
       }),
     );
 
@@ -69,6 +93,7 @@ describe("checkForDesktopUpdates", () => {
     getVersion.mockResolvedValue("0.1.18");
     getBundleType.mockResolvedValue("msi");
     updaterCheck.mockReset();
+    invoke.mockReset();
   });
 
   it("returns a native install path when the updater plugin finds an update", async () => {
@@ -91,11 +116,14 @@ describe("checkForDesktopUpdates", () => {
 
   it("falls back to the published manifest when no native install is available", async () => {
     updaterCheck.mockResolvedValue(null);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ version: "0.1.19" }),
+    invoke.mockResolvedValue(
+      JSON.stringify({
+        version: "0.1.19",
+        platforms: {
+          "windows-x86_64": {
+            url: "https://example.com/NoteSmith.Desktop_0.1.19_x64-setup.exe",
+          },
+        },
       }),
     );
 
@@ -104,19 +132,13 @@ describe("checkForDesktopUpdates", () => {
     expect(result.available).toBe(false);
     expect(result.source).toBe("manifest");
     expect(result.publishedVersion).toBe("0.1.19");
-    expect(result.downloadUrl).toContain("/releases/latest");
-    expect(result.note).toContain("manual reinstall");
+    expect(result.downloadUrl).toContain("setup.exe");
+    expect(result.note).toContain("cannot self-update in place");
   });
 
   it("reports the app as current when neither native nor manifest checks find a newer version", async () => {
     updaterCheck.mockResolvedValue(null);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ version: "0.1.18" }),
-      }),
-    );
+    invoke.mockResolvedValue(JSON.stringify({ version: "0.1.18" }));
 
     const result = await checkForDesktopUpdates();
 

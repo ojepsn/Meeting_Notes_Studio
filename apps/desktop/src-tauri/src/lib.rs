@@ -168,6 +168,25 @@ fn delete_persisted_file(path: String) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+async fn load_update_manifest(url: String) -> Result<String, String> {
+    let response = reqwest::get(url)
+        .await
+        .map_err(|error| format!("Could not reach update manifest: {error}"))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!(
+            "Could not load the published update manifest ({status})."
+        ));
+    }
+
+    response
+        .text()
+        .await
+        .map_err(|error| format!("Could not read update manifest body: {error}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -181,7 +200,8 @@ pub fn run() {
             write_bytes_to_path,
             write_backup_snapshot,
             delete_persisted_file,
-            open_path_in_file_manager
+            open_path_in_file_manager,
+            load_update_manifest
         ])
         .run(tauri::generate_context!())
         .expect("error while running NoteSmith desktop");

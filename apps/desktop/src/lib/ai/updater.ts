@@ -5,10 +5,15 @@ const UPDATE_MANIFEST_URL =
 
 type UpdateManifest = {
   version?: string;
+  platforms?: Record<string, { url?: string }>;
 };
 
 export const normalizeVersion = (value: string) =>
   value.trim().replace(/^v/i, "");
+
+const normalizeBundleType = (value: string | null) => value?.trim().toLowerCase() ?? "";
+
+const isMsiBundle = (value: string | null) => normalizeBundleType(value).includes("msi");
 
 export const compareVersions = (left: string, right: string) => {
   const leftParts = normalizeVersion(left).split(".").map((entry) => Number(entry) || 0);
@@ -24,16 +29,45 @@ export const compareVersions = (left: string, right: string) => {
   return 0;
 };
 
-export const loadPublishedVersion = async () => {
+const parseManifest = (raw: string) => {
+  const manifest = JSON.parse(raw) as UpdateManifest;
+  if (!manifest.version) {
+    throw new Error("Published update manifest did not include a version.");
+  }
+  return manifest;
+};
+
+const loadPublishedManifestViaFetch = async () => {
   const response = await fetch(UPDATE_MANIFEST_URL, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Could not load the published update manifest (${response.status}).`);
   }
-  const manifest = (await response.json()) as UpdateManifest;
-  if (!manifest.version) {
-    throw new Error("Published update manifest did not include a version.");
+  return parseManifest(await response.text());
+};
+
+const loadPublishedManifestViaTauri = async () => {
+  const core = await import("@tauri-apps/api/core");
+  const rawManifest = await core.invoke<string>("load_update_manifest", {
+    url: UPDATE_MANIFEST_URL,
+  });
+  return parseManifest(rawManifest);
+};
+
+export const loadPublishedManifest = async () => {
+  if (isTauriRuntime()) {
+    try {
+      return await loadPublishedManifestViaTauri();
+    } catch {
+      return await loadPublishedManifestViaFetch();
+    }
   }
-  return normalizeVersion(manifest.version);
+
+  return loadPublishedManifestViaFetch();
+};
+
+export const loadPublishedVersion = async () => {
+  const manifest = await loadPublishedManifest();
+  return normalizeVersion(manifest.version ?? "");
 };
 
 export const checkForDesktopUpdates = async () => {
@@ -68,19 +102,22 @@ export const checkForDesktopUpdates = async () => {
   }
 
   try {
-    const publishedVersion = await loadPublishedVersion();
+    const manifest = await loadPublishedManifest();
+    const publishedVersion = normalizeVersion(manifest.version ?? "");
+    const platformDownloadUrl =
+      manifest.platforms?.["windows-x86_64"]?.url ||
+      "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest";
     if (compareVersions(publishedVersion, currentVersion) > 0) {
-      const manualReason =
-        bundleType === "msi"
-          ? "This installed MSI build may require one manual reinstall using the setup.exe installer before future in-place self-updates work."
-          : nativeErrorMessage || "A newer version is published, but automatic install is not available in this check.";
+      const manualReason = isMsiBundle(bundleType)
+        ? "This installed MSI build cannot self-update in place. Install the published setup.exe once to move onto the self-updating desktop channel."
+        : nativeErrorMessage || "A newer version is published, but automatic install is not available in this check.";
       return {
         available: false as const,
         currentVersion,
         bundleType,
         source: "manifest" as const,
         publishedVersion,
-        downloadUrl: "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest",
+        downloadUrl: platformDownloadUrl,
         note: `Version ${publishedVersion} is published on GitHub. ${manualReason}`,
       };
     }

@@ -1,5 +1,12 @@
+type UpdateManifest = {
+    version?: string;
+    platforms?: Record<string, {
+        url?: string;
+    }>;
+};
 export declare const normalizeVersion: (value: string) => string;
 export declare const compareVersions: (left: string, right: string) => number;
+export declare const loadPublishedManifest: () => Promise<UpdateManifest>;
 export declare const loadPublishedVersion: () => Promise<string>;
 export declare const checkForDesktopUpdates: () => Promise<{
     available: false;
@@ -42,3 +49,4 @@ export declare const checkForDesktopUpdates: () => Promise<{
     publishedVersion?: undefined;
     downloadUrl?: undefined;
 }>;
+export {};
