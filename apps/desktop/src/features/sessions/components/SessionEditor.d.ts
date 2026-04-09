@@ -1,3 +1,4 @@
+import { type StructureOptions } from "../../../lib/structure/options";
 import type { RecordingMode } from "../../../lib/files/recording";
 import { type CaptureWorkspaceDensity, type AttachmentRecord, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 interface SessionEditorProps {
@@ -14,6 +15,7 @@ interface SessionEditorProps {
     suggestedDomains: string[];
     savedActivities: string[];
     suggestedActivities: string[];
+    structureOptions: StructureOptions;
     savedTags: string[];
     suggestedTags: string[];
     isTranscribingAudio: boolean;
@@ -32,5 +34,5 @@ interface SessionEditorProps {
     onUpdateAttachment: (attachment: AttachmentRecord) => void;
     onOpenDetails?: () => void;
 }
-export declare const SessionEditor: ({ session, templates, attachments, presentation, showPresentationActions, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, savedTags, suggestedTags, isTranscribingAudio, recordingMode, isRecordingAudio, recordingStatusNote, onChange, onImportTranscript, onImportAudio, onImportImage, onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment, onUpdateAttachment, onOpenDetails, }: SessionEditorProps) => import("react/jsx-runtime").JSX.Element;
+export declare const SessionEditor: ({ session, templates, attachments, presentation, showPresentationActions, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isTranscribingAudio, recordingMode, isRecordingAudio, recordingStatusNote, onChange, onImportTranscript, onImportAudio, onImportImage, onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment, onUpdateAttachment, onOpenDetails, }: SessionEditorProps) => import("react/jsx-runtime").JSX.Element;
 export {};

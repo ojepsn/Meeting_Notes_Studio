@@ -1,8 +1,10 @@
 import type { ActivityRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import { type StructureOptions } from "../../../lib/structure/options";
 interface TodosWorkspaceProps {
     todos: TodoRecord[];
     activities: ActivityRecord[];
     timeLogs: TimeLogRecord[];
+    structureOptions: StructureOptions;
     requestedTodoId?: string | null;
     requestedDomain?: string | null;
     requestedProject?: string | null;
@@ -20,5 +22,5 @@ interface TodosWorkspaceProps {
     onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
     onOpenActivityDetail?: (activityId: string) => void;
 }
-export declare const TodosWorkspace: ({ todos, activities, timeLogs, requestedTodoId, requestedDomain, requestedProject, onEditorClose, onToggle, onAdd, onSave, onDelete, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }: TodosWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const TodosWorkspace: ({ todos, activities, timeLogs, structureOptions, requestedTodoId, requestedDomain, requestedProject, onEditorClose, onToggle, onAdd, onSave, onDelete, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }: TodosWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

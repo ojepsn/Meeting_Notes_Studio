@@ -9,6 +9,7 @@ type StructureWorkspaceProps = {
     onAddDomain: (domain: string) => void;
     onRenameDomain: (previousValue: string, nextValue: string) => void;
     onAddProject: (project: string, domain: string) => void;
+    onAddActivityToProject: (description: string, project: string, domain: string, type: ActivityRecord["type"]) => void;
     onRenameProject: (previousValue: string, nextValue: string) => void;
     onAssignProjectDomain: (project: string, domain: string) => void;
     onOpenActivitiesForDomain: (domain: string) => void;
@@ -20,5 +21,5 @@ type StructureWorkspaceProps = {
     onOpenActivityDetail: (activityId: string) => void;
     onOpenTodoDetail: (todoId: string) => void;
 };
-export declare const StructureWorkspace: ({ activities, todos, timeLogs, savedDomains, savedProjects, projectLinks, onAddDomain, onRenameDomain, onAddProject, onRenameProject, onAssignProjectDomain, onOpenActivitiesForDomain, onOpenActivitiesForProject, onOpenTodosForDomain, onOpenTodosForProject, onOpenTimeForDomain, onOpenTimeForProject, onOpenActivityDetail, onOpenTodoDetail, }: StructureWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const StructureWorkspace: ({ activities, todos, timeLogs, savedDomains, savedProjects, projectLinks, onAddDomain, onRenameDomain, onAddProject, onAddActivityToProject, onRenameProject, onAssignProjectDomain, onOpenActivitiesForDomain, onOpenActivitiesForProject, onOpenTodosForDomain, onOpenTodosForProject, onOpenTimeForDomain, onOpenTimeForProject, onOpenActivityDetail, onOpenTodoDetail, }: StructureWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

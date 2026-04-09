@@ -1,6 +1,8 @@
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
+import { DateInput } from "../../../components/DateInput";
+import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import type { ActivityRecord, AttachmentRecord, CaptureWorkspaceDensity, SessionRecord } from "@notesmith/domain";
 import { useState } from "react";
 
@@ -57,6 +59,7 @@ interface OutputWorkspaceProps {
   suggestedDomains: string[];
   savedActivities: string[];
   suggestedActivities: string[];
+  structureOptions: StructureOptions;
   savedTags: string[];
   suggestedTags: string[];
   isPrimaryActionRunning: boolean;
@@ -95,6 +98,7 @@ export const OutputWorkspace = ({
   suggestedDomains,
   savedActivities,
   suggestedActivities,
+  structureOptions,
   savedTags,
   suggestedTags,
   isPrimaryActionRunning,
@@ -132,6 +136,14 @@ export const OutputWorkspace = ({
   const hasOutput = Boolean(session.output.trim());
   const isMeetingNote = session.captureMode === "meeting-note";
   const isMinimal = presentation === "minimal";
+  const filteredProjects = getProjectsForDomain(structureOptions, session.domain);
+  const filteredActivities = getActivitiesForSelection(structureOptions, session.domain, session.project);
+  const projectPickerOptions = filteredProjects.length ? filteredProjects : savedProjects;
+  const activityPickerOptions = filteredActivities.length ? filteredActivities : savedActivities;
+  const filteredProjectSet = new Set(projectPickerOptions);
+  const filteredActivitySet = new Set(activityPickerOptions);
+  const suggestedProjectsForSelection = suggestedProjects.filter((project) => filteredProjectSet.has(project));
+  const suggestedActivitiesForSelection = suggestedActivities.filter((activity) => filteredActivitySet.has(activity));
   const followUpSuggestions = session.output
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -151,6 +163,29 @@ export const OutputWorkspace = ({
   };
 
   const ownerComment = reviewOwner ? `Owner: ${reviewOwner}` : "";
+
+  const handleDomainChange = (domain: string) => {
+    const nextProjects = getProjectsForDomain(structureOptions, domain);
+    const nextProject = nextProjects.includes(session.project) ? session.project : "";
+    const nextActivities = getActivitiesForSelection(structureOptions, domain, nextProject);
+    const nextActivity = nextActivities.includes(session.activity) ? session.activity : "";
+    onChange({
+      ...session,
+      domain,
+      project: nextProject,
+      activity: nextActivity,
+    });
+  };
+
+  const handleProjectChange = (project: string) => {
+    const nextActivities = getActivitiesForSelection(structureOptions, session.domain, project);
+    const nextActivity = nextActivities.includes(session.activity) ? session.activity : "";
+    onChange({
+      ...session,
+      project,
+      activity: nextActivity,
+    });
+  };
 
   return (
     <div className={`card output-workspace${isMinimal ? " output-workspace-minimal" : ""}`}>
@@ -308,7 +343,7 @@ export const OutputWorkspace = ({
                   </div>
                   <div className="field">
                     <label htmlFor="follow-up-date">Date</label>
-                    <input id="follow-up-date" type="date" value={reviewDate} onChange={(event) => setReviewDate(event.target.value)} />
+                    <DateInput id="follow-up-date" value={reviewDate} onChange={(event) => setReviewDate(event.target.value)} />
                   </div>
                   <div className="field">
                     <label htmlFor="follow-up-owner">Owner note</label>
@@ -467,12 +502,7 @@ export const OutputWorkspace = ({
         </div>
         <div className={`field${isMinimal ? " capture-meta-field" : ""}`}>
           <label htmlFor="output-date">Date</label>
-          <input
-            id="output-date"
-            type="date"
-            value={session.date}
-            onChange={(event) => onChange({ ...session, date: event.target.value })}
-          />
+          <DateInput id="output-date" value={session.date} onChange={(event) => onChange({ ...session, date: event.target.value })} />
         </div>
         <div className={`field capture-private-field${isMinimal ? " capture-meta-field" : ""}`}>
           <span>Private</span>
@@ -508,34 +538,34 @@ export const OutputWorkspace = ({
                 <label htmlFor="output-domain">Domain</label>
                 <TokenPicker
                   value={session.domain}
-                  savedOptions={savedDomains}
+                  savedOptions={structureOptions.domains.length ? structureOptions.domains : savedDomains}
                   suggestedOptions={suggestedDomains}
                   placeholder="Search or add domain"
                   suggestionSummary="Recent domains"
                   suggestionBadgeText="From saved Domains"
                   mode="single"
-                  onChange={(value) => onChange({ ...session, domain: value })}
+                  onChange={handleDomainChange}
                 />
               </div>
               <div className="field metadata-subfield">
                 <label htmlFor="output-project">Project</label>
                 <TokenPicker
                   value={session.project}
-                  savedOptions={savedProjects}
-                  suggestedOptions={suggestedProjects}
+                  savedOptions={projectPickerOptions}
+                  suggestedOptions={suggestedProjectsForSelection}
                   placeholder="Search or add project"
                   suggestionSummary="Recent projects"
                   suggestionBadgeText="From saved Projects"
                   mode="single"
-                  onChange={(value) => onChange({ ...session, project: value })}
+                  onChange={handleProjectChange}
                 />
               </div>
               <div className="field metadata-subfield">
                 <label htmlFor="output-activity">Activity</label>
                 <TokenPicker
                   value={session.activity}
-                  savedOptions={savedActivities}
-                  suggestedOptions={suggestedActivities}
+                  savedOptions={activityPickerOptions}
+                  suggestedOptions={suggestedActivitiesForSelection}
                   placeholder="Search or add activity"
                   suggestionSummary="Recent activities"
                   suggestionBadgeText="From saved Activities"

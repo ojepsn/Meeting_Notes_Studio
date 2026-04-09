@@ -63,6 +63,7 @@ import {
 } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW, type MetadataReviewState } from "../lib/metadata/review";
 import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links/entityLinks";
+import { buildStructureOptions, createEmptyStructureOptions } from "../lib/structure/options";
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
 
@@ -570,6 +571,22 @@ export const App = () => {
     }
     return rankSavedValues(activeSessions, snapshot.settings.savedActivities, (session) => (session.activity ? [session.activity] : []));
   }, [activeSessions, snapshot]);
+
+  const structureOptions = useMemo(
+    () =>
+      snapshot
+        ? buildStructureOptions({
+            savedDomains: snapshot.settings.savedDomains,
+            savedProjects: snapshot.settings.savedProjects,
+            savedActivities: snapshot.settings.savedActivities,
+            projectLinks: snapshot.settings.projectLinks,
+            sessions: snapshot.sessions,
+            todos: snapshot.todos,
+            activities: snapshot.activities,
+          })
+        : createEmptyStructureOptions(),
+    [snapshot],
+  );
 
   const suggestedTags = useMemo(() => {
     if (!snapshot) {
@@ -1945,6 +1962,7 @@ export const App = () => {
             suggestedDomains={suggestedDomains}
             savedActivities={snapshot.settings.savedActivities}
             suggestedActivities={suggestedActivities}
+            structureOptions={structureOptions}
             savedTags={snapshot.settings.savedTags}
             suggestedTags={suggestedTags}
             isTranscribingAudio={isTranscribingAudio}
@@ -1979,6 +1997,7 @@ export const App = () => {
             suggestedDomains={suggestedDomains}
             savedActivities={snapshot.settings.savedActivities}
             suggestedActivities={suggestedActivities}
+            structureOptions={structureOptions}
             savedTags={snapshot.settings.savedTags}
             suggestedTags={suggestedTags}
             isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
@@ -2503,6 +2522,7 @@ export const App = () => {
                 todos={snapshot.todos}
                 activities={snapshot.activities}
                 timeLogs={snapshot.timelogs}
+                structureOptions={structureOptions}
                 requestedTodoId={requestedTodoId}
                 requestedDomain={requestedTodoDomain}
                 requestedProject={requestedTodoProject}
@@ -2523,6 +2543,7 @@ export const App = () => {
                 activities={snapshot.activities}
                 todos={snapshot.todos}
                 timeLogs={snapshot.timelogs}
+                structureOptions={structureOptions}
                 linkedSessionStateByActivity={linkedSessionStateByActivity}
                 requestedActivityId={requestedActivityId}
                 requestedDomain={requestedActivityDomain}
@@ -2555,6 +2576,7 @@ export const App = () => {
                 activities={snapshot.activities}
                 calendarItems={snapshot.calendarItems ?? []}
                 settings={snapshot.settings}
+                structureOptions={structureOptions}
                 linkedSessionStateByActivity={linkedSessionStateByActivity}
                 onSaveSettings={(settings) => void saveSettings(settings)}
                 onCreateFromText={(date, startSlot, value, options) => void createCalendarEntryFromText(date, startSlot, value, options)}
@@ -2641,10 +2663,16 @@ export const App = () => {
                           ...snapshot.settings.projectLinks.filter((entry) => entry.project !== project.trim()),
                           { id: crypto.randomUUID(), project: project.trim(), domain: domain.trim() },
                         ]
-                      : snapshot.settings.projectLinks.filter((entry) => entry.project !== project.trim()),
-                  })
-                }
-                onRenameProject={(previousValue, nextValue) => void renameProjectValue(previousValue, nextValue)}
+                        : snapshot.settings.projectLinks.filter((entry) => entry.project !== project.trim()),
+                    })
+                  }
+                  onAddActivityToProject={(description, project, domain, type) =>
+                    void addActivity(description, type, {
+                      project,
+                      domain,
+                    })
+                  }
+                  onRenameProject={(previousValue, nextValue) => void renameProjectValue(previousValue, nextValue)}
                 onAssignProjectDomain={(project, domain) =>
                   void saveSettings({
                     ...snapshot.settings,
@@ -2731,6 +2759,7 @@ export const App = () => {
                 suggestedDomains={suggestedDomains}
                 savedActivities={snapshot.settings.savedActivities}
                 suggestedActivities={suggestedActivities}
+                structureOptions={structureOptions}
                 savedTags={snapshot.settings.savedTags}
                 suggestedTags={suggestedTags}
                 isTranscribingAudio={isTranscribingAudio}
@@ -2763,6 +2792,7 @@ export const App = () => {
                 suggestedDomains={suggestedDomains}
                 savedActivities={snapshot.settings.savedActivities}
                 suggestedActivities={suggestedActivities}
+                structureOptions={structureOptions}
                 savedTags={snapshot.settings.savedTags}
                 suggestedTags={suggestedTags}
                 isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}

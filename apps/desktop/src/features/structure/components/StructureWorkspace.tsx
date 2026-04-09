@@ -11,6 +11,7 @@ type StructureWorkspaceProps = {
   onAddDomain: (domain: string) => void;
   onRenameDomain: (previousValue: string, nextValue: string) => void;
   onAddProject: (project: string, domain: string) => void;
+  onAddActivityToProject: (description: string, project: string, domain: string, type: ActivityRecord["type"]) => void;
   onRenameProject: (previousValue: string, nextValue: string) => void;
   onAssignProjectDomain: (project: string, domain: string) => void;
   onOpenActivitiesForDomain: (domain: string) => void;
@@ -52,6 +53,7 @@ export const StructureWorkspace = ({
   onAddDomain,
   onRenameDomain,
   onAddProject,
+  onAddActivityToProject,
   onRenameProject,
   onAssignProjectDomain,
   onOpenActivitiesForDomain,
@@ -71,6 +73,9 @@ export const StructureWorkspace = ({
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [editingProjectDraft, setEditingProjectDraft] = useState("");
   const [editingProjectDomainDraft, setEditingProjectDomainDraft] = useState("");
+  const [addingActivityToProject, setAddingActivityToProject] = useState<string | null>(null);
+  const [projectActivityDraft, setProjectActivityDraft] = useState("");
+  const [projectActivityTypeDraft, setProjectActivityTypeDraft] = useState<ActivityRecord["type"]>("task");
   const [focus, setFocus] = useState<StructureFocus>(null);
 
   const projectDomainLookup = useMemo(
@@ -214,6 +219,16 @@ export const StructureWorkspace = ({
     setProjectDomainDraft("");
   };
 
+  const submitProjectActivity = (project: string, domain: string) => {
+    const next = projectActivityDraft.trim();
+    if (!next) return;
+    onAddActivityToProject(next, project, domain, projectActivityTypeDraft);
+    setAddingActivityToProject(null);
+    setProjectActivityDraft("");
+    setProjectActivityTypeDraft("task");
+    setFocus({ kind: "project", label: project || "No project" });
+  };
+
   const focusedActivities = useMemo(() => {
     if (!focus) return [];
     return activities.filter((activity) => {
@@ -246,7 +261,7 @@ export const StructureWorkspace = ({
       <div className="card-header session-editor-header-minimal">
         <div>
           <h2>Structure</h2>
-          <p className="muted">Create and maintain domains and projects here, then jump straight into the linked work when you need to act.</p>
+          <p className="muted">Create and organize domains, projects, and project-owned activities here. Use Activities as the operational work hub once something exists.</p>
         </div>
       </div>
 
@@ -520,7 +535,7 @@ export const StructureWorkspace = ({
             <div className="card-header">
               <div>
                 <h3>Projects</h3>
-                <p className="muted">Project-level structure with direct paths into the linked work.</p>
+                <p className="muted">This is the authoritative place to create activities inside projects, then open them in Activities for execution.</p>
               </div>
             </div>
             <div className="time-log-table">
@@ -597,6 +612,19 @@ export const StructureWorkspace = ({
                               className="small-button"
                               type="button"
                               onClick={() => {
+                                setAddingActivityToProject((current) => (current === row.label ? null : row.label));
+                                setProjectActivityDraft("");
+                                setProjectActivityTypeDraft("task");
+                              }}
+                            >
+                              {addingActivityToProject === row.label ? "Close new activity" : "New activity"}
+                            </button>
+                          ) : null}
+                          {project ? (
+                            <button
+                              className="small-button"
+                              type="button"
+                              onClick={() => {
                                 setEditingProject(row.label);
                                 setEditingProjectDraft(row.label);
                                 setEditingProjectDomainDraft(projectDomainLookup[row.label] || row.domain || "");
@@ -620,6 +648,39 @@ export const StructureWorkspace = ({
                         </div>
                       ) : null}
                     </div>
+                    {addingActivityToProject === row.label ? (
+                      <div className="todos-workspace-input-row structure-inline-create-row">
+                        <div className="field">
+                          <label htmlFor={`structure-project-activity-type-${row.label}`}>Type</label>
+                          <select
+                            id={`structure-project-activity-type-${row.label}`}
+                            value={projectActivityTypeDraft}
+                            onChange={(event) => setProjectActivityTypeDraft(event.target.value === "meeting" ? "meeting" : "task")}
+                          >
+                            <option value="task">Task</option>
+                            <option value="meeting">Meeting</option>
+                          </select>
+                        </div>
+                        <div className="field field-wide">
+                          <label htmlFor={`structure-project-activity-draft-${row.label}`}>New activity in {row.label}</label>
+                          <input
+                            id={`structure-project-activity-draft-${row.label}`}
+                            value={projectActivityDraft}
+                            onChange={(event) => setProjectActivityDraft(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" && !event.shiftKey) {
+                                event.preventDefault();
+                                submitProjectActivity(project, row.domain || "");
+                              }
+                            }}
+                            placeholder={projectActivityTypeDraft === "meeting" ? "Add a meeting activity inside this project" : "Add an activity inside this project"}
+                          />
+                        </div>
+                        <button className="primary-button" type="button" onClick={() => submitProjectActivity(project, row.domain || "")}>
+                          Add
+                        </button>
+                      </div>
+                    ) : null}
                     <div className="structure-preview-row">
                       {row.preview.activities.length ? (
                         <div className="structure-preview-group">

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ActivityRecord, TimeLogRecord, TimeReportPreset, TodoRecord } from "@notesmith/domain";
+import { DateInput } from "../../../components/DateInput";
 import { saveTextFile } from "../../../lib/storage/desktopStorage";
 
 type TimeWorkspaceProps = {
@@ -98,7 +99,6 @@ export const TimeWorkspace = ({
   onDeleteReportPreset,
 }: TimeWorkspaceProps) => {
   const initialWeek = getPresetRange("this-week");
-  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [datePreset, setDatePreset] = useState<DatePreset>("this-week");
   const [fromDate, setFromDate] = useState(initialWeek.fromDate);
   const [toDate, setToDate] = useState(initialWeek.toDate);
@@ -283,25 +283,11 @@ export const TimeWorkspace = ({
   );
   const stackedSummaryTotal = Math.max(1, stackedSummary.reduce((sum, entry) => sum + entry.minutes, 0));
 
-  const selectedLog = useMemo(
-    () => (selectedLogId ? filteredLogs.find((log) => log.id === selectedLogId) ?? null : recentLogs[0] ?? null),
-    [filteredLogs, recentLogs, selectedLogId],
-  );
-
   const applyPreset = (preset: Exclude<DatePreset, "custom">) => {
     const range = getPresetRange(preset);
     setDatePreset(preset);
     setFromDate(range.fromDate);
     setToDate(range.toDate);
-  };
-
-  const openSelectedTarget = () => {
-    if (!selectedLog) return;
-    if (selectedLog.targetType === "todo") {
-      onOpenTodoDetail(selectedLog.targetId);
-      return;
-    }
-    onOpenActivityDetail(selectedLog.targetId);
   };
 
   const exportCsv = async () => {
@@ -424,11 +410,11 @@ export const TimeWorkspace = ({
         <div className="todos-workspace-toolbar">
           <div className="field">
             <label htmlFor="time-filter-from">From</label>
-            <input id="time-filter-from" type="date" value={fromDate} onChange={(event) => { setDatePreset("custom"); setFromDate(event.target.value); }} />
+            <DateInput id="time-filter-from" value={fromDate} onChange={(event) => { setDatePreset("custom"); setFromDate(event.target.value); }} />
           </div>
           <div className="field">
             <label htmlFor="time-filter-to">To</label>
-            <input id="time-filter-to" type="date" value={toDate} onChange={(event) => { setDatePreset("custom"); setToDate(event.target.value); }} />
+            <DateInput id="time-filter-to" value={toDate} onChange={(event) => { setDatePreset("custom"); setToDate(event.target.value); }} />
           </div>
           <div className="field">
             <label htmlFor="time-filter-project">Project</label>
@@ -651,66 +637,103 @@ export const TimeWorkspace = ({
           <div className="sidebar-card">
             <div className="card-header">
               <div>
-                <h3>Recent logs</h3>
-                <p className="muted">This is the fastest place to repair missed stop times or adjust logged durations.</p>
+                <h3>Time logs</h3>
+                <p className="muted">Edit timing and comments inline here. The table stays dense so many rows fit on screen.</p>
               </div>
             </div>
-            <div className="time-log-table">
-              {recentLogs.length ? recentLogs.map((log) => (
-                <button key={log.id} type="button" className={`timelog-list-item time-log-row${selectedLog?.id === log.id ? " time-log-row-selected" : ""}`} onClick={() => setSelectedLogId(log.id)}>
-                  <div><strong>{log.title}</strong><div className="tiny-text">{log.contextLabel}</div></div>
-                  <span>{log.date}</span>
-                  <span>{log.startTime} - {log.endTime}</span>
-                  <span>{formatMinutes(log.durationMinutes)}</span>
-                </button>
+            <div className="time-log-editor-table">
+              {filteredLogs.length ? filteredLogs.map((log) => (
+                <div key={log.id} className="time-log-editor-row">
+                  <button
+                    type="button"
+                    className="time-log-source-button"
+                    onClick={() => (log.targetType === "todo" ? onOpenTodoDetail(log.targetId) : onOpenActivityDetail(log.targetId))}
+                  >
+                    <strong>{log.title}</strong>
+                    <span className="tiny-text">{log.contextLabel}</span>
+                  </button>
+                  <DateInput
+                    value={log.date}
+                    onChange={(event) =>
+                      onSaveTimeLog({
+                        ...log,
+                        date: event.target.value,
+                        durationMinutes: calculateDurationMinutes(event.target.value, log.startTime, log.endTime),
+                        updatedAt: new Date().toISOString(),
+                      })
+                    }
+                  />
+                  <input
+                    type="time"
+                    step={300}
+                    value={log.startTime}
+                    onChange={(event) =>
+                      onSaveTimeLog({
+                        ...log,
+                        startTime: event.target.value,
+                        durationMinutes: calculateDurationMinutes(log.date, event.target.value, log.endTime),
+                        updatedAt: new Date().toISOString(),
+                      })
+                    }
+                  />
+                  <input
+                    type="time"
+                    step={300}
+                    value={log.endTime}
+                    onChange={(event) =>
+                      onSaveTimeLog({
+                        ...log,
+                        endTime: event.target.value,
+                        durationMinutes: calculateDurationMinutes(log.date, log.startTime, event.target.value),
+                        updatedAt: new Date().toISOString(),
+                      })
+                    }
+                  />
+                  <span className="status-chip">{formatMinutes(log.durationMinutes)}</span>
+                  <input
+                    value={log.notes}
+                    onChange={(event) =>
+                      onSaveTimeLog({
+                        ...log,
+                        notes: event.target.value,
+                        updatedAt: new Date().toISOString(),
+                      })
+                    }
+                    placeholder="Comment"
+                  />
+                  <div className="time-log-inline-actions">
+                    <button className="small-button" type="button" onClick={() => onStartTracking(log.targetType, log.targetId)}>
+                      Start
+                    </button>
+                    <button className="small-button" type="button" onClick={() => onStopTracking(log.targetType, log.targetId)}>
+                      Stop
+                    </button>
+                    <button className="small-button danger-button" type="button" onClick={() => onDeleteTimeLog(log.id)}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
               )) : <div className="empty-state-card compact-empty-state"><h3>No time logs yet</h3><p>Start and stop work from Todos or Activities, then correct the logs here when needed.</p></div>}
             </div>
           </div>
         </section>
 
         <aside className="time-workspace-detail">
-          {selectedLog ? (
-            <div className="stack">
-              <div className="card-header">
-                <div>
-                  <h3>{selectedLog.title}</h3>
-                  <div className="calendar-editor-meta">
-                    <span className="status-chip">{selectedLog.targetType === "activity" ? "Activity" : "Todo"}</span>
-                    <span className="status-chip">{selectedLog.contextLabel}</span>
-                  </div>
-                </div>
-                <div className="page-actions">
-                  <button className="small-button" type="button" onClick={openSelectedTarget}>Open source</button>
-                  <button className="small-button danger-button" type="button" onClick={() => onDeleteTimeLog(selectedLog.id)}>Delete</button>
-                </div>
-              </div>
-              <div className="inline-row">
-                <div className="field">
-                  <label htmlFor="time-log-date">Date</label>
-                  <input id="time-log-date" type="date" value={selectedLog.date} onChange={(event) => onSaveTimeLog({ ...selectedLog, date: event.target.value, durationMinutes: calculateDurationMinutes(event.target.value, selectedLog.startTime, selectedLog.endTime), updatedAt: new Date().toISOString() })} />
-                </div>
-                <div className="field">
-                  <label htmlFor="time-log-start">Start</label>
-                  <input id="time-log-start" type="time" step={300} value={selectedLog.startTime} onChange={(event) => onSaveTimeLog({ ...selectedLog, startTime: event.target.value, durationMinutes: calculateDurationMinutes(selectedLog.date, event.target.value, selectedLog.endTime), updatedAt: new Date().toISOString() })} />
-                </div>
-                <div className="field">
-                  <label htmlFor="time-log-end">End</label>
-                  <input id="time-log-end" type="time" step={300} value={selectedLog.endTime} onChange={(event) => onSaveTimeLog({ ...selectedLog, endTime: event.target.value, durationMinutes: calculateDurationMinutes(selectedLog.date, selectedLog.startTime, event.target.value), updatedAt: new Date().toISOString() })} />
-                </div>
-              </div>
-              <div className="field">
-                <label htmlFor="time-log-notes">Notes</label>
-                <textarea id="time-log-notes" rows={5} value={selectedLog.notes} onChange={(event) => onSaveTimeLog({ ...selectedLog, notes: event.target.value, updatedAt: new Date().toISOString() })} />
-              </div>
-              <div className="inline-row">
-                <div className="sidebar-card compact-metric-card"><span className="tiny-text">Duration</span><strong>{formatMinutes(selectedLog.durationMinutes)}</strong></div>
-                <div className="page-actions">
-                  <button className="small-button" type="button" onClick={() => onStartTracking(selectedLog.targetType, selectedLog.targetId)}>Start</button>
-                  <button className="small-button" type="button" onClick={() => onStopTracking(selectedLog.targetType, selectedLog.targetId)}>Stop</button>
-                </div>
+          <div className="stack">
+            <div className="sidebar-card">
+              <h3>Editing guide</h3>
+              <div className="stack tight-stack">
+                <div className="list-item"><strong>One row = one log</strong><span>Change date, start, stop, and comment inline.</span></div>
+                <div className="list-item"><strong>Start / Stop</strong><span>Use these to continue logging on the same todo or activity naturally.</span></div>
+                <div className="list-item"><strong>Open source</strong><span>Click a title to jump back to the todo or activity behind the log.</span></div>
               </div>
             </div>
-          ) : <div className="empty-state-card compact-empty-state"><h3>Select a time log</h3><p>Choose a recent log to correct its timing, notes, or source context.</p></div>}
+            <div className="sidebar-card">
+              <h3>Visible rows</h3>
+              <div className="time-summary-stat">{filteredLogs.length}</div>
+              <p className="muted">All filtered logs are shown in the editable table, not only the most recent ones.</p>
+            </div>
+          </div>
         </aside>
       </div>
     </div>

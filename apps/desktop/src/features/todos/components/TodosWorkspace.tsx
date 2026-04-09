@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActivityRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import { DateInput } from "../../../components/DateInput";
+import { TokenPicker } from "../../../components/TokenPicker";
+import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
+import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog, isTimeLogRunning } from "../../../lib/time/tracking";
 
 type TodoSortKey = "dueDate" | "doOn" | "createdAt" | "description" | "domain" | "project" | "activity";
 
@@ -7,6 +11,7 @@ interface TodosWorkspaceProps {
   todos: TodoRecord[];
   activities: ActivityRecord[];
   timeLogs: TimeLogRecord[];
+  structureOptions: StructureOptions;
   requestedTodoId?: string | null;
   requestedDomain?: string | null;
   requestedProject?: string | null;
@@ -71,6 +76,7 @@ export const TodosWorkspace = ({
   todos,
   activities,
   timeLogs,
+  structureOptions,
   requestedTodoId,
   requestedDomain,
   requestedProject,
@@ -96,6 +102,7 @@ export const TodosWorkspace = ({
   const [editingDraft, setEditingDraft] = useState<TodoRecord>(createBlankTodoDraft());
   const [editingTimeLogId, setEditingTimeLogId] = useState<string | null>(null);
   const [timeLogDraft, setTimeLogDraft] = useState<TimeLogRecord | null>(null);
+  const [now, setNow] = useState(() => new Date());
   const detailsEditorRef = useRef<HTMLDivElement | null>(null);
 
   const activityOptions = useMemo(
@@ -107,13 +114,10 @@ export const TodosWorkspace = ({
     () => Object.fromEntries(activities.map((activity) => [activity.id, activity])) as Record<string, ActivityRecord>,
     [activities],
   );
-  const domainOptions = useMemo(
-    () => Array.from(new Set(todos.map((todo) => todo.domain).filter(Boolean))).sort(),
-    [todos],
-  );
+  const domainOptions = useMemo(() => structureOptions.domains, [structureOptions.domains]);
   const projectOptions = useMemo(
-    () => Array.from(new Set(todos.map((todo) => todo.project).filter(Boolean))).sort(),
-    [todos],
+    () => getProjectsForDomain(structureOptions, domainFilter === "all" ? "" : domainFilter),
+    [domainFilter, structureOptions],
   );
 
   const openTodos = useMemo(() => todos.filter((todo) => !todo.isDone), [todos]);
@@ -130,10 +134,16 @@ export const TodosWorkspace = ({
   const runningTodos = useMemo(
     () =>
       openTodos.filter((todo) =>
-        (timeLogsByTodoId.get(todo.id) || []).some((entry) => entry.startTime === entry.endTime),
+        (timeLogsByTodoId.get(todo.id) || []).some(isTimeLogRunning),
       ),
     [openTodos, timeLogsByTodoId],
   );
+
+  useEffect(() => {
+    if (!runningTodos.length) return;
+    const intervalId = window.setInterval(() => setNow(new Date()), 30000);
+    return () => window.clearInterval(intervalId);
+  }, [runningTodos.length]);
 
   const filteredTodos = useMemo(() => {
     const normalized = normalizeValue(query);
@@ -196,6 +206,13 @@ export const TodosWorkspace = ({
   }, [requestedProject]);
 
   useEffect(() => {
+    if (domainFilter === "all") return;
+    if (projectFilter === "all") return;
+    if (projectOptions.includes(projectFilter)) return;
+    setProjectFilter("all");
+  }, [domainFilter, projectFilter, projectOptions]);
+
+  useEffect(() => {
     if (requestedTodoId) {
       setSelectedTodoId(requestedTodoId);
     }
@@ -242,8 +259,45 @@ export const TodosWorkspace = ({
   };
 
   const currentTimeLogs = selectedTodoId ? timeLogsByTodoId.get(selectedTodoId) || [] : [];
-  const hasOpenTimer = currentTimeLogs.some((entry) => entry.startTime === entry.endTime);
+  const activeTimeLog = getRunningTimeLog(currentTimeLogs);
+  const hasOpenTimer = Boolean(activeTimeLog);
   const currentActivity = editingDraft.activityId ? activityLookup[editingDraft.activityId] : null;
+  const editorProjectOptions = getProjectsForDomain(structureOptions, editingDraft.domain);
+  const editorActivityOptions = getActivitiesForSelection(structureOptions, editingDraft.domain, editingDraft.project);
+  const linkedActivityOptions = activityOptions.filter((activity) => {
+    if (activity.id === editingDraft.activityId) return true;
+    if (editingDraft.domain && activity.domain && activity.domain !== editingDraft.domain) return false;
+    if (editingDraft.project && activity.project && activity.project !== editingDraft.project) return false;
+    return true;
+  });
+
+  const handleDraftDomainChange = (domain: string) => {
+    const nextProjects = getProjectsForDomain(structureOptions, domain);
+    const nextProject = nextProjects.includes(editingDraft.project) ? editingDraft.project : "";
+    const nextActivities = getActivitiesForSelection(structureOptions, domain, nextProject);
+    const nextActivity = nextActivities.includes(editingDraft.activity) ? editingDraft.activity : "";
+    const linkedActivity = editingDraft.activityId ? activityLookup[editingDraft.activityId] : null;
+    const nextActivityId =
+      linkedActivity &&
+      (!domain || !linkedActivity.domain || linkedActivity.domain === domain) &&
+      (!nextProject || !linkedActivity.project || linkedActivity.project === nextProject)
+        ? editingDraft.activityId
+        : "";
+    setEditingDraft({ ...editingDraft, domain, project: nextProject, activity: nextActivity, activityId: nextActivityId });
+  };
+
+  const handleDraftProjectChange = (project: string) => {
+    const nextActivities = getActivitiesForSelection(structureOptions, editingDraft.domain, project);
+    const nextActivity = nextActivities.includes(editingDraft.activity) ? editingDraft.activity : "";
+    const linkedActivity = editingDraft.activityId ? activityLookup[editingDraft.activityId] : null;
+    const nextActivityId =
+      linkedActivity &&
+      (!editingDraft.domain || !linkedActivity.domain || linkedActivity.domain === editingDraft.domain) &&
+      (!project || !linkedActivity.project || linkedActivity.project === project)
+        ? editingDraft.activityId
+        : "";
+    setEditingDraft({ ...editingDraft, project, activity: nextActivity, activityId: nextActivityId });
+  };
 
   const clearSelection = () => {
     setSelectedTodoId(null);
@@ -311,10 +365,10 @@ export const TodosWorkspace = ({
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="todos-workspace-project">Project</label>
-              <select id="todos-workspace-project" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
-                <option value="all">All</option>
+                <div className="field">
+                  <label htmlFor="todos-workspace-project">Project</label>
+                  <select id="todos-workspace-project" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+                    <option value="all">All</option>
                 {projectOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
@@ -340,11 +394,26 @@ export const TodosWorkspace = ({
             <div className="todos-running-strip">
               <strong>Running now</strong>
               <div className="todos-running-list">
-                {runningTodos.map((todo) => (
-                  <button key={todo.id} type="button" className="status-chip" onClick={() => setSelectedTodoId(todo.id)}>
-                    {todo.description}
-                  </button>
-                ))}
+                {runningTodos.map((todo) => {
+                  const runningLog = getRunningTimeLog(timeLogsByTodoId.get(todo.id) || []);
+                  const elapsedLabel = runningLog
+                    ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now))
+                    : "Running";
+                  return (
+                    <div key={todo.id} className="todos-running-chip">
+                      <button type="button" className="status-chip" onClick={() => setSelectedTodoId(todo.id)}>
+                        {todo.description} • {elapsedLabel}
+                      </button>
+                      <button
+                        className="small-button"
+                        type="button"
+                        onClick={() => onStopTracking("todo", todo.id)}
+                      >
+                        Stop
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -354,7 +423,11 @@ export const TodosWorkspace = ({
               filteredTodos.map((todo) => {
                 const logs = timeLogsByTodoId.get(todo.id) || [];
                 const totalMinutes = logs.reduce((sum, entry) => sum + entry.durationMinutes, 0);
-                const running = logs.some((entry) => entry.startTime === entry.endTime);
+                const runningLog = getRunningTimeLog(logs);
+                const running = Boolean(runningLog);
+                const elapsedLabel = runningLog
+                  ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now))
+                  : "";
                 return (
                   <button
                     key={todo.id}
@@ -378,8 +451,24 @@ export const TodosWorkspace = ({
                         <span>{activityLookup[todo.activityId]?.description || todo.activity || "Unassigned"}</span>
                         <span>{todo.project || "No project"}</span>
                         <span>{todo.dueDate || todo.doOn || "-"}</span>
-                        <span>{running ? "Running" : totalMinutes ? `${totalMinutes}m` : "No time"}</span>
+                        <span>{running ? `Running • ${elapsedLabel}` : totalMinutes ? formatTrackedMinutes(totalMinutes) : "No time"}</span>
                       </div>
+                    </div>
+                    <div className="todos-compact-item-actions">
+                      <button
+                        className={`small-button${running ? " primary-button" : ""}`}
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (running) {
+                            onStopTracking("todo", todo.id);
+                            return;
+                          }
+                          onStartTracking("todo", todo.id);
+                        }}
+                      >
+                        {running ? "Stop" : "Start"}
+                      </button>
                     </div>
                   </button>
                 );
@@ -462,7 +551,7 @@ export const TodosWorkspace = ({
                     }}
                   >
                     <option value="">Unassigned</option>
-                    {activityOptions.map((activity) => (
+                    {linkedActivityOptions.map((activity) => (
                       <option key={activity.id} value={activity.id}>
                         {activity.description}
                       </option>
@@ -472,22 +561,54 @@ export const TodosWorkspace = ({
 
                 <div className="field">
                   <label htmlFor="todo-edit-domain">Domain</label>
-                  <input id="todo-edit-domain" value={editingDraft.domain} onChange={(event) => setEditingDraft({ ...editingDraft, domain: event.target.value })} />
+                  <TokenPicker
+                    value={editingDraft.domain}
+                    savedOptions={structureOptions.domains}
+                    suggestedOptions={structureOptions.domains}
+                    placeholder="Search or add domain"
+                    suggestionSummary="Domains"
+                    suggestionBadgeText="Available"
+                    mode="single"
+                    onChange={handleDraftDomainChange}
+                  />
                 </div>
 
                 <div className="field">
                   <label htmlFor="todo-edit-project">Project</label>
-                  <input id="todo-edit-project" value={editingDraft.project} onChange={(event) => setEditingDraft({ ...editingDraft, project: event.target.value })} />
+                  <TokenPicker
+                    value={editingDraft.project}
+                    savedOptions={editorProjectOptions}
+                    suggestedOptions={editorProjectOptions}
+                    placeholder="Search or add project"
+                    suggestionSummary="Projects"
+                    suggestionBadgeText="Available"
+                    mode="single"
+                    onChange={handleDraftProjectChange}
+                  />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="todo-edit-activity-label">Activity</label>
+                  <TokenPicker
+                    value={editingDraft.activity}
+                    savedOptions={editorActivityOptions}
+                    suggestedOptions={editorActivityOptions}
+                    placeholder="Search or add activity"
+                    suggestionSummary="Activities"
+                    suggestionBadgeText="Available"
+                    mode="single"
+                    onChange={(value) => setEditingDraft({ ...editingDraft, activity: value })}
+                  />
                 </div>
 
                 <div className="field">
                   <label htmlFor="todo-edit-do-on">Do on</label>
-                  <input id="todo-edit-do-on" type="date" value={editingDraft.doOn} onChange={(event) => setEditingDraft({ ...editingDraft, doOn: event.target.value })} />
+                  <DateInput id="todo-edit-do-on" value={editingDraft.doOn} onChange={(event) => setEditingDraft({ ...editingDraft, doOn: event.target.value })} />
                 </div>
 
                 <div className="field">
                   <label htmlFor="todo-edit-due-date">Due date</label>
-                  <input id="todo-edit-due-date" type="date" value={editingDraft.dueDate} onChange={(event) => setEditingDraft({ ...editingDraft, dueDate: event.target.value })} />
+                  <DateInput id="todo-edit-due-date" value={editingDraft.dueDate} onChange={(event) => setEditingDraft({ ...editingDraft, dueDate: event.target.value })} />
                 </div>
 
                 <div className="field activity-private-field">
@@ -521,6 +642,11 @@ export const TodosWorkspace = ({
                 <summary>Time logs</summary>
                 <div className="workspace-disclosure-body stack">
                   <div className="page-actions">
+                    <span className="status-chip">
+                      {hasOpenTimer && activeTimeLog
+                        ? `Running • ${formatTrackedMinutes(calculateLiveDurationMinutes(activeTimeLog, now))}`
+                        : `${currentTimeLogs.reduce((sum, entry) => sum + entry.durationMinutes, 0)} min logged`}
+                    </span>
                     <button className="primary-button" type="button" onClick={() => (hasOpenTimer ? onStopTracking("todo", editingDraft.id) : onStartTracking("todo", editingDraft.id))}>
                       {hasOpenTimer ? "Stop" : "Start"}
                     </button>
@@ -537,7 +663,7 @@ export const TodosWorkspace = ({
                       <div className="metadata-triplet-grid">
                         <div className="field metadata-subfield">
                           <label>Date</label>
-                          <input type="date" value={timeLogDraft.date} onChange={(event) => setTimeLogDraft({ ...timeLogDraft, date: event.target.value, durationMinutes: calculateDurationMinutes(event.target.value, timeLogDraft.startTime, timeLogDraft.endTime) })} />
+                          <DateInput value={timeLogDraft.date} onChange={(event) => setTimeLogDraft({ ...timeLogDraft, date: event.target.value, durationMinutes: calculateDurationMinutes(event.target.value, timeLogDraft.startTime, timeLogDraft.endTime) })} />
                         </div>
                         <div className="field metadata-subfield">
                           <label>Start</label>

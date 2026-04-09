@@ -1,6 +1,8 @@
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
+import { DateInput } from "../../../components/DateInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
+import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import type { RecordingMode } from "../../../lib/files/recording";
 import {
   type CaptureWorkspaceDensity,
@@ -26,6 +28,7 @@ interface SessionEditorProps {
   suggestedDomains: string[];
   savedActivities: string[];
   suggestedActivities: string[];
+  structureOptions: StructureOptions;
   savedTags: string[];
   suggestedTags: string[];
   isTranscribingAudio: boolean;
@@ -117,6 +120,7 @@ export const SessionEditor = ({
   suggestedDomains,
   savedActivities,
   suggestedActivities,
+  structureOptions,
   savedTags,
   suggestedTags,
   isTranscribingAudio,
@@ -156,6 +160,14 @@ export const SessionEditor = ({
     })) ?? [];
   const imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
   const otherAttachments = attachments.filter((attachment) => attachment.kind !== "image");
+  const filteredProjects = getProjectsForDomain(structureOptions, session.domain);
+  const filteredActivities = getActivitiesForSelection(structureOptions, session.domain, session.project);
+  const projectPickerOptions = filteredProjects.length ? filteredProjects : savedProjects;
+  const activityPickerOptions = filteredActivities.length ? filteredActivities : savedActivities;
+  const filteredProjectSet = new Set(projectPickerOptions);
+  const filteredActivitySet = new Set(activityPickerOptions);
+  const suggestedProjectsForSelection = suggestedProjects.filter((project) => filteredProjectSet.has(project));
+  const suggestedActivitiesForSelection = suggestedActivities.filter((activity) => filteredActivitySet.has(activity));
   const modeMeta = CAPTURE_MODE_META[session.captureMode];
   const showMeetingMeta = session.captureMode === "meeting-note";
   const showQuickHighlights = session.captureMode === "meeting-note";
@@ -188,6 +200,29 @@ export const SessionEditor = ({
       templateId: nextTemplate?.id ?? session.templateId,
       customFieldValues: nextFieldValues,
       excludedSectionIds: [],
+    });
+  };
+
+  const handleDomainChange = (domain: string) => {
+    const nextProjects = getProjectsForDomain(structureOptions, domain);
+    const nextProject = nextProjects.includes(session.project) ? session.project : "";
+    const nextActivities = getActivitiesForSelection(structureOptions, domain, nextProject);
+    const nextActivity = nextActivities.includes(session.activity) ? session.activity : "";
+    onChange({
+      ...session,
+      domain,
+      project: nextProject,
+      activity: nextActivity,
+    });
+  };
+
+  const handleProjectChange = (project: string) => {
+    const nextActivities = getActivitiesForSelection(structureOptions, session.domain, project);
+    const nextActivity = nextActivities.includes(session.activity) ? session.activity : "";
+    onChange({
+      ...session,
+      project,
+      activity: nextActivity,
     });
   };
 
@@ -398,7 +433,7 @@ export const SessionEditor = ({
             </div>
             <div className="field capture-meta-field">
               <label htmlFor="session-date">Date</label>
-              <input id="session-date" type="date" value={session.date} onChange={(event) => update("date", event.target.value)} />
+              <DateInput id="session-date" value={session.date} onChange={(event) => update("date", event.target.value)} />
             </div>
             <div className="field capture-meta-field">
               <label htmlFor="session-start">Start time</label>
@@ -417,7 +452,7 @@ export const SessionEditor = ({
             <div className="workspace-disclosure-body form-grid">
               <div className="field">
                 <label htmlFor="session-date">Date</label>
-                <input id="session-date" type="date" value={session.date} onChange={(event) => update("date", event.target.value)} />
+                <DateInput id="session-date" value={session.date} onChange={(event) => update("date", event.target.value)} />
               </div>
               <div className="field">
                 <label htmlFor="session-participants">People</label>
@@ -435,34 +470,34 @@ export const SessionEditor = ({
                     <label htmlFor="session-domain">Domain</label>
                     <TokenPicker
                       value={session.domain}
-                      savedOptions={savedDomains}
+                      savedOptions={structureOptions.domains.length ? structureOptions.domains : savedDomains}
                       suggestedOptions={suggestedDomains}
                       placeholder="Search or add domain"
                       suggestionSummary="Recent domains"
                       suggestionBadgeText="From saved Domains"
                       mode="single"
-                      onChange={(value) => update("domain", value)}
+                      onChange={handleDomainChange}
                     />
                   </div>
                   <div className="field metadata-subfield">
                     <label htmlFor="session-project">Project</label>
                     <TokenPicker
                       value={session.project}
-                      savedOptions={savedProjects}
-                      suggestedOptions={suggestedProjects}
+                      savedOptions={projectPickerOptions}
+                      suggestedOptions={suggestedProjectsForSelection}
                       placeholder="Search or add project"
                       suggestionSummary="Recent projects"
                       suggestionBadgeText="From saved Projects"
                       mode="single"
-                      onChange={(value) => update("project", value)}
+                      onChange={handleProjectChange}
                     />
                   </div>
                   <div className="field metadata-subfield">
                     <label htmlFor="session-activity">Activity</label>
                     <TokenPicker
                       value={session.activity}
-                      savedOptions={savedActivities}
-                      suggestedOptions={suggestedActivities}
+                      savedOptions={activityPickerOptions}
+                      suggestedOptions={suggestedActivitiesForSelection}
                       placeholder="Search or add activity"
                       suggestionSummary="Recent activities"
                       suggestionBadgeText="From saved Activities"
@@ -500,7 +535,7 @@ export const SessionEditor = ({
             <div className="workspace-disclosure-body form-grid">
               <div className="field">
                 <label htmlFor="session-date">Date</label>
-                <input id="session-date" type="date" value={session.date} onChange={(event) => update("date", event.target.value)} />
+                <DateInput id="session-date" value={session.date} onChange={(event) => update("date", event.target.value)} />
               </div>
               <div className="field">
                 <label htmlFor="session-time">Time</label>
@@ -522,34 +557,34 @@ export const SessionEditor = ({
                     <label htmlFor="session-domain">Domain</label>
                     <TokenPicker
                       value={session.domain}
-                      savedOptions={savedDomains}
+                      savedOptions={structureOptions.domains.length ? structureOptions.domains : savedDomains}
                       suggestedOptions={suggestedDomains}
                       placeholder="Search or add domain"
                       suggestionSummary="Recent domains"
                       suggestionBadgeText="From saved Domains"
                       mode="single"
-                      onChange={(value) => update("domain", value)}
+                      onChange={handleDomainChange}
                     />
                   </div>
                   <div className="field metadata-subfield">
                     <label htmlFor="session-project">Project</label>
                     <TokenPicker
                       value={session.project}
-                      savedOptions={savedProjects}
-                      suggestedOptions={suggestedProjects}
+                      savedOptions={projectPickerOptions}
+                      suggestedOptions={suggestedProjectsForSelection}
                       placeholder="Search or add project"
                       suggestionSummary="Recent projects"
                       suggestionBadgeText="From saved Projects"
                       mode="single"
-                      onChange={(value) => update("project", value)}
+                      onChange={handleProjectChange}
                     />
                   </div>
                   <div className="field metadata-subfield">
                     <label htmlFor="session-activity">Activity</label>
                     <TokenPicker
                       value={session.activity}
-                      savedOptions={savedActivities}
-                      suggestedOptions={suggestedActivities}
+                      savedOptions={activityPickerOptions}
+                      suggestedOptions={suggestedActivitiesForSelection}
                       placeholder="Search or add activity"
                       suggestionSummary="Recent activities"
                       suggestionBadgeText="From saved Activities"

@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActivityRecord, CalendarItemRecord, LocalAppSettings, TodoRecord } from "@notesmith/domain";
+import { DateInput } from "../../../components/DateInput";
+import { TokenPicker } from "../../../components/TokenPicker";
+import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 
 const TOTAL_SLOTS = 24 * 12;
 const MINUTES_PER_SLOT = 5;
@@ -94,6 +97,7 @@ interface CalendarWorkspaceProps {
   activities: ActivityRecord[];
   calendarItems: CalendarItemRecord[];
   settings: LocalAppSettings;
+  structureOptions: StructureOptions;
   linkedSessionStateByActivity: Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>;
   onSaveSettings: (settings: LocalAppSettings) => void;
   onCreateFromText: (
@@ -124,6 +128,7 @@ export const CalendarWorkspace = ({
   activities,
   calendarItems,
   settings,
+  structureOptions,
   linkedSessionStateByActivity,
   onSaveSettings,
   onCreateFromText,
@@ -167,6 +172,7 @@ export const CalendarWorkspace = ({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const splitterDraggingRef = useRef(false);
   const scrollPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draggedItemIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     onFullScreenChange?.(isFullScreen);
@@ -275,6 +281,29 @@ export const CalendarWorkspace = ({
     () => (selectedItemId ? items.find((item) => item.id === selectedItemId) ?? null : null),
     [items, selectedItemId],
   );
+  const editorProjectOptions = editorDraft ? getProjectsForDomain(structureOptions, editorDraft.domain) : [];
+  const editorActivityOptions = editorDraft ? getActivitiesForSelection(structureOptions, editorDraft.domain, editorDraft.project) : [];
+  const linkedActivityOptions = topLevelActivities.filter((activity) => {
+    if (!editorDraft) return true;
+    if (activity.id === editorDraft.targetId) return false;
+    if (
+      editorDraft.targetType === "activity" &&
+      editorDraft.parentActivityId &&
+      activity.id === editorDraft.parentActivityId
+    ) {
+      return true;
+    }
+    if (
+      editorDraft.targetType === "todo" &&
+      editorDraft.activityId &&
+      activity.id === editorDraft.activityId
+    ) {
+      return true;
+    }
+    if (editorDraft.domain && activity.domain && activity.domain !== editorDraft.domain) return false;
+    if (editorDraft.project && activity.project && activity.project !== editorDraft.project) return false;
+    return true;
+  });
 
   useEffect(() => {
     const scroller = scrollRef.current;
@@ -445,6 +474,51 @@ export const CalendarWorkspace = ({
     onUpdateCalendarItem(editorDraft.itemId, { date: editorDraft.doOn, startSlot, durationSlots });
   };
 
+  const handleEditorDomainChange = (domain: string) => {
+    if (!editorDraft) return;
+    const nextProjects = getProjectsForDomain(structureOptions, domain);
+    const nextProject = nextProjects.includes(editorDraft.project) ? editorDraft.project : "";
+    const nextActivities = getActivitiesForSelection(structureOptions, domain, nextProject);
+    const nextActivity = nextActivities.includes(editorDraft.activity) ? editorDraft.activity : "";
+    const linkedId = editorDraft.targetType === "todo" ? editorDraft.activityId : editorDraft.parentActivityId;
+    const linkedActivity = linkedId ? activityLookup[linkedId] : null;
+    const nextLinkedId =
+      linkedActivity &&
+      (!domain || !linkedActivity.domain || linkedActivity.domain === domain) &&
+      (!nextProject || !linkedActivity.project || linkedActivity.project === nextProject)
+        ? linkedId
+        : "";
+    setEditorDraft({
+      ...editorDraft,
+      domain,
+      project: nextProject,
+      activity: nextActivity,
+      activityId: editorDraft.targetType === "todo" ? nextLinkedId : editorDraft.activityId,
+      parentActivityId: editorDraft.targetType === "activity" ? nextLinkedId : editorDraft.parentActivityId,
+    });
+  };
+
+  const handleEditorProjectChange = (project: string) => {
+    if (!editorDraft) return;
+    const nextActivities = getActivitiesForSelection(structureOptions, editorDraft.domain, project);
+    const nextActivity = nextActivities.includes(editorDraft.activity) ? editorDraft.activity : "";
+    const linkedId = editorDraft.targetType === "todo" ? editorDraft.activityId : editorDraft.parentActivityId;
+    const linkedActivity = linkedId ? activityLookup[linkedId] : null;
+    const nextLinkedId =
+      linkedActivity &&
+      (!editorDraft.domain || !linkedActivity.domain || linkedActivity.domain === editorDraft.domain) &&
+      (!project || !linkedActivity.project || linkedActivity.project === project)
+        ? linkedId
+        : "";
+    setEditorDraft({
+      ...editorDraft,
+      project,
+      activity: nextActivity,
+      activityId: editorDraft.targetType === "todo" ? nextLinkedId : editorDraft.activityId,
+      parentActivityId: editorDraft.targetType === "activity" ? nextLinkedId : editorDraft.parentActivityId,
+    });
+  };
+
   const convertEditorTodoToMeeting = () => {
     if (!editorDraft || editorDraft.targetType !== "todo") return;
     const todo = todos.find((entry) => entry.id === editorDraft.targetId);
@@ -504,7 +578,7 @@ export const CalendarWorkspace = ({
           </div>
         </div>
         <div className="calendar-toolbar calendar-toolbar-dense">
-          <div className="field"><label htmlFor="calendar-jump-date">Jump</label><input id="calendar-jump-date" type="date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} /></div>
+          <div className="field"><label htmlFor="calendar-jump-date">Jump</label><DateInput id="calendar-jump-date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} /></div>
           <button className="shell-button" type="button" onClick={() => setAnchorDate(jumpDate || today)}>Go</button>
           <div className="field field-wide"><label htmlFor="calendar-search">Search</label><input id="calendar-search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search title" /></div>
           <div className="field"><label htmlFor="calendar-type-filter">Type</label><select id="calendar-type-filter" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | "todo" | "activity" | "meeting")}><option value="all">All</option><option value="todo">Todos</option><option value="activity">Activities</option><option value="meeting">Meetings</option></select></div>
@@ -534,10 +608,11 @@ export const CalendarWorkspace = ({
                   event.dataTransfer.dropEffect = "move";
                 }} onDrop={(event) => {
                   event.preventDefault();
-                  const draggedId = event.dataTransfer.getData("text/plain");
+                  const draggedId = event.dataTransfer.getData("text/plain") || draggedItemIdRef.current;
                   if (!draggedId) return;
                   const rect = event.currentTarget.getBoundingClientRect();
                   onMoveItem(draggedId, date, clampSlot(Math.floor((event.clientY - rect.top) / slotHeight)));
+                  draggedItemIdRef.current = null;
                 }}>
                   <div className="calendar-day-interaction-layer" />
                   {active ? <div className="calendar-active-cell" style={{ top: `calc(var(--calendar-slot-height) * ${active.slot})`, height: "var(--calendar-slot-height)" }}><input className="calendar-cell-input" autoFocus value={draftText} onChange={(event) => setDraftText(event.target.value)} onBlur={commitDraftCell} onKeyDown={(event) => {
@@ -553,7 +628,7 @@ export const CalendarWorkspace = ({
                     const durationSlots = preview?.durationSlots ?? item.durationSlots;
                     const laneWidth = 100 / Math.max(1, item.laneCount);
                     const visualHeight = Math.max(slotHeight * Math.max(durationSlots, item.isMeeting ? 3 : 1) - 4, 18);
-                    return <button key={item.id} className={`calendar-item-block${item.isMeeting ? " calendar-item-block-meeting" : ""}${selectedItemId === item.id ? " calendar-item-block-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`} type="button" draggable style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onDragStart={(event) => { event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; }} onClick={() => { setDraftCell(null); setSelectedItemId(item.id); }} onDoubleClick={() => { if (item.targetType === "todo") { onOpenTodoDetail(item.targetId); return; } onOpenActivityDetail(item.targetId); }}>
+                    return <button key={item.id} className={`calendar-item-block${item.isMeeting ? " calendar-item-block-meeting" : ""}${selectedItemId === item.id ? " calendar-item-block-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`} type="button" draggable style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onDragStart={(event) => { draggedItemIdRef.current = item.id; event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { draggedItemIdRef.current = null; }} onClick={() => { setDraftCell(null); setSelectedItemId(item.id); }} onDoubleClick={() => { if (item.targetType === "todo") { onOpenTodoDetail(item.targetId); return; } onOpenActivityDetail(item.targetId); }}>
                       {item.isMeeting ? <span className="calendar-resize-handle calendar-resize-handle-start" onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "start", date: item.date, startSlot, durationSlots }); }} /> : null}
                       <strong>{slotToTime(startSlot)} {item.title}</strong>
                       <span>{item.isMeeting ? `${item.label} • ${durationLabel(durationSlots)}` : item.label}</span>
@@ -588,9 +663,8 @@ export const CalendarWorkspace = ({
               <div className="inline-row">
                 <div className="field">
                   <label htmlFor="calendar-edit-date">Date</label>
-                  <input
+                  <DateInput
                     id="calendar-edit-date"
-                    type="date"
                     value={editorDraft.doOn}
                     onChange={(event) => setEditorDraft({ ...editorDraft, doOn: event.target.value })}
                   />
@@ -719,9 +793,7 @@ export const CalendarWorkspace = ({
                     }}
                   >
                     <option value="">{editorDraft.targetType === "todo" ? "Unassigned" : "No parent activity"}</option>
-                    {topLevelActivities
-                      .filter((activity) => activity.id !== editorDraft.targetId)
-                      .map((activity) => (
+                    {linkedActivityOptions.map((activity) => (
                         <option key={activity.id} value={activity.id}>
                           {activity.description}
                         </option>
@@ -730,34 +802,48 @@ export const CalendarWorkspace = ({
                 </div>
                 <div className="field metadata-subfield">
                   <label htmlFor="calendar-edit-domain">Domain</label>
-                  <input
-                    id="calendar-edit-domain"
+                  <TokenPicker
                     value={editorDraft.domain}
-                    onChange={(event) => setEditorDraft({ ...editorDraft, domain: event.target.value })}
+                    savedOptions={structureOptions.domains}
+                    suggestedOptions={structureOptions.domains}
+                    placeholder="Search or add domain"
+                    suggestionSummary="Domains"
+                    suggestionBadgeText="Available"
+                    mode="single"
+                    onChange={handleEditorDomainChange}
                   />
                 </div>
                 <div className="field metadata-subfield">
                   <label htmlFor="calendar-edit-project">Project</label>
-                  <input
-                    id="calendar-edit-project"
+                  <TokenPicker
                     value={editorDraft.project}
-                    onChange={(event) => setEditorDraft({ ...editorDraft, project: event.target.value })}
+                    savedOptions={editorProjectOptions}
+                    suggestedOptions={editorProjectOptions}
+                    placeholder="Search or add project"
+                    suggestionSummary="Projects"
+                    suggestionBadgeText="Available"
+                    mode="single"
+                    onChange={handleEditorProjectChange}
                   />
                 </div>
                 <div className="field metadata-subfield">
                   <label htmlFor="calendar-edit-activity">Activity</label>
-                  <input
-                    id="calendar-edit-activity"
+                  <TokenPicker
                     value={editorDraft.activity}
-                    onChange={(event) => setEditorDraft({ ...editorDraft, activity: event.target.value })}
+                    savedOptions={editorActivityOptions}
+                    suggestedOptions={editorActivityOptions}
+                    placeholder="Search or add activity"
+                    suggestionSummary="Activities"
+                    suggestionBadgeText="Available"
+                    mode="single"
+                    onChange={(value) => setEditorDraft({ ...editorDraft, activity: value })}
                   />
                 </div>
               </div>
               <div className="field">
                 <label htmlFor="calendar-edit-due">Due date</label>
-                <input
+                <DateInput
                   id="calendar-edit-due"
-                  type="date"
                   value={editorDraft.dueDate}
                   onChange={(event) => setEditorDraft({ ...editorDraft, dueDate: event.target.value })}
                 />

@@ -1,8 +1,10 @@
 import type { ActivityRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import { type StructureOptions } from "../../../lib/structure/options";
 interface ActivitiesWorkspaceProps {
     activities: ActivityRecord[];
     todos: TodoRecord[];
     timeLogs: TimeLogRecord[];
+    structureOptions: StructureOptions;
     linkedSessionStateByActivity: Record<string, {
         sessionId: string | null;
         hasOutput: boolean;
@@ -27,5 +29,5 @@ interface ActivitiesWorkspaceProps {
     onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
     onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
 }
-export declare const ActivitiesWorkspace: ({ activities, todos, timeLogs, linkedSessionStateByActivity, requestedActivityId, requestedDomain, requestedProject, onEditorClose, onToggle, onAdd, onAddChildTodo, onAddChildMeeting, onSave, onDelete, onCreateLinkedMeetingSession, onOpenSession, onPreviewSessionOutput, onOpenTodoDetail, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, }: ActivitiesWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const ActivitiesWorkspace: ({ activities, todos, timeLogs, structureOptions, linkedSessionStateByActivity, requestedActivityId, requestedDomain, requestedProject, onEditorClose, onToggle, onAdd, onAddChildTodo, onAddChildMeeting, onSave, onDelete, onCreateLinkedMeetingSession, onOpenSession, onPreviewSessionOutput, onOpenTodoDetail, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, }: ActivitiesWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

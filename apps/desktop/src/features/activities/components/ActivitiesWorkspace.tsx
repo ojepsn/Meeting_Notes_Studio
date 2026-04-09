@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActivityRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import { DateInput } from "../../../components/DateInput";
+import { TokenPicker } from "../../../components/TokenPicker";
+import { getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 
 type ActivitySortKey = "dueDate" | "description" | "type" | "domain" | "project" | "actualTimeSpentMinutes" | "createdAt";
 
@@ -7,6 +10,7 @@ interface ActivitiesWorkspaceProps {
   activities: ActivityRecord[];
   todos: TodoRecord[];
   timeLogs: TimeLogRecord[];
+  structureOptions: StructureOptions;
   linkedSessionStateByActivity: Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>;
   requestedActivityId?: string | null;
   requestedDomain?: string | null;
@@ -81,6 +85,7 @@ export const ActivitiesWorkspace = ({
   activities,
   todos,
   timeLogs,
+  structureOptions,
   linkedSessionStateByActivity,
   requestedActivityId,
   requestedDomain,
@@ -116,13 +121,10 @@ export const ActivitiesWorkspace = ({
   const detailsEditorRef = useRef<HTMLDivElement | null>(null);
 
   const topLevelActivities = useMemo(() => activities.filter((entry) => !entry.parentActivityId), [activities]);
-  const domainOptions = useMemo(
-    () => Array.from(new Set(topLevelActivities.map((entry) => entry.domain).filter(Boolean))).sort(),
-    [topLevelActivities],
-  );
+  const domainOptions = useMemo(() => structureOptions.domains, [structureOptions.domains]);
   const projectOptions = useMemo(
-    () => Array.from(new Set(topLevelActivities.map((entry) => entry.project).filter(Boolean))).sort(),
-    [topLevelActivities],
+    () => getProjectsForDomain(structureOptions, domainFilter === "all" ? "" : domainFilter),
+    [domainFilter, structureOptions],
   );
 
   const childActivitiesByParent = useMemo(() => {
@@ -198,6 +200,13 @@ export const ActivitiesWorkspace = ({
   }, [requestedProject]);
 
   useEffect(() => {
+    if (domainFilter === "all") return;
+    if (projectFilter === "all") return;
+    if (projectOptions.includes(projectFilter)) return;
+    setProjectFilter("all");
+  }, [domainFilter, projectFilter, projectOptions]);
+
+  useEffect(() => {
     if (requestedActivityId) {
       setSelectedActivityId(requestedActivityId);
     }
@@ -253,6 +262,13 @@ export const ActivitiesWorkspace = ({
   const openChildTodos = currentChildTodos.filter((todo) => !todo.isDone).length;
   const nextChildMeeting = [...currentChildMeetings]
     .sort((left, right) => `${left.doOn} ${left.startTime}`.localeCompare(`${right.doOn} ${right.startTime}`))[0] ?? null;
+  const editorProjectOptions = getProjectsForDomain(structureOptions, editingDraft.domain);
+
+  const handleDraftDomainChange = (domain: string) => {
+    const nextProjects = getProjectsForDomain(structureOptions, domain);
+    const nextProject = nextProjects.includes(editingDraft.project) ? editingDraft.project : "";
+    setEditingDraft({ ...editingDraft, domain, project: nextProject });
+  };
 
   const clearSelection = () => {
     setSelectedActivityId(null);
@@ -268,37 +284,43 @@ export const ActivitiesWorkspace = ({
       <div className="card-header session-editor-header-minimal">
         <div>
           <h2>Activities</h2>
-          <p className="muted">Work is anchored here. Add follow-up todos, meetings, session links, and time from one place.</p>
+          <p className="muted">This is the operational hub for existing activities. Create and organize activities in Structure, then run the work here.</p>
         </div>
       </div>
 
-      <div className="todos-workspace-input-row">
-        <div className="field">
-          <label htmlFor="activities-workspace-type">Type</label>
-          <select id="activities-workspace-type" value={draftType} onChange={(event) => setDraftType(event.target.value as ActivityRecord["type"])}>
-            <option value="task">Task</option>
-            <option value="meeting">Meeting</option>
-          </select>
+      <details className="workspace-disclosure">
+        <summary>Quick add standalone activity</summary>
+        <div className="workspace-disclosure-body stack">
+          <p className="tiny-text">Use Structure for normal project-based setup. This quick add remains here for lightweight edge cases and cleanup work.</p>
+          <div className="todos-workspace-input-row">
+            <div className="field">
+              <label htmlFor="activities-workspace-type">Type</label>
+              <select id="activities-workspace-type" value={draftType} onChange={(event) => setDraftType(event.target.value as ActivityRecord["type"])}>
+                <option value="task">Task</option>
+                <option value="meeting">Meeting</option>
+              </select>
+            </div>
+            <div className="field field-wide">
+              <label htmlFor="activities-workspace-draft">New activity</label>
+              <input
+                id="activities-workspace-draft"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    submitDraft();
+                  }
+                }}
+                placeholder={draftType === "meeting" ? "Add a meeting activity" : "Add an activity"}
+              />
+            </div>
+            <button className="primary-button" type="button" onClick={submitDraft}>
+              Add
+            </button>
+          </div>
         </div>
-        <div className="field field-wide">
-          <label htmlFor="activities-workspace-draft">New activity</label>
-          <input
-            id="activities-workspace-draft"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                submitDraft();
-              }
-            }}
-            placeholder={draftType === "meeting" ? "Add a meeting activity" : "Add an activity"}
-          />
-        </div>
-        <button className="primary-button" type="button" onClick={submitDraft}>
-          Add
-        </button>
-      </div>
+      </details>
 
       <div className="activities-hub-shell">
         <section className="activities-hub-list-panel">
@@ -427,22 +449,40 @@ export const ActivitiesWorkspace = ({
 
                 <div className="field">
                   <label htmlFor="activity-edit-domain">Domain</label>
-                  <input id="activity-edit-domain" value={editingDraft.domain} onChange={(event) => setEditingDraft({ ...editingDraft, domain: event.target.value })} />
+                  <TokenPicker
+                    value={editingDraft.domain}
+                    savedOptions={structureOptions.domains}
+                    suggestedOptions={structureOptions.domains}
+                    placeholder="Search or add domain"
+                    suggestionSummary="Domains"
+                    suggestionBadgeText="Available"
+                    mode="single"
+                    onChange={handleDraftDomainChange}
+                  />
                 </div>
 
                 <div className="field">
                   <label htmlFor="activity-edit-project">Project</label>
-                  <input id="activity-edit-project" value={editingDraft.project} onChange={(event) => setEditingDraft({ ...editingDraft, project: event.target.value })} />
+                  <TokenPicker
+                    value={editingDraft.project}
+                    savedOptions={editorProjectOptions}
+                    suggestedOptions={editorProjectOptions}
+                    placeholder="Search or add project"
+                    suggestionSummary="Projects"
+                    suggestionBadgeText="Available"
+                    mode="single"
+                    onChange={(value) => setEditingDraft({ ...editingDraft, project: value })}
+                  />
                 </div>
 
                 <div className="field">
                   <label htmlFor="activity-edit-do-on">Do on</label>
-                  <input id="activity-edit-do-on" type="date" value={editingDraft.doOn} onChange={(event) => setEditingDraft({ ...editingDraft, doOn: event.target.value })} />
+                  <DateInput id="activity-edit-do-on" value={editingDraft.doOn} onChange={(event) => setEditingDraft({ ...editingDraft, doOn: event.target.value })} />
                 </div>
 
                 <div className="field">
                   <label htmlFor="activity-edit-due-date">Due date</label>
-                  <input id="activity-edit-due-date" type="date" value={editingDraft.dueDate} onChange={(event) => setEditingDraft({ ...editingDraft, dueDate: event.target.value })} />
+                  <DateInput id="activity-edit-due-date" value={editingDraft.dueDate} onChange={(event) => setEditingDraft({ ...editingDraft, dueDate: event.target.value })} />
                 </div>
 
                 <div className="field">
@@ -634,7 +674,7 @@ export const ActivitiesWorkspace = ({
                         <div className="metadata-triplet-grid">
                           <div className="field metadata-subfield">
                             <label>Date</label>
-                            <input type="date" value={timeLogDraft.date} onChange={(event) => setTimeLogDraft({ ...timeLogDraft, date: event.target.value, durationMinutes: calculateDurationMinutes(event.target.value, timeLogDraft.startTime, timeLogDraft.endTime) })} />
+                            <DateInput value={timeLogDraft.date} onChange={(event) => setTimeLogDraft({ ...timeLogDraft, date: event.target.value, durationMinutes: calculateDurationMinutes(event.target.value, timeLogDraft.startTime, timeLogDraft.endTime) })} />
                           </div>
                           <div className="field metadata-subfield">
                             <label>Start</label>
