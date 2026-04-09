@@ -1,0 +1,30 @@
+import { buildStructuredOutput, isHeadingLine, normalizeHeadingText, splitOutputBlocks, toFileSafeName } from "./exportService";
+describe("exportService helpers", () => {
+    it("creates safe filenames from output titles", () => {
+        expect(toFileSafeName("Board review: Q2 / Europe")).toBe("Board review Q2  Europe");
+        expect(toFileSafeName("")).toBe("notesmith-output");
+    });
+    it("splits output into trimmed logical blocks", () => {
+        expect(splitOutputBlocks("Summary\nline\n\nDecisions\nitem")).toEqual([
+            "Summary\nline",
+            "Decisions\nitem",
+        ]);
+    });
+    it("detects headings and excludes bullets and sentences", () => {
+        expect(isHeadingLine("Decisions and next steps")).toBe(true);
+        expect(isHeadingLine("Decisions and next steps:")).toBe(true);
+        expect(isHeadingLine("- action item")).toBe(false);
+        expect(isHeadingLine("This is a full sentence.")).toBe(false);
+    });
+    it("normalizes heading punctuation", () => {
+        expect(normalizeHeadingText("Action items:")).toBe("Action items");
+    });
+    it("builds structured output with heading/body classification", () => {
+        expect(buildStructuredOutput("Summary\nThis is the first paragraph.\n\nAction items:\nCall customer")).toEqual([
+            { kind: "heading", text: "Summary" },
+            { kind: "body", text: "This is the first paragraph." },
+            { kind: "heading", text: "Action items" },
+            { kind: "heading", text: "Call customer" },
+        ]);
+    });
+});

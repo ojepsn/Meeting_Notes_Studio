@@ -1,4 +1,14 @@
 import type { ActivityRecord, CalendarItemRecord, LocalAppSettings, TodoRecord } from "@notesmith/domain";
+declare const DAYS: readonly [3, 5, 7, 14];
+export declare const addDays: (date: string, days: number) => string;
+export declare const clampSlot: (slot: number) => number;
+export declare const clampPane: (width: number) => number;
+export declare const durationFromTimes: (startTime: string, endTime: string) => number;
+export declare const slotToTime: (slot: number) => string;
+export declare const timeToSlot: (time: string) => number;
+export declare const formatDay: (date: string) => string;
+export declare const durationLabel: (slots: number) => string;
+export declare const dayColumnWidthForView: (daysInView: (typeof DAYS)[number]) => 118 | 156 | 220 | 280;
 interface CalendarWorkspaceProps {
     todos: TodoRecord[];
     activities: ActivityRecord[];

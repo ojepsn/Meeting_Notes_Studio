@@ -9,33 +9,33 @@ const HEIGHTS = [12, 16, 22] as const;
 const MIN_PANE = 240;
 const MAX_PANE = 520;
 
-const addDays = (date: string, days: number) => {
+export const addDays = (date: string, days: number) => {
   const next = new Date(`${date}T00:00:00`);
   next.setDate(next.getDate() + days);
-  return next.toISOString().slice(0, 10);
+  return `${next.getFullYear()}-${`${next.getMonth() + 1}`.padStart(2, "0")}-${`${next.getDate()}`.padStart(2, "0")}`;
 };
-const clampSlot = (slot: number) => Math.max(0, Math.min(TOTAL_SLOTS - 1, slot));
-const clampPane = (width: number) => Math.min(MAX_PANE, Math.max(MIN_PANE, Math.round(width)));
-const durationFromTimes = (startTime: string, endTime: string) => Math.max(1, timeToSlot(endTime) - timeToSlot(startTime));
-const slotToTime = (slot: number) => {
+export const clampSlot = (slot: number) => Math.max(0, Math.min(TOTAL_SLOTS - 1, slot));
+export const clampPane = (width: number) => Math.min(MAX_PANE, Math.max(MIN_PANE, Math.round(width)));
+export const durationFromTimes = (startTime: string, endTime: string) => Math.max(1, timeToSlot(endTime) - timeToSlot(startTime));
+export const slotToTime = (slot: number) => {
   const total = slot * MINUTES_PER_SLOT;
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 };
-const timeToSlot = (time: string) => {
+export const timeToSlot = (time: string) => {
   const [hours, minutes] = time.split(":").map(Number);
   if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
   return hours * 12 + Math.floor(minutes / MINUTES_PER_SLOT);
 };
-const formatDay = (date: string) =>
+export const formatDay = (date: string) =>
   new Intl.DateTimeFormat(undefined, { weekday: "short", month: "2-digit", day: "2-digit" }).format(new Date(`${date}T00:00:00`));
-const durationLabel = (slots: number) => {
+export const durationLabel = (slots: number) => {
   const minutes = slots * MINUTES_PER_SLOT;
   if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 };
-const dayColumnWidthForView = (daysInView: typeof DAYS[number]) => {
+export const dayColumnWidthForView = (daysInView: typeof DAYS[number]) => {
   switch (daysInView) {
     case 14:
       return 118;

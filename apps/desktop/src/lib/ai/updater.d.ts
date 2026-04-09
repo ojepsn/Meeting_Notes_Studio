@@ -1,3 +1,6 @@
+export declare const normalizeVersion: (value: string) => string;
+export declare const compareVersions: (left: string, right: string) => number;
+export declare const loadPublishedVersion: () => Promise<string>;
 export declare const checkForDesktopUpdates: () => Promise<{
     available: false;
     note: string;

@@ -15,5 +15,18 @@ type TimeWorkspaceProps = {
     onSaveReportPreset: (preset: Omit<TimeReportPreset, "id">) => void;
     onDeleteReportPreset: (presetId: string) => void;
 };
+type DatePreset = "today" | "this-week" | "this-month" | "custom";
+export declare const formatMinutes: (minutes: number) => string;
+export declare const formatDateInput: (date: Date) => string;
+export declare const shiftDays: (value: string, days: number) => string;
+export declare const differenceInDaysInclusive: (fromDate: string, toDate: string) => number;
+export declare const getPresetRange: (preset: Exclude<DatePreset, "custom">, now?: Date) => {
+    fromDate: string;
+    toDate: string;
+    label: string;
+};
+export declare const calculateDurationMinutes: (date: string, startTime: string, endTime: string) => number;
+export declare const buildExportFilename: (kind: "csv" | "md", now?: Date) => string;
+export declare const buildJsonExportFilename: (now?: Date) => string;
 export declare const TimeWorkspace: ({ todos, activities, timeLogs, requestedDomain, requestedProject, reportPresets, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenTodoDetail, onOpenActivityDetail, onSaveReportPreset, onDeleteReportPreset, }: TimeWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

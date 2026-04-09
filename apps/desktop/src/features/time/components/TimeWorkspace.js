@@ -1,7 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useEffect, useMemo, useState } from "react";
 import { saveTextFile } from "../../../lib/storage/desktopStorage";
-const formatMinutes = (minutes) => {
+export const formatMinutes = (minutes) => {
     if (!minutes)
         return "0m";
     const hours = Math.floor(minutes / 60);
@@ -12,18 +12,18 @@ const formatMinutes = (minutes) => {
         return `${hours}h`;
     return `${hours}h ${rest}m`;
 };
-const formatDateInput = (date) => `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-${`${date.getDate()}`.padStart(2, "0")}`;
-const shiftDays = (value, days) => {
+export const formatDateInput = (date) => `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-${`${date.getDate()}`.padStart(2, "0")}`;
+export const shiftDays = (value, days) => {
     const date = new Date(`${value}T00:00:00`);
     date.setDate(date.getDate() + days);
     return formatDateInput(date);
 };
-const differenceInDaysInclusive = (fromDate, toDate) => {
+export const differenceInDaysInclusive = (fromDate, toDate) => {
     const from = new Date(`${fromDate}T00:00:00`);
     const to = new Date(`${toDate}T00:00:00`);
     return Math.max(1, Math.round((to.getTime() - from.getTime()) / 86400000) + 1);
 };
-const getPresetRange = (preset, now = new Date()) => {
+export const getPresetRange = (preset, now = new Date()) => {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     if (preset === "today") {
         const date = formatDateInput(today);
@@ -41,14 +41,15 @@ const getPresetRange = (preset, now = new Date()) => {
     const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     return { fromDate: formatDateInput(start), toDate: formatDateInput(end), label: "This month" };
 };
-const calculateDurationMinutes = (date, startTime, endTime) => {
+export const calculateDurationMinutes = (date, startTime, endTime) => {
     const start = new Date(`${date}T${startTime || "00:00"}:00`);
     const end = new Date(`${date}T${endTime || startTime || "00:00"}:00`);
     const diff = Math.round((end.getTime() - start.getTime()) / 60000);
     return Number.isFinite(diff) ? Math.max(0, diff) : 0;
 };
-const buildExportFilename = (kind, now = new Date()) => `notesmith-time-report-${now.toISOString().slice(0, 19).replace(/[:T]/g, "-")}.${kind}`;
-const buildJsonExportFilename = (now = new Date()) => `notesmith-time-report-${now.toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
+const formatTimestampForFilename = (date) => `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-${`${date.getDate()}`.padStart(2, "0")}-${`${date.getHours()}`.padStart(2, "0")}-${`${date.getMinutes()}`.padStart(2, "0")}-${`${date.getSeconds()}`.padStart(2, "0")}`;
+export const buildExportFilename = (kind, now = new Date()) => `notesmith-time-report-${formatTimestampForFilename(now)}.${kind}`;
+export const buildJsonExportFilename = (now = new Date()) => `notesmith-time-report-${formatTimestampForFilename(now)}.json`;
 const csvCell = (value) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
 export const TimeWorkspace = ({ todos, activities, timeLogs, requestedDomain, requestedProject, reportPresets, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenTodoDetail, onOpenActivityDetail, onSaveReportPreset, onDeleteReportPreset, }) => {
     const initialWeek = getPresetRange("this-week");

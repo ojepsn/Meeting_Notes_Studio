@@ -38,5 +38,15 @@ export default defineConfig({
     environment: "node",
     globals: true,
     include: ["src/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html"],
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/**/*.d.ts",
+        "src/**/*.test.ts",
+        "src/**/*.js",
+      ],
+    },
   },
 });

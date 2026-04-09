@@ -3,6 +3,7 @@
   "compilerOptions": {
     "composite": true,
     "tsBuildInfoFile": "./node_modules/.cache/tsconfig.app.tsbuildinfo",
+    "types": ["vitest/globals"],
     "paths": {
       "@/*": ["./src/*"]
     }

@@ -1,7 +1,7 @@
 import { isTauriRuntime } from "../storage/environment";
 const UPDATE_MANIFEST_URL = "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest/download/latest.json";
-const normalizeVersion = (value) => value.trim().replace(/^v/i, "");
-const compareVersions = (left, right) => {
+export const normalizeVersion = (value) => value.trim().replace(/^v/i, "");
+export const compareVersions = (left, right) => {
     const leftParts = normalizeVersion(left).split(".").map((entry) => Number(entry) || 0);
     const rightParts = normalizeVersion(right).split(".").map((entry) => Number(entry) || 0);
     const length = Math.max(leftParts.length, rightParts.length);
@@ -14,7 +14,7 @@ const compareVersions = (left, right) => {
     }
     return 0;
 };
-const loadPublishedVersion = async () => {
+export const loadPublishedVersion = async () => {
     const response = await fetch(UPDATE_MANIFEST_URL, { cache: "no-store" });
     if (!response.ok) {
         throw new Error(`Could not load the published update manifest (${response.status}).`);

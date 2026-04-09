@@ -41,7 +41,7 @@ const downloadTextFile = ({
   });
 };
 
-const toFileSafeName = (title: string) =>
+export const toFileSafeName = (title: string) =>
   `${(title || "notesmith-output").replace(/[^\w\- ]+/g, "").trim() || "notesmith-output"}`;
 
 const escapeHtml = (content: string) =>
@@ -52,14 +52,14 @@ const getIncludedImageAttachments = (attachments: AttachmentRecord[] = []) =>
     .filter((attachment) => attachment.kind === "image" && attachment.includeInOutput)
     .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt));
 
-const splitOutputBlocks = (output: string) =>
+export const splitOutputBlocks = (output: string) =>
   output
     .replace(/\r\n/g, "\n")
     .split(/\n{2,}/)
     .map((block) => block.trim())
     .filter(Boolean);
 
-const isHeadingLine = (line: string) => {
+export const isHeadingLine = (line: string) => {
   const trimmed = line.trim();
   if (!trimmed) return false;
   if (trimmed.length > 80) return false;
@@ -69,9 +69,9 @@ const isHeadingLine = (line: string) => {
   return /^[\p{L}\p{N}&/(),:'" -]+:?$/u.test(trimmed);
 };
 
-const normalizeHeadingText = (line: string) => line.trim().replace(/:$/, "");
+export const normalizeHeadingText = (line: string) => line.trim().replace(/:$/, "");
 
-const buildStructuredOutput = (output: string) =>
+export const buildStructuredOutput = (output: string) =>
   splitOutputBlocks(output).flatMap((block) =>
     block.split("\n").flatMap((line) => {
       const trimmed = line.trim();
