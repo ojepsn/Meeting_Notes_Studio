@@ -99,7 +99,7 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
   { id: "todos", label: "Todos", description: "Focused follow-up management", available: true },
   { id: "activities", label: "Activities", description: "Tracked work with time and scheduling", available: true },
   { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: true },
-  { id: "time", label: "Time", description: "Active timers, logs, and reporting", available: true },
+  { id: "time", label: "Timelogs", description: "Active timers, dense logs, and reporting", available: true },
   { id: "structure", label: "Structure", description: "Domains and projects as operational views", available: true },
   { id: "assistant", label: "Assistant", description: "Future AI workflows and agents", available: false },
   { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
@@ -627,6 +627,24 @@ export const App = () => {
     const activityId = findActivityIdForSession(snapshot.entityLinks, activeSession.id);
     return snapshot.activities.find((entry) => entry.id === activityId) ?? null;
   }, [activeSession, snapshot]);
+  const getMeetingTodoDefaults = () => {
+    if (!activeSession) {
+      return {
+        activityId: undefined,
+        domain: "Other",
+        project: "Other",
+        activityLabel: "Other",
+      };
+    }
+
+    return {
+      activityId: activeLinkedActivity?.id || undefined,
+      domain: activeSession.domain.trim() || activeLinkedActivity?.domain.trim() || "Other",
+      project: activeSession.project.trim() || activeLinkedActivity?.project.trim() || "Other",
+      activityLabel:
+        activeLinkedActivity?.description.trim() || activeSession.activity.trim() || "Other",
+    };
+  };
   const linkedSessionStateByActivity = useMemo(
     () =>
       Object.fromEntries(
@@ -749,8 +767,12 @@ export const App = () => {
       event.preventDefault();
       event.stopPropagation();
 
+      const meetingTodoDefaults = getMeetingTodoDefaults();
       await addTodo(todoDescription, {
-        activityId: activeLinkedActivity?.id || undefined,
+        activityId: meetingTodoDefaults.activityId,
+        domain: meetingTodoDefaults.domain,
+        project: meetingTodoDefaults.project,
+        activityLabel: meetingTodoDefaults.activityLabel,
         doOn: activeSession.date || undefined,
       });
       target.value = "";
@@ -1570,8 +1592,7 @@ export const App = () => {
         settings: snapshot.settings,
         onEvent: createAIRuntimeHandler(),
       });
-      const latestSnapshot = await repository.loadSnapshot();
-      const targetSession = latestSnapshot.sessions.find((session) => session.id === sessionId);
+      const targetSession = snapshot.sessions.find((session) => session.id === sessionId);
       if (!targetSession) {
         throw new Error("The session could not be found after recording.");
       }
@@ -2022,7 +2043,12 @@ export const App = () => {
             emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
             linkedActivity={activeLinkedActivity}
             onOpenLinkedActivity={(activityId) => openActivityFromLink(activityId, "notes")}
-            onAddFollowUpTodo={(description, options) => void addTodo(description, options)}
+            onAddFollowUpTodo={(description, options) =>
+              void addTodo(description, {
+                ...getMeetingTodoDefaults(),
+                ...options,
+              })
+            }
             onAddFollowUpMeeting={(description, options) => void addActivity(description, "meeting", options)}
           />
         );
@@ -2578,6 +2604,7 @@ export const App = () => {
               <CalendarWorkspace
                 todos={snapshot.todos}
                 activities={snapshot.activities}
+                timeLogs={snapshot.timelogs}
                 calendarItems={snapshot.calendarItems ?? []}
                 settings={snapshot.settings}
                 structureOptions={structureOptions}
@@ -2598,6 +2625,8 @@ export const App = () => {
                   })
                 }
                 onUpdateCalendarItem={(id, updates) => void updateCalendarItem(id, updates)}
+                onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
+                onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
                 onOpenTodoWorkspace={() => setActiveWorkspace("todos")}
                 onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "calendar")}
                 onOpenActivityWorkspace={(activityId) => openActivityFromLink(activityId, "calendar")}
@@ -2817,7 +2846,12 @@ export const App = () => {
                 emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
                 linkedActivity={activeLinkedActivity}
                 onOpenLinkedActivity={(activityId) => openActivityFromLink(activityId, "notes")}
-                onAddFollowUpTodo={(description, options) => void addTodo(description, options)}
+                onAddFollowUpTodo={(description, options) =>
+                  void addTodo(description, {
+                    ...getMeetingTodoDefaults(),
+                    ...options,
+                  })
+                }
                 onAddFollowUpMeeting={(description, options) => void addActivity(description, "meeting", options)}
               />
             )}

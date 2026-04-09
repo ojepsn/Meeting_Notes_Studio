@@ -3,6 +3,7 @@ import type { ActivityRecord, CalendarItemRecord, LocalAppSettings, TodoRecord }
 import { DateInput } from "../../../components/DateInput";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
+import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
 
 const TOTAL_SLOTS = 24 * 12;
 const MINUTES_PER_SLOT = 5;
@@ -95,6 +96,7 @@ type PendingDeleteState = {
 interface CalendarWorkspaceProps {
   todos: TodoRecord[];
   activities: ActivityRecord[];
+  timeLogs: import("@notesmith/domain").TimeLogRecord[];
   calendarItems: CalendarItemRecord[];
   settings: LocalAppSettings;
   structureOptions: StructureOptions;
@@ -113,6 +115,8 @@ interface CalendarWorkspaceProps {
   onDeleteActivity: (id: string) => void;
   onConvertTodoToMeeting: (todo: TodoRecord, options: { date: string; startTime: string; endTime: string }) => void;
   onUpdateCalendarItem: (id: string, updates: { date: string; startSlot: number; durationSlots: number }) => void;
+  onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
+  onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
   onOpenTodoWorkspace: () => void;
   onOpenTodoDetail: (todoId: string) => void;
   onOpenActivityWorkspace: (activityId: string) => void;
@@ -126,6 +130,7 @@ interface CalendarWorkspaceProps {
 export const CalendarWorkspace = ({
   todos,
   activities,
+  timeLogs,
   calendarItems,
   settings,
   structureOptions,
@@ -139,6 +144,8 @@ export const CalendarWorkspace = ({
   onDeleteActivity,
   onConvertTodoToMeeting,
   onUpdateCalendarItem,
+  onStartTracking,
+  onStopTracking,
   onOpenTodoWorkspace,
   onOpenTodoDetail,
   onOpenActivityWorkspace,
@@ -168,6 +175,7 @@ export const CalendarWorkspace = ({
   const [visibilityFilter, setVisibilityFilter] = useState<"all" | "public" | "private">("all");
   const [resizeState, setResizeState] = useState<null | { itemId: string; edge: "start" | "end"; date: string; startSlot: number; durationSlots: number }>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDeleteState | null>(null);
+  const [now, setNow] = useState(() => new Date());
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const splitterDraggingRef = useRef(false);
@@ -212,6 +220,14 @@ export const CalendarWorkspace = ({
     () => Object.fromEntries(activities.map((activity) => [activity.id, activity])) as Record<string, ActivityRecord>,
     [activities],
   );
+  const timeLogsByTarget = useMemo(() => {
+    const grouped = new Map<string, import("@notesmith/domain").TimeLogRecord[]>();
+    timeLogs.forEach((entry) => {
+      const key = `${entry.targetType}:${entry.targetId}`;
+      grouped.set(key, [...(grouped.get(key) || []), entry]);
+    });
+    return grouped;
+  }, [timeLogs]);
   const items = useMemo<Item[]>(() => {
     const todoMap = new Map((Array.isArray(todos) ? todos : []).map((todo) => [todo.id, todo]));
     const activityMap = new Map((Array.isArray(activities) ? activities : []).map((activity) => [activity.id, activity]));
@@ -253,6 +269,18 @@ export const CalendarWorkspace = ({
     });
     return result.sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.lane - right.lane);
   }, [activities, calendarItems, todos]);
+
+  const runningItemCount = useMemo(
+    () =>
+      items.filter((item) => getRunningTimeLog(timeLogsByTarget.get(`${item.targetType}:${item.targetId}`) || [])).length,
+    [items, timeLogsByTarget],
+  );
+
+  useEffect(() => {
+    if (!runningItemCount) return;
+    const intervalId = window.setInterval(() => setNow(new Date()), 30000);
+    return () => window.clearInterval(intervalId);
+  }, [runningItemCount]);
 
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -628,10 +656,32 @@ export const CalendarWorkspace = ({
                     const durationSlots = preview?.durationSlots ?? item.durationSlots;
                     const laneWidth = 100 / Math.max(1, item.laneCount);
                     const visualHeight = Math.max(slotHeight * Math.max(durationSlots, item.isMeeting ? 3 : 1) - 4, 18);
+                    const runningLog = getRunningTimeLog(timeLogsByTarget.get(`${item.targetType}:${item.targetId}`) || []);
+                    const runningLabel = runningLog ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now)) : "";
                     return <button key={item.id} className={`calendar-item-block${item.isMeeting ? " calendar-item-block-meeting" : ""}${selectedItemId === item.id ? " calendar-item-block-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`} type="button" draggable style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onDragStart={(event) => { draggedItemIdRef.current = item.id; event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { draggedItemIdRef.current = null; }} onClick={() => { setDraftCell(null); setSelectedItemId(item.id); }} onDoubleClick={() => { if (item.targetType === "todo") { onOpenTodoDetail(item.targetId); return; } onOpenActivityDetail(item.targetId); }}>
                       {item.isMeeting ? <span className="calendar-resize-handle calendar-resize-handle-start" onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "start", date: item.date, startSlot, durationSlots }); }} /> : null}
                       <strong>{slotToTime(startSlot)} {item.title}</strong>
-                      <span>{item.isMeeting ? `${item.label} • ${durationLabel(durationSlots)}` : item.label}</span>
+                      <span>{item.isMeeting ? `${item.label} • ${durationLabel(durationSlots)}` : item.label}{runningLog ? ` • Running ${runningLabel}` : ""}</span>
+                      <span
+                        className={`calendar-item-inline-action${runningLog ? " calendar-item-inline-action-active" : ""}`}
+                        role="button"
+                        tabIndex={-1}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          if (runningLog) {
+                            onStopTracking(item.targetType, item.targetId);
+                            return;
+                          }
+                          onStartTracking(item.targetType, item.targetId);
+                        }}
+                      >
+                        {runningLog ? "Stop" : "Start"}
+                      </span>
                       {item.isMeeting ? <span className="calendar-resize-handle calendar-resize-handle-end" onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "end", date: item.date, startSlot, durationSlots }); }} /> : null}
                     </button>;
                   })}
@@ -862,6 +912,31 @@ export const CalendarWorkspace = ({
                   </div>
                 </div>
               ) : null}
+              <div className="calendar-editor-actions">
+                {(() => {
+                  const runningLog = getRunningTimeLog(timeLogsByTarget.get(`${editorDraft.targetType}:${editorDraft.targetId}`) || []);
+                  return (
+                    <>
+                      <span className="status-chip">
+                        {runningLog ? `Running • ${formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now))}` : "No active timer"}
+                      </span>
+                      <button
+                        className={runningLog ? "primary-button" : "shell-button"}
+                        type="button"
+                        onClick={() => {
+                          if (runningLog) {
+                            onStopTracking(editorDraft.targetType, editorDraft.targetId);
+                            return;
+                          }
+                          onStartTracking(editorDraft.targetType, editorDraft.targetId);
+                        }}
+                      >
+                        {runningLog ? "Stop timelog" : "Start timelog"}
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
               <div className="calendar-editor-actions">
                 <button className="primary-button" type="button" onClick={saveEditor}>
                   Save calendar edits

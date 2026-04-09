@@ -14,6 +14,7 @@ const SLOTS_PER_HOUR = 12;
 const MINUTES_PER_SLOT = 5;
 const MAX_SLOT_INDEX = 24 * SLOTS_PER_HOUR - 1;
 const DEFAULT_MEETING_DURATION_SLOTS = 12;
+const OTHER_STRUCTURE_VALUE = "Other";
 const formatLocalDate = (value = new Date()) => {
     const year = value.getFullYear();
     const month = `${value.getMonth() + 1}`.padStart(2, "0");
@@ -99,17 +100,33 @@ const buildTimeLog = (targetType, targetId, overrides) => {
     };
 };
 const getActivityById = (snapshot, activityId) => snapshot.activities.find((entry) => entry.id === activityId) || null;
+const withFallbackValue = (value) => {
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    return trimmed || OTHER_STRUCTURE_VALUE;
+};
+const normalizeTodoStructure = (payload) => ({
+    ...payload,
+    domain: withFallbackValue(payload.domain),
+    project: withFallbackValue(payload.project),
+    activity: withFallbackValue(payload.activity),
+});
+const normalizeActivityStructure = (payload) => ({
+    ...payload,
+    domain: withFallbackValue(payload.domain),
+    project: withFallbackValue(payload.project),
+    activity: "activity" in payload ? withFallbackValue(payload.activity) : payload.activity,
+});
 const applyActivityInheritance = (snapshot, payload) => {
     const linkedActivity = payload.activityId ? getActivityById(snapshot, payload.activityId) : null;
     if (!linkedActivity) {
-        return payload;
+        return normalizeTodoStructure(payload);
     }
-    return {
+    return normalizeTodoStructure({
         ...payload,
         domain: payload.domain || linkedActivity.domain,
         project: payload.project || linkedActivity.project,
         activity: payload.activity || linkedActivity.description,
-    };
+    });
 };
 const toSessionIds = (activeSessionId) => activeSessionId ? [activeSessionId].filter((value) => Boolean(value)) : [];
 const collectActivityDescendants = (activities, rootActivityId) => {
@@ -514,10 +531,10 @@ export const useDesktopStore = create((set, get) => ({
         const snapshot = get().snapshot;
         if (!snapshot)
             return;
-        const nextActivity = {
+        const nextActivity = normalizeActivityStructure({
             ...activity,
             actualTimeSpentMinutes: computeTrackedMinutes(snapshot.timelogs, "activity", activity.id),
-        };
+        });
         let nextSnapshot = {
             ...snapshot,
             activities: upsertActivity(snapshot.activities, nextActivity),
@@ -534,7 +551,7 @@ export const useDesktopStore = create((set, get) => ({
         if (!snapshot || !description.trim())
             return;
         const parentActivity = options?.parentActivityId ? getActivityById(snapshot, options.parentActivityId) : null;
-        const nextActivity = {
+        const nextActivity = normalizeActivityStructure({
             id: crypto.randomUUID(),
             type,
             parentActivityId: options?.parentActivityId || "",
@@ -554,7 +571,7 @@ export const useDesktopStore = create((set, get) => ({
             actualTimeSpentMinutes: 0,
             createdAt: new Date().toISOString(),
             sessionIds: toSessionIds(get().activeSessionId),
-        };
+        });
         const nextSnapshot = {
             ...snapshot,
             activities: [nextActivity, ...snapshot.activities],
@@ -692,13 +709,22 @@ export const useDesktopStore = create((set, get) => ({
                 createdAt,
                 sessionIds: toSessionIds(get().activeSessionId),
             };
+            const normalizedTodo = {
+                ...todo,
+                ...applyActivityInheritance(snapshot, {
+                    activityId: todo.activityId,
+                    domain: todo.domain,
+                    project: todo.project,
+                    activity: todo.activity,
+                }),
+            };
             nextSnapshot = {
                 ...snapshot,
-                todos: [todo, ...snapshot.todos],
+                todos: [normalizedTodo, ...snapshot.todos],
                 calendarItems: upsertCalendarItem(snapshot.calendarItems, {
                     id: crypto.randomUUID(),
                     targetType: "todo",
-                    targetId: todo.id,
+                    targetId: normalizedTodo.id,
                     date,
                     startSlot: normalizedSlot,
                     durationSlots: 1,
@@ -709,7 +735,7 @@ export const useDesktopStore = create((set, get) => ({
         }
         else {
             const isMeeting = parsed.kind === "meeting";
-            const activity = {
+            const activity = normalizeActivityStructure({
                 id: crypto.randomUUID(),
                 type: isMeeting ? "meeting" : "task",
                 parentActivityId: options?.parentActivityId || options?.activityId || "",
@@ -729,7 +755,7 @@ export const useDesktopStore = create((set, get) => ({
                 actualTimeSpentMinutes: 0,
                 createdAt,
                 sessionIds: toSessionIds(get().activeSessionId),
-            };
+            });
             nextSnapshot = {
                 ...snapshot,
                 activities: [activity, ...snapshot.activities],

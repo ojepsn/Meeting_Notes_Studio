@@ -13,6 +13,7 @@ export declare const dayColumnWidthForView: (daysInView: (typeof DAYS)[number]) 
 interface CalendarWorkspaceProps {
     todos: TodoRecord[];
     activities: ActivityRecord[];
+    timeLogs: import("@notesmith/domain").TimeLogRecord[];
     calendarItems: CalendarItemRecord[];
     settings: LocalAppSettings;
     structureOptions: StructureOptions;
@@ -41,6 +42,8 @@ interface CalendarWorkspaceProps {
         startSlot: number;
         durationSlots: number;
     }) => void;
+    onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
+    onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
     onOpenTodoWorkspace: () => void;
     onOpenTodoDetail: (todoId: string) => void;
     onOpenActivityWorkspace: (activityId: string) => void;
@@ -50,5 +53,5 @@ interface CalendarWorkspaceProps {
     onPreviewSessionOutput: (sessionId: string) => void;
     onFullScreenChange?: (isFullScreen: boolean) => void;
 }
-export declare const CalendarWorkspace: ({ todos, activities, calendarItems, settings, structureOptions, linkedSessionStateByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, onCreateLinkedMeetingSession, onPreviewSessionOutput, onFullScreenChange, }: CalendarWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const CalendarWorkspace: ({ todos, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, onCreateLinkedMeetingSession, onPreviewSessionOutput, onFullScreenChange, }: CalendarWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

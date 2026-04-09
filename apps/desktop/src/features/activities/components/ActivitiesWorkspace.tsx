@@ -3,6 +3,7 @@ import type { ActivityRecord, TimeLogRecord, TodoRecord } from "@notesmith/domai
 import { DateInput } from "../../../components/DateInput";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
+import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
 
 type ActivitySortKey = "dueDate" | "description" | "type" | "domain" | "project" | "actualTimeSpentMinutes" | "createdAt";
 
@@ -118,6 +119,7 @@ export const ActivitiesWorkspace = ({
   const [childMeetingDraft, setChildMeetingDraft] = useState("");
   const [editingTimeLogId, setEditingTimeLogId] = useState<string | null>(null);
   const [timeLogDraft, setTimeLogDraft] = useState<TimeLogRecord | null>(null);
+  const [now, setNow] = useState(() => new Date());
   const detailsEditorRef = useRef<HTMLDivElement | null>(null);
 
   const topLevelActivities = useMemo(() => activities.filter((entry) => !entry.parentActivityId), [activities]);
@@ -150,6 +152,20 @@ export const ActivitiesWorkspace = ({
       .forEach((entry) => grouped.set(entry.targetId, [...(grouped.get(entry.targetId) || []), entry]));
     return grouped;
   }, [timeLogs]);
+
+  const runningActivities = useMemo(
+    () =>
+      topLevelActivities.filter((activity) =>
+        Boolean(getRunningTimeLog(activityTimeLogsById.get(activity.id) || [])),
+      ),
+    [activityTimeLogsById, topLevelActivities],
+  );
+
+  useEffect(() => {
+    if (!runningActivities.length) return;
+    const intervalId = window.setInterval(() => setNow(new Date()), 30000);
+    return () => window.clearInterval(intervalId);
+  }, [runningActivities.length]);
 
   const filteredActivities = useMemo(() => {
     const normalized = normalizeValue(query);
@@ -390,10 +406,35 @@ export const ActivitiesWorkspace = ({
                     <span>{entry.project || "No project"}</span>
                     <span>{(childTodosByActivity.get(entry.id) || []).length} todos</span>
                     <span>{(childActivitiesByParent.get(entry.id) || []).length} meetings</span>
-                    <span>{entry.actualTimeSpentMinutes ? `${entry.actualTimeSpentMinutes}m` : "No time"}</span>
+                    <span>
+                      {(() => {
+                        const runningLog = getRunningTimeLog(activityTimeLogsById.get(entry.id) || []);
+                        return runningLog
+                          ? `Running • ${formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now))}`
+                          : entry.actualTimeSpentMinutes
+                            ? `${entry.actualTimeSpentMinutes}m`
+                            : "No time";
+                      })()}
+                    </span>
                   </div>
                 </div>
-                <span className="tiny-text">{entry.dueDate || entry.doOn || entry.createdAt.slice(0, 10)}</span>
+                <div className="activities-compact-item-actions">
+                  <span className="tiny-text">{entry.dueDate || entry.doOn || entry.createdAt.slice(0, 10)}</span>
+                  <button
+                    className={`small-button${getRunningTimeLog(activityTimeLogsById.get(entry.id) || []) ? " primary-button" : ""}`}
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (getRunningTimeLog(activityTimeLogsById.get(entry.id) || [])) {
+                        onStopTracking("activity", entry.id);
+                        return;
+                      }
+                      onStartTracking("activity", entry.id);
+                    }}
+                  >
+                    {getRunningTimeLog(activityTimeLogsById.get(entry.id) || []) ? "Stop" : "Start"}
+                  </button>
+                </div>
               </button>
             )) : (
               <div className="empty-state-card compact-empty-state">

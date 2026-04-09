@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ActivityRecord, TimeLogRecord, TimeReportPreset, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { saveTextFile } from "../../../lib/storage/desktopStorage";
+import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
 
 type TimeWorkspaceProps = {
   todos: TodoRecord[];
@@ -105,6 +106,7 @@ export const TimeWorkspace = ({
   const [projectFilter, setProjectFilter] = useState("all");
   const [domainFilter, setDomainFilter] = useState("all");
   const [presetDraft, setPresetDraft] = useState("");
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
     if (requestedProject !== undefined && requestedProject !== null) setProjectFilter(requestedProject || "all");
@@ -211,7 +213,14 @@ export const TimeWorkspace = ({
   );
 
   const runningLogs = useMemo(() => filteredLogs.filter((log) => log.startTime === log.endTime), [filteredLogs]);
+  const activeLog = useMemo<EditableTimeLogRecord | null>(() => getRunningTimeLog(filteredLogs) as EditableTimeLogRecord | null, [filteredLogs]);
   const recentLogs = useMemo(() => filteredLogs.slice(0, 24), [filteredLogs]);
+
+  useEffect(() => {
+    if (!activeLog) return;
+    const intervalId = window.setInterval(() => setNow(new Date()), 30000);
+    return () => window.clearInterval(intervalId);
+  }, [activeLog]);
 
   const dailyTotals = useMemo(() => {
     const grouped = new Map<string, number>();
@@ -372,8 +381,8 @@ export const TimeWorkspace = ({
     <div className="card todos-workspace todos-workspace-minimal time-workspace-card">
       <div className="card-header session-editor-header-minimal">
         <div>
-          <h2>Time</h2>
-          <p className="muted">See what is running, compare periods, correct missed stop times, and export clean reporting views when needed.</p>
+          <h2>Timelogs</h2>
+          <p className="muted">This is the main workspace for starting, stopping, correcting, and commenting on time logs.</p>
         </div>
         <div className="page-actions">
           <button className="shell-button" type="button" onClick={() => void exportCsv()}>Export CSV</button>
@@ -507,6 +516,128 @@ export const TimeWorkspace = ({
       </div>
       <div className="time-workspace-layout">
         <section className="time-workspace-main">
+          <div className="sidebar-card timelog-active-card">
+            <div className="card-header">
+              <div>
+                <h3>Active time log</h3>
+                <p className="muted">The running log stays pinned here so it is always easy to stop or correct.</p>
+              </div>
+            </div>
+            {activeLog ? (
+              <div className="timelog-active-row">
+                <div className="timelog-active-copy">
+                  <strong>{activeLog.title}</strong>
+                  <span className="tiny-text">{activeLog.contextLabel}</span>
+                  <span className="status-chip">
+                    Running • {formatTrackedMinutes(calculateLiveDurationMinutes(activeLog, now))}
+                  </span>
+                </div>
+                <div className="timelog-active-actions">
+                  <button className="primary-button" type="button" onClick={() => onStopTracking(activeLog.targetType, activeLog.targetId)}>
+                    Stop
+                  </button>
+                  <button
+                    className="small-button"
+                    type="button"
+                    onClick={() => (activeLog.targetType === "todo" ? onOpenTodoDetail(activeLog.targetId) : onOpenActivityDetail(activeLog.targetId))}
+                  >
+                    Open source
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="timelog-active-empty">
+                <strong>No active time log</strong>
+                <span className="muted">Start a timer from Todos, Activities, Calendar, or this workspace.</span>
+              </div>
+            )}
+          </div>
+
+          <div className="sidebar-card">
+            <div className="card-header">
+              <div>
+                <h3>All time logs</h3>
+                <p className="muted">Most recent first. Edit date, start, stop, and comment inline.</p>
+              </div>
+              <span className="status-chip">{filteredLogs.length} visible</span>
+            </div>
+            <div className="time-log-editor-table">
+              {filteredLogs.length ? filteredLogs.map((log) => {
+                const running = log.startTime === log.endTime;
+                const displayedMinutes = running ? calculateLiveDurationMinutes(log, now) : log.durationMinutes;
+                return (
+                  <div key={log.id} className={`time-log-editor-row${running ? " time-log-editor-row-active" : ""}`}>
+                    <button
+                      type="button"
+                      className="time-log-source-button"
+                      onClick={() => (log.targetType === "todo" ? onOpenTodoDetail(log.targetId) : onOpenActivityDetail(log.targetId))}
+                    >
+                      <strong>{log.title}</strong>
+                      <span className="tiny-text">{log.contextLabel}</span>
+                    </button>
+                    <DateInput
+                      value={log.date}
+                      onChange={(event) =>
+                        onSaveTimeLog({
+                          ...log,
+                          date: event.target.value,
+                          durationMinutes: calculateDurationMinutes(event.target.value, log.startTime, log.endTime),
+                          updatedAt: new Date().toISOString(),
+                        })
+                      }
+                    />
+                    <input
+                      type="time"
+                      step={300}
+                      value={log.startTime}
+                      onChange={(event) =>
+                        onSaveTimeLog({
+                          ...log,
+                          startTime: event.target.value,
+                          durationMinutes: calculateDurationMinutes(log.date, event.target.value, log.endTime),
+                          updatedAt: new Date().toISOString(),
+                        })
+                      }
+                    />
+                    <input
+                      type="time"
+                      step={300}
+                      value={log.endTime}
+                      onChange={(event) =>
+                        onSaveTimeLog({
+                          ...log,
+                          endTime: event.target.value,
+                          durationMinutes: calculateDurationMinutes(log.date, log.startTime, event.target.value),
+                          updatedAt: new Date().toISOString(),
+                        })
+                      }
+                    />
+                    <span className="status-chip">{running ? `Running • ${formatTrackedMinutes(displayedMinutes)}` : formatMinutes(displayedMinutes)}</span>
+                    <input
+                      value={log.notes}
+                      onChange={(event) =>
+                        onSaveTimeLog({
+                          ...log,
+                          notes: event.target.value,
+                          updatedAt: new Date().toISOString(),
+                        })
+                      }
+                      placeholder="Comment"
+                    />
+                    <div className="time-log-inline-actions">
+                      <button className={`small-button${running ? " primary-button" : ""}`} type="button" onClick={() => (running ? onStopTracking(log.targetType, log.targetId) : onStartTracking(log.targetType, log.targetId))}>
+                        {running ? "Stop" : "Start"}
+                      </button>
+                      <button className="small-button danger-button" type="button" onClick={() => onDeleteTimeLog(log.id)}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              }) : <div className="empty-state-card compact-empty-state"><h3>No time logs yet</h3><p>Start and stop work from Todos, Activities, or Calendar, then manage the logs here.</p></div>}
+            </div>
+          </div>
+
           <div className="time-summary-grid">
             <div className="sidebar-card">
               <h3>Active timers</h3>
@@ -560,162 +691,84 @@ export const TimeWorkspace = ({
             </div>
           </div>
 
-          <div className="sidebar-card">
-            <div className="card-header">
-              <div>
-                <h3>Grouped tables</h3>
-                <p className="muted">Use these as dashboard tables now, and as chart-ready exports later.</p>
-              </div>
-            </div>
-            <div className="time-grouped-grid">
-              <div className="stack tight-stack">
-                <strong>Projects</strong>
-                {projectTotals.slice(0, 10).map((entry) => <div key={entry.label} className="list-item"><span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span></div>)}
-              </div>
-              <div className="stack tight-stack">
-                <strong>Domains</strong>
-                {domainTotals.slice(0, 10).map((entry) => <div key={entry.label} className="list-item"><span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span></div>)}
-              </div>
-              <div className="stack tight-stack">
-                <strong>Activities</strong>
-                {activityTotals.slice(0, 10).map((entry) => (
-                  <button key={`${entry.targetType}-${entry.targetId}`} className="list-item list-item-button" type="button" onClick={() => entry.targetType === "activity" ? onOpenActivityDetail(entry.targetId) : onOpenTodoDetail(entry.targetId)}>
-                    <span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="time-visual-grid">
-            <div className="sidebar-card">
-              <div className="card-header">
-                <div>
-                  <h3>Daily trend</h3>
-                  <p className="muted">A quick visual read of where time clustered across the current range.</p>
+          <details className="workspace-disclosure">
+            <summary>Reports and exports</summary>
+            <div className="workspace-disclosure-body stack">
+              <div className="sidebar-card">
+                <div className="card-header">
+                  <div>
+                    <h3>Grouped tables</h3>
+                    <p className="muted">Use these as dashboard tables now, and as chart-ready exports later.</p>
+                  </div>
+                </div>
+                <div className="time-grouped-grid">
+                  <div className="stack tight-stack">
+                    <strong>Projects</strong>
+                    {projectTotals.slice(0, 10).map((entry) => <div key={entry.label} className="list-item"><span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span></div>)}
+                  </div>
+                  <div className="stack tight-stack">
+                    <strong>Domains</strong>
+                    {domainTotals.slice(0, 10).map((entry) => <div key={entry.label} className="list-item"><span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span></div>)}
+                  </div>
+                  <div className="stack tight-stack">
+                    <strong>Activities</strong>
+                    {activityTotals.slice(0, 10).map((entry) => (
+                      <button key={`${entry.targetType}-${entry.targetId}`} className="list-item list-item-button" type="button" onClick={() => entry.targetType === "activity" ? onOpenActivityDetail(entry.targetId) : onOpenTodoDetail(entry.targetId)}>
+                        <span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-              <div className="time-trend-list">
-                {dailyTotals.slice(0, 10).map((entry) => (
-                  <div key={entry.date} className="time-trend-row">
-                    <span className="tiny-text">{entry.date}</span>
-                    <div className="time-trend-bar">
-                      <span style={{ width: `${(entry.minutes / maxDailyMinutes) * 100}%` }} />
+
+              <div className="time-visual-grid">
+                <div className="sidebar-card">
+                  <div className="card-header">
+                    <div>
+                      <h3>Daily trend</h3>
+                      <p className="muted">A quick visual read of where time clustered across the current range.</p>
                     </div>
-                    <strong>{formatMinutes(entry.minutes)}</strong>
                   </div>
-                ))}
-              </div>
-            </div>
-            <div className="sidebar-card">
-              <div className="card-header">
-                <div>
-                  <h3>Stacked summary</h3>
-                  <p className="muted">A compact split between workspace and work-type effort in the selected range.</p>
-                </div>
-              </div>
-              <div className="time-stacked-strip">
-                {stackedSummary.map((entry) => (
-                  <span
-                    key={entry.label}
-                    title={`${entry.label}: ${formatMinutes(entry.minutes)}`}
-                    style={{ width: `${(entry.minutes / stackedSummaryTotal) * 100}%` }}
-                  />
-                ))}
-              </div>
-              <div className="section-list">
-                {stackedSummary.map((entry) => (
-                  <div key={entry.label} className="list-item">
-                    <strong>{entry.label}</strong>
-                    <span>{formatMinutes(entry.minutes)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="sidebar-card">
-            <div className="card-header">
-              <div>
-                <h3>Time logs</h3>
-                <p className="muted">Edit timing and comments inline here. The table stays dense so many rows fit on screen.</p>
-              </div>
-            </div>
-            <div className="time-log-editor-table">
-              {filteredLogs.length ? filteredLogs.map((log) => (
-                <div key={log.id} className="time-log-editor-row">
-                  <button
-                    type="button"
-                    className="time-log-source-button"
-                    onClick={() => (log.targetType === "todo" ? onOpenTodoDetail(log.targetId) : onOpenActivityDetail(log.targetId))}
-                  >
-                    <strong>{log.title}</strong>
-                    <span className="tiny-text">{log.contextLabel}</span>
-                  </button>
-                  <DateInput
-                    value={log.date}
-                    onChange={(event) =>
-                      onSaveTimeLog({
-                        ...log,
-                        date: event.target.value,
-                        durationMinutes: calculateDurationMinutes(event.target.value, log.startTime, log.endTime),
-                        updatedAt: new Date().toISOString(),
-                      })
-                    }
-                  />
-                  <input
-                    type="time"
-                    step={300}
-                    value={log.startTime}
-                    onChange={(event) =>
-                      onSaveTimeLog({
-                        ...log,
-                        startTime: event.target.value,
-                        durationMinutes: calculateDurationMinutes(log.date, event.target.value, log.endTime),
-                        updatedAt: new Date().toISOString(),
-                      })
-                    }
-                  />
-                  <input
-                    type="time"
-                    step={300}
-                    value={log.endTime}
-                    onChange={(event) =>
-                      onSaveTimeLog({
-                        ...log,
-                        endTime: event.target.value,
-                        durationMinutes: calculateDurationMinutes(log.date, log.startTime, event.target.value),
-                        updatedAt: new Date().toISOString(),
-                      })
-                    }
-                  />
-                  <span className="status-chip">{formatMinutes(log.durationMinutes)}</span>
-                  <input
-                    value={log.notes}
-                    onChange={(event) =>
-                      onSaveTimeLog({
-                        ...log,
-                        notes: event.target.value,
-                        updatedAt: new Date().toISOString(),
-                      })
-                    }
-                    placeholder="Comment"
-                  />
-                  <div className="time-log-inline-actions">
-                    <button className="small-button" type="button" onClick={() => onStartTracking(log.targetType, log.targetId)}>
-                      Start
-                    </button>
-                    <button className="small-button" type="button" onClick={() => onStopTracking(log.targetType, log.targetId)}>
-                      Stop
-                    </button>
-                    <button className="small-button danger-button" type="button" onClick={() => onDeleteTimeLog(log.id)}>
-                      Delete
-                    </button>
+                  <div className="time-trend-list">
+                    {dailyTotals.slice(0, 10).map((entry) => (
+                      <div key={entry.date} className="time-trend-row">
+                        <span className="tiny-text">{entry.date}</span>
+                        <div className="time-trend-bar">
+                          <span style={{ width: `${(entry.minutes / maxDailyMinutes) * 100}%` }} />
+                        </div>
+                        <strong>{formatMinutes(entry.minutes)}</strong>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              )) : <div className="empty-state-card compact-empty-state"><h3>No time logs yet</h3><p>Start and stop work from Todos or Activities, then correct the logs here when needed.</p></div>}
+                <div className="sidebar-card">
+                  <div className="card-header">
+                    <div>
+                      <h3>Stacked summary</h3>
+                      <p className="muted">A compact split between workspace and work-type effort in the selected range.</p>
+                    </div>
+                  </div>
+                  <div className="time-stacked-strip">
+                    {stackedSummary.map((entry) => (
+                      <span
+                        key={entry.label}
+                        title={`${entry.label}: ${formatMinutes(entry.minutes)}`}
+                        style={{ width: `${(entry.minutes / stackedSummaryTotal) * 100}%` }}
+                      />
+                    ))}
+                  </div>
+                  <div className="section-list">
+                    {stackedSummary.map((entry) => (
+                      <div key={entry.label} className="list-item">
+                        <strong>{entry.label}</strong>
+                        <span>{formatMinutes(entry.minutes)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          </details>
         </section>
 
         <aside className="time-workspace-detail">

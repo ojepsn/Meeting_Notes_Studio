@@ -2502,6 +2502,24 @@ select {
   color: var(--app-muted);
 }
 
+.calendar-item-inline-action {
+  align-self: flex-start;
+  margin-top: 0.1rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 85%, transparent 15%);
+  background: color-mix(in srgb, var(--app-surface) 82%, transparent 18%);
+  color: var(--app-text);
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+
+.calendar-item-inline-action-active {
+  border-color: var(--app-accent-border);
+  background: color-mix(in srgb, var(--app-accent-soft) 42%, var(--app-surface) 58%);
+  color: var(--app-accent-strong-border);
+}
+
 .calendar-item-block-compact {
   padding: 0.15rem 0.35rem;
   justify-content: center;
@@ -2514,6 +2532,15 @@ select {
 
 .calendar-item-block-compact span {
   display: none;
+}
+
+.calendar-item-block-compact .calendar-item-inline-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.15rem;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.58rem;
 }
 
 .calendar-item-block-compact .calendar-resize-handle {
@@ -3200,6 +3227,11 @@ select {
   padding: 0.45rem 0.55rem;
 }
 
+.time-log-editor-row-active {
+  border-color: var(--app-accent-border);
+  background: color-mix(in srgb, var(--app-accent-soft) 18%, var(--app-surface-soft) 82%);
+}
+
 .time-log-editor-row input {
   min-height: 2.2rem;
   padding: 0.45rem 0.55rem;
@@ -3300,11 +3332,52 @@ select {
   gap: 1rem;
 }
 
+.timelog-active-card {
+  border-color: var(--app-accent-border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 36%, var(--app-surface-soft) 64%) 0%, var(--app-surface-soft) 100%),
+    var(--app-surface-soft);
+}
+
+.timelog-active-row,
+.timelog-active-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.timelog-active-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.timelog-active-copy strong,
+.timelog-active-copy .tiny-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timelog-active-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
 .time-workspace-main,
 .time-workspace-detail {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.time-workspace-detail .sidebar-card {
+  position: sticky;
+  top: 1rem;
 }
 
 .time-visual-grid {
