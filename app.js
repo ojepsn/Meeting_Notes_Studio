@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.5";
+const APP_VERSION = "v0.10.6";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -828,6 +828,7 @@ void initializeApp();
     document.addEventListener("click", handlePrimaryChromeClick);
     if (outputResizeHandle && workspaceLayout) {
       outputResizeHandle.addEventListener("pointerdown", startOutputResize);
+      outputResizeHandle.addEventListener("mousedown", startOutputResize);
     }
     const createAndOpenNewSession = () => {
     if (audioRecordingSessionId) {
@@ -6351,8 +6352,9 @@ function startOutputResize(event) {
 
   event.preventDefault();
   const workspaceBounds = workspaceLayout.getBoundingClientRect();
+  const isPointerEvent = typeof PointerEvent !== "undefined" && event instanceof PointerEvent;
 
-  const onPointerMove = (moveEvent) => {
+  const onMove = (moveEvent) => {
     const nextWidth = clampNumber(
       workspaceBounds.right - moveEvent.clientX,
       MIN_OUTPUT_PANEL_WIDTH,
@@ -6363,13 +6365,20 @@ function startOutputResize(event) {
     applyOutputPanelWidth();
   };
 
-  const onPointerUp = () => {
-    window.removeEventListener("pointermove", onPointerMove);
+  const onUp = () => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("mousemove", onMove);
     persistSettings();
   };
 
-  window.addEventListener("pointermove", onPointerMove);
-  window.addEventListener("pointerup", onPointerUp, { once: true });
+  if (isPointerEvent) {
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+    return;
+  }
+
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp, { once: true });
 }
 
 function stopMediaStream(stream) {
