@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.8";
+const APP_VERSION = "v0.10.9";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -751,6 +751,17 @@ function getTemplateBehaviorId(template) {
 
   const sourceTemplateId = typeof template.sourceTemplateId === "string" ? template.sourceTemplateId : "";
   return sourceTemplateId || template.id || "meeting";
+}
+
+function getTemplateTitleFieldLabel(template) {
+  const behaviorId = getTemplateBehaviorId(template);
+  if (behaviorId === "personalNote") {
+    return "Quick note title";
+  }
+  if (behaviorId === "oneToOneCall") {
+    return "1:1 / Phone call title";
+  }
+  return "Meeting title";
 }
 
 function getTemplateDefinition(templateId) {
@@ -2373,14 +2384,8 @@ void initializeApp().catch((error) => {
 
     try {
       const transcriptText = await readTranscriptFile(file);
-      updateActiveSession({ uploadedTranscript: transcriptText }, true);
-      const session = getActiveSession();
-      uploadedTranscriptInput.value = transcriptText;
-      setTranscriptFieldState("uploaded", "uploaded", "Uploaded transcript");
-      applyTemplateUi({
-        ...session,
-        uploadedTranscript: transcriptText,
-      });
+      updateActiveSession({ uploadedTranscript: transcriptText }, false);
+      syncFieldsFromSession();
       setElementVisibility(uploadedTranscriptField, Boolean(transcriptText.trim()));
       revealTranscriptSurface("uploaded", { focus: true });
       audioCaptureStatus.textContent = `Transcript uploaded from ${file.name} and added to the Uploaded transcript field.`;
@@ -3081,6 +3086,16 @@ function renderTemplateQuickSelectors() {
     });
 
   templateQuickSelectors.innerHTML = "";
+
+  const newButton = document.createElement("button");
+  newButton.type = "button";
+  newButton.className = "ghost-button template-quick-button";
+  newButton.textContent = "New";
+  newButton.addEventListener("click", () => {
+    createAndOpenNewSession();
+  });
+  templateQuickSelectors.appendChild(newButton);
+
   rankedTemplates.forEach((template) => {
     if (!template) {
       return;
@@ -3330,7 +3345,7 @@ function applyTemplateUi(session) {
   const showUploadedTranscript = Boolean(session.uploadedTranscript?.trim());
   const showTitle = fields.title !== false;
   const templateCustomFields = normalizeTemplateCustomFields(template.customFields);
-  const showContextDisclosure = showMeetingSchedule || templateCustomFields.length > 0;
+  const showContextDisclosure = showParticipants || templateCustomFields.length > 0;
 
   setElementVisibility(titleField, showTitle);
   setElementVisibility(participantsField, showParticipants);
@@ -3350,7 +3365,7 @@ function applyTemplateUi(session) {
   }
   setElementVisibility(uploadedTranscriptField, showUploadedTranscript);
   renderTemplateCustomFields(session, template);
-  titleFieldLabel.textContent = isQuickNote ? "Note title" : isOneToOneCall ? "Title" : "Meeting title";
+  titleFieldLabel.textContent = getTemplateTitleFieldLabel(template);
   if (participantsFieldLabel) {
     participantsFieldLabel.textContent = isOneToOneCall ? "Participant" : "Participants";
   }
@@ -6318,6 +6333,15 @@ function formatDate(timestamp) {
   }
 
   return `${formatIsoDate(date)} ${formatIsoTime(date)}`;
+}
+
+function formatTime(timestamp) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return formatIsoTime(date);
 }
 
 function formatMeetingDate(dateValue) {

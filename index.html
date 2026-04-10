@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.10.8">
+  <link rel="stylesheet" href="styles.css?v=0.10.9">
 </head>
 <body>
   <main class="page-shell">
@@ -24,7 +24,7 @@
           Capture rough notes and turn them into professional meeting notes without leaving the page.
         </p>
         <div class="hero-meta">
-        <div class="version-pill" id="app-version">v0.10.8</div>
+        <div class="version-pill" id="app-version">v0.10.9</div>
           <div class="update-notice is-hidden-field" id="app-update-notice">New version available</div>
         </div>
       </div>
@@ -93,6 +93,7 @@
               <button class="ghost-button" id="open-sessions-main" type="button">All Sessions</button>
               <button class="ghost-button" id="open-backup-panel" type="button">Back-up</button>
               <button class="ghost-button" id="open-settings" type="button">Settings</button>
+              <div class="status-pill" id="save-status" data-state="idle">Saved locally</div>
             </div>
           </div>
         </div>
@@ -103,25 +104,42 @@
                 <summary>
                   <div class="form-section-header">
                     <p class="section-label">Context</p>
-                    <h3>Title and template</h3>
+                    <h3>Details</h3>
                   </div>
                 </summary>
 
-                <div class="field-grid">
-                  <label class="field" id="title-field">
+                  <div class="field-grid">
+                    <label class="field" id="title-field">
                     <span class="field-label" id="title-field-label">Meeting title</span>
                     <input id="meeting-title" type="text" maxlength="100" placeholder="Weekly project meeting">
                   </label>
 
                   <label class="field">
-                    <span class="field-label">Template</span>
-                    <select id="meeting-template"></select>
-                  </label>
-                </div>
+                      <span class="field-label">Template</span>
+                      <select id="meeting-template"></select>
+                    </label>
+                  </div>
+
+                  <div class="field-grid field-grid-three" id="meeting-schedule-field">
+                    <label class="field field-tight" id="meeting-date-field">
+                      <span class="field-label">Date</span>
+                      <input id="meeting-date" type="date">
+                    </label>
+
+                    <label class="field field-tight" id="meeting-start-time-field">
+                      <span class="field-label">Start time</span>
+                      <input id="meeting-start-time" type="time">
+                    </label>
+
+                    <label class="field field-tight" id="meeting-end-time-field">
+                      <span class="field-label">End time</span>
+                      <input id="meeting-end-time" type="time">
+                    </label>
+                  </div>
 
                   <details class="context-disclosure">
-                  <summary>People and details</summary>
-                  <div class="context-disclosure-body">
+                    <summary>People</summary>
+                    <div class="context-disclosure-body">
                     <label class="field" id="participants-field">
                       <span class="field-label">Participants</span>
                       <input id="participants" type="text" maxlength="160" placeholder="Add participants" list="participant-suggestions">
@@ -141,26 +159,9 @@
                       <div class="chip-row participant-chip-row is-hidden-field" id="participant-chips" aria-live="polite"></div>
                     </div>
 
-                    <div class="field-grid field-grid-three" id="meeting-schedule-field">
-                      <label class="field field-tight" id="meeting-date-field">
-                        <span class="field-label">Date</span>
-                        <input id="meeting-date" type="date">
-                      </label>
-
-                      <label class="field field-tight" id="meeting-start-time-field">
-                        <span class="field-label">Start time</span>
-                        <input id="meeting-start-time" type="time">
-                      </label>
-
-                      <label class="field field-tight" id="meeting-end-time-field">
-                        <span class="field-label">End time</span>
-                        <input id="meeting-end-time" type="time">
-                      </label>
+                      <div class="template-custom-fields" id="template-custom-fields"></div>
                     </div>
-
-                    <div class="template-custom-fields" id="template-custom-fields"></div>
-                  </div>
-                </details>
+                  </details>
               </details>
             </section>
 
@@ -193,11 +194,11 @@
                   <label class="field" id="manual-notes-field">
                     <textarea
                       id="raw-notes"
-                    rows="12"
-                    placeholder="Write your own notes here while dictation continues in the transcript field..."
-                  ></textarea>
-                </label>
-              </details>
+                      rows="12"
+                      placeholder="Write your own notes here, which will be included in the Output"
+                    ></textarea>
+                  </label>
+                </details>
 
                 <details class="manual-notes-disclosure is-hidden-field" id="live-transcript-disclosure" hidden>
                   <summary>
@@ -233,10 +234,6 @@
           </div>
 
           <aside class="editor-sidebar">
-            <div class="sidebar-status-row">
-              <div class="status-pill" id="save-status" data-state="idle">Saved locally</div>
-            </div>
-
             <div class="mobile-sheet-header mobile-only">
               <div>
                 <p class="section-label">More</p>
@@ -1465,7 +1462,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.17/mammoth.browser.min.js"></script>
-  <script src="app.js?v=0.10.8"></script>
+  <script src="app.js?v=0.10.9"></script>
 </body>
 </html>
 

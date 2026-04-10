@@ -661,11 +661,6 @@ body.sessions-panel-open {
   gap: 12px;
 }
 
-.sidebar-status-row {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .panel-heading {
   display: flex;
   align-items: flex-start;
@@ -693,6 +688,10 @@ body.sessions-panel-open {
 
 .panel-actions-shared {
   margin-left: auto;
+}
+
+.panel-actions-shared .status-pill {
+  margin-left: 4px;
 }
 
 .header-new-session-button {
