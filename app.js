@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.10";
+const APP_VERSION = "v0.10.11";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -210,10 +210,11 @@ const modelSelect = document.querySelector("#model-select");
 const modelOptions = document.querySelector("#model-options");
 const modelPricingStatus = document.querySelector("#model-pricing-status");
 const transcriptionModelSelect = document.querySelector("#transcription-model-select");
+const transcriptionModelOptions = document.querySelector("#transcription-model-options");
 const transcriptionModelDescription = document.querySelector("#transcription-model-description");
 const transcriptionModelPricing = document.querySelector("#transcription-model-pricing");
-const audioModelNote = document.querySelector("#audio-model-note");
 const aiStatusCopy = document.querySelector("#ai-status-copy");
+const appModelsLabel = document.querySelector("#app-models");
 const participantsInput = document.querySelector("#participants");
 const participantSuggestions = document.querySelector("#participant-suggestions");
 const participantDirectoryPanel = document.querySelector("#participant-directory");
@@ -262,6 +263,7 @@ const mobileGenerateButton = document.querySelector("#mobile-generate");
 const dictationToggle = document.querySelector("#dictation-toggle");
 const mobileDictationToggle = document.querySelector("#mobile-dictation-toggle");
 const audioRecordToggle = document.querySelector("#audio-record-toggle");
+const audioScreenToggle = document.querySelector("#audio-screen-toggle");
 const uploadAudioButton = document.querySelector("#upload-audio");
 const uploadTranscriptButton = document.querySelector("#upload-transcript");
 const transcribeAudioButton = document.querySelector("#transcribe-audio");
@@ -878,7 +880,7 @@ async function initializeApp() {
   setupSpeechRecognition();
   render();
   registerServiceWorker();
-  appVersionLabel.textContent = `${APP_VERSION} · IndexedDB`;
+  updateHeroMeta();
   try {
     await initializeStorageMode();
   } catch (error) {
@@ -920,7 +922,7 @@ void initializeApp().catch((error) => {
     }
   mobileDictationToggle?.addEventListener("click", () => {
     if (mobileDictationToggle.dataset.captureMode === "audio") {
-      toggleAudioCapture();
+      toggleAudioCapture("room");
       return;
     }
     toggleDictation();
@@ -1952,7 +1954,18 @@ void initializeApp().catch((error) => {
     persistAiSettings();
   });
 
-  transcriptionModelSelect.addEventListener("change", () => {
+  transcriptionModelOptions?.addEventListener("click", (event) => {
+    const option = event.target.closest(".model-option");
+    if (!option) {
+      return;
+    }
+
+    const nextModelId = option.dataset.transcriptionModelId;
+    if (!nextModelId) {
+      return;
+    }
+
+    transcriptionModelSelect.value = resolveSelectedTranscriptionModel(nextModelId);
     persistAiSettings();
   });
 
@@ -2346,7 +2359,11 @@ void initializeApp().catch((error) => {
   dictationToggle.addEventListener("click", toggleDictation);
 
   audioRecordToggle.addEventListener("click", () => {
-    toggleAudioCapture();
+    toggleAudioCapture("room");
+  });
+
+  audioScreenToggle?.addEventListener("click", () => {
+    toggleAudioCapture("screen");
   });
 
   uploadAudioButton.addEventListener("click", () => {
@@ -3003,13 +3020,7 @@ function normalizeTemplateLauncherIds(input, availableTemplateIds = null) {
 }
 
 function getPreferredDesktopTemplateId() {
-  const usageCounts = normalizeTemplateUsageCounts(settings.templateUsageCounts);
-  const validTemplateIds = new Set(getAllTemplates().map((template) => template.id));
-  const ranked = Object.entries(usageCounts)
-    .filter(([templateId]) => validTemplateIds.has(templateId))
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
-
-  return ranked[0]?.[0] || "meeting";
+  return "meeting";
 }
 
 function recordTemplateUsage(templateId) {
@@ -3073,15 +3084,18 @@ function renderTemplateQuickSelectors() {
   }
 
   const activeTemplateId = getActiveSession()?.template || getPreferredDesktopTemplateId();
-  const usageCounts = normalizeTemplateUsageCounts(settings.templateUsageCounts);
   settings.templateLauncherTemplateIds = normalizeTemplateLauncherIds(settings.templateLauncherTemplateIds);
+  const preferredOrder = ["meeting", "personalNote", "oneToOneCall"];
   const rankedTemplates = getAllTemplates()
     .filter((template) => settings.templateLauncherTemplateIds.includes(template.id))
     .slice()
     .sort((left, right) => {
-      const usageDelta = (usageCounts[right.id] || 0) - (usageCounts[left.id] || 0);
-      if (usageDelta !== 0) {
-        return usageDelta;
+      const leftIndex = preferredOrder.indexOf(left.id);
+      const rightIndex = preferredOrder.indexOf(right.id);
+      const normalizedLeftIndex = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex;
+      const normalizedRightIndex = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex;
+      if (normalizedLeftIndex !== normalizedRightIndex) {
+        return normalizedLeftIndex - normalizedRightIndex;
       }
       return left.label.localeCompare(right.label);
     });
@@ -3093,7 +3107,7 @@ function renderTemplateQuickSelectors() {
   newButton.className = "ghost-button template-quick-button";
   newButton.textContent = "New";
   newButton.addEventListener("click", () => {
-    createAndOpenNewSession();
+    createAndOpenNewSession(activeTemplateId);
   });
   templateQuickSelectors.appendChild(newButton);
 
@@ -3657,6 +3671,8 @@ function syncAudioCaptureUi(session = getActiveSession()) {
   const audioDraftMeta = normalizePendingAudioDraftMeta(session?.pendingAudioDraftMeta);
   const isAudioRecording = audioRecordingSessionId === session?.id;
   const canTranscribe = Boolean(audioDraftMeta) && !isAudioRecording;
+  const isRoomRecording = isAudioRecording && activeAudioCaptureMode === "room-meeting";
+  const isScreenRecording = isAudioRecording && activeAudioCaptureMode === "screen-meeting";
 
   setElementVisibility(audioRecordToggle?.closest(".audio-capture-card"), supportsTranscriptField);
 
@@ -3664,38 +3680,49 @@ function syncAudioCaptureUi(session = getActiveSession()) {
     return;
   }
 
-  if (audioModelNote) {
-    audioModelNote.innerHTML = `Audio transcription uses <strong>${escapeHtml(getTranscriptionModelLabel(settings.transcriptionModel))}</strong>.`;
-  }
-
-  audioRecordToggle.disabled = !SUPPORTS_AUDIO_RECORDING && !SUPPORTS_MEETING_CAPTURE && !isAudioRecording;
+  audioRecordToggle.disabled = (!SUPPORTS_AUDIO_RECORDING && !isAudioRecording) || isScreenRecording;
   setCaptureButtonContent(
     audioRecordToggle,
-    isAudioRecording ? "Stop meeting capture" : "Start meeting capture",
-    isAudioRecording
+    isRoomRecording ? "Stop room / hybrid meeting" : "Start room / hybrid meeting",
+    isRoomRecording
       ? "Save recording for transcription"
-      : (SUPPORTS_MEETING_CAPTURE
-        ? "Share tab, window, or screen audio"
-        : "Falls back to microphone capture"),
+      : "Use mic for room voices and nearby speakers",
   );
-  audioRecordToggle.classList.toggle("is-recording", isAudioRecording);
+  audioRecordToggle.classList.toggle("is-recording", isRoomRecording);
+
+  if (audioScreenToggle) {
+    audioScreenToggle.disabled = (!SUPPORTS_MEETING_CAPTURE && !isScreenRecording) || isRoomRecording;
+    setCaptureButtonContent(
+      audioScreenToggle,
+      isScreenRecording ? "Stop screen / browser audio" : "Start screen / browser audio",
+      isScreenRecording
+        ? "Save recording for transcription"
+        : (SUPPORTS_MEETING_CAPTURE
+          ? "Use direct in-computer audio from a tab or screen"
+          : "Not available in this browser"),
+    );
+    audioScreenToggle.classList.toggle("is-recording", isScreenRecording);
+  }
+
   uploadAudioButton.disabled = isAudioRecording;
   transcribeAudioButton.disabled = !canTranscribe;
 
   if (isAudioRecording) {
-    audioCaptureStatus.textContent = activeAudioCaptureMode === "meeting"
-      ? "Meeting capture is running. Keep sharing the tab, window, or screen until you are ready to transcribe."
-      : "Audio capture is running. Stop when you are ready to transcribe.";
+    audioCaptureStatus.textContent = activeAudioCaptureMode === "screen-meeting"
+      ? "Screen / browser audio capture is running. Keep sharing the tab, window, or screen until you are ready to transcribe."
+      : "Room / hybrid meeting capture is running through the microphone. Stop when you are ready to transcribe.";
     return;
   }
 
   if (!SUPPORTS_AUDIO_RECORDING && !SUPPORTS_MEETING_CAPTURE) {
-    audioCaptureStatus.textContent = "Live meeting capture is unavailable in this browser, but you can still upload an audio file to transcribe.";
+    audioCaptureStatus.textContent = "Live meeting recording is unavailable in this browser, but you can still upload an audio file to transcribe.";
   } else if (audioDraftMeta) {
     const sourceLabel = audioDraftMeta.source === "upload"
       ? "Uploaded audio ready"
-      : audioDraftMeta.source === "meeting-capture"
-        ? "Meeting capture ready"
+      : audioDraftMeta.source === "screen-meeting-capture"
+        ? "Screen / browser audio ready"
+        : audioDraftMeta.source === "room-meeting-capture"
+          ? "Room / hybrid meeting ready"
         : "Recorded audio ready";
     const sizeHint = audioDraftMeta.size > MAX_AUDIO_UPLOAD_BYTES
       ? " It will be split into smaller parts automatically before transcription."
@@ -3703,8 +3730,8 @@ function syncAudioCaptureUi(session = getActiveSession()) {
     audioCaptureStatus.textContent = `${sourceLabel}: ${audioDraftMeta.fileName} (${formatAudioFileSize(audioDraftMeta.size)}). Click "Transcribe audio" to add it to the Live transcript field.${sizeHint}`;
   } else {
     audioCaptureStatus.textContent = SUPPORTS_MEETING_CAPTURE
-      ? "No capture saved yet. Start meeting capture, use dictation, or upload mp3, m4a, wav, mp4, or webm. Larger files will be split automatically before transcription."
-      : "No capture saved yet. Start dictation, use microphone fallback capture, or upload mp3, m4a, wav, mp4, or webm. Larger files will be split automatically before transcription.";
+      ? "No capture saved yet. Start a room / hybrid meeting, use screen / browser audio for direct in-computer sound, or upload mp3, m4a, wav, mp4, or webm. Larger files will be split automatically before transcription."
+      : "No capture saved yet. Start a room / hybrid meeting through the microphone, use dictation, or upload mp3, m4a, wav, mp4, or webm. Larger files will be split automatically before transcription.";
   }
 
   syncMobileUi();
@@ -3733,8 +3760,10 @@ function renderPendingRecordings() {
     fragment.querySelector(".pending-recording-session").textContent = session.title.trim() || "Untitled session";
     const sourceLabel = meta.source === "upload"
       ? "Uploaded audio"
-      : meta.source === "meeting-capture"
-        ? "Meeting capture"
+      : meta.source === "screen-meeting-capture"
+        ? "Screen / browser audio"
+        : meta.source === "room-meeting-capture"
+          ? "Room / hybrid meeting"
         : "Recorded audio";
     fragment.querySelector(".pending-recording-meta").textContent = `${meta.fileName} • ${formatAudioFileSize(meta.size)} • ${sourceLabel}`;
     pendingRecordingsList.appendChild(fragment);
@@ -4144,6 +4173,33 @@ function updateTranscriptionModelDescription() {
   }
 }
 
+function renderTranscriptionModelOptions() {
+  if (!transcriptionModelOptions || !transcriptionModelSelect) {
+    return;
+  }
+
+  const selectedModel = resolveSelectedTranscriptionModel(transcriptionModelSelect.value || settings.transcriptionModel);
+  transcriptionModelSelect.value = selectedModel;
+
+  transcriptionModelOptions.innerHTML = Object.entries(TRANSCRIPTION_MODELS)
+    .map(([modelId, model]) => {
+      const isSelected = modelId === selectedModel;
+      const selectedClass = isSelected ? " is-selected" : "";
+      return `
+        <button class="model-option${selectedClass}" data-transcription-model-id="${escapeHtml(modelId)}" type="button" aria-pressed="${String(isSelected)}">
+          <span class="model-option-header">
+            <span class="model-option-name">${escapeHtml(model.label)}</span>
+            <span class="model-option-badge">${isSelected ? "Selected" : "Choose"}</span>
+          </span>
+          <span class="model-option-copy">${escapeHtml(model.description)}</span>
+          <span class="model-option-price">${escapeHtml(`Estimated cost: ${model.pricing}`)}</span>
+          <span class="model-option-meta">Pricing date: ${escapeHtml(model.pricingDate)}</span>
+        </button>
+      `;
+    })
+    .join("");
+}
+
 function syncModalScrollLock() {
   const hasOpenModal = !aiSettingsModal.classList.contains("is-hidden")
     || !settingsModal.classList.contains("is-hidden")
@@ -4258,26 +4314,24 @@ function syncMobileUi() {
         mobileDictationToggle.textContent = isRecording ? "Stop dictation" : "Start dictation";
       }
       if (hintNode) {
-        hintNode.textContent = isRecording ? "Live browser transcription" : "Fastest for one voice";
+        hintNode.textContent = isRecording ? "Live browser transcription" : "Best for personal dictation";
       }
       mobileDictationToggle.classList.toggle("is-recording", dictationToggle.classList.contains("is-recording"));
       mobileDictationToggle.disabled = dictationToggle.disabled;
       mobileDictationToggle.dataset.captureMode = "dictation";
     } else {
       if (titleNode) {
-        titleNode.textContent = isRecordingAudio ? "Stop meeting capture" : "Start meeting capture";
+        titleNode.textContent = isRecordingAudio ? "Stop room / hybrid meeting" : "Start room / hybrid meeting";
       } else {
-        mobileDictationToggle.textContent = isRecordingAudio ? "Stop meeting capture" : "Start meeting capture";
+        mobileDictationToggle.textContent = isRecordingAudio ? "Stop room / hybrid meeting" : "Start room / hybrid meeting";
       }
       if (hintNode) {
-        hintNode.textContent = SUPPORTS_MEETING_CAPTURE
-          ? "Share tab, window, or screen audio"
-          : SUPPORTS_AUDIO_RECORDING
-            ? "Falls back to microphone capture"
-            : "Use More to upload audio";
+        hintNode.textContent = SUPPORTS_AUDIO_RECORDING
+          ? "Use mic for room voices and nearby speakers"
+          : "Use More to upload audio";
       }
       mobileDictationToggle.classList.toggle("is-recording", isRecordingAudio);
-      mobileDictationToggle.disabled = (!SUPPORTS_AUDIO_RECORDING && !SUPPORTS_MEETING_CAPTURE) && !isRecordingAudio;
+      mobileDictationToggle.disabled = !SUPPORTS_AUDIO_RECORDING && !isRecordingAudio;
       mobileDictationToggle.dataset.captureMode = "audio";
     }
   }
@@ -4324,7 +4378,7 @@ function syncMobileCaptureStatus(text = "") {
   }
 
   const nextText = String(text || "").trim()
-    || "Start dictation, try meeting capture, or use More to upload audio.";
+    || "Start a room / hybrid meeting, use screen / browser audio, or use More to upload audio.";
   mobileCaptureStatus.textContent = nextText;
 }
 
@@ -4358,9 +4412,11 @@ function persistAiSettings({ announce = true } = {}) {
   settings.model = resolveSelectedModel(modelSelect.value);
   settings.transcriptionModel = resolveSelectedTranscriptionModel(transcriptionModelSelect.value);
   persistSettings();
+  updateHeroMeta();
   updateAiStatusCopy();
   updateTranscriptionModelDescription();
   renderAiModelOptions();
+  renderTranscriptionModelOptions();
   syncAudioCaptureUi(getActiveSession());
 
   if (announce) {
@@ -4404,6 +4460,16 @@ function resolveSelectedModel(modelId) {
 
 function getAiModelLabel(modelId) {
   return getVisibleAiModels().find((model) => model.id === resolveSelectedModel(modelId))?.label || "GPT-5 mini";
+}
+
+function updateHeroMeta() {
+  if (appVersionLabel) {
+    appVersionLabel.textContent = `${APP_VERSION} · IndexedDB`;
+  }
+
+  if (appModelsLabel) {
+    appModelsLabel.textContent = `Output: ${getAiModelLabel(settings.model)} · Audio: ${getTranscriptionModelLabel(settings.transcriptionModel)}`;
+  }
 }
 
 function updateModelPricingStatus(message) {
@@ -6579,7 +6645,7 @@ function resolveLiveTranscriptSource(session = getActiveSession()) {
     return "dictation";
   }
 
-  if (audioRecordingSessionId === session?.id && activeAudioCaptureMode.startsWith("meeting")) {
+  if (audioRecordingSessionId === session?.id && /meeting/.test(activeAudioCaptureMode || "")) {
     return "meeting";
   }
 
@@ -6596,7 +6662,7 @@ function getLiveTranscriptSourceLabel(session = getActiveSession()) {
     return "Live dictation";
   }
   if (source === "meeting") {
-    return "Meeting capture";
+    return "Meeting recording";
   }
   if (source === "transcribed") {
     return "Transcribed audio";
@@ -6673,7 +6739,7 @@ function createRecorderForStream(stream) {
     : new MediaRecorder(stream);
 }
 
-async function getMeetingCaptureStream() {
+async function getScreenAudioCaptureStream() {
   if (!SUPPORTS_MEETING_CAPTURE) {
     return null;
   }
@@ -6685,14 +6751,14 @@ async function getMeetingCaptureStream() {
   const audioTracks = displayStream.getAudioTracks();
   if (!audioTracks.length) {
     stopMediaStream(displayStream);
-    throw new Error("No shared audio was available. Try sharing a browser tab and enable audio, or upload the audio file instead.");
+    throw new Error("No shared in-computer audio was available. Try sharing a browser tab and enabling audio, or use Room / hybrid meeting instead.");
   }
 
   return {
     recorderStream: new MediaStream(audioTracks),
     sourceStream: displayStream,
-    mode: "meeting",
-    status: "Meeting capture started. Share a tab, window, or screen with audio enabled, then stop when you are ready to transcribe.",
+    mode: "screen-meeting",
+    status: "Screen / browser audio started. Keep sharing the tab, window, or screen until you are ready to transcribe.",
   };
 }
 
@@ -6708,40 +6774,30 @@ async function getMicrophoneCaptureStream() {
   return {
     recorderStream: stream,
     sourceStream: null,
-    mode: "dictation-audio",
-    status: "Microphone capture started. Stop when you are ready to transcribe the recording.",
+    mode: "room-meeting",
+    status: "Room / hybrid meeting started. The microphone is now recording people in the room and any voices coming through nearby speakers.",
   };
 }
 
-async function resolveAudioCaptureStream() {
-  if (SUPPORTS_MEETING_CAPTURE) {
-    try {
-      return await getMeetingCaptureStream();
-    } catch (error) {
-      if (!SUPPORTS_AUDIO_RECORDING) {
-        throw error;
-      }
-      const fallback = await getMicrophoneCaptureStream();
-      fallback.mode = "meeting-fallback";
-      fallback.status = `${error.message} Falling back to microphone capture now.`;
-      return fallback;
+async function resolveAudioCaptureStream(requestedMode = "room") {
+  if (requestedMode === "screen") {
+    if (!SUPPORTS_MEETING_CAPTURE) {
+      throw new Error("Direct in-computer audio is not available in this browser. Use Room / hybrid meeting or upload audio instead.");
     }
+    return getScreenAudioCaptureStream();
   }
 
   if (SUPPORTS_AUDIO_RECORDING) {
-    const fallback = await getMicrophoneCaptureStream();
-    fallback.mode = "meeting-fallback";
-    fallback.status = "Browser meeting capture is unavailable here, so microphone capture started instead.";
-    return fallback;
+    return getMicrophoneCaptureStream();
   }
 
-  throw new Error("This browser cannot record meeting audio here. Upload audio instead.");
+  throw new Error("Microphone recording is not available in this browser. Use screen / browser audio or upload audio instead.");
 }
 
 function setupSpeechRecognition() {
   if (!SpeechRecognition) {
     dictationToggle.disabled = true;
-    setCaptureButtonContent(dictationToggle, "Dictation unavailable", "Use meeting capture or upload audio");
+    setCaptureButtonContent(dictationToggle, "Dictation unavailable", "Use a meeting recording mode or upload audio");
     dictationStatus.textContent = "This browser does not expose speech recognition, but the rest of the app is ready to use.";
     setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
     syncMobileUi();
@@ -6797,7 +6853,7 @@ function setupSpeechRecognition() {
     dictationSeedText = "";
     pendingLanguageRestart = false;
     setTranscriptFieldState("live", resolveLiveTranscriptSource(getActiveSession()), getLiveTranscriptSourceLabel(getActiveSession()));
-    setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
+    setCaptureButtonContent(dictationToggle, "Start dictation", "Best for personal dictation");
     dictationToggle.classList.remove("is-recording");
       dictationStatus.textContent = "Dictation stopped. You can continue typing or restart capture anytime.";
       setAppStatus("Saved locally", APP_STATUS_STATES.idle);
@@ -6811,7 +6867,7 @@ function setupSpeechRecognition() {
     dictationSeedText = "";
     pendingLanguageRestart = false;
     setTranscriptFieldState("live", resolveLiveTranscriptSource(getActiveSession()), getLiveTranscriptSourceLabel(getActiveSession()));
-    setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
+    setCaptureButtonContent(dictationToggle, "Start dictation", "Best for personal dictation");
     dictationToggle.classList.remove("is-recording");
       dictationStatus.textContent = `Dictation error: ${event.error}. You can still take notes manually.`;
       setAppStatus("Recording error", APP_STATUS_STATES.warning);
@@ -6833,7 +6889,7 @@ function toggleDictation() {
       try {
         recognition.stop();
       } catch {
-      setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
+      setCaptureButtonContent(dictationToggle, "Start dictation", "Best for personal dictation");
       dictationToggle.classList.remove("is-recording");
         dictationStatus.textContent = "Dictation stopped.";
         setAppStatus("Saved locally", APP_STATUS_STATES.idle);
@@ -6863,9 +6919,9 @@ function toggleDictation() {
       syncMobileUi();
     } catch (error) {
       isRecording = false;
-    setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
+    setCaptureButtonContent(dictationToggle, "Start dictation", "Best for personal dictation");
     dictationToggle.classList.remove("is-recording");
-      dictationStatus.textContent = `Could not start live dictation: ${error.message || "this browser blocked it"}. Try Meeting capture or upload audio instead.`;
+      dictationStatus.textContent = `Could not start live dictation: ${error.message || "this browser blocked it"}. Try a meeting recording mode or upload audio instead.`;
       setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
       applyTemplateUi(getActiveSession());
       syncMobileUi();
@@ -6929,7 +6985,11 @@ async function stopAudioCapture() {
         fileName: buildAudioRecordingFileName(),
         mimeType,
         size: audioBlob.size,
-        source: activeAudioCaptureMode === "meeting" || activeAudioCaptureMode === "meeting-fallback" ? "meeting-capture" : "recording",
+        source: activeAudioCaptureMode === "screen-meeting"
+          ? "screen-meeting-capture"
+          : activeAudioCaptureMode === "room-meeting"
+            ? "room-meeting-capture"
+            : "recording",
       }, activeSessionForRecording);
       setTranscriptFieldState("live", resolveLiveTranscriptSource(getActiveSession()), getLiveTranscriptSourceLabel(getActiveSession()));
       audioCaptureStatus.textContent = "Capture stopped. Your recording is saved locally and ready to transcribe into the Live transcript field.";
@@ -6945,15 +7005,15 @@ async function stopAudioCapture() {
     applyTemplateUi(getActiveSession());
   }
 
-async function toggleAudioCapture() {
+async function toggleAudioCapture(requestedMode = "room") {
   if (audioRecordingSessionId) {
     await stopAudioCapture();
     return;
   }
 
   try {
-    const capture = await resolveAudioCaptureStream();
-    setTranscriptFieldState("live", "meeting", "Meeting capture");
+    const capture = await resolveAudioCaptureStream(requestedMode);
+    setTranscriptFieldState("live", "meeting", requestedMode === "screen" ? "Screen / browser audio" : "Room / hybrid meeting");
     revealTranscriptSurface("live");
     mediaRecorderStream = capture.recorderStream;
     mediaRecorderSourceStream = capture.sourceStream;
@@ -6976,7 +7036,7 @@ async function toggleAudioCapture() {
       mediaRecorderSourceStream = null;
       mediaRecorderChunks = [];
       audioRecordingSessionId = null;
-        audioCaptureStatus.textContent = "Meeting capture failed. You can still upload audio instead.";
+        audioCaptureStatus.textContent = "Meeting recording failed. You can still upload audio instead.";
         setAppStatus("Recording error", APP_STATUS_STATES.warning);
         applyTemplateUi(getActiveSession());
         syncAudioCaptureUi(getActiveSession());
@@ -6988,7 +7048,7 @@ async function toggleAudioCapture() {
       applyTemplateUi(getActiveSession());
       syncAudioCaptureUi(getActiveSession());
     } catch (error) {
-      audioCaptureStatus.textContent = error?.message || "Meeting capture was blocked. You can still upload audio instead.";
+      audioCaptureStatus.textContent = error?.message || "Meeting recording was blocked. You can still upload audio instead.";
       setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
       applyTemplateUi(getActiveSession());
       syncMobileUi();

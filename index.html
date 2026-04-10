@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.10.10">
+  <link rel="stylesheet" href="styles.css?v=0.10.11">
 </head>
 <body>
   <main class="page-shell">
@@ -24,7 +24,8 @@
           Capture rough notes and turn them into professional meeting notes without leaving the page.
         </p>
         <div class="hero-meta">
-        <div class="version-pill" id="app-version">v0.10.10</div>
+        <div class="version-pill" id="app-version">v0.10.11</div>
+          <div class="version-pill model-pill" id="app-models">Output: GPT-5 mini · Audio: GPT-4o mini transcribe</div>
           <div class="update-notice is-hidden-field" id="app-update-notice">New version available</div>
         </div>
       </div>
@@ -80,15 +81,11 @@
 
       <section class="editor-panel">
         <div class="panel-heading">
-          <div>
+          <div class="panel-heading-copy">
             <p class="section-label">Capture</p>
             <h2 id="session-title">Untitled session</h2>
           </div>
           <div class="panel-actions">
-              <div class="panel-actions-page">
-                <div class="template-quick-selectors" id="template-quick-selectors" aria-label="Quick new-session templates"></div>
-                <button class="ghost-button is-hidden-field" id="update-app" type="button">Update App</button>
-              </div>
             <div class="panel-actions-shared desktop-only">
               <button class="ghost-button" id="open-sessions-main" type="button">All Sessions</button>
               <button class="ghost-button" id="open-backup-panel" type="button">Back-up</button>
@@ -97,14 +94,17 @@
             </div>
           </div>
         </div>
+        <div class="editor-header-row">
+          <div class="template-quick-selectors" id="template-quick-selectors" aria-label="Quick new-session templates"></div>
+          <button class="ghost-button is-hidden-field" id="update-app" type="button">Update App</button>
+        </div>
         <div class="editor-layout">
           <div class="editor-main">
             <section class="form-section" aria-label="Session context">
               <details class="desktop-card-disclosure" id="context-card-disclosure">
                 <summary>
                   <div class="form-section-header">
-                    <p class="section-label">Context</p>
-                    <h3>Details</h3>
+                    <p class="section-label">Details</p>
                   </div>
                 </summary>
 
@@ -268,17 +268,18 @@
                   <details class="audio-info-disclosure">
                     <summary>Recording options</summary>
                     <p class="support-text">
-                      <strong>Meeting capture</strong> should be used for meetings, including browser meetings, hybrid meetings, room conversations, or playback. First share a tab, window, or screen and enable audio if your browser offers it. If shared audio is unavailable, the app falls back gracefully so you can still capture what your browser allows. <strong>Dictation</strong> is mainly for personal dictation, where one person is speaking clearly into the device. <strong>Upload audio</strong> is the safest fallback when live browser capture is limited. All recorded or uploaded audio uses the same transcription flow and ends up in the <strong>Live transcript</strong> field.
+                      <strong>Room / hybrid meeting</strong> is the default for most meetings. It records through the microphone, so it is the right choice for people speaking in the room and also for remote participants whose voices are coming through nearby speakers. <strong>Screen / browser audio</strong> is only for cases where you want direct in-computer audio from a shared tab, window, or screen, and it will open the browser share picker. <strong>Dictation</strong> is mainly for personal dictation, where one person is speaking clearly into the device. <strong>Upload audio</strong> is the safest fallback when live browser capture is limited. All recorded or uploaded audio uses the same transcription flow and ends up in the <strong>Live transcript</strong> field.
                     </p>
                   </details>
-                  <p class="support-text" id="audio-model-note">
-                    Audio transcription uses <strong>gpt-4o-mini-transcribe</strong>.
-                  </p>
                 </div>
                 <div class="capture-toolbar audio-capture-actions">
                   <button class="secondary-button capture-mode-button" id="audio-record-toggle" type="button">
-                    <span class="capture-mode-title">Start meeting capture</span>
-                    <span class="capture-mode-hint">Recommended for meetings and hybrid calls</span>
+                    <span class="capture-mode-title">Start room / hybrid meeting</span>
+                    <span class="capture-mode-hint">Use mic for room voices and nearby speakers</span>
+                  </button>
+                  <button class="secondary-button capture-mode-button" id="audio-screen-toggle" type="button">
+                    <span class="capture-mode-title">Start screen / browser audio</span>
+                    <span class="capture-mode-hint">Use direct in-computer audio from a tab or screen</span>
                   </button>
                   <button class="secondary-button capture-mode-button" id="dictation-toggle" type="button">
                     <span class="capture-mode-title">Start dictation</span>
@@ -289,7 +290,7 @@
                   <button class="ghost-button" id="transcribe-audio" type="button">Transcribe audio</button>
                 </div>
                 <p class="support-text" id="audio-capture-status">
-                  No audio selected yet. Start dictation, try meeting capture, or upload mp3, m4a, wav, mp4, or webm.
+                  No audio selected yet. Start a room / hybrid meeting, try screen / browser audio, or upload mp3, m4a, wav, mp4, or webm.
                 </p>
                 <div class="pending-recordings-panel" id="pending-recordings-panel" hidden>
                   <div class="pending-recordings-heading">
@@ -483,7 +484,7 @@
       <div class="mobile-bottom-bar mobile-only" aria-label="Mobile actions">
         <button class="primary-button mobile-bottom-primary capture-mode-button" id="mobile-dictation-toggle" type="button">
           <span class="capture-mode-title">Start dictation</span>
-          <span class="capture-mode-hint">Fastest for one voice</span>
+          <span class="capture-mode-hint">Best for personal dictation</span>
         </button>
         <button class="secondary-button mobile-bottom-action is-hidden-field" id="mobile-generate" type="button" hidden>Generate</button>
         <button class="ghost-button mobile-bottom-action is-hidden-field" id="mobile-view-output-bar" type="button" hidden>Output</button>
@@ -886,14 +887,13 @@
                 <h3>Choose audio transcription quality</h3>
               </div>
 
-              <label class="field">
-                <span class="field-label">Recorded or uploaded audio</span>
-                <select id="transcription-model-select">
-                  <option value="gpt-4o-mini-transcribe">GPT-4o mini transcribe</option>
-                  <option value="gpt-4o-transcribe">GPT-4o transcribe</option>
-                  <option value="gpt-4o-transcribe-diarize">GPT-4o transcribe diarize</option>
-                </select>
-              </label>
+              <input id="transcription-model-select" type="hidden" value="gpt-4o-mini-transcribe">
+
+              <p class="support-text">
+                Pricing is shown per minute of audio. For short meetings the cost is usually low, but longer recordings can add up faster than note generation.
+              </p>
+
+              <div class="model-option-list" id="transcription-model-options" aria-live="polite"></div>
 
               <p class="support-text" id="transcription-model-description">
                 Best value for most recorded meeting audio and speaker playback.
@@ -1459,7 +1459,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.17/mammoth.browser.min.js"></script>
-  <script src="app.js?v=0.10.10"></script>
+  <script src="app.js?v=0.10.11"></script>
 </body>
 </html>
 

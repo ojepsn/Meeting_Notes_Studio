@@ -393,6 +393,12 @@ button {
   text-transform: uppercase;
 }
 
+.model-pill {
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-weight: 700;
+}
+
 .hero-meta {
   display: flex;
   align-items: center;
@@ -669,13 +675,18 @@ body.sessions-panel-open {
   margin-bottom: 20px;
 }
 
+.panel-heading-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .panel-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
-  flex-wrap: wrap;
-  width: 100%;
+  flex: 0 0 auto;
+  width: auto;
 }
 
 .panel-actions-page,
@@ -694,6 +705,14 @@ body.sessions-panel-open {
   margin-left: 4px;
 }
 
+.editor-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -6px 0 20px;
+}
+
 .header-new-session-button {
   min-width: 138px;
   box-shadow: 0 14px 28px rgba(108, 127, 79, 0.2);
@@ -703,6 +722,7 @@ body.sessions-panel-open {
   margin: 0;
   font-size: clamp(1.6rem, 2vw, 2rem);
   line-height: 1;
+  overflow-wrap: anywhere;
 }
 
 .status-pill {
@@ -1607,6 +1627,7 @@ body.sessions-panel-open {
   flex-wrap: wrap;
   gap: 8px;
   margin: 0;
+  min-width: 0;
 }
 
 .template-quick-button {

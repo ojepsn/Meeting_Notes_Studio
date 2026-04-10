@@ -93,6 +93,7 @@ function extractFunction(source, name) {
 function loadPwaTemplateHelpers() {
   const snippets = [
     extractConst(appJsSource, "BUILT_IN_TEMPLATES"),
+    extractFunction(appJsSource, "getPreferredDesktopTemplateId"),
     extractFunction(appJsSource, "getTemplateBehaviorId"),
     extractFunction(appJsSource, "getTemplateTitleFieldLabel"),
     extractFunction(appJsSource, "formatIsoDate"),
@@ -108,6 +109,7 @@ function loadPwaTemplateHelpers() {
     ${snippets.join("\n;\n")}
     ;globalThis.__exports = {
       BUILT_IN_TEMPLATES,
+      getPreferredDesktopTemplateId,
       getTemplateBehaviorId,
       getTemplateTitleFieldLabel,
       formatIsoDate,
@@ -136,7 +138,7 @@ function normalizeVmObject(value) {
 }
 
 runTest("built-in session templates preserve intended defaults", () => {
-  const { BUILT_IN_TEMPLATES } = loadPwaTemplateHelpers();
+  const { BUILT_IN_TEMPLATES, getPreferredDesktopTemplateId } = loadPwaTemplateHelpers();
 
   assert.ok(BUILT_IN_TEMPLATES.meeting);
   assert.ok(BUILT_IN_TEMPLATES.personalNote);
@@ -151,6 +153,7 @@ runTest("built-in session templates preserve intended defaults", () => {
   assert.equal(BUILT_IN_TEMPLATES.oneToOneCall.fields.meetingDate, true);
   assert.equal(BUILT_IN_TEMPLATES.oneToOneCall.fields.meetingStartTime, true);
   assert.equal(BUILT_IN_TEMPLATES.oneToOneCall.fields.meetingEndTime, false);
+  assert.equal(getPreferredDesktopTemplateId(), "meeting");
 });
 
 runTest("quick note and 1:1 templates auto-fill title and schedule defaults", () => {
@@ -200,7 +203,7 @@ runTest("title labels stay aligned with built-in and derived template behavior",
 });
 
 runTest("capture shell keeps the core minimal defaults visible in markup", () => {
-  assert.match(indexHtmlSource, /<h3>Details<\/h3>/);
+  assert.match(indexHtmlSource, /<p class="section-label">Details<\/p>/);
   assert.match(indexHtmlSource, /<summary>People<\/summary>/);
   assert.match(indexHtmlSource, /id="manual-notes-disclosure" open/);
   assert.match(indexHtmlSource, /Write your own notes here, which will be included in the Output/);
@@ -222,9 +225,12 @@ runTest("top chrome hosts the save-status pill instead of the right sidebar", ()
   assert.doesNotMatch(earlySidebarSlice, /id="save-status"/);
 });
 
-runTest("quick-start strip includes New and the meeting-first capture wording", () => {
+runTest("quick-start strip includes New and the split meeting capture wording", () => {
   assert.match(appJsSource, /newButton\.textContent = "New"/);
-  assert.match(indexHtmlSource, /id="audio-record-toggle"[\s\S]*?Start meeting capture[\s\S]*?Recommended for meetings and hybrid calls/);
+  assert.match(appJsSource, /createAndOpenNewSession\(activeTemplateId\)/);
+  assert.match(appJsSource, /const preferredOrder = \["meeting", "personalNote", "oneToOneCall"\]/);
+  assert.match(indexHtmlSource, /id="audio-record-toggle"[\s\S]*?Start room \/ hybrid meeting[\s\S]*?Use mic for room voices and nearby speakers/);
+  assert.match(indexHtmlSource, /id="audio-screen-toggle"[\s\S]*?Start screen \/ browser audio[\s\S]*?Use direct in-computer audio from a tab or screen/);
   assert.match(indexHtmlSource, /id="dictation-toggle"[\s\S]*?Start dictation[\s\S]*?Best for personal dictation/);
 });
 
