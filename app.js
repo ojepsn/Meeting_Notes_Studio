@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.6";
+const APP_VERSION = "v0.10.7";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -24,6 +24,9 @@ const BUILT_IN_TEMPLATES = {
       highlights: true,
       manualNotes: true,
       liveTranscript: true,
+      meetingDate: true,
+      meetingStartTime: true,
+      meetingEndTime: true,
     },
   },
   oneToOneCall: {
@@ -38,17 +41,17 @@ const BUILT_IN_TEMPLATES = {
       highlights: false,
       manualNotes: true,
       liveTranscript: true,
-      meetingDate: true,
-      meetingStartTime: true,
-      meetingEndTime: true,
+      meetingDate: false,
+      meetingStartTime: false,
+      meetingEndTime: false,
     },
   },
   personalNote: {
     id: "personalNote",
-    label: "Personal Note",
-    summaryLead: "This note captures the most important professional observations, ideas, and follow-ups.",
+    label: "Quick note",
+    summaryLead: "This note captures the most important observations, ideas, and follow-ups quickly.",
     sections: ["Overview", "Key Notes", "Decisions", "Action Items"],
-    templateInstructions: "Structure the output like a professional personal working note. Keep the focus on useful business observations, decisions, and follow-up actions.",
+    templateInstructions: "Structure the output like a professional quick working note. Keep the focus on useful observations, decisions, and follow-up actions.",
     fields: {
       title: true,
       participants: false,
@@ -297,6 +300,9 @@ const todoItemTemplate = document.querySelector("#todo-item-template");
 const promptBlockTemplate = document.querySelector("#prompt-block-template");
 const customHeaderTemplate = document.querySelector("#custom-header-template");
 const addCustomTemplateButton = document.querySelector("#add-custom-template");
+const duplicateTemplateButton = document.querySelector("#duplicate-template");
+const duplicateTemplateSourceSelect = document.querySelector("#duplicate-template-source");
+const templateLauncherVisibilityList = document.querySelector("#template-launcher-visibility-list");
 const customTemplateList = document.querySelector("#custom-template-list");
 const customTemplateTemplate = document.querySelector("#custom-template-template");
 const templateHeaderTemplate = document.querySelector("#template-header-template");
@@ -720,6 +726,21 @@ function getAllTemplates() {
   return [...builtIns, ...customTemplates];
 }
 
+function cloneTemplateForCustomTemplate(template, options = {}) {
+  const source = template ? normalizeCustomTemplate(template) : createCustomTemplate();
+  const baseLabel = options.label || source.label || "Custom template";
+
+  return {
+    ...source,
+    id: `custom-${crypto.randomUUID()}`,
+    label: options.label ?? `${baseLabel} copy`,
+    isExpanded: true,
+    headers: normalizeTemplateHeaders(source.headers),
+    customFields: normalizeTemplateCustomFields(source.customFields),
+    fields: normalizeTemplateFields(source.fields),
+  };
+}
+
 function getTemplateDefinition(templateId) {
   if (BUILT_IN_TEMPLATES[templateId]) {
     return BUILT_IN_TEMPLATES[templateId];
@@ -745,6 +766,7 @@ function createDefaultSettings() {
     defaultCustomHeaders: [],
     customTemplates: [],
     templateUsageCounts: {},
+    templateLauncherTemplateIds: ["meeting", "oneToOneCall", "personalNote"],
     exportStylePreset: DEFAULT_EXPORT_PRESET,
     exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
     promptSettings: { ...DEFAULT_PROMPT_SETTINGS },
@@ -872,22 +894,8 @@ void initializeApp().catch((error) => {
       outputResizeHandle.addEventListener("pointerdown", startOutputResize);
       outputResizeHandle.addEventListener("mousedown", startOutputResize);
     }
-    const createAndOpenNewSession = () => {
-    if (audioRecordingSessionId) {
-      void stopAudioCapture();
-    }
-    const nextSession = createSession();
-    sessions.unshift(nextSession);
-    activeSessionId = nextSession.id;
-    settings.recentSessionsExpanded = false;
-    persistSettings();
-    persistSessions();
-    render();
-    meetingTitleInput.focus();
-  };
-
-  newSessionButton.addEventListener("click", createAndOpenNewSession);
-  newSessionMainButton.addEventListener("click", createAndOpenNewSession);
+  newSessionButton.addEventListener("click", () => createAndOpenNewSession());
+  newSessionMainButton.addEventListener("click", () => createAndOpenNewSession());
   mobileNewSessionButton?.addEventListener("click", () => {
     closeMobileSheets();
     createAndOpenNewSession();
@@ -1315,6 +1323,21 @@ void initializeApp().catch((error) => {
     renderCustomTemplates(nextTemplate.id);
   });
 
+  duplicateTemplateButton?.addEventListener("click", () => {
+    const templateId = duplicateTemplateSourceSelect?.value;
+    if (!templateId) {
+      duplicateTemplateSourceSelect?.focus();
+      return;
+    }
+
+    const sourceTemplate = getTemplateDefinition(templateId);
+    const nextTemplate = cloneTemplateForCustomTemplate(sourceTemplate);
+    settings.customTemplates = [...settings.customTemplates, nextTemplate];
+    persistSettings();
+    renderTemplateOptions();
+    renderCustomTemplates(nextTemplate.id);
+  });
+
   addDirectoryParticipantButton.addEventListener("click", () => {
     addParticipantToDirectory(participantDirectoryInput.value);
   });
@@ -1575,11 +1598,14 @@ void initializeApp().catch((error) => {
       return;
     }
 
-    if (event.target.closest(".custom-template-remove")) {
-      settings.customTemplates = settings.customTemplates.filter((template) => template.id !== templateId);
-      persistSettings();
-      sessions = sessions.map((session) => ({
-        ...session,
+      if (event.target.closest(".custom-template-remove")) {
+        settings.customTemplates = settings.customTemplates.filter((template) => template.id !== templateId);
+        settings.templateLauncherTemplateIds = normalizeTemplateLauncherIds(
+          settings.templateLauncherTemplateIds.filter((id) => id !== templateId)
+        );
+        persistSettings();
+        sessions = sessions.map((session) => ({
+          ...session,
         template: session.template === templateId ? "meeting" : session.template,
       }));
       persistSessions();
@@ -1587,10 +1613,10 @@ void initializeApp().catch((error) => {
       return;
     }
 
-    if (event.target.closest(".custom-template-save")) {
-      settings.customTemplates = settings.customTemplates.map((template) => {
-        if (template.id !== templateId) {
-          return template;
+      if (event.target.closest(".custom-template-save")) {
+        settings.customTemplates = settings.customTemplates.map((template) => {
+          if (template.id !== templateId) {
+            return template;
         }
 
         return {
@@ -1611,11 +1637,25 @@ void initializeApp().catch((error) => {
         });
         applyTemplateUi(session);
         renderCustomHeaders();
+        }
+        return;
       }
-      return;
-    }
 
-    if (event.target.closest(".custom-template-header-add")) {
+      if (event.target.closest(".custom-template-duplicate")) {
+        const sourceTemplate = settings.customTemplates.find((template) => template.id === templateId);
+        if (!sourceTemplate) {
+          return;
+        }
+
+        const nextTemplate = cloneTemplateForCustomTemplate(sourceTemplate);
+        settings.customTemplates = [...settings.customTemplates, nextTemplate];
+        persistSettings();
+        renderTemplateOptions();
+        renderCustomTemplates(nextTemplate.id);
+        return;
+      }
+
+      if (event.target.closest(".custom-template-header-add")) {
       const addForm = templateItem.querySelector(".custom-template-header-add-form");
       setElementVisibility(addForm, true);
       addForm?.querySelector(".custom-template-new-header-title")?.focus();
@@ -2803,6 +2843,83 @@ function renderTemplateOptions() {
   }
 
   templateSelect.value = getTemplateDefinition(activeTemplateId).id || currentValue || "meeting";
+  renderDuplicateTemplateOptions();
+  renderTemplateLauncherVisibilityOptions();
+}
+
+function renderDuplicateTemplateOptions() {
+  if (!duplicateTemplateSourceSelect) {
+    return;
+  }
+
+  const currentValue = duplicateTemplateSourceSelect.value;
+  duplicateTemplateSourceSelect.innerHTML = "";
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Choose template to duplicate";
+  duplicateTemplateSourceSelect.appendChild(placeholder);
+
+  const standardGroup = document.createElement("optgroup");
+  standardGroup.label = "Standard";
+  Object.values(BUILT_IN_TEMPLATES).forEach((template) => {
+    const option = document.createElement("option");
+    option.value = template.id;
+    option.textContent = template.label;
+    standardGroup.appendChild(option);
+  });
+  duplicateTemplateSourceSelect.appendChild(standardGroup);
+
+  if ((settings.customTemplates || []).length) {
+    const customGroup = document.createElement("optgroup");
+    customGroup.label = "My templates";
+    settings.customTemplates.forEach((template) => {
+      const option = document.createElement("option");
+      option.value = template.id;
+      option.textContent = template.label || "Untitled template";
+      customGroup.appendChild(option);
+    });
+    duplicateTemplateSourceSelect.appendChild(customGroup);
+  }
+
+  if (getAllTemplates().some((template) => template.id === currentValue)) {
+    duplicateTemplateSourceSelect.value = currentValue;
+  }
+}
+
+function renderTemplateLauncherVisibilityOptions() {
+  if (!templateLauncherVisibilityList) {
+    return;
+  }
+
+  settings.templateLauncherTemplateIds = normalizeTemplateLauncherIds(settings.templateLauncherTemplateIds);
+  templateLauncherVisibilityList.innerHTML = "";
+
+  getAllTemplates().forEach((template) => {
+    const label = document.createElement("label");
+    label.className = "config-option";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = template.id;
+    input.checked = settings.templateLauncherTemplateIds.includes(template.id);
+    input.addEventListener("change", () => {
+      const nextIds = input.checked
+        ? [...settings.templateLauncherTemplateIds, template.id]
+        : settings.templateLauncherTemplateIds.filter((templateId) => templateId !== template.id);
+      settings.templateLauncherTemplateIds = normalizeTemplateLauncherIds(nextIds);
+      persistSettings();
+      renderTemplateQuickSelectors();
+      renderTemplateLauncherVisibilityOptions();
+    });
+
+    const copy = document.createElement("span");
+    copy.textContent = template.label || "Untitled template";
+
+    label.appendChild(input);
+    label.appendChild(copy);
+    templateLauncherVisibilityList.appendChild(label);
+  });
 }
 
 function normalizeTemplateUsageCounts(input) {
@@ -2815,6 +2932,27 @@ function normalizeTemplateUsageCounts(input) {
       .filter(([key, value]) => typeof key === "string" && key && Number.isFinite(value) && Number(value) > 0)
       .map(([key, value]) => [key, Number(value)])
   );
+}
+
+function normalizeTemplateLauncherIds(input) {
+  if (!Array.isArray(input)) {
+    return ["meeting", "oneToOneCall", "personalNote"];
+  }
+
+  const validTemplateIds = new Set(getAllTemplates().map((template) => template.id));
+  const seen = new Set();
+
+  const normalized = input
+    .filter((templateId) => typeof templateId === "string" && templateId && validTemplateIds.has(templateId))
+    .filter((templateId) => {
+      if (seen.has(templateId)) {
+        return false;
+      }
+      seen.add(templateId);
+      return true;
+    });
+
+  return normalized.length ? normalized : ["meeting", "oneToOneCall", "personalNote"].filter((templateId) => validTemplateIds.has(templateId));
 }
 
 function getPreferredDesktopTemplateId() {
@@ -2854,17 +2992,11 @@ function applySelectedTemplate(templateId, options = {}) {
     customFieldValues: normalizeCustomFieldValues({}, template.customFields || []),
   };
 
-  if (template.id === "oneToOneCall") {
-    if (!currentSession.meetingDate) {
-      patch.meetingDate = defaultSchedule.meetingDate;
+    if (template.id === "oneToOneCall") {
+      patch.meetingDate = "";
+      patch.meetingStartTime = "";
+      patch.meetingEndTime = "";
     }
-    if (!currentSession.meetingStartTime) {
-      patch.meetingStartTime = defaultSchedule.meetingStartTime;
-    }
-    if (!currentSession.meetingEndTime) {
-      patch.meetingEndTime = defaultSchedule.meetingEndTime;
-    }
-  }
 
   if (!currentSession.title.trim() || isAutoGeneratedTitle(currentSession.title)) {
     patch.title = getDefaultTitleForTemplate(template, Date.now(), {
@@ -2890,13 +3022,17 @@ function renderTemplateQuickSelectors() {
 
   const activeTemplateId = getActiveSession()?.template || getPreferredDesktopTemplateId();
   const usageCounts = normalizeTemplateUsageCounts(settings.templateUsageCounts);
-  const rankedTemplates = getAllTemplates().slice().sort((left, right) => {
-    const usageDelta = (usageCounts[right.id] || 0) - (usageCounts[left.id] || 0);
-    if (usageDelta !== 0) {
-      return usageDelta;
-    }
-    return left.label.localeCompare(right.label);
-  });
+  settings.templateLauncherTemplateIds = normalizeTemplateLauncherIds(settings.templateLauncherTemplateIds);
+  const rankedTemplates = getAllTemplates()
+    .filter((template) => settings.templateLauncherTemplateIds.includes(template.id))
+    .slice()
+    .sort((left, right) => {
+      const usageDelta = (usageCounts[right.id] || 0) - (usageCounts[left.id] || 0);
+      if (usageDelta !== 0) {
+        return usageDelta;
+      }
+      return left.label.localeCompare(right.label);
+    });
 
   templateQuickSelectors.innerHTML = "";
   rankedTemplates.forEach((template) => {
@@ -2910,7 +3046,7 @@ function renderTemplateQuickSelectors() {
     button.textContent = template.label;
     button.classList.toggle("is-active", template.id === activeTemplateId);
     button.addEventListener("click", () => {
-      applySelectedTemplate(template.id);
+      createAndOpenNewSession(template.id);
     });
     templateQuickSelectors.appendChild(button);
   });
@@ -3133,10 +3269,10 @@ function applyTemplateUi(session) {
   const template = getTemplateDefinition(session.template);
   const fields = template.fields || BUILT_IN_TEMPLATES.meeting.fields;
   const liveTranscriptEnabled = fields.liveTranscript !== false;
-  const isPersonalNote = template.id === "personalNote";
+  const isQuickNote = template.id === "personalNote";
   const isOneToOneCall = template.id === "oneToOneCall";
-  const showParticipants = !isPersonalNote && fields.participants !== false;
-  const showHighlights = !isPersonalNote && fields.highlights !== false;
+  const showParticipants = fields.participants !== false;
+  const showHighlights = fields.highlights !== false;
   const showMeetingDate = template.id === "meeting" || fields.meetingDate === true;
   const showMeetingStartTime = template.id === "meeting" || fields.meetingStartTime === true;
   const showMeetingEndTime = template.id === "meeting" || fields.meetingEndTime === true;
@@ -3163,16 +3299,16 @@ function applyTemplateUi(session) {
   setElementVisibility(liveTranscriptField, showLiveTranscript);
   setElementVisibility(uploadedTranscriptField, showUploadedTranscript);
   renderTemplateCustomFields(session, template);
-  titleFieldLabel.textContent = isPersonalNote ? "Note title" : isOneToOneCall ? "Title" : "Meeting title";
+  titleFieldLabel.textContent = isQuickNote ? "Note title" : isOneToOneCall ? "Title" : "Meeting title";
   if (participantsFieldLabel) {
     participantsFieldLabel.textContent = isOneToOneCall ? "Participant" : "Participants";
   }
   updateTranscribeOnlyUi(session);
 
-  meetingTitleInput.placeholder = isPersonalNote
-    ? `${formatDateTimeForTitle(Date.now())} Personal note`
+  meetingTitleInput.placeholder = isQuickNote
+    ? formatDateTimeForTitle(Date.now())
     : isOneToOneCall
-      ? "2026-03-30 14:30 Participant"
+      ? formatDateTimeForTitle(Date.now())
       : "Weekly project meeting";
   participantsInput.placeholder = isOneToOneCall ? "Add participant" : "Add participants";
 
@@ -4800,8 +4936,8 @@ function schedulePersist() {
   }, 220);
 }
 
-function createSession() {
-  const defaultTemplate = getTemplateDefinition(isMobileLayout() ? "personalNote" : getPreferredDesktopTemplateId());
+function createSession(templateId = null) {
+  const defaultTemplate = getTemplateDefinition(templateId || (isMobileLayout() ? "personalNote" : getPreferredDesktopTemplateId()));
   const createdAt = Date.now();
   const defaultSchedule = getDefaultMeetingScheduleForTemplate(defaultTemplate, createdAt);
   const defaultTitle = getDefaultTitleForTemplate(defaultTemplate, createdAt, {
@@ -4836,6 +4972,20 @@ function createSession() {
     previousPolishedHtml: "",
     updatedAt: createdAt,
   };
+}
+
+function createAndOpenNewSession(templateId = null) {
+  if (audioRecordingSessionId) {
+    void stopAudioCapture();
+  }
+  const nextSession = createSession(templateId);
+  sessions.unshift(nextSession);
+  activeSessionId = nextSession.id;
+  settings.recentSessionsExpanded = false;
+  persistSettings();
+  persistSessions();
+  render();
+  meetingTitleInput.focus();
 }
 
 function cloneCustomHeadersForSession(customHeaders) {
@@ -6202,14 +6352,11 @@ function getPrimaryParticipantName(participants) {
 
 function getDefaultTitleForTemplate(template, timestamp = Date.now(), sessionData = {}) {
   if (template.id === "personalNote") {
-    return `${formatDateTimeForTitle(timestamp)} Personal note`;
+    return formatDateTimeForTitle(timestamp);
   }
 
   if (template.id === "oneToOneCall") {
-    const meetingDate = sessionData.meetingDate || getDefaultMeetingScheduleForTemplate(template, timestamp).meetingDate;
-    const meetingStartTime = sessionData.meetingStartTime || getDefaultMeetingScheduleForTemplate(template, timestamp).meetingStartTime;
-    const participant = getPrimaryParticipantName(sessionData.participants);
-    return [meetingDate, meetingStartTime, participant].filter(Boolean).join(" ");
+    return formatDateTimeForTitle(timestamp);
   }
 
   return "";
@@ -6220,7 +6367,7 @@ function getDefaultTranscribeOnlyForTemplate(template) {
 }
 
 function isAutoGeneratedTitle(title) {
-  return /personal note$/i.test(title.trim()) || /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?:\s+.+)?$/.test(title.trim());
+  return /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?:\s+.+)?$/.test(title.trim());
 }
 
 function formatIsoDate(date) {
@@ -7186,12 +7333,13 @@ function normalizeStoredSettings(parsed) {
     abbreviationDirectory: normalizeAbbreviationDirectory(parsed.abbreviationDirectory),
     todoItems: normalizeTodoItems(parsed.todoItems),
     participantDirectory: normalizeParticipantDirectory(parsed.participantDirectory),
-    participantDirectoryInitialized: parsed.participantDirectoryInitialized === true
-      || normalizeParticipantDirectory(parsed.participantDirectory).length > 0,
-    defaultCustomHeaders: normalizeCustomHeaders(parsed.defaultCustomHeaders),
-    customTemplates: normalizeCustomTemplates(parsed.customTemplates),
-    templateUsageCounts: normalizeTemplateUsageCounts(parsed.templateUsageCounts),
-    exportStylePreset,
+      participantDirectoryInitialized: parsed.participantDirectoryInitialized === true
+        || normalizeParticipantDirectory(parsed.participantDirectory).length > 0,
+      defaultCustomHeaders: normalizeCustomHeaders(parsed.defaultCustomHeaders),
+      customTemplates: normalizeCustomTemplates(parsed.customTemplates),
+      templateUsageCounts: normalizeTemplateUsageCounts(parsed.templateUsageCounts),
+      templateLauncherTemplateIds: normalizeTemplateLauncherIds(parsed.templateLauncherTemplateIds),
+      exportStylePreset,
     exportStyle: normalizeExportStyle({
       ...EXPORT_STYLE_PRESETS[exportStylePreset].style,
       ...(parsed.exportStyle || {}),

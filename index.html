@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.10.6">
+  <link rel="stylesheet" href="styles.css?v=0.10.7">
 </head>
 <body>
   <main class="page-shell">
@@ -23,7 +23,7 @@
         <p class="subtitle">
           Capture rough notes and turn them into professional meeting notes without leaving the page.
         </p>
-        <div class="version-pill" id="app-version">v0.10.5</div>
+        <div class="version-pill" id="app-version">v0.10.7</div>
       </div>
 
       <div class="hero-metrics" aria-label="Product highlights">
@@ -118,7 +118,7 @@
                   </label>
                 </div>
 
-                <div class="template-quick-selectors" id="template-quick-selectors" aria-label="Quick template selection"></div>
+                 <div class="template-quick-selectors" id="template-quick-selectors" aria-label="Quick new-session templates"></div>
 
                 <details class="context-disclosure">
                   <summary>People and details</summary>
@@ -618,6 +618,7 @@
         </div>
         <div class="custom-template-actions">
           <button class="ghost-button custom-template-edit" type="button">Edit</button>
+          <button class="ghost-button custom-template-duplicate" type="button">Duplicate</button>
           <button class="secondary-button custom-template-save" type="button">Save Template</button>
           <button class="ghost-button custom-template-remove" type="button">Remove</button>
         </div>
@@ -635,10 +636,10 @@
         </div>
 
         <div class="settings-checkbox-grid">
-          <label class="config-option">
-            <input class="custom-template-show-title" type="checkbox">
-            <span>Meeting title</span>
-          </label>
+            <label class="config-option">
+              <input class="custom-template-show-title" type="checkbox">
+              <span>Title</span>
+            </label>
           <label class="config-option">
             <input class="custom-template-show-participants" type="checkbox">
             <span>Participants</span>
@@ -1199,16 +1200,24 @@
                 Build your own note flow by choosing which input fields are visible and by adding template-specific sections and AI instructions.
               </p>
 
-              <details class="advanced-options-disclosure">
-                <summary>Custom templates</summary>
-                <div class="advanced-options-body">
-                  <div class="template-builder-actions">
-                    <button class="ghost-button" id="add-custom-template" type="button">Add Template</button>
-                  </div>
+                  <details class="advanced-options-disclosure">
+                    <summary>Custom templates</summary>
+                    <div class="advanced-options-body">
+                      <div class="field">
+                        <span class="field-label">Visible as quick-start buttons</span>
+                        <div class="custom-template-list" id="template-launcher-visibility-list"></div>
+                      </div>
+                      <div class="template-builder-actions">
+                       <button class="ghost-button" id="add-custom-template" type="button">New blank template</button>
+                       <select id="duplicate-template-source" aria-label="Choose template to duplicate">
+                       <option value="">Choose template to duplicate</option>
+                     </select>
+                     <button class="ghost-button" id="duplicate-template" type="button">Duplicate existing template</button>
+                    </div>
 
-                  <div class="custom-template-list" id="custom-template-list"></div>
-                </div>
-              </details>
+                    <div class="custom-template-list" id="custom-template-list"></div>
+                  </div>
+                </details>
             </section>
 
             <section class="config-card settings-card is-hidden-field" data-settings-section="abbreviations" aria-label="Abbreviation settings">
@@ -1457,7 +1466,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.17/mammoth.browser.min.js"></script>
-  <script src="app.js?v=0.10.6"></script>
+  <script src="app.js?v=0.10.7"></script>
 </body>
 </html>
 

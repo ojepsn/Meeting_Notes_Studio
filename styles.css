@@ -1661,6 +1661,15 @@ body.sessions-panel-open {
 
 .template-builder-actions {
   margin: 14px 0 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.template-builder-actions select {
+  min-width: 220px;
+  width: auto;
 }
 
 .custom-template-list,
