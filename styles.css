@@ -1641,6 +1641,12 @@ body.sessions-panel-open {
   box-shadow: inset 0 0 0 1px rgba(62, 81, 48, 0.06);
 }
 
+.template-create-button {
+  background: linear-gradient(180deg, rgba(108, 127, 79, 0.22), rgba(108, 127, 79, 0.12));
+  color: var(--accent-strong);
+  box-shadow: 0 10px 20px rgba(53, 68, 40, 0.08), inset 0 0 0 1px rgba(108, 127, 79, 0.18);
+}
+
 .template-quick-button.is-active {
   background: linear-gradient(180deg, rgba(108, 127, 79, 0.18), rgba(255, 255, 255, 0.94));
   color: var(--accent-strong);
@@ -1650,6 +1656,12 @@ body.sessions-panel-open {
 :root[data-theme$="-dark"] .template-quick-button {
   background: rgba(24, 34, 48, 0.9);
   box-shadow: inset 0 0 0 1px rgba(207, 219, 231, 0.08);
+}
+
+:root[data-theme$="-dark"] .template-create-button {
+  background: linear-gradient(180deg, rgba(212, 123, 81, 0.22), rgba(24, 34, 48, 0.96));
+  color: var(--accent-strong);
+  box-shadow: 0 10px 22px rgba(3, 9, 18, 0.22), inset 0 0 0 1px rgba(212, 123, 81, 0.18);
 }
 
 :root[data-theme$="-dark"] .template-quick-button.is-active {
@@ -2266,8 +2278,17 @@ textarea:focus {
   line-height: 1.6;
 }
 
+.support-text:empty {
+  display: none;
+}
+
 .support-text + .support-text {
   margin-top: 8px;
+}
+
+.instructions-stack {
+  display: grid;
+  gap: 16px;
 }
 
 .modal-shell {

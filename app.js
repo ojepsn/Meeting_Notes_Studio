@@ -86,6 +86,7 @@ const openTodoMainButton = document.querySelector("#open-todo-main");
 const openTodoOutputButton = document.querySelector("#open-todo-output");
 const openBackupPanelButton = document.querySelector("#open-backup-panel");
 const openBackupOutputButton = document.querySelector("#open-backup-output");
+const openInstructionsButton = document.querySelector("#open-instructions");
 const openSettingsButton = document.querySelector("#open-settings");
 const openSettingsOutputButton = document.querySelector("#open-settings-output");
 const openAiSettingsInlineButton = document.querySelector("#open-ai-settings-inline");
@@ -135,6 +136,9 @@ const confirmModalMessage = document.querySelector("#confirm-modal-message");
 const confirmModalCancelButton = document.querySelector("#confirm-modal-cancel");
 const confirmModalConfirmButton = document.querySelector("#confirm-modal-confirm");
 const settingsModal = document.querySelector("#settings-modal");
+const instructionsModal = document.querySelector("#instructions-modal");
+const closeInstructionsBackdrop = document.querySelector("#close-instructions");
+const closeInstructionsButton = document.querySelector("#close-instructions-button");
 const closeSettingsBackdrop = document.querySelector("#close-settings");
 const closeSettingsButton = document.querySelector("#close-settings-button");
 const settingsForm = document.querySelector("#settings-form");
@@ -213,7 +217,6 @@ const transcriptionModelSelect = document.querySelector("#transcription-model-se
 const transcriptionModelOptions = document.querySelector("#transcription-model-options");
 const transcriptionModelDescription = document.querySelector("#transcription-model-description");
 const transcriptionModelPricing = document.querySelector("#transcription-model-pricing");
-const aiStatusCopy = document.querySelector("#ai-status-copy");
 const appModelsLabel = document.querySelector("#app-models");
 const participantsInput = document.querySelector("#participants");
 const participantSuggestions = document.querySelector("#participant-suggestions");
@@ -294,6 +297,7 @@ const closeMobileOutputButton = document.querySelector("#close-mobile-output");
 const mobileOpenSessionsButton = document.querySelector("#mobile-open-sessions");
 const mobileOpenTodoButton = document.querySelector("#mobile-open-todo");
 const mobileOpenSettingsButton = document.querySelector("#mobile-open-settings");
+const mobileOpenInstructionsButton = document.querySelector("#mobile-open-instructions");
 const mobileOpenBackupButton = document.querySelector("#mobile-open-backup");
 const mobileSheetBackdrop = document.querySelector("#mobile-sheet-backdrop");
 const sessionItemTemplate = document.querySelector("#session-item-template");
@@ -792,7 +796,8 @@ function createDefaultSettings() {
     defaultCustomHeaders: [],
     customTemplates: [],
     templateUsageCounts: {},
-    templateLauncherTemplateIds: ["meeting", "oneToOneCall", "personalNote"],
+    templateLauncherTemplateIds: ["meeting", "personalNote", "oneToOneCall"],
+    selectedQuickTemplateId: "meeting",
     exportStylePreset: DEFAULT_EXPORT_PRESET,
     exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
     promptSettings: { ...DEFAULT_PROMPT_SETTINGS },
@@ -950,6 +955,10 @@ void initializeApp().catch((error) => {
     closeMobileSheets();
     openSettings();
   });
+  mobileOpenInstructionsButton?.addEventListener("click", () => {
+    closeMobileSheets();
+    openInstructions();
+  });
   mobileOpenBackupButton?.addEventListener("click", () => {
     closeMobileSheets();
     openBackupPanel();
@@ -1034,9 +1043,12 @@ void initializeApp().catch((error) => {
   [openBackupPanelButton, openBackupOutputButton].forEach((button) => {
     button?.addEventListener("click", openBackupPanel);
   });
+  openInstructionsButton?.addEventListener("click", openInstructions);
   [openSettingsButton, openSettingsOutputButton].forEach((button) => {
     button?.addEventListener("click", openSettings);
   });
+  closeInstructionsBackdrop?.addEventListener("click", closeInstructions);
+  closeInstructionsButton?.addEventListener("click", closeInstructions);
   closeWorkspacePanelBackdrop.addEventListener("click", closeWorkspacePanel);
   closeWorkspacePanelButton.addEventListener("click", closeWorkspacePanel);
   closeConfirmModalBackdrop.addEventListener("click", () => closeConfirmModal(false));
@@ -1997,6 +2009,10 @@ void initializeApp().catch((error) => {
       closeSettings();
     }
 
+    if (event.key === "Escape" && !instructionsModal.classList.contains("is-hidden")) {
+      closeInstructions();
+    }
+
     if (event.key === "Escape" && !aiSettingsModal.classList.contains("is-hidden")) {
       closeAiSettings();
     }
@@ -2861,7 +2877,6 @@ function render() {
   renderCustomHeaders();
   renderOutput();
   syncAudioCaptureUi();
-  updateAiStatusCopy();
   updateSessionStorageUi();
   updateExportButtons();
   syncSettingsForm();
@@ -3023,6 +3038,11 @@ function getPreferredDesktopTemplateId() {
   return "meeting";
 }
 
+function getSelectedQuickTemplateId() {
+  const templateId = typeof settings.selectedQuickTemplateId === "string" ? settings.selectedQuickTemplateId : "";
+  return getTemplateDefinition(templateId).id || "meeting";
+}
+
 function recordTemplateUsage(templateId) {
   if (!templateId) {
     return;
@@ -3083,7 +3103,7 @@ function renderTemplateQuickSelectors() {
     return;
   }
 
-  const activeTemplateId = getActiveSession()?.template || getPreferredDesktopTemplateId();
+  const activeTemplateId = getSelectedQuickTemplateId();
   settings.templateLauncherTemplateIds = normalizeTemplateLauncherIds(settings.templateLauncherTemplateIds);
   const preferredOrder = ["meeting", "personalNote", "oneToOneCall"];
   const rankedTemplates = getAllTemplates()
@@ -3104,7 +3124,7 @@ function renderTemplateQuickSelectors() {
 
   const newButton = document.createElement("button");
   newButton.type = "button";
-  newButton.className = "ghost-button template-quick-button";
+  newButton.className = "ghost-button template-quick-button template-create-button";
   newButton.textContent = "New";
   newButton.addEventListener("click", () => {
     createAndOpenNewSession(activeTemplateId);
@@ -3122,7 +3142,9 @@ function renderTemplateQuickSelectors() {
     button.textContent = template.label;
     button.classList.toggle("is-active", template.id === activeTemplateId);
     button.addEventListener("click", () => {
-      createAndOpenNewSession(template.id);
+      settings.selectedQuickTemplateId = template.id;
+      persistSettings();
+      renderTemplateQuickSelectors();
     });
     templateQuickSelectors.appendChild(button);
   });
@@ -3715,7 +3737,7 @@ function syncAudioCaptureUi(session = getActiveSession()) {
   }
 
   if (!SUPPORTS_AUDIO_RECORDING && !SUPPORTS_MEETING_CAPTURE) {
-    audioCaptureStatus.textContent = "Live meeting recording is unavailable in this browser, but you can still upload an audio file to transcribe.";
+    audioCaptureStatus.textContent = "Live meeting recording is unavailable in this browser. Upload audio instead.";
   } else if (audioDraftMeta) {
     const sourceLabel = audioDraftMeta.source === "upload"
       ? "Uploaded audio ready"
@@ -3724,14 +3746,12 @@ function syncAudioCaptureUi(session = getActiveSession()) {
         : audioDraftMeta.source === "room-meeting-capture"
           ? "Room / hybrid meeting ready"
         : "Recorded audio ready";
-    const sizeHint = audioDraftMeta.size > MAX_AUDIO_UPLOAD_BYTES
-      ? " It will be split into smaller parts automatically before transcription."
-      : "";
-    audioCaptureStatus.textContent = `${sourceLabel}: ${audioDraftMeta.fileName} (${formatAudioFileSize(audioDraftMeta.size)}). Click "Transcribe audio" to add it to the Live transcript field.${sizeHint}`;
+      const sizeHint = audioDraftMeta.size > MAX_AUDIO_UPLOAD_BYTES
+        ? " It will be split into smaller parts automatically before transcription."
+        : "";
+      audioCaptureStatus.textContent = `${sourceLabel}: ${audioDraftMeta.fileName} (${formatAudioFileSize(audioDraftMeta.size)}). Click "Transcribe audio" to add it to the Live transcript field.${sizeHint}`;
   } else {
-    audioCaptureStatus.textContent = SUPPORTS_MEETING_CAPTURE
-      ? "No capture saved yet. Start a room / hybrid meeting, use screen / browser audio for direct in-computer sound, or upload mp3, m4a, wav, mp4, or webm. Larger files will be split automatically before transcription."
-      : "No capture saved yet. Start a room / hybrid meeting through the microphone, use dictation, or upload mp3, m4a, wav, mp4, or webm. Larger files will be split automatically before transcription.";
+      audioCaptureStatus.textContent = "";
   }
 
   syncMobileUi();
@@ -3888,7 +3908,7 @@ function syncFieldsFromSession() {
   setTranscriptFieldState(
     "uploaded",
     session.uploadedTranscript?.trim() ? "uploaded" : "uploaded-ready",
-    session.uploadedTranscript?.trim() ? "Uploaded transcript" : "Imported text"
+    "Uploaded transcript"
   );
   rawNotesInput.value = session.rawNotes;
   renderTemplateCustomFields(session, template);
@@ -4126,6 +4146,20 @@ function closeSettings() {
   openSettingsButton.focus();
 }
 
+function openInstructions() {
+  instructionsModal.classList.remove("is-hidden");
+  instructionsModal.setAttribute("aria-hidden", "false");
+  syncModalScrollLock();
+  closeInstructionsButton?.focus();
+}
+
+function closeInstructions() {
+  instructionsModal.classList.add("is-hidden");
+  instructionsModal.setAttribute("aria-hidden", "true");
+  syncModalScrollLock();
+  (openInstructionsButton || mobileOpenInstructionsButton || openSettingsButton)?.focus();
+}
+
 function setActiveSettingsSection(sectionId) {
   activeSettingsSection = settingsSections.some((section) => section.dataset.settingsSection === sectionId)
     ? sectionId
@@ -4142,12 +4176,6 @@ function setActiveSettingsSection(sectionId) {
     section.classList.toggle("is-hidden-field", !isActive);
     section.hidden = !isActive;
   });
-}
-
-function updateAiStatusCopy() {
-  aiStatusCopy.innerHTML = settings.apiKey
-    ? `AI polishing is connected with <strong>${escapeHtml(getAiModelLabel(settings.model))}</strong>. Open <strong>Settings → AI</strong> to update or remove the key. If no OpenAI API key is provided, generation will not work well, although transcription is still possible.`
-    : `Open <strong>Settings → AI</strong> to connect your OpenAI API key. If no OpenAI API key is provided, generation will not work well, although transcription is still possible.`;
 }
 
 function resolveSelectedTranscriptionModel(modelId) {
@@ -4203,6 +4231,7 @@ function renderTranscriptionModelOptions() {
 function syncModalScrollLock() {
   const hasOpenModal = !aiSettingsModal.classList.contains("is-hidden")
     || !settingsModal.classList.contains("is-hidden")
+    || !instructionsModal.classList.contains("is-hidden")
     || !backupReminderModal.classList.contains("is-hidden")
     || !backupPanelModal.classList.contains("is-hidden")
     || !todoPanelModal.classList.contains("is-hidden")
@@ -4413,7 +4442,6 @@ function persistAiSettings({ announce = true } = {}) {
   settings.transcriptionModel = resolveSelectedTranscriptionModel(transcriptionModelSelect.value);
   persistSettings();
   updateHeroMeta();
-  updateAiStatusCopy();
   updateTranscriptionModelDescription();
   renderAiModelOptions();
   renderTranscriptionModelOptions();
@@ -5123,6 +5151,9 @@ function createAndOpenNewSession(templateId = null) {
   persistSettings();
   persistSessions();
   render();
+  if (contextCardDisclosure) {
+    contextCardDisclosure.open = nextSession.template === "meeting";
+  }
   meetingTitleInput.focus();
 }
 
@@ -6607,7 +6638,7 @@ function buildSessionPreview(session) {
 
 function handlePrimaryChromeClick(event) {
   const button = event.target.closest(
-    "#open-sessions-main, #open-sessions-output, #mobile-open-sessions, #open-settings, #mobile-open-settings, #open-backup-panel, #mobile-open-backup"
+    "#open-sessions-main, #open-sessions-output, #mobile-open-sessions, #open-settings, #mobile-open-settings, #open-instructions, #mobile-open-instructions, #open-backup-panel, #mobile-open-backup"
   );
 
   if (!button) {
@@ -6629,6 +6660,14 @@ function handlePrimaryChromeClick(event) {
       closeMobileSheets();
     }
     openSettings();
+    return;
+  }
+
+  if (button.matches("#open-instructions, #mobile-open-instructions")) {
+    if (button.matches("#mobile-open-instructions")) {
+      closeMobileSheets();
+    }
+    openInstructions();
     return;
   }
 
@@ -7508,6 +7547,7 @@ function normalizeStoredSettings(parsed) {
       customTemplates: normalizedCustomTemplates,
       templateUsageCounts: normalizeTemplateUsageCounts(parsed.templateUsageCounts),
       templateLauncherTemplateIds: normalizeTemplateLauncherIds(parsed.templateLauncherTemplateIds, availableTemplateIds),
+      selectedQuickTemplateId: availableTemplateIds.includes(parsed.selectedQuickTemplateId) ? parsed.selectedQuickTemplateId : "meeting",
       exportStylePreset,
     exportStyle: normalizeExportStyle({
       ...EXPORT_STYLE_PRESETS[exportStylePreset].style,

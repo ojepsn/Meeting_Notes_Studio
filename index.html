@@ -85,14 +85,15 @@
             <p class="section-label">Capture</p>
             <h2 id="session-title">Untitled session</h2>
           </div>
-          <div class="panel-actions">
-            <div class="panel-actions-shared desktop-only">
-              <button class="ghost-button" id="open-sessions-main" type="button">All Sessions</button>
-              <button class="ghost-button" id="open-backup-panel" type="button">Back-up</button>
-              <button class="ghost-button" id="open-settings" type="button">Settings</button>
-              <div class="status-pill" id="save-status" data-state="idle">Saved locally</div>
+            <div class="panel-actions">
+              <div class="panel-actions-shared desktop-only">
+                <button class="ghost-button" id="open-sessions-main" type="button">All Sessions</button>
+                <button class="ghost-button" id="open-backup-panel" type="button">Back-up</button>
+                <button class="ghost-button" id="open-instructions" type="button">Instructions</button>
+                <button class="ghost-button" id="open-settings" type="button">Settings</button>
+                <div class="status-pill" id="save-status" data-state="idle">Saved locally</div>
+              </div>
             </div>
-          </div>
         </div>
         <div class="editor-header-row">
           <div class="template-quick-selectors" id="template-quick-selectors" aria-label="Quick new-session templates"></div>
@@ -239,12 +240,13 @@
               <button class="ghost-button" id="close-mobile-more" type="button">Close</button>
             </div>
 
-              <div class="mobile-sheet-shortcuts mobile-only">
-                <button class="ghost-button" id="mobile-open-sessions" type="button">All Sessions</button>
-                <button class="ghost-button" id="mobile-open-settings" type="button">Settings</button>
-                <button class="ghost-button" id="mobile-open-backup" type="button">Data Backup</button>
-              <button class="ghost-button" id="mobile-open-output" type="button">View Output</button>
-            </div>
+                <div class="mobile-sheet-shortcuts mobile-only">
+                  <button class="ghost-button" id="mobile-open-sessions" type="button">All Sessions</button>
+                  <button class="ghost-button" id="mobile-open-settings" type="button">Settings</button>
+                  <button class="ghost-button" id="mobile-open-instructions" type="button">Instructions</button>
+                  <button class="ghost-button" id="mobile-open-backup" type="button">Data Backup</button>
+                <button class="ghost-button" id="mobile-open-output" type="button">View Output</button>
+              </div>
 
             <section class="config-card workflow-card" aria-label="Capture methods">
               <div class="config-card-copy">
@@ -289,12 +291,10 @@
                   <button class="ghost-button" id="upload-transcript" type="button">Upload transcript</button>
                   <button class="ghost-button" id="transcribe-audio" type="button">Transcribe audio</button>
                 </div>
-                <p class="support-text" id="audio-capture-status">
-                  No audio selected yet. Start a room / hybrid meeting, try screen / browser audio, or upload mp3, m4a, wav, mp4, or webm.
-                </p>
-                <div class="pending-recordings-panel" id="pending-recordings-panel" hidden>
-                  <div class="pending-recordings-heading">
-                    <p class="section-label">Saved recordings</p>
+                <p class="support-text" id="audio-capture-status" aria-live="polite"></p>
+                  <div class="pending-recordings-panel" id="pending-recordings-panel" hidden>
+                    <div class="pending-recordings-heading">
+                      <p class="section-label">Saved recordings</p>
                     <span class="support-text">Delete recordings you no longer need before transcription.</span>
                   </div>
                   <div class="pending-recordings-list" id="pending-recordings-list"></div>
@@ -304,18 +304,10 @@
               </section>
             </section>
 
-            <p class="support-text" id="dictation-status">
-              Dictation uses the browser speech API when available. You can still type normally at any time.
-            </p>
-            <p class="support-text">
-              If your browser asks for microphone permission, choose <strong>Allow while visiting the site</strong> to avoid being asked again every time you start recording.
-            </p>
-            <p class="support-text" id="ai-status-copy">
-              Open <strong>Settings → AI</strong> to connect your OpenAI API key when you want AI polishing.
-            </p>
-          </aside>
-        </div>
-      </section>
+            <p class="support-text" id="dictation-status" aria-live="polite"></p>
+            </aside>
+          </div>
+        </section>
 
       <div class="output-resize-handle desktop-only" id="output-resize-handle" aria-hidden="true"></div>
       <section class="output-panel">
@@ -1279,6 +1271,118 @@
           </div>
         </div>
       </form>
+    </section>
+    </div>
+
+  <div class="modal-shell is-hidden" id="instructions-modal" aria-hidden="true">
+    <div class="modal-backdrop" id="close-instructions"></div>
+    <section class="modal-card modal-card-settings" aria-label="Instructions dialog" aria-modal="true" role="dialog">
+      <div class="panel-heading modal-heading">
+        <div>
+          <p class="section-label">Instructions</p>
+          <h2>How to use the Sessions app</h2>
+        </div>
+        <button class="ghost-button" id="close-instructions-button" type="button">Close</button>
+      </div>
+
+      <div class="modal-form instructions-stack">
+        <section class="config-card">
+          <div class="config-card-copy">
+            <p class="section-label">Start</p>
+            <h3>Start a session</h3>
+          </div>
+          <p class="support-text">
+            Choose a template first, then click <strong>New</strong> to create a fresh session. <strong>Meeting</strong> is the default. Use <strong>Quick note</strong> for short written notes, and <strong>1:1 / Phone call</strong> for calls or one-to-one conversations.
+          </p>
+          <p class="support-text">
+            The template buttons only select what the next new session should be. They do not create a session on their own.
+          </p>
+        </section>
+
+        <section class="config-card">
+          <div class="config-card-copy">
+            <p class="section-label">Capture</p>
+            <h3>Write, record, or import</h3>
+          </div>
+          <p class="support-text">
+            <strong>Manual notes</strong> is the main writing area and is always included in Output. <strong>Uploaded transcript</strong> opens automatically when you import transcript text. <strong>Live transcript</strong> is mainly for active dictation and transcribed audio.
+          </p>
+          <p class="support-text">
+            Use <strong>Details</strong> for the session title, template, date, and time. Use <strong>People</strong> when the template includes participants.
+          </p>
+        </section>
+
+        <section class="config-card">
+          <div class="config-card-copy">
+            <p class="section-label">Recording</p>
+            <h3>Choose the right recording mode</h3>
+          </div>
+          <p class="support-text">
+            <strong>Room / hybrid meeting</strong> is the right choice for most meetings. It records through the microphone, so it works for people speaking in the room and also for remote voices coming through nearby physical speakers.
+          </p>
+          <p class="support-text">
+            <strong>Screen / browser audio</strong> is only for direct in-computer sound from a shared tab, window, or screen. This mode opens the browser share picker.
+          </p>
+          <p class="support-text">
+            <strong>Dictation</strong> is mainly for personal dictation when one person is speaking clearly into the device. <strong>Upload audio</strong> is the safest fallback if live browser capture is limited.
+          </p>
+          <p class="support-text">
+            Recorded or uploaded audio uses the same transcription flow. If your browser asks for microphone permission, choose <strong>Allow while visiting the site</strong> for a smoother workflow.
+          </p>
+        </section>
+
+        <section class="config-card">
+          <div class="config-card-copy">
+            <p class="section-label">Output</p>
+            <h3>Generate, refine, and export</h3>
+          </div>
+          <p class="support-text">
+            Click <strong>Generate</strong> to turn your notes and transcripts into polished output. Use <strong>Refine output</strong> for revision comments, <strong>Translate</strong> for another language, and <strong>Export Word</strong> or <strong>Export PDF</strong> for formatted documents.
+          </p>
+          <p class="support-text">
+            Export style settings in <strong>Settings</strong> control how the Word and PDF documents look. The on-screen Output preview follows those settings closely.
+          </p>
+        </section>
+
+        <section class="config-card">
+          <div class="config-card-copy">
+            <p class="section-label">Sessions</p>
+            <h3>Reopen and protect your work</h3>
+          </div>
+          <p class="support-text">
+            Use <strong>All Sessions</strong> to reopen recent work quickly. Use <strong>Back-up</strong> to export sessions, import a backup, or save directly to a local file when your browser supports it.
+          </p>
+          <p class="support-text">
+            This app stores sessions locally in the browser by default, so regular backups are important if the notes matter to you.
+          </p>
+        </section>
+
+        <section class="config-card">
+          <div class="config-card-copy">
+            <p class="section-label">Settings</p>
+            <h3>Theme, AI, and templates</h3>
+          </div>
+          <p class="support-text">
+            <strong>Settings</strong> controls theme, export typography, visible quick-start templates, participants, abbreviations, and your own custom templates. You can create a blank template or duplicate an existing one and then edit which fields it shows.
+          </p>
+          <p class="support-text">
+            <strong>AI Settings</strong> controls the Output model and the audio transcription model. Without an OpenAI API key, transcription and generation will be limited.
+          </p>
+        </section>
+
+        <section class="config-card">
+          <div class="config-card-copy">
+            <p class="section-label">Tech stack</p>
+            <h3>Technical design</h3>
+          </div>
+          <p class="support-text">
+            This Sessions app is the legacy browser PWA. It is built with plain HTML, CSS, and JavaScript, uses a service worker for installability and caching, and stores primary session data in browser <strong>IndexedDB</strong> with legacy browser storage compatibility where needed.
+          </p>
+          <p class="support-text">
+            Audio capture uses browser media APIs such as <strong>getUserMedia</strong> and <strong>getDisplayMedia</strong>. Live dictation uses the browser speech-recognition API when the browser exposes it. Word export is HTML-based, and PDF export uses the client-side libraries already bundled in the app.
+          </p>
+        </section>
+      </div>
     </section>
   </div>
 

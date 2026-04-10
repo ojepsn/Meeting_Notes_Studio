@@ -154,6 +154,7 @@ runTest("built-in session templates preserve intended defaults", () => {
   assert.equal(BUILT_IN_TEMPLATES.oneToOneCall.fields.meetingStartTime, true);
   assert.equal(BUILT_IN_TEMPLATES.oneToOneCall.fields.meetingEndTime, false);
   assert.equal(getPreferredDesktopTemplateId(), "meeting");
+  assert.match(appJsSource, /selectedQuickTemplateId: "meeting"/);
 });
 
 runTest("quick note and 1:1 templates auto-fill title and schedule defaults", () => {
@@ -215,6 +216,27 @@ runTest("capture shell keeps the core minimal defaults visible in markup", () =>
   assert.doesNotMatch(indexHtmlSource, /Imported text/);
 });
 
+runTest("detailed guidance moved into the Instructions modal instead of the capture sidebar", () => {
+  const sidebarMatch = indexHtmlSource.match(/<aside class="editor-sidebar">([\s\S]*?)<\/aside>/);
+  const instructionsMatch = indexHtmlSource.match(/<div class="modal-shell is-hidden" id="instructions-modal"[\s\S]*?<\/div>\s*<\/div>/);
+
+  assert.ok(sidebarMatch);
+  assert.ok(instructionsMatch);
+  assert.match(indexHtmlSource, /id="open-instructions"/);
+  assert.match(indexHtmlSource, /id="mobile-open-instructions"/);
+
+  assert.doesNotMatch(sidebarMatch[1], /No capture saved yet/);
+  assert.doesNotMatch(sidebarMatch[1], /Dictation uses the browser speech API when available/);
+  assert.doesNotMatch(sidebarMatch[1], /Allow while visiting the site/);
+  assert.doesNotMatch(sidebarMatch[1], /Open <strong>Settings → AI<\/strong> to connect your OpenAI API key when you want AI polishing/);
+
+  assert.match(instructionsMatch[0], /How to use the Sessions app/);
+  assert.match(instructionsMatch[0], /Choose the right recording mode/);
+  assert.match(instructionsMatch[0], /Technical design/);
+  assert.match(instructionsMatch[0], /IndexedDB/);
+  assert.match(instructionsMatch[0], /getUserMedia/);
+});
+
 runTest("top chrome hosts the save-status pill instead of the right sidebar", () => {
   const topActionsMatch = indexHtmlSource.match(/<div class="panel-actions-shared desktop-only">([\s\S]*?)<\/div>/);
   assert.ok(topActionsMatch);
@@ -229,6 +251,9 @@ runTest("quick-start strip includes New and the split meeting capture wording", 
   assert.match(appJsSource, /newButton\.textContent = "New"/);
   assert.match(appJsSource, /createAndOpenNewSession\(activeTemplateId\)/);
   assert.match(appJsSource, /const preferredOrder = \["meeting", "personalNote", "oneToOneCall"\]/);
+  assert.match(appJsSource, /settings\.selectedQuickTemplateId = template\.id/);
+  assert.match(appJsSource, /template-create-button/);
+  assert.match(appJsSource, /contextCardDisclosure\.open = nextSession\.template === "meeting"/);
   assert.match(indexHtmlSource, /id="audio-record-toggle"[\s\S]*?Start room \/ hybrid meeting[\s\S]*?Use mic for room voices and nearby speakers/);
   assert.match(indexHtmlSource, /id="audio-screen-toggle"[\s\S]*?Start screen \/ browser audio[\s\S]*?Use direct in-computer audio from a tab or screen/);
   assert.match(indexHtmlSource, /id="dictation-toggle"[\s\S]*?Start dictation[\s\S]*?Best for personal dictation/);
