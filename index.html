@@ -290,15 +290,9 @@
                   <button class="ghost-button" id="upload-audio" type="button">Upload audio</button>
                   <button class="ghost-button" id="upload-transcript" type="button">Upload transcript</button>
                   <button class="ghost-button" id="transcribe-audio" type="button">Transcribe audio</button>
+                  <button class="ghost-button" id="manage-recordings" type="button">Recordings</button>
                 </div>
                 <p class="support-text" id="audio-capture-status" aria-live="polite"></p>
-                  <div class="pending-recordings-panel" id="pending-recordings-panel" hidden>
-                    <div class="pending-recordings-heading">
-                      <p class="section-label">Saved recordings</p>
-                    <span class="support-text">Delete recordings you no longer need before transcription.</span>
-                  </div>
-                  <div class="pending-recordings-list" id="pending-recordings-list"></div>
-                </div>
                 <input id="audio-file-input" type="file" accept=".mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm,audio/*,video/mp4" hidden>
                 <input id="transcript-file-input" type="file" accept=".txt,.md,.text,.docx,.doc,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" hidden>
               </section>
@@ -882,7 +876,7 @@
               <input id="transcription-model-select" type="hidden" value="gpt-4o-mini-transcribe">
 
               <p class="support-text">
-                Pricing is shown per minute of audio. For short meetings the cost is usually low, but longer recordings can add up faster than note generation.
+                Only OpenAI transcription models relevant for this app are shown here. Pricing is shown per minute of audio.
               </p>
 
               <div class="model-option-list" id="transcription-model-options" aria-live="polite"></div>
@@ -1438,6 +1432,28 @@
             <strong>Save Local File</strong> is best on supported desktop browsers when you want to save directly to a chosen file on your computer.
           </p>
           <input id="import-sessions-input" type="file" accept="application/json,.json" hidden>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-shell is-hidden" id="recordings-modal" aria-hidden="true">
+    <div class="modal-backdrop" id="close-recordings"></div>
+    <section class="modal-card" aria-label="Saved recordings" aria-modal="true" role="dialog">
+      <div class="panel-heading modal-heading">
+        <div>
+          <p class="section-label">Recordings</p>
+          <h2>Saved recordings</h2>
+        </div>
+        <button class="ghost-button" id="close-recordings-button" type="button">Close</button>
+      </div>
+
+      <div class="modal-form">
+        <p class="support-text">
+          These recordings are saved locally and are ready for transcription. Delete the ones you no longer need.
+        </p>
+        <div class="pending-recordings-panel modal-recordings-panel" id="pending-recordings-panel">
+          <div class="pending-recordings-list" id="pending-recordings-list"></div>
         </div>
       </div>
     </section>

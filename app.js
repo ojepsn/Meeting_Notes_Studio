@@ -102,6 +102,9 @@ const resetPromptSettingsButton = document.querySelector("#reset-prompt-settings
 const backupPanelModal = document.querySelector("#backup-panel-modal");
 const closeBackupPanelBackdrop = document.querySelector("#close-backup-panel");
 const closeBackupPanelButton = document.querySelector("#close-backup-panel-button");
+const recordingsModal = document.querySelector("#recordings-modal");
+const closeRecordingsBackdrop = document.querySelector("#close-recordings");
+const closeRecordingsButton = document.querySelector("#close-recordings-button");
 const todoPanelModal = document.querySelector("#todo-panel-modal");
 const closeTodoPanelBackdrop = document.querySelector("#close-todo-panel");
 const closeTodoPanelButton = document.querySelector("#close-todo-panel-button");
@@ -270,6 +273,7 @@ const audioScreenToggle = document.querySelector("#audio-screen-toggle");
 const uploadAudioButton = document.querySelector("#upload-audio");
 const uploadTranscriptButton = document.querySelector("#upload-transcript");
 const transcribeAudioButton = document.querySelector("#transcribe-audio");
+const manageRecordingsButton = document.querySelector("#manage-recordings");
 const audioFileInput = document.querySelector("#audio-file-input");
 const transcriptFileInput = document.querySelector("#transcript-file-input");
 const audioCaptureStatus = document.querySelector("#audio-capture-status");
@@ -483,6 +487,11 @@ const TRANSCRIPTION_MODELS = {
     pricingDate: "2026-03-29",
   },
 };
+const RELEVANT_TRANSCRIPTION_MODEL_IDS = [
+  "gpt-4o-mini-transcribe",
+  "gpt-4o-transcribe",
+  "gpt-4o-transcribe-diarize",
+];
 const THEME_DESCRIPTIONS = {
   "fluent-slate": "A calm professional default with restrained blue accents and quiet neutral surfaces.",
   "atlas-blue": "A familiar enterprise look with crisp structure, clarity, and dependable blue emphasis.",
@@ -1049,6 +1058,8 @@ void initializeApp().catch((error) => {
   });
   closeInstructionsBackdrop?.addEventListener("click", closeInstructions);
   closeInstructionsButton?.addEventListener("click", closeInstructions);
+  closeRecordingsBackdrop?.addEventListener("click", closeRecordingsModal);
+  closeRecordingsButton?.addEventListener("click", closeRecordingsModal);
   closeWorkspacePanelBackdrop.addEventListener("click", closeWorkspacePanel);
   closeWorkspacePanelButton.addEventListener("click", closeWorkspacePanel);
   closeConfirmModalBackdrop.addEventListener("click", () => closeConfirmModal(false));
@@ -2025,6 +2036,10 @@ void initializeApp().catch((error) => {
       closeBackupPanel();
     }
 
+    if (event.key === "Escape" && !recordingsModal.classList.contains("is-hidden")) {
+      closeRecordingsModal();
+    }
+
     if (event.key === "Escape" && !todoPanelModal.classList.contains("is-hidden")) {
       closeTodoPanel();
     }
@@ -2385,6 +2400,7 @@ void initializeApp().catch((error) => {
   uploadAudioButton.addEventListener("click", () => {
     audioFileInput.click();
   });
+  manageRecordingsButton?.addEventListener("click", openRecordingsModal);
 
   uploadTranscriptButton.addEventListener("click", () => {
     transcriptFileInput.click();
@@ -3728,6 +3744,9 @@ function syncAudioCaptureUi(session = getActiveSession()) {
 
   uploadAudioButton.disabled = isAudioRecording;
   transcribeAudioButton.disabled = !canTranscribe;
+  if (manageRecordingsButton) {
+    manageRecordingsButton.disabled = sessions.every((entry) => !normalizePendingAudioDraftMeta(entry.pendingAudioDraftMeta));
+  }
 
   if (isAudioRecording) {
     audioCaptureStatus.textContent = activeAudioCaptureMode === "screen-meeting"
@@ -3997,6 +4016,21 @@ function closeBackupPanel() {
   openBackupPanelButton.focus();
 }
 
+function openRecordingsModal() {
+  renderPendingRecordings();
+  recordingsModal.classList.remove("is-hidden");
+  recordingsModal.setAttribute("aria-hidden", "false");
+  syncModalScrollLock();
+  pendingRecordingsList.querySelector("button")?.focus();
+}
+
+function closeRecordingsModal() {
+  recordingsModal.classList.add("is-hidden");
+  recordingsModal.setAttribute("aria-hidden", "true");
+  syncModalScrollLock();
+  manageRecordingsButton?.focus();
+}
+
 function openTodoPanel() {
   renderTodoList();
   todoPanelModal.classList.remove("is-hidden");
@@ -4179,7 +4213,9 @@ function setActiveSettingsSection(sectionId) {
 }
 
 function resolveSelectedTranscriptionModel(modelId) {
-  return TRANSCRIPTION_MODELS[modelId] ? modelId : DEFAULT_TRANSCRIPTION_MODEL;
+  return getVisibleTranscriptionModels().some(([visibleModelId]) => visibleModelId === modelId)
+    ? modelId
+    : DEFAULT_TRANSCRIPTION_MODEL;
 }
 
 function getTranscriptionModelLabel(modelId) {
@@ -4194,7 +4230,10 @@ function updateTranscriptionModelDescription() {
   const modelId = resolveSelectedTranscriptionModel(transcriptionModelSelect.value || settings.transcriptionModel);
   transcriptionModelSelect.value = modelId;
   const model = TRANSCRIPTION_MODELS[modelId] || TRANSCRIPTION_MODELS[DEFAULT_TRANSCRIPTION_MODEL];
-  transcriptionModelDescription.textContent = model.description;
+  const visibleModels = getVisibleTranscriptionModels();
+  transcriptionModelDescription.textContent = visibleModels.length === 1
+    ? `${model.description} This is currently the only relevant OpenAI transcription model shown for this app.`
+    : `${model.description} Only OpenAI transcription models relevant for NoteSmith sessions are shown here.`;
 
   if (transcriptionModelPricing) {
     transcriptionModelPricing.textContent = `Estimated transcription cost: about ${model.pricing}. Pricing info date: ${model.pricingDate}.`;
@@ -4206,18 +4245,22 @@ function renderTranscriptionModelOptions() {
     return;
   }
 
+  const visibleModels = getVisibleTranscriptionModels();
   const selectedModel = resolveSelectedTranscriptionModel(transcriptionModelSelect.value || settings.transcriptionModel);
   transcriptionModelSelect.value = selectedModel;
 
-  transcriptionModelOptions.innerHTML = Object.entries(TRANSCRIPTION_MODELS)
+  transcriptionModelOptions.innerHTML = visibleModels
     .map(([modelId, model]) => {
       const isSelected = modelId === selectedModel;
       const selectedClass = isSelected ? " is-selected" : "";
+      const badgeLabel = visibleModels.length === 1
+        ? "Only option"
+        : (isSelected ? "Selected" : "Choose");
       return `
         <button class="model-option${selectedClass}" data-transcription-model-id="${escapeHtml(modelId)}" type="button" aria-pressed="${String(isSelected)}">
           <span class="model-option-header">
             <span class="model-option-name">${escapeHtml(model.label)}</span>
-            <span class="model-option-badge">${isSelected ? "Selected" : "Choose"}</span>
+            <span class="model-option-badge">${badgeLabel}</span>
           </span>
           <span class="model-option-copy">${escapeHtml(model.description)}</span>
           <span class="model-option-price">${escapeHtml(`Estimated cost: ${model.pricing}`)}</span>
@@ -4228,12 +4271,19 @@ function renderTranscriptionModelOptions() {
     .join("");
 }
 
+function getVisibleTranscriptionModels() {
+  return RELEVANT_TRANSCRIPTION_MODEL_IDS
+    .filter((modelId) => TRANSCRIPTION_MODELS[modelId])
+    .map((modelId) => [modelId, TRANSCRIPTION_MODELS[modelId]]);
+}
+
 function syncModalScrollLock() {
   const hasOpenModal = !aiSettingsModal.classList.contains("is-hidden")
     || !settingsModal.classList.contains("is-hidden")
     || !instructionsModal.classList.contains("is-hidden")
     || !backupReminderModal.classList.contains("is-hidden")
     || !backupPanelModal.classList.contains("is-hidden")
+    || !recordingsModal.classList.contains("is-hidden")
     || !todoPanelModal.classList.contains("is-hidden")
     || !todoDetailModal.classList.contains("is-hidden")
     || !workspacePanelModal.classList.contains("is-hidden")

@@ -93,7 +93,10 @@ function extractFunction(source, name) {
 function loadPwaTemplateHelpers() {
   const snippets = [
     extractConst(appJsSource, "BUILT_IN_TEMPLATES"),
+    extractConst(appJsSource, "TRANSCRIPTION_MODELS"),
+    extractConst(appJsSource, "RELEVANT_TRANSCRIPTION_MODEL_IDS"),
     extractFunction(appJsSource, "getPreferredDesktopTemplateId"),
+    extractFunction(appJsSource, "getVisibleTranscriptionModels"),
     extractFunction(appJsSource, "getTemplateBehaviorId"),
     extractFunction(appJsSource, "getTemplateTitleFieldLabel"),
     extractFunction(appJsSource, "formatIsoDate"),
@@ -109,7 +112,10 @@ function loadPwaTemplateHelpers() {
     ${snippets.join("\n;\n")}
     ;globalThis.__exports = {
       BUILT_IN_TEMPLATES,
+      TRANSCRIPTION_MODELS,
+      RELEVANT_TRANSCRIPTION_MODEL_IDS,
       getPreferredDesktopTemplateId,
+      getVisibleTranscriptionModels,
       getTemplateBehaviorId,
       getTemplateTitleFieldLabel,
       formatIsoDate,
@@ -155,6 +161,27 @@ runTest("built-in session templates preserve intended defaults", () => {
   assert.equal(BUILT_IN_TEMPLATES.oneToOneCall.fields.meetingEndTime, false);
   assert.equal(getPreferredDesktopTemplateId(), "meeting");
   assert.match(appJsSource, /selectedQuickTemplateId: "meeting"/);
+});
+
+runTest("only relevant OpenAI transcription models are exposed in the selector", () => {
+  const {
+    TRANSCRIPTION_MODELS,
+    RELEVANT_TRANSCRIPTION_MODEL_IDS,
+    getVisibleTranscriptionModels,
+  } = loadPwaTemplateHelpers();
+
+  assert.deepEqual(
+    normalizeVmObject(RELEVANT_TRANSCRIPTION_MODEL_IDS),
+    ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "gpt-4o-transcribe-diarize"]
+  );
+  assert.ok(TRANSCRIPTION_MODELS["gpt-4o-mini-transcribe"]);
+  assert.ok(TRANSCRIPTION_MODELS["gpt-4o-transcribe"]);
+  assert.ok(TRANSCRIPTION_MODELS["gpt-4o-transcribe-diarize"]);
+  assert.deepEqual(
+    normalizeVmObject(getVisibleTranscriptionModels().map(([modelId]) => modelId)),
+    ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "gpt-4o-transcribe-diarize"]
+  );
+  assert.match(indexHtmlSource, /Only OpenAI transcription models relevant for this app are shown here/);
 });
 
 runTest("quick note and 1:1 templates auto-fill title and schedule defaults", () => {
@@ -235,6 +262,19 @@ runTest("detailed guidance moved into the Instructions modal instead of the capt
   assert.match(instructionsMatch[0], /Technical design/);
   assert.match(instructionsMatch[0], /IndexedDB/);
   assert.match(instructionsMatch[0], /getUserMedia/);
+});
+
+runTest("recording management is no longer embedded in the main capture sidebar", () => {
+  const sidebarMatch = indexHtmlSource.match(/<aside class="editor-sidebar">([\s\S]*?)<\/aside>/);
+  const recordingsModalMatch = indexHtmlSource.match(/<div class="modal-shell is-hidden" id="recordings-modal"[\s\S]*?<\/div>\s*<\/div>/);
+
+  assert.ok(sidebarMatch);
+  assert.ok(recordingsModalMatch);
+  assert.match(indexHtmlSource, /id="manage-recordings"/);
+  assert.doesNotMatch(sidebarMatch[1], /Saved recordings/);
+  assert.doesNotMatch(sidebarMatch[1], /Delete recordings you no longer need before transcription/);
+  assert.match(recordingsModalMatch[0], /Saved recordings/);
+  assert.match(recordingsModalMatch[0], /ready for transcription/);
 });
 
 runTest("top chrome hosts the save-status pill instead of the right sidebar", () => {
