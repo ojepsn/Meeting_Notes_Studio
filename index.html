@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.10.9">
+  <link rel="stylesheet" href="styles.css?v=0.10.10">
 </head>
 <body>
   <main class="page-shell">
@@ -24,7 +24,7 @@
           Capture rough notes and turn them into professional meeting notes without leaving the page.
         </p>
         <div class="hero-meta">
-        <div class="version-pill" id="app-version">v0.10.9</div>
+        <div class="version-pill" id="app-version">v0.10.10</div>
           <div class="update-notice is-hidden-field" id="app-update-notice">New version available</div>
         </div>
       </div>
@@ -170,7 +170,6 @@
                 <summary>
                   <div class="form-section-header">
                     <p class="section-label">Highlights</p>
-                    <h3>Optional emphasis</h3>
                   </div>
                 </summary>
 
@@ -186,7 +185,6 @@
             <section class="form-section notes-transcript-section" aria-label="Notes and transcripts">
               <div class="form-section-header">
                 <p class="section-label">Capture</p>
-                <h3>Work from notes, transcript, or both</h3>
               </div>
 
                 <details class="manual-notes-disclosure" id="manual-notes-disclosure" open>
@@ -219,17 +217,16 @@
                 Start dictation for live transcript, or use More to record audio instead.
               </p>
 
-                <label class="field transcript-field transcript-field-uploaded is-hidden-field" id="uploaded-transcript-field" data-transcript-source="uploaded-ready" hidden>
-                  <span class="field-label transcript-field-label">
-                    <span>Uploaded transcript</span>
-                    <span class="transcript-source-badge" id="uploaded-transcript-badge">Imported text</span>
-                  </span>
-                  <textarea
-                    id="uploaded-transcript"
-                    rows="7"
-                    placeholder="Uploaded transcript text will appear here..."
-                  ></textarea>
-              </label>
+                <details class="manual-notes-disclosure is-hidden-field" id="uploaded-transcript-disclosure" hidden>
+                  <summary>Uploaded transcript</summary>
+                  <label class="field transcript-field transcript-field-uploaded" id="uploaded-transcript-field" data-transcript-source="uploaded-ready">
+                    <textarea
+                      id="uploaded-transcript"
+                      rows="7"
+                      placeholder="Uploaded transcript text will appear here..."
+                    ></textarea>
+                  </label>
+                </details>
             </section>
           </div>
 
@@ -271,7 +268,7 @@
                   <details class="audio-info-disclosure">
                     <summary>Recording options</summary>
                     <p class="support-text">
-                      <strong>Dictation</strong> uses your browser's live speech recognition and works best for one voice or clear room audio. <strong>Meeting capture</strong> is for browser-based meetings or playback: first share a tab, window, or screen and enable audio if your browser offers it. If shared audio is unavailable, the app falls back gracefully so you can still capture what your browser allows. <strong>Upload audio</strong> is the safest fallback when live browser capture is limited. All recorded or uploaded audio uses the same transcription flow and ends up in the <strong>Live transcript</strong> field.
+                      <strong>Meeting capture</strong> should be used for meetings, including browser meetings, hybrid meetings, room conversations, or playback. First share a tab, window, or screen and enable audio if your browser offers it. If shared audio is unavailable, the app falls back gracefully so you can still capture what your browser allows. <strong>Dictation</strong> is mainly for personal dictation, where one person is speaking clearly into the device. <strong>Upload audio</strong> is the safest fallback when live browser capture is limited. All recorded or uploaded audio uses the same transcription flow and ends up in the <strong>Live transcript</strong> field.
                     </p>
                   </details>
                   <p class="support-text" id="audio-model-note">
@@ -279,13 +276,13 @@
                   </p>
                 </div>
                 <div class="capture-toolbar audio-capture-actions">
-                  <button class="secondary-button capture-mode-button" id="dictation-toggle" type="button">
-                    <span class="capture-mode-title">Start dictation</span>
-                    <span class="capture-mode-hint">Fastest for one voice</span>
-                  </button>
                   <button class="secondary-button capture-mode-button" id="audio-record-toggle" type="button">
                     <span class="capture-mode-title">Start meeting capture</span>
-                    <span class="capture-mode-hint">Share tab, window, or screen audio</span>
+                    <span class="capture-mode-hint">Recommended for meetings and hybrid calls</span>
+                  </button>
+                  <button class="secondary-button capture-mode-button" id="dictation-toggle" type="button">
+                    <span class="capture-mode-title">Start dictation</span>
+                    <span class="capture-mode-hint">Best for personal dictation</span>
                   </button>
                   <button class="ghost-button" id="upload-audio" type="button">Upload audio</button>
                   <button class="ghost-button" id="upload-transcript" type="button">Upload transcript</button>
@@ -1462,7 +1459,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.17/mammoth.browser.min.js"></script>
-  <script src="app.js?v=0.10.9"></script>
+  <script src="app.js?v=0.10.10"></script>
 </body>
 </html>
 

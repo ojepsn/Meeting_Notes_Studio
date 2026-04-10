@@ -32,6 +32,7 @@ assert.deepEqual(missingIds, [
   "open-todo-main",
   "open-todo-output",
   "toggle-sessions-panel",
+  "uploaded-transcript-badge",
 ]);
 
 console.log("PWA smoke checks passed.");

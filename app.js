@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.9";
+const APP_VERSION = "v0.10.10";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -197,13 +197,14 @@ const highlightsCardDisclosure = document.querySelector("#highlights-card-disclo
 const manualNotesField = document.querySelector("#manual-notes-field");
 const manualNotesDisclosure = document.querySelector("#manual-notes-disclosure");
 const liveTranscriptDisclosure = document.querySelector("#live-transcript-disclosure");
-  const liveTranscriptField = document.querySelector("#live-transcript-field");
-  const uploadedTranscriptField = document.querySelector("#uploaded-transcript-field");
-  const liveTranscriptBadge = document.querySelector("#live-transcript-badge");
-  const uploadedTranscriptBadge = document.querySelector("#uploaded-transcript-badge");
-  const mobileCaptureStatus = document.querySelector("#mobile-capture-status");
-  const editorPanel = document.querySelector(".editor-panel");
-  const workspaceLayout = document.querySelector(".workspace");
+const uploadedTranscriptDisclosure = document.querySelector("#uploaded-transcript-disclosure");
+const liveTranscriptField = document.querySelector("#live-transcript-field");
+const uploadedTranscriptField = document.querySelector("#uploaded-transcript-field");
+const liveTranscriptBadge = document.querySelector("#live-transcript-badge");
+const uploadedTranscriptBadge = document.querySelector("#uploaded-transcript-badge");
+const mobileCaptureStatus = document.querySelector("#mobile-capture-status");
+const editorPanel = document.querySelector(".editor-panel");
+const workspaceLayout = document.querySelector(".workspace");
 const apiKeyInput = document.querySelector("#api-key");
 const modelSelect = document.querySelector("#model-select");
 const modelOptions = document.querySelector("#model-options");
@@ -2386,7 +2387,7 @@ void initializeApp().catch((error) => {
       const transcriptText = await readTranscriptFile(file);
       updateActiveSession({ uploadedTranscript: transcriptText }, false);
       syncFieldsFromSession();
-      setElementVisibility(uploadedTranscriptField, Boolean(transcriptText.trim()));
+      setElementVisibility(uploadedTranscriptDisclosure, Boolean(transcriptText.trim()));
       revealTranscriptSurface("uploaded", { focus: true });
       audioCaptureStatus.textContent = `Transcript uploaded from ${file.name} and added to the Uploaded transcript field.`;
     } catch (error) {
@@ -3363,7 +3364,10 @@ function applyTemplateUi(session) {
   if (!showLiveTranscript && liveTranscriptDisclosure) {
     liveTranscriptDisclosure.open = false;
   }
-  setElementVisibility(uploadedTranscriptField, showUploadedTranscript);
+  setElementVisibility(uploadedTranscriptDisclosure, showUploadedTranscript);
+  if (!showUploadedTranscript && uploadedTranscriptDisclosure) {
+    uploadedTranscriptDisclosure.open = false;
+  }
   renderTemplateCustomFields(session, template);
   titleFieldLabel.textContent = getTemplateTitleFieldLabel(template);
   if (participantsFieldLabel) {
@@ -6491,7 +6495,7 @@ function setCaptureButtonContent(button, title, hint = "") {
 
 function revealTranscriptSurface(mode = "live", { focus = false } = {}) {
   const isUploaded = mode === "uploaded";
-  const disclosure = isUploaded ? null : liveTranscriptDisclosure;
+  const disclosure = isUploaded ? uploadedTranscriptDisclosure : liveTranscriptDisclosure;
   const field = isUploaded ? uploadedTranscriptField : liveTranscriptField;
   const input = isUploaded ? uploadedTranscriptInput : liveTranscriptInput;
 
@@ -6510,8 +6514,6 @@ function revealTranscriptSurface(mode = "live", { focus = false } = {}) {
     if (focus) {
       disclosure.open = true;
     }
-  } else {
-    setElementVisibility(field, true);
   }
   window.requestAnimationFrame(() => {
     (disclosure || field).scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -6605,12 +6607,14 @@ function getLiveTranscriptSourceLabel(session = getActiveSession()) {
 function setTranscriptFieldState(kind, source, label) {
   const field = kind === "uploaded" ? uploadedTranscriptField : liveTranscriptField;
   const badge = kind === "uploaded" ? uploadedTranscriptBadge : liveTranscriptBadge;
-  if (!field || !badge) {
+  if (!field) {
     return;
   }
 
   field.dataset.transcriptSource = source;
-  badge.textContent = label;
+  if (badge) {
+    badge.textContent = label;
+  }
 }
 
 function applyOutputPanelWidth() {

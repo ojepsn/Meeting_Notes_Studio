@@ -205,6 +205,11 @@ runTest("capture shell keeps the core minimal defaults visible in markup", () =>
   assert.match(indexHtmlSource, /id="manual-notes-disclosure" open/);
   assert.match(indexHtmlSource, /Write your own notes here, which will be included in the Output/);
   assert.match(indexHtmlSource, /id="live-transcript-disclosure" hidden/);
+  assert.match(indexHtmlSource, /id="uploaded-transcript-disclosure" hidden/);
+  assert.match(indexHtmlSource, /<summary>Uploaded transcript<\/summary>/);
+  assert.doesNotMatch(indexHtmlSource, /Optional emphasis/);
+  assert.doesNotMatch(indexHtmlSource, /Work from notes, transcript, or both/);
+  assert.doesNotMatch(indexHtmlSource, /Imported text/);
 });
 
 runTest("top chrome hosts the save-status pill instead of the right sidebar", () => {
@@ -215,6 +220,12 @@ runTest("top chrome hosts the save-status pill instead of the right sidebar", ()
   const sidebarPrefix = indexHtmlSource.split('<aside class="editor-sidebar">')[1] ?? "";
   const earlySidebarSlice = sidebarPrefix.slice(0, 400);
   assert.doesNotMatch(earlySidebarSlice, /id="save-status"/);
+});
+
+runTest("quick-start strip includes New and the meeting-first capture wording", () => {
+  assert.match(appJsSource, /newButton\.textContent = "New"/);
+  assert.match(indexHtmlSource, /id="audio-record-toggle"[\s\S]*?Start meeting capture[\s\S]*?Recommended for meetings and hybrid calls/);
+  assert.match(indexHtmlSource, /id="dictation-toggle"[\s\S]*?Start dictation[\s\S]*?Best for personal dictation/);
 });
 
 console.log("PWA core tests passed.");
