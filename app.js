@@ -825,6 +825,7 @@ async function initializeApp() {
 void initializeApp();
 
   function bindEvents() {
+    document.addEventListener("click", handlePrimaryChromeClick);
     if (outputResizeHandle && workspaceLayout) {
       outputResizeHandle.addEventListener("pointerdown", startOutputResize);
     }
@@ -6256,6 +6257,41 @@ function buildSessionPreview(session) {
   }
 
   return previewSource.replace(/\s+/g, " ").trim().slice(0, 96);
+}
+
+function handlePrimaryChromeClick(event) {
+  const button = event.target.closest(
+    "#open-sessions-main, #open-sessions-output, #mobile-open-sessions, #open-settings, #mobile-open-settings, #open-backup-panel, #mobile-open-backup"
+  );
+
+  if (!button) {
+    return;
+  }
+
+  if (button.matches("#open-sessions-main, #open-sessions-output, #mobile-open-sessions")) {
+    if (button.matches("#mobile-open-sessions")) {
+      closeMobileSheets();
+    }
+    settings.recentSessionsExpanded = true;
+    persistSettings();
+    updateRecentSessionsPanelUi();
+    return;
+  }
+
+  if (button.matches("#open-settings, #mobile-open-settings")) {
+    if (button.matches("#mobile-open-settings")) {
+      closeMobileSheets();
+    }
+    openSettings();
+    return;
+  }
+
+  if (button.matches("#open-backup-panel, #mobile-open-backup")) {
+    if (button.matches("#mobile-open-backup")) {
+      closeMobileSheets();
+    }
+    openBackupPanel();
+  }
 }
 
 function resolveLiveTranscriptSource(session = getActiveSession()) {
