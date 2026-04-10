@@ -191,10 +191,13 @@ const highlightsField = document.querySelector("#highlights-field");
 const highlightsCardDisclosure = document.querySelector("#highlights-card-disclosure");
 const manualNotesField = document.querySelector("#manual-notes-field");
 const manualNotesDisclosure = document.querySelector("#manual-notes-disclosure");
-const liveTranscriptField = document.querySelector("#live-transcript-field");
-const uploadedTranscriptField = document.querySelector("#uploaded-transcript-field");
-const mobileCaptureStatus = document.querySelector("#mobile-capture-status");
-const editorPanel = document.querySelector(".editor-panel");
+  const liveTranscriptField = document.querySelector("#live-transcript-field");
+  const uploadedTranscriptField = document.querySelector("#uploaded-transcript-field");
+  const liveTranscriptBadge = document.querySelector("#live-transcript-badge");
+  const uploadedTranscriptBadge = document.querySelector("#uploaded-transcript-badge");
+  const mobileCaptureStatus = document.querySelector("#mobile-capture-status");
+  const editorPanel = document.querySelector(".editor-panel");
+  const workspaceLayout = document.querySelector(".workspace");
 const apiKeyInput = document.querySelector("#api-key");
 const modelSelect = document.querySelector("#model-select");
 const modelOptions = document.querySelector("#model-options");
@@ -268,9 +271,10 @@ const translateOutputButton = document.querySelector("#translate-output");
 const polishedOutput = document.querySelector("#polished-output");
 const outputFeedbackInput = document.querySelector("#output-feedback");
 const improveOutputButton = document.querySelector("#improve-output");
-const revertOutputButton = document.querySelector("#revert-output");
-const outputFeedbackStatus = document.querySelector("#output-feedback-status");
-const appVersionLabel = document.querySelector("#app-version");
+  const revertOutputButton = document.querySelector("#revert-output");
+  const outputFeedbackStatus = document.querySelector("#output-feedback-status");
+  const outputResizeHandle = document.querySelector("#output-resize-handle");
+  const appVersionLabel = document.querySelector("#app-version");
 const editorSidebar = document.querySelector(".editor-sidebar");
 const outputPanel = document.querySelector(".output-panel");
 const mobileOpenMoreButton = document.querySelector("#mobile-open-more");
@@ -328,9 +332,12 @@ const SUPPORTS_AUDIO_RECORDING = typeof window.MediaRecorder !== "undefined" && 
 const SUPPORTS_MEETING_CAPTURE = typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getDisplayMedia;
 const MAX_MODEL_INPUT_PRICE_PER_MILLION = 2.5;
 const APPROX_TOKENS_PER_PAGE = 750;
-const MAX_AUDIO_UPLOAD_BYTES = 25 * 1024 * 1024;
-const AUDIO_CHUNK_TARGET_BYTES = 23 * 1024 * 1024;
-const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+  const MAX_AUDIO_UPLOAD_BYTES = 25 * 1024 * 1024;
+  const AUDIO_CHUNK_TARGET_BYTES = 23 * 1024 * 1024;
+  const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+  const DEFAULT_OUTPUT_PANEL_WIDTH = 460;
+  const MIN_OUTPUT_PANEL_WIDTH = 340;
+  const MAX_OUTPUT_PANEL_WIDTH = 720;
 const DEFAULT_PROMPT_SETTINGS = {
   meetingMinutesSystem: `# Role
 You are an expert business meeting-minutes writer.
@@ -740,12 +747,13 @@ function createDefaultSettings() {
     exportStylePreset: DEFAULT_EXPORT_PRESET,
     exportStyle: normalizeExportStyle(EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style),
     promptSettings: { ...DEFAULT_PROMPT_SETTINGS },
-    storageMode: STORAGE_MODES.browser,
-    storageFileName: "",
-    storageFileConnected: false,
-    storageLastSyncAt: 0,
-  };
-}
+      storageMode: STORAGE_MODES.browser,
+      storageFileName: "",
+      storageFileConnected: false,
+      storageLastSyncAt: 0,
+      outputPanelWidth: DEFAULT_OUTPUT_PANEL_WIDTH,
+    };
+  }
 
 let settings = createDefaultSettings();
 let sessions = [];
@@ -774,6 +782,8 @@ let todoFilterQuery = "";
 let todoSortKey = "addedAt";
 let todoSortDirection = "desc";
 let activeTodoDetailId = null;
+let outputPanelWidth = 440;
+let transcriptVisualState = "idle";
 let mediaRecorder = null;
 let mediaRecorderStream = null;
 let mediaRecorderSourceStream = null;
@@ -787,10 +797,11 @@ async function initializeApp() {
   settings = await loadSettings();
   sessions = await loadSessions();
   aiModelCatalog = await loadAiModelCatalog();
-  activeSessionId = sessions[0]?.id ?? null;
-
-  applyTheme(settings.themeFamily, settings.themeMode);
-  settings.model = resolveSelectedModel(settings.model);
+    activeSessionId = sessions[0]?.id ?? null;
+  
+    applyTheme(settings.themeFamily, settings.themeMode);
+    applyOutputPanelWidth();
+    settings.model = resolveSelectedModel(settings.model);
   syncParticipantDirectoryFromAllSessions();
 
   if (!sessions.length) {
@@ -813,8 +824,11 @@ async function initializeApp() {
 
 void initializeApp();
 
-function bindEvents() {
-  const createAndOpenNewSession = () => {
+  function bindEvents() {
+    if (outputResizeHandle && workspaceLayout) {
+      outputResizeHandle.addEventListener("pointerdown", startOutputResize);
+    }
+    const createAndOpenNewSession = () => {
     if (audioRecordingSessionId) {
       void stopAudioCapture();
     }
@@ -2171,6 +2185,8 @@ function bindEvents() {
 
         updateActiveSession({ liveTranscript: nextTranscript }, true);
         liveTranscriptInput.value = nextTranscript;
+        setTranscriptFieldState("live", "transcribed", "Transcribed audio");
+        revealTranscriptSurface("live");
         await clearAudioDraft(session.id);
         audioCaptureStatus.textContent = "Recorded audio was transcribed and added to the Live transcript field.";
         session = getActiveSession();
@@ -2269,8 +2285,8 @@ function bindEvents() {
       render();
       setElementVisibility(uploadedTranscriptField, Boolean(transcriptText.trim()));
       uploadedTranscriptInput.value = transcriptText;
-      uploadedTranscriptField.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      uploadedTranscriptInput.focus();
+      setTranscriptFieldState("uploaded", "uploaded", "Uploaded transcript");
+      revealTranscriptSurface("uploaded", { focus: true });
       audioCaptureStatus.textContent = `Transcript uploaded from ${file.name} and added to the Uploaded transcript field.`;
     } catch (error) {
       audioCaptureStatus.textContent = error.message || "That transcript file could not be read in this browser.";
@@ -2311,6 +2327,8 @@ function bindEvents() {
 
       updateActiveSession({ liveTranscript: nextTranscript }, true);
       liveTranscriptInput.value = nextTranscript;
+      setTranscriptFieldState("live", "transcribed", "Transcribed audio");
+      revealTranscriptSurface("live");
       dictationStatus.textContent = `Audio transcription complete with ${getTranscriptionModelLabel(settings.transcriptionModel)}.`;
       await clearAudioDraft(session.id);
       audioCaptureStatus.textContent = "Audio transcription complete. The transcript has been added to the Live transcript field.";
@@ -2860,19 +2878,20 @@ function renderSessionList() {
   const visibleSessions = getVisibleSessions();
   selectedSessionIds = new Set(Array.from(selectedSessionIds).filter((sessionId) => sessions.some((session) => session.id === sessionId)));
 
-  visibleSessions.forEach((session) => {
-    const fragment = sessionItemTemplate.content.cloneNode(true);
-    const selectInput = fragment.querySelector(".session-select");
-    const button = fragment.querySelector(".session-button");
-    const editButton = fragment.querySelector(".session-edit");
-    const deleteButton = fragment.querySelector(".session-delete");
-    const name = fragment.querySelector(".session-name");
-    const meta = fragment.querySelector(".session-meta");
+    visibleSessions.forEach((session) => {
+      const fragment = sessionItemTemplate.content.cloneNode(true);
+      const selectInput = fragment.querySelector(".session-select");
+      const button = fragment.querySelector(".session-button");
+      const deleteButton = fragment.querySelector(".session-delete");
+      const name = fragment.querySelector(".session-name");
+      const meta = fragment.querySelector(".session-meta");
+      const preview = fragment.querySelector(".session-preview");
 
-    name.textContent = `${formatDate(session.updatedAt)} ${session.title.trim() || "Untitled session"}`;
-    meta.textContent = `${getTemplateDefinition(session.template).label} - ${formatDate(session.updatedAt)}`;
-    button.classList.toggle("is-active", session.id === activeSessionId);
-    selectInput.checked = selectedSessionIds.has(session.id);
+      name.textContent = session.title.trim() || "Untitled session";
+      meta.textContent = `${getTemplateDefinition(session.template).label} · ${formatDate(session.updatedAt)} ${formatTime(session.updatedAt)}`;
+      preview.textContent = buildSessionPreview(session);
+      button.classList.toggle("is-active", session.id === activeSessionId);
+      selectInput.checked = selectedSessionIds.has(session.id);
 
     selectInput.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -2887,31 +2906,15 @@ function renderSessionList() {
       updateSessionSelectionControls(visibleSessions);
     });
 
-    button.addEventListener("click", () => {
-      if (audioRecordingSessionId) {
-        void stopAudioCapture();
-      }
-      activeSessionId = session.id;
+      button.addEventListener("click", () => {
+        if (audioRecordingSessionId) {
+          void stopAudioCapture();
+        }
+        activeSessionId = session.id;
       settings.recentSessionsExpanded = false;
-      persistSettings();
-      render();
-    });
-
-    editButton.addEventListener("click", () => {
-      if (audioRecordingSessionId) {
-        void stopAudioCapture();
-      }
-      activeSessionId = session.id;
-      settings.recentSessionsExpanded = false;
-      persistSettings();
-      render();
-      if (!titleField.classList.contains("is-hidden-field")) {
-        meetingTitleInput.focus();
-        meetingTitleInput.select();
-      } else {
-        rawNotesInput.focus();
-      }
-    });
+        persistSettings();
+        render();
+      });
 
     deleteButton.addEventListener("click", async () => {
       const sessionName = session.title.trim() || "Untitled session";
@@ -3602,6 +3605,12 @@ function syncFieldsFromSession() {
   dictationLanguageSelect.value = settings.dictationLanguage ?? "auto";
   liveTranscriptInput.value = session.liveTranscript ?? "";
   uploadedTranscriptInput.value = session.uploadedTranscript ?? "";
+  setTranscriptFieldState("live", resolveLiveTranscriptSource(session), getLiveTranscriptSourceLabel(session));
+  setTranscriptFieldState(
+    "uploaded",
+    session.uploadedTranscript?.trim() ? "uploaded" : "uploaded-ready",
+    session.uploadedTranscript?.trim() ? "Uploaded transcript" : "Imported text"
+  );
   rawNotesInput.value = session.rawNotes;
   renderTemplateCustomFields(session, template);
   outputFeedbackInput.value = session.outputFeedback ?? "";
@@ -3941,7 +3950,7 @@ function setDesktopWorkspaceView(view) {
 }
 
 function updateDesktopWorkspaceViewUi() {
-  if (!desktopViewButtons.length || !editorPanel || !outputPanel) {
+  if (!editorPanel || !outputPanel) {
     return;
   }
 
@@ -3955,8 +3964,8 @@ function updateDesktopWorkspaceViewUi() {
     button.disabled = false;
   });
 
-  const hideEditor = !isMobile && desktopWorkspaceView === "output";
-  const hideOutput = !isMobile && desktopWorkspaceView !== "output";
+  const hideEditor = false;
+  const hideOutput = false;
   editorPanel.classList.toggle("desktop-panel-hidden", hideEditor);
   outputPanel.classList.toggle("desktop-panel-hidden", hideOutput);
 }
@@ -4600,6 +4609,16 @@ function updateDetailLevelLabel() {
 
 function renderOutput() {
   const session = getActiveSession();
+  const exportStyle = getCurrentExportStyle();
+  polishedOutput.style.setProperty("--output-title-font", exportStyle.titleFont);
+  polishedOutput.style.setProperty("--output-heading-font", exportStyle.headingFont);
+  polishedOutput.style.setProperty("--output-body-font", exportStyle.bodyFont);
+  polishedOutput.style.setProperty("--output-meta-font", exportStyle.metaFont);
+  polishedOutput.style.setProperty("--output-title-size", `${exportStyle.titleSize}pt`);
+  polishedOutput.style.setProperty("--output-heading-size", `${exportStyle.headingSize}pt`);
+  polishedOutput.style.setProperty("--output-body-size", `${exportStyle.bodySize}pt`);
+  polishedOutput.style.setProperty("--output-meta-size", `${exportStyle.metaSize}pt`);
+  polishedOutput.style.setProperty("--output-line-height", String(exportStyle.lineHeight));
 
   if (!session.polishedHtml) {
     polishedOutput.contentEditable = "false";
@@ -6199,6 +6218,124 @@ function setCaptureButtonContent(button, title, hint = "") {
   }
 }
 
+function revealTranscriptSurface(mode = "live", { focus = false } = {}) {
+  const isUploaded = mode === "uploaded";
+  const field = isUploaded ? uploadedTranscriptField : liveTranscriptField;
+  const input = isUploaded ? uploadedTranscriptInput : liveTranscriptInput;
+
+  if (!field || !input) {
+    return;
+  }
+
+  if (!isMobileLayout()) {
+    setDesktopWorkspaceView("capture");
+  } else {
+    closeMobileSheets();
+  }
+
+  setElementVisibility(field, true);
+  window.requestAnimationFrame(() => {
+    field.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (focus) {
+      input.focus();
+    }
+  });
+}
+
+function buildSessionPreview(session) {
+  const previewSource = [
+    session.rawNotes,
+    session.liveTranscript,
+    session.uploadedTranscript,
+    session.participants,
+  ]
+    .find((value) => typeof value === "string" && value.trim());
+
+  if (!previewSource) {
+    return "Open to continue capturing or polishing this session.";
+  }
+
+  return previewSource.replace(/\s+/g, " ").trim().slice(0, 96);
+}
+
+function resolveLiveTranscriptSource(session = getActiveSession()) {
+  if (isRecording && recognition) {
+    return "dictation";
+  }
+
+  if (audioRecordingSessionId === session?.id && activeAudioCaptureMode.startsWith("meeting")) {
+    return "meeting";
+  }
+
+  if (session?.liveTranscript?.trim()) {
+    return "transcribed";
+  }
+
+  return "live-ready";
+}
+
+function getLiveTranscriptSourceLabel(session = getActiveSession()) {
+  const source = resolveLiveTranscriptSource(session);
+  if (source === "dictation") {
+    return "Live dictation";
+  }
+  if (source === "meeting") {
+    return "Meeting capture";
+  }
+  if (source === "transcribed") {
+    return "Transcribed audio";
+  }
+  return "Ready for live notes";
+}
+
+function setTranscriptFieldState(kind, source, label) {
+  const field = kind === "uploaded" ? uploadedTranscriptField : liveTranscriptField;
+  const badge = kind === "uploaded" ? uploadedTranscriptBadge : liveTranscriptBadge;
+  if (!field || !badge) {
+    return;
+  }
+
+  field.dataset.transcriptSource = source;
+  badge.textContent = label;
+}
+
+function applyOutputPanelWidth() {
+  if (!workspaceLayout) {
+    return;
+  }
+
+  const width = clampNumber(settings.outputPanelWidth, MIN_OUTPUT_PANEL_WIDTH, MAX_OUTPUT_PANEL_WIDTH, DEFAULT_OUTPUT_PANEL_WIDTH);
+  workspaceLayout.style.setProperty("--output-panel-width", `${width}px`);
+}
+
+function startOutputResize(event) {
+  if (isMobileLayout() || !workspaceLayout) {
+    return;
+  }
+
+  event.preventDefault();
+  const workspaceBounds = workspaceLayout.getBoundingClientRect();
+
+  const onPointerMove = (moveEvent) => {
+    const nextWidth = clampNumber(
+      workspaceBounds.right - moveEvent.clientX,
+      MIN_OUTPUT_PANEL_WIDTH,
+      MAX_OUTPUT_PANEL_WIDTH,
+      DEFAULT_OUTPUT_PANEL_WIDTH
+    );
+    settings.outputPanelWidth = nextWidth;
+    applyOutputPanelWidth();
+  };
+
+  const onPointerUp = () => {
+    window.removeEventListener("pointermove", onPointerMove);
+    persistSettings();
+  };
+
+  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", onPointerUp, { once: true });
+}
+
 function stopMediaStream(stream) {
   stream?.getTracks?.().forEach((track) => track.stop());
 }
@@ -6333,6 +6470,7 @@ function setupSpeechRecognition() {
     finalTranscript = "";
     dictationSeedText = "";
     pendingLanguageRestart = false;
+    setTranscriptFieldState("live", resolveLiveTranscriptSource(getActiveSession()), getLiveTranscriptSourceLabel(getActiveSession()));
     setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
     dictationToggle.classList.remove("is-recording");
     dictationStatus.textContent = "Dictation stopped. You can continue typing or restart capture anytime.";
@@ -6345,6 +6483,7 @@ function setupSpeechRecognition() {
     finalTranscript = "";
     dictationSeedText = "";
     pendingLanguageRestart = false;
+    setTranscriptFieldState("live", resolveLiveTranscriptSource(getActiveSession()), getLiveTranscriptSourceLabel(getActiveSession()));
     setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
     dictationToggle.classList.remove("is-recording");
     dictationStatus.textContent = `Dictation error: ${event.error}. You can still take notes manually.`;
@@ -6381,6 +6520,8 @@ function toggleDictation() {
     dictationSeedText = liveTranscriptInput.value.trim();
     currentDictationLanguage = resolveDictationLanguage(dictationSeedText || navigator.language);
     recognition.lang = currentDictationLanguage;
+    setTranscriptFieldState("live", "dictation", "Live dictation");
+    revealTranscriptSurface("live");
     recognition.start();
     setCaptureButtonContent(dictationToggle, "Stop dictation", "Live browser transcription");
     dictationToggle.classList.add("is-recording");
@@ -6456,8 +6597,10 @@ async function stopAudioCapture() {
         size: audioBlob.size,
         source: activeAudioCaptureMode === "meeting" || activeAudioCaptureMode === "meeting-fallback" ? "meeting-capture" : "recording",
       }, activeSessionForRecording);
+      setTranscriptFieldState("live", resolveLiveTranscriptSource(getActiveSession()), getLiveTranscriptSourceLabel(getActiveSession()));
       audioCaptureStatus.textContent = "Capture stopped. Your recording is saved locally and ready to transcribe into the Live transcript field.";
     } catch {
+      setTranscriptFieldState("live", resolveLiveTranscriptSource(getActiveSession()), getLiveTranscriptSourceLabel(getActiveSession()));
       audioCaptureStatus.textContent = "Capture stopped, but the recording could not be saved locally for later transcription.";
     }
   } else {
@@ -6475,6 +6618,8 @@ async function toggleAudioCapture() {
 
   try {
     const capture = await resolveAudioCaptureStream();
+    setTranscriptFieldState("live", "meeting", "Meeting capture");
+    revealTranscriptSurface("live");
     mediaRecorderStream = capture.recorderStream;
     mediaRecorderSourceStream = capture.sourceStream;
     mediaRecorderChunks = [];
@@ -6949,13 +7094,14 @@ function normalizeStoredSettings(parsed) {
       ...EXPORT_STYLE_PRESETS[exportStylePreset].style,
       ...(parsed.exportStyle || {}),
     }),
-    promptSettings: normalizePromptSettings(parsed.promptSettings),
-    storageMode: parsed.storageMode === STORAGE_MODES.file ? STORAGE_MODES.file : STORAGE_MODES.browser,
-    storageFileName: typeof parsed.storageFileName === "string" ? parsed.storageFileName : "",
-    storageFileConnected: parsed.storageFileConnected === true,
-    storageLastSyncAt: Number.isFinite(parsed.storageLastSyncAt) ? Number(parsed.storageLastSyncAt) : 0,
-  };
-}
+      promptSettings: normalizePromptSettings(parsed.promptSettings),
+      storageMode: parsed.storageMode === STORAGE_MODES.file ? STORAGE_MODES.file : STORAGE_MODES.browser,
+      storageFileName: typeof parsed.storageFileName === "string" ? parsed.storageFileName : "",
+      storageFileConnected: parsed.storageFileConnected === true,
+      storageLastSyncAt: Number.isFinite(parsed.storageLastSyncAt) ? Number(parsed.storageLastSyncAt) : 0,
+      outputPanelWidth: clampNumber(parsed.outputPanelWidth, MIN_OUTPUT_PANEL_WIDTH, MAX_OUTPUT_PANEL_WIDTH, DEFAULT_OUTPUT_PANEL_WIDTH),
+    };
+  }
 
 async function loadAiModelCatalog() {
   const persisted = await readAppStateValue(AI_MODEL_CATALOG_KEY);
@@ -7331,21 +7477,21 @@ function updateStorageUi() {
   reconnectStorageFileButton.disabled = !supported;
 
   if (!supported) {
-    storageModeCopy.textContent = "Local data file mode is not supported in this browser. Browser storage remains the recommended and available option here.";
-    storageStatusCopy.textContent = "No local data file is connected.";
+    storageModeCopy.textContent = "This browser uses local IndexedDB storage. Your sessions stay on this device, and you can still export a backup whenever you want.";
+    storageStatusCopy.textContent = "No separate local data file is connected in this browser.";
     disconnectStorageFileButton.disabled = true;
     return;
   }
 
   if (!isFileMode) {
-    storageModeCopy.textContent = "Browser storage is active in this browser's local IndexedDB database. Your data stays in this browser profile, and you can still back it up from the Data Backup menu.";
-    storageStatusCopy.textContent = "No local data file is connected.";
+    storageModeCopy.textContent = "Browser storage is active in local IndexedDB. Your sessions stay in this browser profile, and backup/export remains available from the Data Backup menu.";
+    storageStatusCopy.textContent = "No separate local data file is connected.";
     reconnectStorageFileButton.disabled = true;
     disconnectStorageFileButton.disabled = true;
     return;
   }
 
-  storageModeCopy.textContent = "Local data file mode is active. Sessions, saved participants, abbreviations, and custom templates are written to a file on this computer.";
+  storageModeCopy.textContent = "Local data file mode is active. Sessions and related settings are written to a file on this computer for extra control and backup.";
   storageStatusCopy.textContent = settings.storageFileConnected
     ? `Connected to ${settings.storageFileName || "your local data file"}. Last sync: ${settings.storageLastSyncAt ? `${formatDate(settings.storageLastSyncAt)} ${formatTime(settings.storageLastSyncAt)}` : "just now"}.`
     : `Local data file mode is selected${settings.storageFileName ? ` for ${settings.storageFileName}` : ""}, but the file needs to be reconnected.`;
@@ -7452,8 +7598,8 @@ function getExportStyleDisplayName(presetId) {
 function updateSessionStorageUi() {
   saveLocalFileButton.disabled = !SUPPORTS_FILE_SAVE;
   sessionStorageStatus.textContent = SUPPORTS_FILE_SAVE
-    ? "Export sessions to a file, import them later, or save directly to a local file on this browser."
-    : "Export and import sessions are available here. Direct local file saving depends on browser support and is unavailable in this browser.";
+    ? "Export a backup, import one later, or save directly to a local file on supported browsers."
+    : "Export and import are available here. Direct local file saving depends on browser support and is unavailable in this browser.";
 }
 
 function buildSessionsExportPayload() {

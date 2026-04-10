@@ -475,7 +475,8 @@ button {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  --output-panel-width: 460px;
+  grid-template-columns: minmax(0, 1fr) 10px minmax(340px, var(--output-panel-width));
   gap: 18px;
   align-items: start;
 }
@@ -565,9 +566,26 @@ body.sessions-panel-open {
 }
 
 .output-panel {
-  grid-column: 1;
+  grid-column: 3;
   grid-row: 1;
   padding-top: 18px;
+  position: sticky;
+  top: 18px;
+  align-self: start;
+}
+
+.output-resize-handle {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: stretch;
+  border-radius: 999px;
+  cursor: col-resize;
+  background: linear-gradient(180deg, rgba(108, 127, 79, 0.08), rgba(108, 127, 79, 0.22));
+  box-shadow: inset 0 0 0 1px rgba(62, 81, 48, 0.08);
+}
+
+.output-resize-handle:hover {
+  background: linear-gradient(180deg, rgba(108, 127, 79, 0.16), rgba(108, 127, 79, 0.32));
 }
 
 .desktop-panel-hidden {
@@ -595,8 +613,8 @@ body.sessions-panel-open {
 
 .output-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
   align-items: start;
 }
 
@@ -612,7 +630,7 @@ body.sessions-panel-open {
 
 .output-sidebar {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .sidebar-status-row {
@@ -840,7 +858,7 @@ body.sessions-panel-open {
 .session-button {
   width: 100%;
   display: grid;
-  gap: 2px;
+  gap: 3px;
   padding: 8px 9px;
   border-radius: 12px;
   border: 1px solid transparent;
@@ -866,6 +884,15 @@ body.sessions-panel-open {
 .session-meta {
   font-size: 0.72rem;
   line-height: 1.35;
+}
+
+.session-preview {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .session-actions {
@@ -1764,6 +1791,54 @@ body.sessions-panel-open {
   color: var(--ink);
 }
 
+.transcript-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.transcript-source-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent-strong);
+  background: rgba(108, 127, 79, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(108, 127, 79, 0.14);
+}
+
+.transcript-field[data-transcript-source="dictation"] textarea,
+.transcript-field[data-transcript-source="meeting"] textarea,
+.transcript-field[data-transcript-source="transcribed"] textarea,
+.transcript-field[data-transcript-source="uploaded"] textarea {
+  box-shadow: inset 0 0 0 1px rgba(62, 81, 48, 0.08), 0 0 0 3px rgba(108, 127, 79, 0.06);
+}
+
+.transcript-field[data-transcript-source="dictation"] .transcript-source-badge {
+  color: #6b4b13;
+  background: rgba(208, 157, 82, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(208, 157, 82, 0.24);
+}
+
+.transcript-field[data-transcript-source="meeting"] .transcript-source-badge {
+  color: #345c73;
+  background: rgba(120, 176, 214, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(120, 176, 214, 0.24);
+}
+
+.transcript-field[data-transcript-source="transcribed"] .transcript-source-badge,
+.transcript-field[data-transcript-source="uploaded"] .transcript-source-badge {
+  color: #5a4f89;
+  background: rgba(156, 138, 218, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(156, 138, 218, 0.24);
+}
+
 input,
 select,
 textarea {
@@ -2203,6 +2278,9 @@ textarea:focus {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 247, 238, 0.96));
   border: 1px solid var(--line);
+  font-family: var(--output-body-font, "Manrope", sans-serif);
+  font-size: var(--output-body-size, 11pt);
+  line-height: var(--output-line-height, 1.6);
 }
 
 .output-card.is-editable {
@@ -2263,6 +2341,23 @@ textarea:focus {
 
 .output-feedback-actions {
   margin-top: 4px;
+}
+
+.output-card .output-header h3,
+.output-card > h3 {
+  font-family: var(--output-title-font, "Newsreader", serif);
+  font-size: var(--output-title-size, 22pt);
+  line-height: 1.08;
+}
+
+.output-card .output-meta {
+  font-family: var(--output-meta-font, "Manrope", sans-serif);
+  font-size: var(--output-meta-size, 9.5pt);
+}
+
+.output-card .output-section h4 {
+  font-family: var(--output-heading-font, "Manrope", sans-serif);
+  font-size: var(--output-heading-size, 12pt);
 }
 
 .settings-card {
@@ -2544,6 +2639,10 @@ textarea:focus {
   .hero-panel,
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .output-resize-handle {
+    display: none;
   }
 
   .sessions-panel,
@@ -2946,6 +3045,7 @@ textarea:focus {
 
   .workspace {
     gap: 0;
+    grid-template-columns: 1fr;
   }
 
   .editor-panel {

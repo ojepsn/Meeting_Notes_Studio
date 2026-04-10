@@ -90,13 +90,8 @@
             </div>
             <div class="panel-actions-shared desktop-only">
               <button class="ghost-button" id="open-sessions-main" type="button">All Sessions</button>
-              <button class="ghost-button" id="open-todo-main" type="button">To-do</button>
               <button class="ghost-button" id="open-backup-panel" type="button">Back-up</button>
               <button class="ghost-button" id="open-settings" type="button">Settings</button>
-              <div class="workspace-view-switch" aria-label="Workspace view">
-                <button class="workspace-view-button is-active" data-desktop-view="capture" type="button">Capture</button>
-                <button class="workspace-view-button" data-desktop-view="output" type="button">Output</button>
-              </div>
             </div>
           </div>
         </div>
@@ -107,7 +102,7 @@
                 <summary>
                   <div class="form-section-header">
                     <p class="section-label">Context</p>
-                    <h3>Session setup</h3>
+                    <h3>Title and template</h3>
                   </div>
                 </summary>
 
@@ -123,30 +118,30 @@
                   </label>
                 </div>
 
-                <div class="template-quick-selectors desktop-only" id="template-quick-selectors" aria-label="Quick template selection"></div>
-
-                <label class="field" id="participants-field">
-                  <span class="field-label">Participants</span>
-                  <input id="participants" type="text" maxlength="160" placeholder="Add participants" list="participant-suggestions">
-                </label>
-                <datalist id="participant-suggestions"></datalist>
-                <div class="participant-directory" id="participant-directory">
-                  <div class="participant-directory-header">
-                    <span class="participant-directory-label">Saved participants</span>
-                    <div class="participant-directory-actions">
-                      <button class="ghost-button participant-toggle-button" id="toggle-participant-directory" type="button" aria-expanded="false" aria-controls="participant-chips">
-                        <span class="participant-toggle-arrow" aria-hidden="true">▾</span>
-                        <span class="participant-toggle-label">Show list</span>
-                      </button>
-                      <button class="ghost-button participant-manage-button" id="open-participant-settings" type="button">Manage list</button>
-                    </div>
-                  </div>
-                  <div class="chip-row participant-chip-row is-hidden-field" id="participant-chips" aria-live="polite"></div>
-                </div>
+                <div class="template-quick-selectors" id="template-quick-selectors" aria-label="Quick template selection"></div>
 
                 <details class="context-disclosure">
-                  <summary>Meeting details</summary>
+                  <summary>People and details</summary>
                   <div class="context-disclosure-body">
+                    <label class="field" id="participants-field">
+                      <span class="field-label">Participants</span>
+                      <input id="participants" type="text" maxlength="160" placeholder="Add participants" list="participant-suggestions">
+                    </label>
+                    <datalist id="participant-suggestions"></datalist>
+                    <div class="participant-directory" id="participant-directory">
+                      <div class="participant-directory-header">
+                        <span class="participant-directory-label">Saved participants</span>
+                        <div class="participant-directory-actions">
+                          <button class="ghost-button participant-toggle-button" id="toggle-participant-directory" type="button" aria-expanded="false" aria-controls="participant-chips">
+                            <span class="participant-toggle-arrow" aria-hidden="true">▾</span>
+                            <span class="participant-toggle-label">Show list</span>
+                          </button>
+                          <button class="ghost-button participant-manage-button" id="open-participant-settings" type="button">Manage list</button>
+                        </div>
+                      </div>
+                      <div class="chip-row participant-chip-row is-hidden-field" id="participant-chips" aria-live="polite"></div>
+                    </div>
+
                     <div class="field-grid field-grid-three" id="meeting-schedule-field">
                       <label class="field field-tight" id="meeting-date-field">
                         <span class="field-label">Date</span>
@@ -175,7 +170,7 @@
                 <summary>
                   <div class="form-section-header">
                     <p class="section-label">Highlights</p>
-                    <h3>Pin the most important points</h3>
+                    <h3>Optional emphasis</h3>
                   </div>
                 </summary>
 
@@ -206,27 +201,33 @@
                 </label>
               </details>
 
-              <label class="field" id="live-transcript-field">
-                <span class="field-label">Live transcript</span>
-                <textarea
-                  id="live-transcript"
-                  rows="7"
-                  placeholder="Dictation appears here while recording..."
-                  readonly
-                ></textarea>
-              </label>
+              <label class="field transcript-field transcript-field-live" id="live-transcript-field" data-transcript-source="live-ready">
+                  <span class="field-label transcript-field-label">
+                    <span>Live transcript</span>
+                    <span class="transcript-source-badge" id="live-transcript-badge">Ready for live notes</span>
+                  </span>
+                  <textarea
+                    id="live-transcript"
+                    rows="7"
+                    placeholder="Dictation appears here while recording..."
+                    readonly
+                  ></textarea>
+                </label>
 
               <p class="support-text mobile-capture-status mobile-only" id="mobile-capture-status">
                 Start dictation for live transcript, or use More to record audio instead.
               </p>
 
-              <label class="field is-hidden-field" id="uploaded-transcript-field" hidden>
-                <span class="field-label">Uploaded transcript</span>
-                <textarea
-                  id="uploaded-transcript"
-                  rows="7"
-                  placeholder="Uploaded transcript text will appear here..."
-                ></textarea>
+                <label class="field transcript-field transcript-field-uploaded is-hidden-field" id="uploaded-transcript-field" data-transcript-source="uploaded-ready" hidden>
+                  <span class="field-label transcript-field-label">
+                    <span>Uploaded transcript</span>
+                    <span class="transcript-source-badge" id="uploaded-transcript-badge">Imported text</span>
+                  </span>
+                  <textarea
+                    id="uploaded-transcript"
+                    rows="7"
+                    placeholder="Uploaded transcript text will appear here..."
+                  ></textarea>
               </label>
             </section>
           </div>
@@ -247,7 +248,6 @@
             <div class="mobile-sheet-shortcuts mobile-only">
               <button class="ghost-button" id="mobile-new-session" type="button">New Session</button>
               <button class="ghost-button" id="mobile-open-sessions" type="button">All Sessions</button>
-              <button class="ghost-button" id="mobile-open-todo" type="button">To-do</button>
               <button class="ghost-button" id="mobile-open-settings" type="button">Settings</button>
               <button class="ghost-button" id="mobile-open-backup" type="button">Data Backup</button>
               <button class="ghost-button" id="mobile-open-output" type="button">View Output</button>
@@ -323,6 +323,7 @@
         </div>
       </section>
 
+      <div class="output-resize-handle desktop-only" id="output-resize-handle" aria-hidden="true"></div>
       <section class="output-panel">
         <div class="panel-heading">
           <div>
@@ -338,12 +339,6 @@
             </div>
             <div class="panel-actions-shared desktop-only">
               <button class="ghost-button" id="open-sessions-output" type="button">All Sessions</button>
-              <button class="ghost-button" id="open-backup-output" type="button">Back-up</button>
-              <button class="ghost-button" id="open-settings-output" type="button">Settings</button>
-              <div class="workspace-view-switch" aria-label="Workspace view">
-                <button class="workspace-view-button" data-desktop-view="capture" type="button">Capture</button>
-                <button class="workspace-view-button is-active" data-desktop-view="output" type="button">Output</button>
-              </div>
             </div>
           </div>
         </div>
@@ -383,34 +378,34 @@
             <section class="config-card workflow-card output-workflow-card" aria-label="Generation controls">
               <div class="config-card-copy">
                 <p class="section-label">Generate</p>
-                <h3>Shape the output</h3>
+                <h3>Output actions</h3>
               </div>
-
-              <label class="field field-compact field-polish-language">
-                <span class="field-label">Output language</span>
-                <select id="output-language">
-                  <option value="auto">Same as notes</option>
-                  <option value="sv">Swedish</option>
-                  <option value="en">English</option>
-                </select>
-              </label>
 
               <div class="capture-toolbar capture-toolbar-sidebar">
                 <button class="primary-button" id="polish-notes" type="button">Generate</button>
                 <button class="ghost-button" id="copy-output" type="button">Copy Output</button>
               </div>
 
-              <label class="config-option config-option-featured">
-                <input id="transcribe-only" type="checkbox">
-                <span class="config-option-copy">
-                  <span class="config-option-title">Transcribe only</span>
-                  <span class="config-option-hint">Use this when you want clean transcript text instead of polished notes.</span>
-                </span>
-              </label>
-
               <details class="advanced-options-disclosure">
-                <summary>More output options</summary>
+                <summary>Language and generation options</summary>
                 <div class="advanced-options-body">
+                  <label class="field field-compact field-polish-language">
+                    <span class="field-label">Output language</span>
+                    <select id="output-language">
+                      <option value="auto">Same as notes</option>
+                      <option value="sv">Swedish</option>
+                      <option value="en">English</option>
+                    </select>
+                  </label>
+
+                  <label class="config-option config-option-featured">
+                    <input id="transcribe-only" type="checkbox">
+                    <span class="config-option-copy">
+                      <span class="config-option-title">Transcribe only</span>
+                      <span class="config-option-hint">Use this when you want clean transcript text instead of polished notes.</span>
+                    </span>
+                  </label>
+
                   <p class="support-text">
                     Select the sections you want in the generated output. Checked sections are included, and unchecked sections are left out.
                   </p>
@@ -478,6 +473,13 @@
                   </label>
                 </div>
               </details>
+
+              <details class="advanced-options-disclosure">
+                <summary>More output options</summary>
+                <div class="advanced-options-body">
+                  <p class="support-text">Refinement, translation, and export stay available here when you need them, while the polished document remains the main surface.</p>
+                </div>
+              </details>
             </section>
           </aside>
         </div>
@@ -507,9 +509,9 @@
         <button class="session-button" type="button">
           <span class="session-name"></span>
           <span class="session-meta"></span>
+          <span class="session-preview"></span>
         </button>
         <div class="session-actions">
-          <button class="session-action session-edit" type="button">Edit</button>
           <button class="session-action session-delete" type="button">Delete</button>
         </div>
       </div>
@@ -1004,37 +1006,40 @@
                 These prompt families match the desktop app. Meeting minutes and personal notes have separate defaults, while revision and translation stay shared across session workflows.
               </p>
 
-              <div class="settings-stack">
-                <label class="field">
-                  <span class="field-label">Meeting minutes system prompt</span>
-                  <textarea id="prompt-generation-system" rows="7" placeholder="Core instructions for structured professional notes"></textarea>
-                </label>
+              <details class="advanced-options-disclosure">
+                <summary>Prompt families</summary>
+                <div class="advanced-options-body settings-stack">
+                  <label class="field">
+                    <span class="field-label">Meeting minutes system prompt</span>
+                    <textarea id="prompt-generation-system" rows="7" placeholder="Core instructions for structured professional notes"></textarea>
+                  </label>
 
-                <label class="field">
-                  <span class="field-label">Meeting minutes rules</span>
-                  <textarea id="prompt-generation-rules" rows="8" placeholder="Extra requirements for structure, synthesis, and tone"></textarea>
-                </label>
+                  <label class="field">
+                    <span class="field-label">Meeting minutes rules</span>
+                    <textarea id="prompt-generation-rules" rows="8" placeholder="Extra requirements for structure, synthesis, and tone"></textarea>
+                  </label>
 
-                <label class="field">
-                  <span class="field-label">Personal notes system prompt</span>
-                  <textarea id="prompt-personal-notes-system" rows="6" placeholder="Core instructions for polishing personal notes and dictated memos"></textarea>
-                </label>
+                  <label class="field">
+                    <span class="field-label">Personal notes system prompt</span>
+                    <textarea id="prompt-personal-notes-system" rows="6" placeholder="Core instructions for polishing personal notes and dictated memos"></textarea>
+                  </label>
 
-                <label class="field">
-                  <span class="field-label">Personal notes rules</span>
-                  <textarea id="prompt-personal-notes-rules" rows="7" placeholder="Extra requirements for light structure, readability, and restraint"></textarea>
-                </label>
+                  <label class="field">
+                    <span class="field-label">Personal notes rules</span>
+                    <textarea id="prompt-personal-notes-rules" rows="7" placeholder="Extra requirements for light structure, readability, and restraint"></textarea>
+                  </label>
 
-                <label class="field">
-                  <span class="field-label">Revision rules</span>
-                  <textarea id="prompt-revision-rules" rows="7" placeholder="How improvement requests should be handled"></textarea>
-                </label>
+                  <label class="field">
+                    <span class="field-label">Revision rules</span>
+                    <textarea id="prompt-revision-rules" rows="7" placeholder="How improvement requests should be handled"></textarea>
+                  </label>
 
-                <label class="field">
-                  <span class="field-label">Translation rules</span>
-                  <textarea id="prompt-translation-rules" rows="6" placeholder="How translated output should preserve structure and meaning"></textarea>
-                </label>
-              </div>
+                  <label class="field">
+                    <span class="field-label">Translation rules</span>
+                    <textarea id="prompt-translation-rules" rows="6" placeholder="How translated output should preserve structure and meaning"></textarea>
+                  </label>
+                </div>
+              </details>
 
               <div class="config-card-copy prompt-additional-copy">
                 <p class="section-label">Additional prompts</p>
@@ -1045,15 +1050,20 @@
                 These extra prompt blocks are reusable add-ons, just like in the desktop app. They are appended when enabled without replacing the core prompt families.
               </p>
 
-              <div class="prompt-additional-list" id="prompt-additional-list"></div>
+              <details class="advanced-options-disclosure">
+                <summary>Reusable prompt blocks</summary>
+                <div class="advanced-options-body">
+                  <div class="prompt-additional-list" id="prompt-additional-list"></div>
 
-              <div class="capture-toolbar settings-inline-actions">
-                <button class="secondary-button" id="add-prompt-block" type="button">Add prompt block</button>
-              </div>
+                  <div class="capture-toolbar settings-inline-actions">
+                    <button class="secondary-button" id="add-prompt-block" type="button">Add prompt block</button>
+                  </div>
 
-              <div class="capture-toolbar settings-inline-actions">
-                <button class="ghost-button" id="reset-prompt-settings" type="button">Reset to recommended defaults</button>
-              </div>
+                  <div class="capture-toolbar settings-inline-actions">
+                    <button class="ghost-button" id="reset-prompt-settings" type="button">Reset to recommended defaults</button>
+                  </div>
+                </div>
+              </details>
             </section>
 
             <section class="config-card settings-card is-hidden-field" data-settings-section="storage" aria-label="Storage settings">
@@ -1084,19 +1094,24 @@
                 Browser storage is active. Your data stays in this browser profile, and you can still back it up from the Data Backup menu.
               </p>
 
-              <div class="capture-toolbar settings-inline-actions">
-                <button class="secondary-button" id="create-storage-file" type="button">Create data file</button>
-                <button class="secondary-button" id="use-storage-file" type="button">Use existing data file</button>
-                <button class="ghost-button" id="reconnect-storage-file" type="button">Reconnect file</button>
-                <button class="ghost-button" id="disconnect-storage-file" type="button">Return to browser storage</button>
-              </div>
+              <details class="advanced-options-disclosure">
+                <summary>Advanced storage controls</summary>
+                <div class="advanced-options-body">
+                  <div class="capture-toolbar settings-inline-actions">
+                    <button class="secondary-button" id="create-storage-file" type="button">Create data file</button>
+                    <button class="secondary-button" id="use-storage-file" type="button">Use existing data file</button>
+                    <button class="ghost-button" id="reconnect-storage-file" type="button">Reconnect file</button>
+                    <button class="ghost-button" id="disconnect-storage-file" type="button">Return to browser storage</button>
+                  </div>
 
-              <p class="support-text" id="storage-status-copy">
-                No local data file is connected.
-              </p>
-              <p class="support-text">
-                The shared file never stores your OpenAI API key, theme, modal state, or reminder dismissals.
-              </p>
+                  <p class="support-text" id="storage-status-copy">
+                    No local data file is connected.
+                  </p>
+                  <p class="support-text">
+                    The shared file never stores your OpenAI API key, theme, modal state, or reminder dismissals.
+                  </p>
+                </div>
+              </details>
             </section>
 
             <section class="config-card settings-card is-hidden-field" data-settings-section="exports" aria-label="Export style settings">
@@ -1121,7 +1136,10 @@
                 Balanced Microsoft 365-style business typography with a calm sans-serif hierarchy.
               </p>
 
-              <div class="settings-grid export-style-grid">
+              <details class="advanced-options-disclosure">
+                <summary>Advanced typography controls</summary>
+                <div class="advanced-options-body">
+                  <div class="settings-grid export-style-grid">
                 <label class="field">
                   <span class="field-label">Title font</span>
                   <input id="export-title-font" type="text" placeholder="Aptos, Calibri, Arial, sans-serif">
@@ -1166,7 +1184,9 @@
                   <span class="field-label">Line spacing</span>
                   <input id="export-line-height" type="number" min="1.1" max="2" step="0.05">
                 </label>
-              </div>
+                  </div>
+                </div>
+              </details>
             </section>
 
             <section class="config-card settings-card is-hidden-field" data-settings-section="templates" aria-label="Custom template settings">
@@ -1179,11 +1199,16 @@
                 Build your own note flow by choosing which input fields are visible and by adding template-specific sections and AI instructions.
               </p>
 
-              <div class="template-builder-actions">
-                <button class="ghost-button" id="add-custom-template" type="button">Add Template</button>
-              </div>
+              <details class="advanced-options-disclosure">
+                <summary>Custom templates</summary>
+                <div class="advanced-options-body">
+                  <div class="template-builder-actions">
+                    <button class="ghost-button" id="add-custom-template" type="button">Add Template</button>
+                  </div>
 
-              <div class="custom-template-list" id="custom-template-list"></div>
+                  <div class="custom-template-list" id="custom-template-list"></div>
+                </div>
+              </details>
             </section>
 
             <section class="config-card settings-card is-hidden-field" data-settings-section="abbreviations" aria-label="Abbreviation settings">
@@ -1196,19 +1221,24 @@
                 Add abbreviations you often use in notes so the app can expand them during generation.
               </p>
 
-              <div class="abbreviation-settings-add">
-                <label class="field field-tight">
-                  <span class="field-label">Abbreviation</span>
-                  <input id="abbreviation-short-input" type="text" maxlength="40" placeholder="ex. mtg">
-                </label>
-                <label class="field field-tight">
-                  <span class="field-label">Full wording</span>
-                  <input id="abbreviation-full-input" type="text" maxlength="180" placeholder="meeting">
-                </label>
-                <button class="secondary-button" id="add-abbreviation" type="button">Add</button>
-              </div>
+              <details class="advanced-options-disclosure">
+                <summary>Manage abbreviations</summary>
+                <div class="advanced-options-body">
+                  <div class="abbreviation-settings-add">
+                    <label class="field field-tight">
+                      <span class="field-label">Abbreviation</span>
+                      <input id="abbreviation-short-input" type="text" maxlength="40" placeholder="ex. mtg">
+                    </label>
+                    <label class="field field-tight">
+                      <span class="field-label">Full wording</span>
+                      <input id="abbreviation-full-input" type="text" maxlength="180" placeholder="meeting">
+                    </label>
+                    <button class="secondary-button" id="add-abbreviation" type="button">Add</button>
+                  </div>
 
-              <div class="abbreviation-directory-list" id="abbreviation-directory-list"></div>
+                  <div class="abbreviation-directory-list" id="abbreviation-directory-list"></div>
+                </div>
+              </details>
             </section>
 
             <section class="config-card settings-card is-hidden-field" data-settings-section="participants" aria-label="Participant directory settings">
@@ -1221,23 +1251,28 @@
                 Store commonly used participant names here so they can be selected quickly in meeting sessions.
               </p>
 
-              <div class="participant-settings-add">
-                <label class="field field-tight">
-                  <span class="field-label">Add participant</span>
-                  <input id="participant-directory-input" type="text" maxlength="80" placeholder="Add a participant name">
-                </label>
-                <button class="secondary-button" id="add-directory-participant" type="button">Add</button>
-              </div>
+              <details class="advanced-options-disclosure">
+                <summary>Manage participants</summary>
+                <div class="advanced-options-body">
+                  <div class="participant-settings-add">
+                    <label class="field field-tight">
+                      <span class="field-label">Add participant</span>
+                      <input id="participant-directory-input" type="text" maxlength="80" placeholder="Add a participant name">
+                    </label>
+                    <button class="secondary-button" id="add-directory-participant" type="button">Add</button>
+                  </div>
 
-              <div class="participant-selection-bar">
+                  <div class="participant-selection-bar">
                 <label class="checkbox-field compact-checkbox">
                   <input id="select-all-participants" type="checkbox">
                   <span>Select all</span>
                 </label>
                 <button class="ghost-button participant-bulk-delete" id="delete-selected-participants" type="button" disabled>Delete selected</button>
-              </div>
+                  </div>
 
-              <div class="participant-directory-list" id="participant-directory-list"></div>
+                  <div class="participant-directory-list" id="participant-directory-list"></div>
+                </div>
+              </details>
             </section>
           </div>
         </div>
