@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.7";
+const APP_VERSION = "v0.10.8";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -41,8 +41,8 @@ const BUILT_IN_TEMPLATES = {
       highlights: false,
       manualNotes: true,
       liveTranscript: true,
-      meetingDate: false,
-      meetingStartTime: false,
+      meetingDate: true,
+      meetingStartTime: true,
       meetingEndTime: false,
     },
   },
@@ -58,6 +58,9 @@ const BUILT_IN_TEMPLATES = {
       highlights: false,
       manualNotes: true,
       liveTranscript: true,
+      meetingDate: true,
+      meetingStartTime: true,
+      meetingEndTime: false,
     },
   },
 };
@@ -69,8 +72,6 @@ const sessionsPanelBackdrop = document.querySelector("#sessions-panel-backdrop")
 const toggleSessionsPanelButton = document.querySelector("#toggle-sessions-panel");
 const collapseSessionsPanelButton = document.querySelector("#collapse-sessions-panel");
 const desktopViewButtons = [...document.querySelectorAll("[data-desktop-view]")];
-const newSessionButton = document.querySelector("#new-session");
-const newSessionMainButton = document.querySelector("#new-session-main");
 const sessionFilterInput = document.querySelector("#session-filter");
 const selectAllSessionsInput = document.querySelector("#select-all-sessions");
 const deleteSelectedSessionsButton = document.querySelector("#delete-selected-sessions");
@@ -195,6 +196,7 @@ const highlightsField = document.querySelector("#highlights-field");
 const highlightsCardDisclosure = document.querySelector("#highlights-card-disclosure");
 const manualNotesField = document.querySelector("#manual-notes-field");
 const manualNotesDisclosure = document.querySelector("#manual-notes-disclosure");
+const liveTranscriptDisclosure = document.querySelector("#live-transcript-disclosure");
   const liveTranscriptField = document.querySelector("#live-transcript-field");
   const uploadedTranscriptField = document.querySelector("#uploaded-transcript-field");
   const liveTranscriptBadge = document.querySelector("#live-transcript-badge");
@@ -286,7 +288,6 @@ const closeMobileMoreButton = document.querySelector("#close-mobile-more");
 const mobileOpenOutputButton = document.querySelector("#mobile-open-output");
 const mobileOpenOutputBarButton = document.querySelector("#mobile-view-output-bar");
 const closeMobileOutputButton = document.querySelector("#close-mobile-output");
-const mobileNewSessionButton = document.querySelector("#mobile-new-session");
 const mobileOpenSessionsButton = document.querySelector("#mobile-open-sessions");
 const mobileOpenTodoButton = document.querySelector("#mobile-open-todo");
 const mobileOpenSettingsButton = document.querySelector("#mobile-open-settings");
@@ -736,10 +737,20 @@ function cloneTemplateForCustomTemplate(template, options = {}) {
     id: `custom-${crypto.randomUUID()}`,
     label: options.label ?? `${baseLabel} copy`,
     isExpanded: true,
+    sourceTemplateId: source.sourceTemplateId || source.id || "",
     headers: normalizeTemplateHeaders(source.headers),
     customFields: normalizeTemplateCustomFields(source.customFields),
     fields: normalizeTemplateFields(source.fields),
   };
+}
+
+function getTemplateBehaviorId(template) {
+  if (!template) {
+    return "meeting";
+  }
+
+  const sourceTemplateId = typeof template.sourceTemplateId === "string" ? template.sourceTemplateId : "";
+  return sourceTemplateId || template.id || "meeting";
 }
 
 function getTemplateDefinition(templateId) {
@@ -895,12 +906,6 @@ void initializeApp().catch((error) => {
       outputResizeHandle.addEventListener("pointerdown", startOutputResize);
       outputResizeHandle.addEventListener("mousedown", startOutputResize);
     }
-  newSessionButton.addEventListener("click", () => createAndOpenNewSession());
-  newSessionMainButton.addEventListener("click", () => createAndOpenNewSession());
-  mobileNewSessionButton?.addEventListener("click", () => {
-    closeMobileSheets();
-    createAndOpenNewSession();
-  });
   mobileDictationToggle?.addEventListener("click", () => {
     if (mobileDictationToggle.dataset.captureMode === "audio") {
       toggleAudioCapture();
@@ -1234,7 +1239,9 @@ void initializeApp().catch((error) => {
       setActiveSettingsSection(button.dataset.settingsTab);
     });
   });
+  themeFamilySelect.addEventListener("input", previewThemeSelection);
   themeFamilySelect.addEventListener("change", previewThemeSelection);
+  themeModeSelect.addEventListener("input", previewThemeSelection);
   themeModeSelect.addEventListener("change", previewThemeSelection);
   exportStylePresetSelect.addEventListener("change", () => {
     applyExportPresetToInputs(exportStylePresetSelect.value);
@@ -2367,10 +2374,14 @@ void initializeApp().catch((error) => {
     try {
       const transcriptText = await readTranscriptFile(file);
       updateActiveSession({ uploadedTranscript: transcriptText }, true);
-      render();
-      setElementVisibility(uploadedTranscriptField, Boolean(transcriptText.trim()));
+      const session = getActiveSession();
       uploadedTranscriptInput.value = transcriptText;
       setTranscriptFieldState("uploaded", "uploaded", "Uploaded transcript");
+      applyTemplateUi({
+        ...session,
+        uploadedTranscript: transcriptText,
+      });
+      setElementVisibility(uploadedTranscriptField, Boolean(transcriptText.trim()));
       revealTranscriptSurface("uploaded", { focus: true });
       audioCaptureStatus.textContent = `Transcript uploaded from ${file.name} and added to the Uploaded transcript field.`;
     } catch (error) {
@@ -2689,6 +2700,10 @@ function setAppStatus(label, state = APP_STATUS_STATES.idle) {
   syncMobileUi();
 }
 
+function applyCurrentTheme() {
+  applyTheme(settings.themeFamily, settings.themeMode);
+}
+
 function applyLatestAppUpdate() {
   if (!serviceWorkerRegistration) {
     forceReloadLatestVersion();
@@ -2811,6 +2826,7 @@ function canAutoApplyUpdate() {
 }
 
 function render() {
+  applyCurrentTheme();
   renderTemplateOptions();
   renderTemplateQuickSelectors();
   renderSessionList();
@@ -2955,12 +2971,16 @@ function normalizeTemplateUsageCounts(input) {
   );
 }
 
-function normalizeTemplateLauncherIds(input) {
+function normalizeTemplateLauncherIds(input, availableTemplateIds = null) {
   if (!Array.isArray(input)) {
     return ["meeting", "oneToOneCall", "personalNote"];
   }
 
-  const validTemplateIds = new Set(getAllTemplates().map((template) => template.id));
+  const validTemplateIds = new Set(
+    Array.isArray(availableTemplateIds) && availableTemplateIds.length
+      ? availableTemplateIds
+      : getAllTemplates().map((template) => template.id)
+  );
   const seen = new Set();
 
   const normalized = input
@@ -2999,6 +3019,7 @@ function recordTemplateUsage(templateId) {
 function applySelectedTemplate(templateId, options = {}) {
   const currentSession = getActiveSession();
   const template = getTemplateDefinition(templateId);
+  const behaviorId = getTemplateBehaviorId(template);
   const shouldRecordUsage = options.recordUsage !== false;
 
   if (shouldRecordUsage) {
@@ -3013,11 +3034,15 @@ function applySelectedTemplate(templateId, options = {}) {
     customFieldValues: normalizeCustomFieldValues({}, template.customFields || []),
   };
 
-    if (template.id === "oneToOneCall") {
-      patch.meetingDate = "";
-      patch.meetingStartTime = "";
+  if (behaviorId === "oneToOneCall" || behaviorId === "personalNote") {
+      if (!currentSession.meetingDate) {
+        patch.meetingDate = defaultSchedule.meetingDate;
+      }
+      if (!currentSession.meetingStartTime) {
+        patch.meetingStartTime = defaultSchedule.meetingStartTime;
+      }
       patch.meetingEndTime = "";
-    }
+  }
 
   if (!currentSession.title.trim() || isAutoGeneratedTitle(currentSession.title)) {
     patch.title = getDefaultTitleForTemplate(template, Date.now(), {
@@ -3288,19 +3313,21 @@ function updateSessionSelectionControls(visibleSessions = getVisibleSessions()) 
 
 function applyTemplateUi(session) {
   const template = getTemplateDefinition(session.template);
+  const behaviorId = getTemplateBehaviorId(template);
   const fields = template.fields || BUILT_IN_TEMPLATES.meeting.fields;
   const liveTranscriptEnabled = fields.liveTranscript !== false;
-  const isQuickNote = template.id === "personalNote";
-  const isOneToOneCall = template.id === "oneToOneCall";
+  const isQuickNote = behaviorId === "personalNote";
+  const isOneToOneCall = behaviorId === "oneToOneCall";
+  const isDictationActive = isRecording && !audioRecordingSessionId;
   const showParticipants = fields.participants !== false;
   const showHighlights = fields.highlights !== false;
-  const showMeetingDate = template.id === "meeting" || fields.meetingDate === true;
-  const showMeetingStartTime = template.id === "meeting" || fields.meetingStartTime === true;
-  const showMeetingEndTime = template.id === "meeting" || fields.meetingEndTime === true;
+  const showMeetingDate = fields.meetingDate === true;
+  const showMeetingStartTime = fields.meetingStartTime === true;
+  const showMeetingEndTime = fields.meetingEndTime === true;
   const showMeetingSchedule = showMeetingDate || showMeetingStartTime || showMeetingEndTime;
   const showManualNotes = fields.manualNotes !== false;
-  const showLiveTranscript = liveTranscriptEnabled;
-  const showUploadedTranscript = liveTranscriptEnabled && Boolean(session.uploadedTranscript?.trim());
+  const showLiveTranscript = liveTranscriptEnabled && isDictationActive;
+  const showUploadedTranscript = Boolean(session.uploadedTranscript?.trim());
   const showTitle = fields.title !== false;
   const templateCustomFields = normalizeTemplateCustomFields(template.customFields);
   const showContextDisclosure = showMeetingSchedule || templateCustomFields.length > 0;
@@ -3317,7 +3344,10 @@ function applyTemplateUi(session) {
   setElementVisibility(highlightChips, showHighlights);
   setElementVisibility(highlightsSection, showHighlights);
   setElementVisibility(manualNotesField, showManualNotes);
-  setElementVisibility(liveTranscriptField, showLiveTranscript);
+  setElementVisibility(liveTranscriptDisclosure, showLiveTranscript);
+  if (!showLiveTranscript && liveTranscriptDisclosure) {
+    liveTranscriptDisclosure.open = false;
+  }
   setElementVisibility(uploadedTranscriptField, showUploadedTranscript);
   renderTemplateCustomFields(session, template);
   titleFieldLabel.textContent = isQuickNote ? "Note title" : isOneToOneCall ? "Title" : "Meeting title";
@@ -4030,6 +4060,7 @@ function openSettings() {
   if (activeSettingsSection === "ai") {
     activeSettingsSection = "appearance";
   }
+  applyCurrentTheme();
   syncSettingsForm();
   settingsModal.classList.remove("is-hidden");
   settingsModal.setAttribute("aria-hidden", "false");
@@ -4040,6 +4071,7 @@ function openSettings() {
 }
 
 function closeSettings() {
+  applyCurrentTheme();
   settingsModal.classList.add("is-hidden");
   settingsModal.setAttribute("aria-hidden", "true");
   syncModalScrollLock();
@@ -5021,6 +5053,7 @@ function createCustomTemplate() {
   return {
     id: `custom-${crypto.randomUUID()}`,
     label: "",
+    sourceTemplateId: "",
     isExpanded: true,
     summaryLead: "This note focused on the most important business updates and follow-ups.",
     sections: ["Overview", "Key Discussion Points", "Decisions", "Action Items"],
@@ -6338,11 +6371,12 @@ function formatDateTimeForTitle(timestamp) {
 }
 
 function getDefaultMeetingScheduleForTemplate(template, timestamp = Date.now()) {
-  if (template.id !== "oneToOneCall") {
-    return {
-      meetingDate: "",
-      meetingStartTime: "",
-      meetingEndTime: "",
+  const behaviorId = getTemplateBehaviorId(template);
+  if (behaviorId !== "oneToOneCall" && behaviorId !== "personalNote") {
+      return {
+        meetingDate: "",
+        meetingStartTime: "",
+        meetingEndTime: "",
     };
   }
 
@@ -6360,7 +6394,7 @@ function getDefaultMeetingScheduleForTemplate(template, timestamp = Date.now()) 
   return {
     meetingDate: isoDate,
     meetingStartTime: isoTime,
-    meetingEndTime: isoTime,
+    meetingEndTime: "",
   };
 }
 
@@ -6372,11 +6406,12 @@ function getPrimaryParticipantName(participants) {
 }
 
 function getDefaultTitleForTemplate(template, timestamp = Date.now(), sessionData = {}) {
-  if (template.id === "personalNote") {
+  const behaviorId = getTemplateBehaviorId(template);
+  if (behaviorId === "personalNote") {
     return formatDateTimeForTitle(timestamp);
   }
 
-  if (template.id === "oneToOneCall") {
+  if (behaviorId === "oneToOneCall") {
     return formatDateTimeForTitle(timestamp);
   }
 
@@ -6432,6 +6467,7 @@ function setCaptureButtonContent(button, title, hint = "") {
 
 function revealTranscriptSurface(mode = "live", { focus = false } = {}) {
   const isUploaded = mode === "uploaded";
+  const disclosure = isUploaded ? null : liveTranscriptDisclosure;
   const field = isUploaded ? uploadedTranscriptField : liveTranscriptField;
   const input = isUploaded ? uploadedTranscriptInput : liveTranscriptInput;
 
@@ -6445,9 +6481,16 @@ function revealTranscriptSurface(mode = "live", { focus = false } = {}) {
     closeMobileSheets();
   }
 
-  setElementVisibility(field, true);
+  if (disclosure) {
+    setElementVisibility(disclosure, true);
+    if (focus) {
+      disclosure.open = true;
+    }
+  } else {
+    setElementVisibility(field, true);
+  }
   window.requestAnimationFrame(() => {
-    field.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    (disclosure || field).scrollIntoView({ behavior: "smooth", block: "nearest" });
     if (focus) {
       input.focus();
     }
@@ -6714,7 +6757,7 @@ function setupSpeechRecognition() {
     }
   });
 
-  recognition.addEventListener("end", () => {
+    recognition.addEventListener("end", () => {
     if (isRecording) {
       recognition.lang = currentDictationLanguage;
       pendingLanguageRestart = false;
@@ -6728,10 +6771,11 @@ function setupSpeechRecognition() {
     setTranscriptFieldState("live", resolveLiveTranscriptSource(getActiveSession()), getLiveTranscriptSourceLabel(getActiveSession()));
     setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
     dictationToggle.classList.remove("is-recording");
-    dictationStatus.textContent = "Dictation stopped. You can continue typing or restart capture anytime.";
-    setAppStatus("Saved locally", APP_STATUS_STATES.idle);
-    syncMobileUi();
-  });
+      dictationStatus.textContent = "Dictation stopped. You can continue typing or restart capture anytime.";
+      setAppStatus("Saved locally", APP_STATUS_STATES.idle);
+      applyTemplateUi(getActiveSession());
+      syncMobileUi();
+    });
 
   recognition.addEventListener("error", (event) => {
     isRecording = false;
@@ -6741,11 +6785,12 @@ function setupSpeechRecognition() {
     setTranscriptFieldState("live", resolveLiveTranscriptSource(getActiveSession()), getLiveTranscriptSourceLabel(getActiveSession()));
     setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
     dictationToggle.classList.remove("is-recording");
-    dictationStatus.textContent = `Dictation error: ${event.error}. You can still take notes manually.`;
-    setAppStatus("Recording error", APP_STATUS_STATES.warning);
-    syncMobileUi();
-  });
-}
+      dictationStatus.textContent = `Dictation error: ${event.error}. You can still take notes manually.`;
+      setAppStatus("Recording error", APP_STATUS_STATES.warning);
+      applyTemplateUi(getActiveSession());
+      syncMobileUi();
+    });
+  }
 
 function toggleDictation() {
   if (!recognition) {
@@ -6755,18 +6800,19 @@ function toggleDictation() {
     return;
   }
 
-  if (isRecording) {
-    isRecording = false;
-    try {
-      recognition.stop();
-    } catch {
+    if (isRecording) {
+      isRecording = false;
+      try {
+        recognition.stop();
+      } catch {
       setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
       dictationToggle.classList.remove("is-recording");
-      dictationStatus.textContent = "Dictation stopped.";
-      setAppStatus("Saved locally", APP_STATUS_STATES.idle);
-      syncMobileUi();
-    }
-    return;
+        dictationStatus.textContent = "Dictation stopped.";
+        setAppStatus("Saved locally", APP_STATUS_STATES.idle);
+        applyTemplateUi(getActiveSession());
+        syncMobileUi();
+      }
+      return;
   }
 
   try {
@@ -6780,18 +6826,23 @@ function toggleDictation() {
     recognition.start();
     setCaptureButtonContent(dictationToggle, "Stop dictation", "Live browser transcription");
     dictationToggle.classList.add("is-recording");
-    dictationStatus.textContent = `Listening in ${formatDictationLanguage(currentDictationLanguage)}. The app will switch between Swedish and English when the speech pattern changes.`;
-    setAppStatus("Recording", APP_STATUS_STATES.recording);
-    syncMobileUi();
-  } catch (error) {
-    isRecording = false;
+      dictationStatus.textContent = `Listening in ${formatDictationLanguage(currentDictationLanguage)}. The app will switch between Swedish and English when the speech pattern changes.`;
+      setAppStatus("Recording", APP_STATUS_STATES.recording);
+      if (liveTranscriptDisclosure) {
+        liveTranscriptDisclosure.open = false;
+      }
+      applyTemplateUi(getActiveSession());
+      syncMobileUi();
+    } catch (error) {
+      isRecording = false;
     setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
     dictationToggle.classList.remove("is-recording");
-    dictationStatus.textContent = `Could not start live dictation: ${error.message || "this browser blocked it"}. Try Meeting capture or upload audio instead.`;
-    setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
-    syncMobileUi();
+      dictationStatus.textContent = `Could not start live dictation: ${error.message || "this browser blocked it"}. Try Meeting capture or upload audio instead.`;
+      setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
+      applyTemplateUi(getActiveSession());
+      syncMobileUi();
+    }
   }
-}
 
 function getAudioRecordingMimeType() {
   if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
@@ -6858,12 +6909,13 @@ async function stopAudioCapture() {
       setTranscriptFieldState("live", resolveLiveTranscriptSource(getActiveSession()), getLiveTranscriptSourceLabel(getActiveSession()));
       audioCaptureStatus.textContent = "Capture stopped, but the recording could not be saved locally for later transcription.";
     }
-  } else {
-    syncAudioCaptureUi(getActiveSession());
+    } else {
+      syncAudioCaptureUi(getActiveSession());
+    }
+  
+    setAppStatus("Saved locally", APP_STATUS_STATES.idle);
+    applyTemplateUi(getActiveSession());
   }
-
-  setAppStatus("Saved locally", APP_STATUS_STATES.idle);
-}
 
 async function toggleAudioCapture() {
   if (audioRecordingSessionId) {
@@ -6888,7 +6940,7 @@ async function toggleAudioCapture() {
       }
     });
 
-    mediaRecorder.addEventListener("error", () => {
+      mediaRecorder.addEventListener("error", () => {
       stopMediaStream(mediaRecorderStream);
       stopMediaStream(mediaRecorderSourceStream);
       mediaRecorder = null;
@@ -6896,21 +6948,24 @@ async function toggleAudioCapture() {
       mediaRecorderSourceStream = null;
       mediaRecorderChunks = [];
       audioRecordingSessionId = null;
-      audioCaptureStatus.textContent = "Meeting capture failed. You can still upload audio instead.";
-      setAppStatus("Recording error", APP_STATUS_STATES.warning);
-      syncAudioCaptureUi(getActiveSession());
-    });
+        audioCaptureStatus.textContent = "Meeting capture failed. You can still upload audio instead.";
+        setAppStatus("Recording error", APP_STATUS_STATES.warning);
+        applyTemplateUi(getActiveSession());
+        syncAudioCaptureUi(getActiveSession());
+      });
 
     mediaRecorder.start();
-    audioCaptureStatus.textContent = capture.status;
-    setAppStatus("Recording", APP_STATUS_STATES.recording);
-    syncAudioCaptureUi(getActiveSession());
-  } catch (error) {
-    audioCaptureStatus.textContent = error?.message || "Meeting capture was blocked. You can still upload audio instead.";
-    setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
-    syncMobileUi();
+      audioCaptureStatus.textContent = capture.status;
+      setAppStatus("Recording", APP_STATUS_STATES.recording);
+      applyTemplateUi(getActiveSession());
+      syncAudioCaptureUi(getActiveSession());
+    } catch (error) {
+      audioCaptureStatus.textContent = error?.message || "Meeting capture was blocked. You can still upload audio instead.";
+      setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
+      applyTemplateUi(getActiveSession());
+      syncMobileUi();
+    }
   }
-}
 
 function persistSessions() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
@@ -7341,6 +7396,11 @@ function normalizeStoredSettings(parsed) {
   };
   const normalizedExportStylePreset = legacyExportPresetMap[parsed.exportStylePreset] || parsed.exportStylePreset;
   const exportStylePreset = EXPORT_STYLE_PRESETS[normalizedExportStylePreset] ? normalizedExportStylePreset : DEFAULT_EXPORT_PRESET;
+  const normalizedCustomTemplates = normalizeCustomTemplates(parsed.customTemplates);
+  const availableTemplateIds = [
+    ...Object.values(BUILT_IN_TEMPLATES).map((template) => template.id),
+    ...normalizedCustomTemplates.map((template) => template.id),
+  ];
 
   return {
     ...createDefaultSettings(),
@@ -7357,9 +7417,9 @@ function normalizeStoredSettings(parsed) {
       participantDirectoryInitialized: parsed.participantDirectoryInitialized === true
         || normalizeParticipantDirectory(parsed.participantDirectory).length > 0,
       defaultCustomHeaders: normalizeCustomHeaders(parsed.defaultCustomHeaders),
-      customTemplates: normalizeCustomTemplates(parsed.customTemplates),
+      customTemplates: normalizedCustomTemplates,
       templateUsageCounts: normalizeTemplateUsageCounts(parsed.templateUsageCounts),
-      templateLauncherTemplateIds: normalizeTemplateLauncherIds(parsed.templateLauncherTemplateIds),
+      templateLauncherTemplateIds: normalizeTemplateLauncherIds(parsed.templateLauncherTemplateIds, availableTemplateIds),
       exportStylePreset,
     exportStyle: normalizeExportStyle({
       ...EXPORT_STYLE_PRESETS[exportStylePreset].style,
@@ -7805,7 +7865,7 @@ function previewThemeSelection() {
   settings.themeFamily = themeFamilySelect.value;
   settings.themeMode = themeModeSelect.value;
   persistSettings();
-  applyTheme(settings.themeFamily, settings.themeMode);
+  applyCurrentTheme();
   updateThemeDescription();
 }
 
@@ -8349,6 +8409,7 @@ function normalizeCustomTemplate(template) {
     ...template,
     id: typeof template.id === "string" && template.id ? template.id : fallback.id,
     label: typeof template.label === "string" ? template.label : "",
+    sourceTemplateId: typeof template.sourceTemplateId === "string" ? template.sourceTemplateId : "",
     isExpanded: template.isExpanded === true,
     summaryLead: typeof template.summaryLead === "string" && template.summaryLead.trim()
       ? template.summaryLead

@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.10.7">
+  <link rel="stylesheet" href="styles.css?v=0.10.8">
 </head>
 <body>
   <main class="page-shell">
@@ -24,7 +24,7 @@
           Capture rough notes and turn them into professional meeting notes without leaving the page.
         </p>
         <div class="hero-meta">
-          <div class="version-pill" id="app-version">v0.10.7</div>
+        <div class="version-pill" id="app-version">v0.10.8</div>
           <div class="update-notice is-hidden-field" id="app-update-notice">New version available</div>
         </div>
       </div>
@@ -57,9 +57,7 @@
           <button class="ghost-button sessions-panel-toggle" id="collapse-sessions-panel" type="button" aria-expanded="true" aria-controls="sessions-panel">Close</button>
         </div>
 
-        <button class="primary-button new-session-button" id="new-session" type="button">+ New Session</button>
-
-        <label class="field field-tight session-filter-field">
+          <label class="field field-tight session-filter-field">
           <span class="field-label">Filter sessions</span>
           <input id="session-filter" type="text" maxlength="80" placeholder="Type to filter sessions">
         </label>
@@ -87,10 +85,10 @@
             <h2 id="session-title">Untitled session</h2>
           </div>
           <div class="panel-actions">
-            <div class="panel-actions-page">
-              <button class="primary-button header-new-session-button" id="new-session-main" type="button">+ New Session</button>
-              <button class="ghost-button is-hidden-field" id="update-app" type="button">Update App</button>
-            </div>
+              <div class="panel-actions-page">
+                <div class="template-quick-selectors" id="template-quick-selectors" aria-label="Quick new-session templates"></div>
+                <button class="ghost-button is-hidden-field" id="update-app" type="button">Update App</button>
+              </div>
             <div class="panel-actions-shared desktop-only">
               <button class="ghost-button" id="open-sessions-main" type="button">All Sessions</button>
               <button class="ghost-button" id="open-backup-panel" type="button">Back-up</button>
@@ -121,9 +119,7 @@
                   </label>
                 </div>
 
-                 <div class="template-quick-selectors" id="template-quick-selectors" aria-label="Quick new-session templates"></div>
-
-                <details class="context-disclosure">
+                  <details class="context-disclosure">
                   <summary>People and details</summary>
                   <div class="context-disclosure-body">
                     <label class="field" id="participants-field">
@@ -192,30 +188,31 @@
                 <h3>Work from notes, transcript, or both</h3>
               </div>
 
-              <details class="manual-notes-disclosure" id="manual-notes-disclosure">
-                <summary>Manual notes</summary>
-                <label class="field" id="manual-notes-field">
-                  <span class="field-label">Manual notes</span>
-                  <textarea
-                    id="raw-notes"
+                <details class="manual-notes-disclosure" id="manual-notes-disclosure" open>
+                  <summary>Manual notes</summary>
+                  <label class="field" id="manual-notes-field">
+                    <textarea
+                      id="raw-notes"
                     rows="12"
                     placeholder="Write your own notes here while dictation continues in the transcript field..."
                   ></textarea>
                 </label>
               </details>
 
-              <label class="field transcript-field transcript-field-live" id="live-transcript-field" data-transcript-source="live-ready">
-                  <span class="field-label transcript-field-label">
+                <details class="manual-notes-disclosure is-hidden-field" id="live-transcript-disclosure" hidden>
+                  <summary>
                     <span>Live transcript</span>
                     <span class="transcript-source-badge" id="live-transcript-badge">Ready for live notes</span>
-                  </span>
-                  <textarea
-                    id="live-transcript"
-                    rows="7"
-                    placeholder="Dictation appears here while recording..."
-                    readonly
-                  ></textarea>
-                </label>
+                  </summary>
+                  <label class="field transcript-field transcript-field-live" id="live-transcript-field" data-transcript-source="live-ready">
+                    <textarea
+                      id="live-transcript"
+                      rows="7"
+                      placeholder="Dictation appears here while recording..."
+                      readonly
+                    ></textarea>
+                  </label>
+                </details>
 
               <p class="support-text mobile-capture-status mobile-only" id="mobile-capture-status">
                 Start dictation for live transcript, or use More to record audio instead.
@@ -248,11 +245,10 @@
               <button class="ghost-button" id="close-mobile-more" type="button">Close</button>
             </div>
 
-            <div class="mobile-sheet-shortcuts mobile-only">
-              <button class="ghost-button" id="mobile-new-session" type="button">New Session</button>
-              <button class="ghost-button" id="mobile-open-sessions" type="button">All Sessions</button>
-              <button class="ghost-button" id="mobile-open-settings" type="button">Settings</button>
-              <button class="ghost-button" id="mobile-open-backup" type="button">Data Backup</button>
+              <div class="mobile-sheet-shortcuts mobile-only">
+                <button class="ghost-button" id="mobile-open-sessions" type="button">All Sessions</button>
+                <button class="ghost-button" id="mobile-open-settings" type="button">Settings</button>
+                <button class="ghost-button" id="mobile-open-backup" type="button">Data Backup</button>
               <button class="ghost-button" id="mobile-open-output" type="button">View Output</button>
             </div>
 
@@ -1469,7 +1465,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.17/mammoth.browser.min.js"></script>
-  <script src="app.js?v=0.10.7"></script>
+  <script src="app.js?v=0.10.8"></script>
 </body>
 </html>
 
