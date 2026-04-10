@@ -9,10 +9,22 @@ export declare const toFileSafeName: (title: string) => string;
 export declare const splitOutputBlocks: (output: string) => string[];
 export declare const isHeadingLine: (line: string) => boolean;
 export declare const normalizeHeadingText: (line: string) => string;
-export declare const buildStructuredOutput: (output: string) => {
-    kind: "body" | "heading";
+type StructuredOutputEntry = {
+    kind: "heading";
+    level: 1 | 2 | 3;
     text: string;
-}[];
+} | {
+    kind: "body";
+    text: string;
+} | {
+    kind: "bullet";
+    text: string;
+} | {
+    kind: "numbered";
+    text: string;
+    order: number | null;
+};
+export declare const buildStructuredOutput: (output: string) => StructuredOutputEntry[];
 export declare const exportOutputAsText: ({ title, output }: ExportPayload) => void;
 export declare const exportOutputAsMarkdown: ({ title, output }: ExportPayload) => void;
 export declare const exportOutputAsHtml: ({ title, output, attachments, layoutPresetId }: ExportPayload) => void;

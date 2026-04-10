@@ -20,11 +20,12 @@ describe("exportService helpers", () => {
         expect(normalizeHeadingText("Action items:")).toBe("Action items");
     });
     it("builds structured output with heading/body classification", () => {
-        expect(buildStructuredOutput("Summary\nThis is the first paragraph.\n\nAction items:\nCall customer")).toEqual([
-            { kind: "heading", text: "Summary" },
-            { kind: "body", text: "This is the first paragraph." },
-            { kind: "heading", text: "Action items" },
-            { kind: "heading", text: "Call customer" },
+        expect(buildStructuredOutput("## Key discussion points\n### 1) Site dry run\n\n- Call customer\n1. Confirm timeline\nThis is a summary line.")).toEqual([
+            { kind: "heading", level: 2, text: "Key discussion points" },
+            { kind: "heading", level: 3, text: "1) Site dry run" },
+            { kind: "bullet", text: "Call customer" },
+            { kind: "numbered", order: 1, text: "Confirm timeline" },
+            { kind: "body", text: "This is a summary line." },
         ]);
     });
 });
