@@ -485,6 +485,7 @@ let mobileMoreSheetOpen = false;
 let mobileOutputSheetOpen = false;
 let aiSettingsOpenedFromSettings = false;
 let confirmModalResolver = null;
+let eventsBound = false;
 
 function isMobileLayout() {
   return MOBILE_LAYOUT_QUERY.matches;
@@ -794,10 +795,26 @@ const audioDrafts = new Map();
 let pendingAudioDbPromise = null;
 
 async function initializeApp() {
-  settings = await loadSettings();
-  sessions = await loadSessions();
-  aiModelCatalog = await loadAiModelCatalog();
-    activeSessionId = sessions[0]?.id ?? null;
+  if (!eventsBound) {
+    bindEvents();
+    eventsBound = true;
+  }
+
+  try {
+    settings = await loadSettings();
+    sessions = await loadSessions();
+    aiModelCatalog = await loadAiModelCatalog();
+  } catch (error) {
+    console.error("Legacy PWA storage init failed, falling back to browser-local defaults.", error);
+    settings = normalizeStoredSettings(readLegacyLocalStorageJson(SETTINGS_KEY));
+    sessions = normalizeImportedSessions(readLegacyLocalStorageJson(STORAGE_KEY) || []);
+    aiModelCatalog = filterRelevantAiModels(DEFAULT_AI_MODEL_CATALOG.map((model) => ({ ...model })));
+    if (dictationStatus) {
+      dictationStatus.textContent = "Browser database setup was unavailable, so NoteSmith fell back to local browser storage for this session.";
+    }
+  }
+
+  activeSessionId = sessions[0]?.id ?? null;
   
     applyTheme(settings.themeFamily, settings.themeMode);
     applyOutputPanelWidth();
@@ -813,16 +830,40 @@ async function initializeApp() {
 
   setupSpeechRecognition();
   render();
-  bindEvents();
   registerServiceWorker();
   appVersionLabel.textContent = `${APP_VERSION} · IndexedDB`;
-  await initializeStorageMode();
+  try {
+    await initializeStorageMode();
+  } catch (error) {
+    console.error("Storage mode initialization failed.", error);
+    settings.storageMode = STORAGE_MODES.browser;
+    updateStorageUi();
+    updateSessionStorageUi();
+    if (sessionStorageStatus) {
+      sessionStorageStatus.textContent = "Browser storage is active. Advanced storage setup could not be restored in this browser session.";
+    }
+  }
   window.setTimeout(() => {
     maybeShowBackupReminder();
   }, 350);
 }
 
-void initializeApp();
+void initializeApp().catch((error) => {
+  console.error("Legacy PWA initialization failed.", error);
+  if (!eventsBound) {
+    bindEvents();
+    eventsBound = true;
+  }
+  if (!sessions.length) {
+    const startupSession = createSession();
+    sessions = [startupSession];
+    activeSessionId = startupSession.id;
+  }
+  render();
+  if (dictationStatus) {
+    dictationStatus.textContent = "NoteSmith recovered from a startup issue. Core session editing is available, but some browser features may need a reload.";
+  }
+});
 
   function bindEvents() {
     document.addEventListener("click", handlePrimaryChromeClick);
@@ -6704,7 +6745,7 @@ async function toggleAudioCapture() {
 
 function persistSessions() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-  void writeAppStateValue(STORAGE_KEY, sessions);
+  void safeWriteAppStateValue(STORAGE_KEY, sessions);
   queueStorageFilePersist();
 }
 
@@ -6748,6 +6789,15 @@ async function readAppStateValue(key) {
   });
 }
 
+async function safeReadAppStateValue(key) {
+  try {
+    return await readAppStateValue(key);
+  } catch (error) {
+    console.warn(`Could not read ${key} from browser database. Falling back to legacy browser storage.`, error);
+    return null;
+  }
+}
+
 async function writeAppStateValue(key, value) {
   const db = await openAppStateDb();
   if (!db) {
@@ -6762,6 +6812,14 @@ async function writeAppStateValue(key, value) {
   });
 }
 
+async function safeWriteAppStateValue(key, value) {
+  try {
+    await writeAppStateValue(key, value);
+  } catch (error) {
+    console.warn(`Could not save ${key} to browser database.`, error);
+  }
+}
+
 function readLegacyLocalStorageJson(key) {
   try {
     const stored = localStorage.getItem(key);
@@ -6772,7 +6830,7 @@ function readLegacyLocalStorageJson(key) {
 }
 
 async function loadSessions() {
-  const persisted = await readAppStateValue(STORAGE_KEY);
+  const persisted = await safeReadAppStateValue(STORAGE_KEY);
   if (Array.isArray(persisted)) {
     return normalizeImportedSessions(persisted);
   }
@@ -6780,7 +6838,7 @@ async function loadSessions() {
   const legacy = readLegacyLocalStorageJson(STORAGE_KEY);
   const nextSessions = Array.isArray(legacy) ? normalizeImportedSessions(legacy) : [];
   if (nextSessions.length) {
-    void writeAppStateValue(STORAGE_KEY, nextSessions);
+    void safeWriteAppStateValue(STORAGE_KEY, nextSessions);
   }
   return nextSessions;
 }
@@ -7093,7 +7151,7 @@ function syncParticipantDirectoryFromAllSessions() {
 
 function persistAiModelCatalog() {
   localStorage.setItem(AI_MODEL_CATALOG_KEY, JSON.stringify(aiModelCatalog));
-  void writeAppStateValue(AI_MODEL_CATALOG_KEY, aiModelCatalog);
+  void safeWriteAppStateValue(AI_MODEL_CATALOG_KEY, aiModelCatalog);
 }
 
 function normalizeStoredSettings(parsed) {
@@ -7149,7 +7207,7 @@ function normalizeStoredSettings(parsed) {
   }
 
 async function loadAiModelCatalog() {
-  const persisted = await readAppStateValue(AI_MODEL_CATALOG_KEY);
+  const persisted = await safeReadAppStateValue(AI_MODEL_CATALOG_KEY);
   const source = Array.isArray(persisted) && persisted.length
     ? persisted
     : readLegacyLocalStorageJson(AI_MODEL_CATALOG_KEY);
@@ -7164,13 +7222,13 @@ async function loadAiModelCatalog() {
     ...(byId.get(model.id) || {}),
   })));
   if (!persisted) {
-    void writeAppStateValue(AI_MODEL_CATALOG_KEY, normalized);
+    void safeWriteAppStateValue(AI_MODEL_CATALOG_KEY, normalized);
   }
   return normalized;
 }
 
 async function loadSettings() {
-  const persisted = await readAppStateValue(SETTINGS_KEY);
+  const persisted = await safeReadAppStateValue(SETTINGS_KEY);
   if (persisted) {
     return normalizeStoredSettings(persisted);
   }
@@ -7178,7 +7236,7 @@ async function loadSettings() {
   const legacy = readLegacyLocalStorageJson(SETTINGS_KEY);
   const normalized = normalizeStoredSettings(legacy);
   if (legacy) {
-    void writeAppStateValue(SETTINGS_KEY, normalized);
+    void safeWriteAppStateValue(SETTINGS_KEY, normalized);
   }
   return normalized;
 }
@@ -7227,7 +7285,7 @@ function normalizeAdditionalPrompts(additionalPrompts) {
 
 function persistSettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  void writeAppStateValue(SETTINGS_KEY, settings);
+  void safeWriteAppStateValue(SETTINGS_KEY, settings);
   queueStorageFilePersist();
 }
 
