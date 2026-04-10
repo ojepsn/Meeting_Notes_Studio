@@ -793,6 +793,7 @@ let audioRecordingSessionId = null;
 let activeAudioCaptureMode = "meeting";
 const audioDrafts = new Map();
 let pendingAudioDbPromise = null;
+let appStateDbPromise = null;
 
 async function initializeApp() {
   if (!eventsBound) {
@@ -6748,8 +6749,6 @@ function persistSessions() {
   void safeWriteAppStateValue(STORAGE_KEY, sessions);
   queueStorageFilePersist();
 }
-
-let appStateDbPromise = null;
 
 async function openAppStateDb() {
   if (!("indexedDB" in window)) {
