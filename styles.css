@@ -393,6 +393,32 @@ button {
   text-transform: uppercase;
 }
 
+.hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.update-notice {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: rgba(181, 111, 35, 0.14);
+  color: #9c5f17;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+:root[data-theme$="-dark"] .update-notice {
+  background: rgba(214, 165, 84, 0.18);
+  color: #ffd486;
+}
+
 .metric-card {
   display: grid;
   gap: 4px;
@@ -3046,6 +3072,12 @@ textarea:focus {
   .version-pill {
     margin-top: 0;
     margin-left: auto;
+    padding: 4px 8px;
+    font-size: 0.64rem;
+  }
+
+  .update-notice {
+    margin-top: 0;
     padding: 4px 8px;
     font-size: 0.64rem;
   }

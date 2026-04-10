@@ -176,6 +176,7 @@ const aiSettingsSections = [...document.querySelectorAll("[data-ai-settings-sect
 const titleDisplay = document.querySelector("#session-title");
 const saveStatus = document.querySelector("#save-status");
 const updateAppButton = document.querySelector("#update-app");
+const appUpdateNotice = document.querySelector("#app-update-notice");
 const meetingTitleInput = document.querySelector("#meeting-title");
 const templateSelect = document.querySelector("#meeting-template");
 const templateQuickSelectors = document.querySelector("#template-quick-selectors");
@@ -2585,9 +2586,9 @@ function registerServiceWorker() {
   }
 
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js").then((registration) => {
-      serviceWorkerRegistration = registration;
-      bindServiceWorkerRegistration(registration);
+      navigator.serviceWorker.register("./service-worker.js").then((registration) => {
+        serviceWorkerRegistration = registration;
+        bindServiceWorkerRegistration(registration);
       registration.update().catch(() => {
         // Keep the app functional even if update checks fail.
       });
@@ -2599,6 +2600,16 @@ function registerServiceWorker() {
       checkForRemoteAppUpdate().catch(() => {
         // Ignore version check failures and keep the local app usable.
       });
+      });
+    });
+  window.addEventListener("focus", () => {
+    if (serviceWorkerRegistration) {
+      serviceWorkerRegistration.update().catch(() => {
+        // Ignore focus refresh failures.
+      });
+    }
+    checkForRemoteAppUpdate().catch(() => {
+      // Ignore focus version check failures.
     });
   });
 }
@@ -2645,18 +2656,28 @@ function bindServiceWorkerRegistration(registration) {
 function markAppUpdateAvailable(nextVersion = latestRemoteVersion) {
   hasPendingAppUpdate = true;
   latestRemoteVersion = nextVersion || latestRemoteVersion;
+  if (appUpdateNotice) {
+    appUpdateNotice.classList.remove("is-hidden-field");
+    appUpdateNotice.textContent = latestRemoteVersion && latestRemoteVersion !== APP_VERSION
+      ? `New version: ${latestRemoteVersion}`
+      : "New version available";
+  }
   updateAppButton.classList.remove("is-hidden-field");
   updateAppButton.textContent = latestRemoteVersion && latestRemoteVersion !== APP_VERSION
-    ? `Update App (${latestRemoteVersion})`
-    : "Update App";
+    ? `Refresh app (${latestRemoteVersion})`
+    : "Refresh app";
   setAppStatus("Update available", APP_STATUS_STATES.warning);
 }
 
 function clearAppUpdateAvailable() {
   hasPendingAppUpdate = false;
   latestRemoteVersion = APP_VERSION;
+  if (appUpdateNotice) {
+    appUpdateNotice.classList.add("is-hidden-field");
+    appUpdateNotice.textContent = "New version available";
+  }
   updateAppButton.classList.add("is-hidden-field");
-  updateAppButton.textContent = "Update App";
+  updateAppButton.textContent = "Refresh app";
   if (saveStatus.textContent === "Update available") {
     setAppStatus("Saved locally", APP_STATUS_STATES.idle);
   }
