@@ -1,6 +1,9 @@
 ﻿const STORAGE_KEY = "notesmith-sessions";
 const SETTINGS_KEY = "notesmith-settings";
 const AI_MODEL_CATALOG_KEY = "notesmith-ai-model-catalog";
+const APP_STATE_DB_NAME = "notesmith-app-state";
+const APP_STATE_DB_VERSION = 1;
+const APP_STATE_STORE_NAME = "appState";
 const PENDING_AUDIO_DB_NAME = "notesmith-pending-audio";
 const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
@@ -84,6 +87,8 @@ const openSettingsOutputButton = document.querySelector("#open-settings-output")
 const openAiSettingsInlineButton = document.querySelector("#open-ai-settings-inline");
 const promptGenerationSystemInput = document.querySelector("#prompt-generation-system");
 const promptGenerationRulesInput = document.querySelector("#prompt-generation-rules");
+const promptPersonalNotesSystemInput = document.querySelector("#prompt-personal-notes-system");
+const promptPersonalNotesRulesInput = document.querySelector("#prompt-personal-notes-rules");
 const promptRevisionRulesInput = document.querySelector("#prompt-revision-rules");
 const promptTranslationRulesInput = document.querySelector("#prompt-translation-rules");
 const promptAdditionalList = document.querySelector("#prompt-additional-list");
@@ -320,44 +325,115 @@ const MOBILE_LAYOUT_QUERY = window.matchMedia("(max-width: 720px)");
 const REMOTE_VERSION_CHECK_INTERVAL_MS = 2 * 60 * 1000;
 const SUPPORTS_FILE_SAVE = typeof window.showSaveFilePicker === "function";
 const SUPPORTS_AUDIO_RECORDING = typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+const SUPPORTS_MEETING_CAPTURE = typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getDisplayMedia;
 const MAX_MODEL_INPUT_PRICE_PER_MILLION = 2.5;
 const APPROX_TOKENS_PER_PAGE = 750;
 const MAX_AUDIO_UPLOAD_BYTES = 25 * 1024 * 1024;
 const AUDIO_CHUNK_TARGET_BYTES = 23 * 1024 * 1024;
 const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 const DEFAULT_PROMPT_SETTINGS = {
-  generationSystem: "You turn rough business notes and transcripts into polished professional meeting notes. Be concise, accurate, and businesslike. Do not invent facts. If details are missing, stay neutral. Preserve the language of the source notes. If the notes are Swedish, write Swedish. If the notes are English, write English. Always focus on business-related discussion. Exclude private matters, social chatter, greetings, and small talk from the final output. Never reproduce the transcript verbatim. Synthesize the discussion into structured professional notes grouped by topic rather than by speaking order.",
-  generationRules: [
-    "- Use a professional tone.",
-    "- Convert the transcript and notes into structured professional meeting notes rather than a transcript reproduction.",
-    "- Synthesize what was said into concise business language instead of copying spoken phrasing.",
-    "- Group discussion points by business topic or theme, not by speaking order or transcript chronology.",
-    "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.",
-    "- Use headings that reflect the actual topics discussed, not generic placeholders.",
-    "- Only include a discussion point when the transcript supports a substantive theme or issue.",
-    "- Make the summary a real executive-style synthesis of the most important business discussion, not a transcript recap.",
-    "- Highlights should be key takeaways, risks, or updates, not quoted phrases from the transcript.",
-    "- Keep action items specific.",
-    "- Only include decisions that are actually supported by the notes.",
-    "- Exclude private matters, greetings, and small talk. Keep the output focused on business discussion only.",
-  ].join("\n"),
-  revisionRules: [
-    "- Apply the user's requested improvements when they are supported by the notes.",
-    "- Keep the revised output as close as possible to the current polished output.",
-    "- Do not rewrite, reorder, or rephrase sections unless needed to satisfy the user's requested improvements.",
-    "- If the user asks for a specific change, preserve everything else as much as possible.",
-    "- Do not invent new facts or decisions.",
-    "- Keep the revised output in the form of structured professional notes, not transcript-style prose.",
-    "- Keep discussion points grouped by business topic with concise synthesized bullets.",
-    "- Keep the output focused on business discussion only.",
-  ].join("\n"),
-  translationRules: [
-    "- Keep the meaning faithful to the current output.",
-    "- Do not summarize, expand, shorten, or reorganize the content.",
-    "- Translate headings and labels too, but preserve the HTML structure.",
-    "- Preserve the structure, order, headings, lists, emphasis, and HTML markup as closely as possible.",
-    "- Translate only the user-visible text and return only translated HTML.",
-  ].join("\n"),
+  meetingMinutesSystem: `# Role
+You are an expert business meeting-minutes writer.
+
+# Mission
+Turn rough notes and transcripts into accurate, professional, decision-focused meeting minutes that are easy to scan, safe to share, and useful for follow-up work.
+
+# Standard
+Write like an excellent human operations partner: factual, clear, concise, and structured. The result should read like high-quality meeting minutes, not a transcript cleanup.
+
+# Output contract
+Your job is to produce a business-ready record of what matters from the meeting:
+- what the meeting was about
+- what was decided
+- what follow-up is required
+- what remains open, risky, blocked, or unresolved
+
+Prefer reliable synthesis over coverage for its own sake.`,
+  meetingMinutesRules: `# Core instructions
+- Write professional meeting minutes from the source material.
+- Synthesize; do not retell the meeting minute-by-minute.
+- Prioritize outcomes, decisions, commitments, risks, blockers, and unresolved questions.
+- Use clear sectioning and concise business language.
+- Use bullets when they improve scanability; avoid bloated prose.
+- Remove filler, repetition, false starts, side chatter, and spoken-language clutter.
+
+# Source handling
+- Use the provided manual notes, transcript text, uploaded material, and template context together.
+- When sources differ, prefer the most specific, credible, and decision-relevant formulation that is supported by the material.
+- Manual notes may contain the user's intended emphasis; preserve that emphasis when it does not conflict with stronger evidence in the transcript or source text.
+
+# Section behavior
+- Follow the requested template sections and write each section according to its purpose.
+- If a section has little or no supported content, keep it very brief rather than inventing filler.
+- If a section is not applicable, omit it only if the surrounding app/template logic clearly allows omission; otherwise keep it concise and factual.
+
+# Accuracy and restraint
+- Preserve only what is supported by the source material.
+- Do not invent decisions, owners, due dates, or rationale that were not stated or strongly supported.
+- If the source is ambiguous, reflect that uncertainty briefly instead of guessing.
+- Merge duplicate points and normalize inconsistent wording without changing meaning.
+- Distinguish clearly between discussion, decision, and action.
+- Do not promote a suggestion or open question into a decision unless the source supports that conclusion.
+
+# Actionability
+- Capture action items, owners, and timing when they are present.
+- Call out open issues, pending decisions, and required follow-up clearly.
+- Keep the output proportionate to the meeting: concise for short sessions, fuller for substantial ones.
+- If an owner or timing is missing, preserve the action but do not fabricate the missing detail.
+
+# Writing style
+- Neutral, professional, business-ready.
+- Specific and information-dense.
+- Avoid transcript phrasing, conversational clutter, and unnecessary scene-setting.
+- Prefer short paragraphs and tight bullets over long narrative blocks.
+- Make the result easy for a busy colleague to scan in under a minute.
+
+# Output priorities
+1. Main outcome and business significance
+2. Decisions made
+3. Action items and follow-up
+4. Risks, blockers, and open questions
+
+# Final checks
+- Ensure the output reads like polished meeting minutes, not notes or a transcript.
+- Ensure important follow-up items are easy to find.
+- Ensure nothing material has been invented to make the document feel more complete.`,
+  personalNotesSystem: `# Role
+You are an expert editor for personal notes, work notes, and dictated memos.
+
+# Mission
+Turn rough writing or dictated speech into a clear, readable note that preserves the writer's meaning, useful detail, and practical intent.
+
+# Standard
+Improve clarity and reusability without over-writing, over-formalizing, or turning a simple note into something more elaborate than the source calls for.`,
+  personalNotesRules: `# Core instructions
+- Polish the source into a clean, readable note.
+- Preserve the original meaning, practical intent, and useful specifics.
+- Remove spoken clutter, false starts, repetition, and minor grammar issues.
+- Keep the note proportionate to the source: short notes should stay short.
+
+# Structure
+- Apply light structure only when it genuinely improves reuse.
+- Use brief headings or bullets when the source naturally supports them.
+- Do not force meeting-minute structure onto simple notes or dictations.
+
+# Accuracy and restraint
+- Do not invent facts, conclusions, or action items.
+- If wording is ambiguous, prefer conservative cleanup over reinterpretation.
+- Preserve tasks, reminders, questions, and follow-ups clearly when they appear.
+
+# Writing style
+- Natural, clear, and efficient.
+- Slightly polished, not corporate for its own sake.
+- Easy to skim later and easy to search.
+
+# Output priorities
+1. Readability
+2. Faithfulness to the source
+3. Useful light structure
+4. Brevity when brevity fits`,
+  revisionRules: "Apply only the requested improvements, keep the existing structure, and avoid unnecessary rewrites.",
+  translationRules: "Translate the current output faithfully while preserving the same structure, tone, and action items.",
   additionalPrompts: [],
 };
 const BACKUP_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -386,10 +462,12 @@ const TRANSCRIPTION_MODELS = {
   },
 };
 const THEME_DESCRIPTIONS = {
-  olive: "A calm olive palette designed for focused writing and professional notes.",
-  blue: "A classic blue enterprise theme with a familiar SaaS feel.",
-  teal: "A crisp teal palette for a clean, modern product look.",
-  forest: "A graphite-forward theme with restrained forest-green accents.",
+  "fluent-slate": "A calm professional default with restrained blue accents and quiet neutral surfaces.",
+  "atlas-blue": "A familiar enterprise look with crisp structure, clarity, and dependable blue emphasis.",
+  "graphite-forest": "A low-fatigue theme for long sessions, with deep neutrals and muted green focus accents.",
+  "stone-olive": "A warmer premium theme with stone neutrals and olive accents that still feels serious and productive.",
+  "nordic-teal": "A crisp contemporary theme with cool neutrals and teal accents for a modern technical feel.",
+  "copper-ink": "A warmer executive-style theme with editorial contrast and muted copper emphasis.",
 };
 
 let localDataFileHandle = null;
@@ -425,9 +503,9 @@ const DEFAULT_EXPORT_PRESET = "modern-aptos";
 const EXPORT_STYLE_PRESETS = {
   "modern-aptos": {
     label: "Modern Aptos",
-    description: "A modern business document look with a clean sans serif hierarchy and restrained spacing.",
+    description: "Balanced Microsoft 365-style business typography with a calm sans-serif hierarchy.",
     style: {
-      titleFont: "Aptos, Calibri, Arial, sans-serif",
+      titleFont: "Aptos Display, Aptos, Calibri, Arial, sans-serif",
       headingFont: "Aptos, Calibri, Arial, sans-serif",
       bodyFont: "Aptos, Calibri, Arial, sans-serif",
       metaFont: "Aptos, Calibri, Arial, sans-serif",
@@ -439,8 +517,8 @@ const EXPORT_STYLE_PRESETS = {
     },
   },
   "enterprise-helvetica": {
-    label: "Enterprise Helvetica",
-    description: "A very common enterprise report style: neutral sans serif, crisp headings, compact body text.",
+    label: "Enterprise Sans",
+    description: "Neutral, executive-ready sans serif pairing with slightly tighter spacing for efficient reading.",
     style: {
       titleFont: "\"Helvetica Neue\", Helvetica, Arial, sans-serif",
       headingFont: "\"Helvetica Neue\", Helvetica, Arial, sans-serif",
@@ -454,13 +532,13 @@ const EXPORT_STYLE_PRESETS = {
     },
   },
   "editorial-georgia": {
-    label: "Editorial Georgia",
-    description: "A polished serif-forward style often used for executive summaries and formal client-ready notes.",
+    label: "Editorial Serif",
+    description: "Serif headlines with clean sans-serif body text for a more formal, client-facing tone.",
     style: {
-      titleFont: "Georgia, Times New Roman, serif",
-      headingFont: "Georgia, Times New Roman, serif",
-      bodyFont: "Arial, Helvetica, sans-serif",
-      metaFont: "Arial, Helvetica, sans-serif",
+      titleFont: "Georgia, Cambria, \"Times New Roman\", serif",
+      headingFont: "Georgia, Cambria, \"Times New Roman\", serif",
+      bodyFont: "Aptos, Calibri, Arial, sans-serif",
+      metaFont: "Aptos, Calibri, Arial, sans-serif",
       titleSize: 24,
       headingSize: 13,
       bodySize: 11,
@@ -468,19 +546,19 @@ const EXPORT_STYLE_PRESETS = {
       lineHeight: 1.55,
     },
   },
-  "refined-garamond": {
-    label: "Refined Garamond",
-    description: "A classic report look with a more literary serif headline and highly readable business body text.",
+  "board-briefing": {
+    label: "Board Briefing",
+    description: "Compact hierarchy and disciplined spacing for dense but readable briefing packs.",
     style: {
-      titleFont: "Garamond, Georgia, serif",
-      headingFont: "Garamond, Georgia, serif",
-      bodyFont: "Aptos, Calibri, Arial, sans-serif",
-      metaFont: "Aptos, Calibri, Arial, sans-serif",
-      titleSize: 24,
-      headingSize: 13,
-      bodySize: 11,
-      metaSize: 9,
-      lineHeight: 1.55,
+      titleFont: "Aptos Display, Aptos, Arial, sans-serif",
+      headingFont: "Aptos, Arial, sans-serif",
+      bodyFont: "Aptos, Arial, sans-serif",
+      metaFont: "Aptos, Arial, sans-serif",
+      titleSize: 20,
+      headingSize: 11.5,
+      bodySize: 10.5,
+      metaSize: 8.5,
+      lineHeight: 1.4,
     },
   },
   "digital-inter": {
@@ -649,7 +727,7 @@ function createDefaultSettings() {
     transcriptionModel: DEFAULT_TRANSCRIPTION_MODEL,
     dictationLanguage: "auto",
     lastBackupAt: 0,
-    themeFamily: "olive",
+    themeFamily: "fluent-slate",
     themeMode: "light",
     recentSessionsExpanded: false,
     abbreviationDirectory: [],
@@ -669,10 +747,10 @@ function createDefaultSettings() {
   };
 }
 
-let settings = loadSettings();
-let sessions = loadSessions();
-let aiModelCatalog = loadAiModelCatalog();
-let activeSessionId = sessions[0]?.id ?? null;
+let settings = createDefaultSettings();
+let sessions = [];
+let aiModelCatalog = filterRelevantAiModels(DEFAULT_AI_MODEL_CATALOG.map((model) => ({ ...model })));
+let activeSessionId = null;
 let recognition = null;
 let isRecording = false;
 let finalTranscript = "";
@@ -698,31 +776,42 @@ let todoSortDirection = "desc";
 let activeTodoDetailId = null;
 let mediaRecorder = null;
 let mediaRecorderStream = null;
+let mediaRecorderSourceStream = null;
 let mediaRecorderChunks = [];
 let audioRecordingSessionId = null;
+let activeAudioCaptureMode = "meeting";
 const audioDrafts = new Map();
 let pendingAudioDbPromise = null;
 
-applyTheme(settings.themeFamily, settings.themeMode);
-settings.model = resolveSelectedModel(settings.model);
-syncParticipantDirectoryFromAllSessions();
+async function initializeApp() {
+  settings = await loadSettings();
+  sessions = await loadSessions();
+  aiModelCatalog = await loadAiModelCatalog();
+  activeSessionId = sessions[0]?.id ?? null;
 
-if (!sessions.length) {
-  const startupSession = createSession();
-  sessions = [startupSession];
-  activeSessionId = startupSession.id;
-  persistSessions();
+  applyTheme(settings.themeFamily, settings.themeMode);
+  settings.model = resolveSelectedModel(settings.model);
+  syncParticipantDirectoryFromAllSessions();
+
+  if (!sessions.length) {
+    const startupSession = createSession();
+    sessions = [startupSession];
+    activeSessionId = startupSession.id;
+    persistSessions();
+  }
+
+  setupSpeechRecognition();
+  render();
+  bindEvents();
+  registerServiceWorker();
+  appVersionLabel.textContent = `${APP_VERSION} · IndexedDB`;
+  await initializeStorageMode();
+  window.setTimeout(() => {
+    maybeShowBackupReminder();
+  }, 350);
 }
 
-setupSpeechRecognition();
-render();
-bindEvents();
-registerServiceWorker();
-appVersionLabel.textContent = APP_VERSION;
-void initializeStorageMode();
-window.setTimeout(() => {
-  maybeShowBackupReminder();
-}, 350);
+void initializeApp();
 
 function bindEvents() {
   const createAndOpenNewSession = () => {
@@ -1639,8 +1728,10 @@ function bindEvents() {
 
   openAiSettingsInlineButton.addEventListener("click", openAiSettingsFromSettings);
   [
-    [promptGenerationSystemInput, "generationSystem"],
-    [promptGenerationRulesInput, "generationRules"],
+    [promptGenerationSystemInput, "meetingMinutesSystem"],
+    [promptGenerationRulesInput, "meetingMinutesRules"],
+    [promptPersonalNotesSystemInput, "personalNotesSystem"],
+    [promptPersonalNotesRulesInput, "personalNotesRules"],
     [promptRevisionRulesInput, "revisionRules"],
     [promptTranslationRulesInput, "translationRules"],
   ].forEach(([input, key]) => {
@@ -3324,27 +3415,43 @@ function syncAudioCaptureUi(session = getActiveSession()) {
     audioModelNote.innerHTML = `Audio transcription uses <strong>${escapeHtml(getTranscriptionModelLabel(settings.transcriptionModel))}</strong>.`;
   }
 
-  audioRecordToggle.disabled = !SUPPORTS_AUDIO_RECORDING;
-  audioRecordToggle.textContent = isAudioRecording ? "Stop audio capture" : "Record audio";
+  audioRecordToggle.disabled = !SUPPORTS_AUDIO_RECORDING && !SUPPORTS_MEETING_CAPTURE && !isAudioRecording;
+  setCaptureButtonContent(
+    audioRecordToggle,
+    isAudioRecording ? "Stop meeting capture" : "Start meeting capture",
+    isAudioRecording
+      ? "Save recording for transcription"
+      : (SUPPORTS_MEETING_CAPTURE
+        ? "Share tab, window, or screen audio"
+        : "Falls back to microphone capture"),
+  );
   audioRecordToggle.classList.toggle("is-recording", isAudioRecording);
   uploadAudioButton.disabled = isAudioRecording;
   transcribeAudioButton.disabled = !canTranscribe;
 
   if (isAudioRecording) {
-    audioCaptureStatus.textContent = "Recording raw audio now. Stop recording when you are ready to transcribe it.";
+    audioCaptureStatus.textContent = activeAudioCaptureMode === "meeting"
+      ? "Meeting capture is running. Keep sharing the tab, window, or screen until you are ready to transcribe."
+      : "Audio capture is running. Stop when you are ready to transcribe.";
     return;
   }
 
-  if (!SUPPORTS_AUDIO_RECORDING) {
-    audioCaptureStatus.textContent = "This browser cannot record raw audio here, but you can still upload an audio file to transcribe.";
+  if (!SUPPORTS_AUDIO_RECORDING && !SUPPORTS_MEETING_CAPTURE) {
+    audioCaptureStatus.textContent = "Live meeting capture is unavailable in this browser, but you can still upload an audio file to transcribe.";
   } else if (audioDraftMeta) {
-    const sourceLabel = audioDraftMeta.source === "recording" ? "Recorded audio ready" : "Uploaded audio ready";
+    const sourceLabel = audioDraftMeta.source === "upload"
+      ? "Uploaded audio ready"
+      : audioDraftMeta.source === "meeting-capture"
+        ? "Meeting capture ready"
+        : "Recorded audio ready";
     const sizeHint = audioDraftMeta.size > MAX_AUDIO_UPLOAD_BYTES
       ? " It will be split into smaller parts automatically before transcription."
       : "";
     audioCaptureStatus.textContent = `${sourceLabel}: ${audioDraftMeta.fileName} (${formatAudioFileSize(audioDraftMeta.size)}). Click "Transcribe audio" to add it to the Live transcript field.${sizeHint}`;
   } else {
-    audioCaptureStatus.textContent = "No audio file selected yet. You can record here or upload mp3, m4a, wav, mp4, or webm. Larger files will be split automatically before transcription.";
+    audioCaptureStatus.textContent = SUPPORTS_MEETING_CAPTURE
+      ? "No capture saved yet. Start meeting capture, use dictation, or upload mp3, m4a, wav, mp4, or webm. Larger files will be split automatically before transcription."
+      : "No capture saved yet. Start dictation, use microphone fallback capture, or upload mp3, m4a, wav, mp4, or webm. Larger files will be split automatically before transcription.";
   }
 
   syncMobileUi();
@@ -3371,7 +3478,12 @@ function renderPendingRecordings() {
     const item = fragment.querySelector(".pending-recording-item");
     item.dataset.sessionId = session.id;
     fragment.querySelector(".pending-recording-session").textContent = session.title.trim() || "Untitled session";
-    fragment.querySelector(".pending-recording-meta").textContent = `${meta.fileName} • ${formatAudioFileSize(meta.size)} • ${meta.source === "recording" ? "Recorded audio" : "Uploaded audio"}`;
+    const sourceLabel = meta.source === "upload"
+      ? "Uploaded audio"
+      : meta.source === "meeting-capture"
+        ? "Meeting capture"
+        : "Recorded audio";
+    fragment.querySelector(".pending-recording-meta").textContent = `${meta.fileName} • ${formatAudioFileSize(meta.size)} • ${sourceLabel}`;
     pendingRecordingsList.appendChild(fragment);
   });
 }
@@ -3880,29 +3992,31 @@ function syncMobileUi() {
 
     if (canDictate) {
       if (titleNode) {
-        titleNode.textContent = dictationToggle.textContent;
+        titleNode.textContent = isRecording ? "Stop dictation" : "Start dictation";
       } else {
-        mobileDictationToggle.textContent = dictationToggle.textContent;
+        mobileDictationToggle.textContent = isRecording ? "Stop dictation" : "Start dictation";
       }
       if (hintNode) {
-        hintNode.textContent = isRecording ? "Live browser transcription" : "Fastest option when supported";
+        hintNode.textContent = isRecording ? "Live browser transcription" : "Fastest for one voice";
       }
       mobileDictationToggle.classList.toggle("is-recording", dictationToggle.classList.contains("is-recording"));
       mobileDictationToggle.disabled = dictationToggle.disabled;
       mobileDictationToggle.dataset.captureMode = "dictation";
     } else {
       if (titleNode) {
-        titleNode.textContent = isRecordingAudio ? "Stop audio" : "Record audio";
+        titleNode.textContent = isRecordingAudio ? "Stop meeting capture" : "Start meeting capture";
       } else {
-        mobileDictationToggle.textContent = isRecordingAudio ? "Stop audio" : "Record audio";
+        mobileDictationToggle.textContent = isRecordingAudio ? "Stop meeting capture" : "Start meeting capture";
       }
       if (hintNode) {
-        hintNode.textContent = SUPPORTS_AUDIO_RECORDING
-          ? "Most reliable on this device"
-          : "Use More to upload audio";
+        hintNode.textContent = SUPPORTS_MEETING_CAPTURE
+          ? "Share tab, window, or screen audio"
+          : SUPPORTS_AUDIO_RECORDING
+            ? "Falls back to microphone capture"
+            : "Use More to upload audio";
       }
       mobileDictationToggle.classList.toggle("is-recording", isRecordingAudio);
-      mobileDictationToggle.disabled = !SUPPORTS_AUDIO_RECORDING && !isRecordingAudio;
+      mobileDictationToggle.disabled = (!SUPPORTS_AUDIO_RECORDING && !SUPPORTS_MEETING_CAPTURE) && !isRecordingAudio;
       mobileDictationToggle.dataset.captureMode = "audio";
     }
   }
@@ -3949,7 +4063,7 @@ function syncMobileCaptureStatus(text = "") {
   }
 
   const nextText = String(text || "").trim()
-    || "Start dictation for live transcript, or use More to record audio instead.";
+    || "Start dictation, try meeting capture, or use More to upload audio.";
   mobileCaptureStatus.textContent = nextText;
 }
 
@@ -4945,6 +5059,9 @@ async function polishWithOpenAI(session, activeSettings) {
   const outputLanguage = resolveOutputLanguage(session);
   const prompt = buildAiPrompt(session, template, outputLanguage);
   const promptSettings = normalizePromptSettings(activeSettings.promptSettings);
+  const generationSystemText = template.id === "personalNote"
+    ? promptSettings.personalNotesSystem
+    : promptSettings.meetingMinutesSystem;
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -4959,7 +5076,7 @@ async function polishWithOpenAI(session, activeSettings) {
           content: [
             {
               type: "input_text",
-              text: promptSettings.generationSystem,
+              text: generationSystemText,
             },
           ],
         },
@@ -5505,6 +5622,9 @@ function buildAiPrompt(session, template, outputLanguage) {
   const templateHeaders = formatTemplateHeadersForPrompt(template.headers || [], session);
   const templateCustomFields = formatTemplateCustomFieldsForPrompt(template, session);
   const promptSettings = normalizePromptSettings(settings.promptSettings);
+  const generationRules = template.id === "personalNote"
+    ? promptSettings.personalNotesRules
+    : promptSettings.meetingMinutesRules;
   return [
     `Template: ${template.label}`,
     `Meeting title: ${session.title.trim() || "Untitled session"}`,
@@ -5555,7 +5675,7 @@ function buildAiPrompt(session, template, outputLanguage) {
       : "- Keep the wording in the same language as the source notes.",
     `- Match this detail level: ${getDetailLevelLabel(session.detailLevel ?? 3)}.`,
     "- Keep the summary to 3-5 sentences.",
-    promptSettings.generationRules,
+    generationRules,
   ].join("\n");
 }
 
@@ -6062,10 +6182,103 @@ function escapeHtml(text) {
     .replaceAll("'", "&#39;");
 }
 
+function setCaptureButtonContent(button, title, hint = "") {
+  if (!button) {
+    return;
+  }
+
+  const titleNode = button.querySelector(".capture-mode-title");
+  const hintNode = button.querySelector(".capture-mode-hint");
+  if (titleNode) {
+    titleNode.textContent = title;
+  } else {
+    button.textContent = title;
+  }
+  if (hintNode) {
+    hintNode.textContent = hint;
+  }
+}
+
+function stopMediaStream(stream) {
+  stream?.getTracks?.().forEach((track) => track.stop());
+}
+
+function createRecorderForStream(stream) {
+  const mimeType = getAudioRecordingMimeType();
+  return mimeType
+    ? new MediaRecorder(stream, { mimeType })
+    : new MediaRecorder(stream);
+}
+
+async function getMeetingCaptureStream() {
+  if (!SUPPORTS_MEETING_CAPTURE) {
+    return null;
+  }
+
+  const displayStream = await navigator.mediaDevices.getDisplayMedia({
+    video: true,
+    audio: true,
+  });
+  const audioTracks = displayStream.getAudioTracks();
+  if (!audioTracks.length) {
+    stopMediaStream(displayStream);
+    throw new Error("No shared audio was available. Try sharing a browser tab and enable audio, or upload the audio file instead.");
+  }
+
+  return {
+    recorderStream: new MediaStream(audioTracks),
+    sourceStream: displayStream,
+    mode: "meeting",
+    status: "Meeting capture started. Share a tab, window, or screen with audio enabled, then stop when you are ready to transcribe.",
+  };
+}
+
+async function getMicrophoneCaptureStream() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    },
+  });
+
+  return {
+    recorderStream: stream,
+    sourceStream: null,
+    mode: "dictation-audio",
+    status: "Microphone capture started. Stop when you are ready to transcribe the recording.",
+  };
+}
+
+async function resolveAudioCaptureStream() {
+  if (SUPPORTS_MEETING_CAPTURE) {
+    try {
+      return await getMeetingCaptureStream();
+    } catch (error) {
+      if (!SUPPORTS_AUDIO_RECORDING) {
+        throw error;
+      }
+      const fallback = await getMicrophoneCaptureStream();
+      fallback.mode = "meeting-fallback";
+      fallback.status = `${error.message} Falling back to microphone capture now.`;
+      return fallback;
+    }
+  }
+
+  if (SUPPORTS_AUDIO_RECORDING) {
+    const fallback = await getMicrophoneCaptureStream();
+    fallback.mode = "meeting-fallback";
+    fallback.status = "Browser meeting capture is unavailable here, so microphone capture started instead.";
+    return fallback;
+  }
+
+  throw new Error("This browser cannot record meeting audio here. Upload audio instead.");
+}
+
 function setupSpeechRecognition() {
   if (!SpeechRecognition) {
     dictationToggle.disabled = true;
-    dictationToggle.textContent = "Recording Unavailable";
+    setCaptureButtonContent(dictationToggle, "Dictation unavailable", "Use meeting capture or upload audio");
     dictationStatus.textContent = "This browser does not expose speech recognition, but the rest of the app is ready to use.";
     setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
     syncMobileUi();
@@ -6120,7 +6333,7 @@ function setupSpeechRecognition() {
     finalTranscript = "";
     dictationSeedText = "";
     pendingLanguageRestart = false;
-    dictationToggle.textContent = "Start dictation";
+    setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
     dictationToggle.classList.remove("is-recording");
     dictationStatus.textContent = "Dictation stopped. You can continue typing or restart capture anytime.";
     setAppStatus("Saved locally", APP_STATUS_STATES.idle);
@@ -6132,7 +6345,7 @@ function setupSpeechRecognition() {
     finalTranscript = "";
     dictationSeedText = "";
     pendingLanguageRestart = false;
-    dictationToggle.textContent = "Start dictation";
+    setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
     dictationToggle.classList.remove("is-recording");
     dictationStatus.textContent = `Dictation error: ${event.error}. You can still take notes manually.`;
     setAppStatus("Recording error", APP_STATUS_STATES.warning);
@@ -6153,7 +6366,7 @@ function toggleDictation() {
     try {
       recognition.stop();
     } catch {
-      dictationToggle.textContent = "Start dictation";
+      setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
       dictationToggle.classList.remove("is-recording");
       dictationStatus.textContent = "Dictation stopped.";
       setAppStatus("Saved locally", APP_STATUS_STATES.idle);
@@ -6169,16 +6382,16 @@ function toggleDictation() {
     currentDictationLanguage = resolveDictationLanguage(dictationSeedText || navigator.language);
     recognition.lang = currentDictationLanguage;
     recognition.start();
-    dictationToggle.textContent = "Stop dictation";
+    setCaptureButtonContent(dictationToggle, "Stop dictation", "Live browser transcription");
     dictationToggle.classList.add("is-recording");
     dictationStatus.textContent = `Listening in ${formatDictationLanguage(currentDictationLanguage)}. The app will switch between Swedish and English when the speech pattern changes.`;
     setAppStatus("Recording", APP_STATUS_STATES.recording);
     syncMobileUi();
   } catch (error) {
     isRecording = false;
-    dictationToggle.textContent = "Start dictation";
+    setCaptureButtonContent(dictationToggle, "Start dictation", "Fastest for one voice");
     dictationToggle.classList.remove("is-recording");
-    dictationStatus.textContent = `Could not start live dictation: ${error.message || "this browser blocked it"}. Try Record audio instead.`;
+    dictationStatus.textContent = `Could not start live dictation: ${error.message || "this browser blocked it"}. Try Meeting capture or upload audio instead.`;
     setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
     syncMobileUi();
   }
@@ -6222,13 +6435,15 @@ async function stopAudioCapture() {
   });
 
   if (mediaRecorderStream) {
-    mediaRecorderStream.getTracks().forEach((track) => track.stop());
+    stopMediaStream(mediaRecorderStream);
   }
+  stopMediaStream(mediaRecorderSourceStream);
 
   const mimeType = recorder.mimeType || "audio/webm";
   const audioBlob = new Blob(mediaRecorderChunks, { type: mimeType });
   mediaRecorder = null;
   mediaRecorderStream = null;
+  mediaRecorderSourceStream = null;
   mediaRecorderChunks = [];
   audioRecordingSessionId = null;
 
@@ -6239,11 +6454,11 @@ async function stopAudioCapture() {
         fileName: buildAudioRecordingFileName(),
         mimeType,
         size: audioBlob.size,
-        source: "recording",
+        source: activeAudioCaptureMode === "meeting" || activeAudioCaptureMode === "meeting-fallback" ? "meeting-capture" : "recording",
       }, activeSessionForRecording);
-      audioCaptureStatus.textContent = "Audio capture stopped. Your recording is saved locally and ready to transcribe later.";
+      audioCaptureStatus.textContent = "Capture stopped. Your recording is saved locally and ready to transcribe into the Live transcript field.";
     } catch {
-      audioCaptureStatus.textContent = "Audio capture stopped, but the recording could not be saved locally for later transcription.";
+      audioCaptureStatus.textContent = "Capture stopped, but the recording could not be saved locally for later transcription.";
     }
   } else {
     syncAudioCaptureUi(getActiveSession());
@@ -6258,27 +6473,14 @@ async function toggleAudioCapture() {
     return;
   }
 
-  if (!SUPPORTS_AUDIO_RECORDING) {
-    audioCaptureStatus.textContent = "This browser cannot record raw audio here, but you can still upload an audio file.";
-    return;
-  }
-
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-      },
-    });
-
-    mediaRecorderStream = stream;
+    const capture = await resolveAudioCaptureStream();
+    mediaRecorderStream = capture.recorderStream;
+    mediaRecorderSourceStream = capture.sourceStream;
     mediaRecorderChunks = [];
     audioRecordingSessionId = activeSessionId;
-    const mimeType = getAudioRecordingMimeType();
-    mediaRecorder = mimeType
-      ? new MediaRecorder(stream, { mimeType })
-      : new MediaRecorder(stream);
+    activeAudioCaptureMode = capture.mode;
+    mediaRecorder = createRecorderForStream(capture.recorderStream);
 
     mediaRecorder.addEventListener("dataavailable", (event) => {
       if (event.data && event.data.size > 0) {
@@ -6287,45 +6489,110 @@ async function toggleAudioCapture() {
     });
 
     mediaRecorder.addEventListener("error", () => {
-      if (mediaRecorderStream) {
-        mediaRecorderStream.getTracks().forEach((track) => track.stop());
-      }
+      stopMediaStream(mediaRecorderStream);
+      stopMediaStream(mediaRecorderSourceStream);
       mediaRecorder = null;
       mediaRecorderStream = null;
+      mediaRecorderSourceStream = null;
       mediaRecorderChunks = [];
       audioRecordingSessionId = null;
-      audioCaptureStatus.textContent = "Audio capture failed. You can still upload an audio file instead.";
+      audioCaptureStatus.textContent = "Meeting capture failed. You can still upload audio instead.";
       setAppStatus("Recording error", APP_STATUS_STATES.warning);
       syncAudioCaptureUi(getActiveSession());
     });
 
     mediaRecorder.start();
-    audioCaptureStatus.textContent = "Recording raw audio now. Stop recording when you are ready to transcribe it.";
+    audioCaptureStatus.textContent = capture.status;
     setAppStatus("Recording", APP_STATUS_STATES.recording);
     syncAudioCaptureUi(getActiveSession());
-  } catch {
-    audioCaptureStatus.textContent = "Microphone access was blocked for raw audio capture. You can still upload an audio file instead.";
+  } catch (error) {
+    audioCaptureStatus.textContent = error?.message || "Meeting capture was blocked. You can still upload audio instead.";
     setAppStatus("Recording unavailable", APP_STATUS_STATES.warning);
-  }
-}
-
-function loadSessions() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) {
-      return [];
-    }
-
-    const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? normalizeImportedSessions(parsed) : [];
-  } catch {
-    return [];
+    syncMobileUi();
   }
 }
 
 function persistSessions() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  void writeAppStateValue(STORAGE_KEY, sessions);
   queueStorageFilePersist();
+}
+
+let appStateDbPromise = null;
+
+async function openAppStateDb() {
+  if (!("indexedDB" in window)) {
+    return null;
+  }
+
+  if (!appStateDbPromise) {
+    appStateDbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(APP_STATE_DB_NAME, APP_STATE_DB_VERSION);
+
+      request.addEventListener("upgradeneeded", () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(APP_STATE_STORE_NAME)) {
+          db.createObjectStore(APP_STATE_STORE_NAME);
+        }
+      });
+
+      request.addEventListener("success", () => resolve(request.result));
+      request.addEventListener("error", () => reject(request.error || new Error("App state database could not be opened.")));
+    });
+  }
+
+  return appStateDbPromise;
+}
+
+async function readAppStateValue(key) {
+  const db = await openAppStateDb();
+  if (!db) {
+    return null;
+  }
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(APP_STATE_STORE_NAME, "readonly");
+    const request = transaction.objectStore(APP_STATE_STORE_NAME).get(key);
+    request.addEventListener("success", () => resolve(request.result ?? null));
+    request.addEventListener("error", () => reject(request.error || new Error(`Could not load ${key} from browser database.`)));
+  });
+}
+
+async function writeAppStateValue(key, value) {
+  const db = await openAppStateDb();
+  if (!db) {
+    return;
+  }
+
+  await new Promise((resolve, reject) => {
+    const transaction = db.transaction(APP_STATE_STORE_NAME, "readwrite");
+    transaction.objectStore(APP_STATE_STORE_NAME).put(value, key);
+    transaction.addEventListener("complete", resolve);
+    transaction.addEventListener("error", () => reject(transaction.error || new Error(`Could not save ${key} to browser database.`)));
+  });
+}
+
+function readLegacyLocalStorageJson(key) {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadSessions() {
+  const persisted = await readAppStateValue(STORAGE_KEY);
+  if (Array.isArray(persisted)) {
+    return normalizeImportedSessions(persisted);
+  }
+
+  const legacy = readLegacyLocalStorageJson(STORAGE_KEY);
+  const nextSessions = Array.isArray(legacy) ? normalizeImportedSessions(legacy) : [];
+  if (nextSessions.length) {
+    void writeAppStateValue(STORAGE_KEY, nextSessions);
+  }
+  return nextSessions;
 }
 
 function isLocalDataFileMode() {
@@ -6494,6 +6761,7 @@ function updateStorageConnectionState(isConnected, fileName = settings.storageFi
     settings.storageLastSyncAt = Date.now();
   }
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  void writeAppStateValue(SETTINGS_KEY, settings);
 }
 
 async function connectLocalDataFileHandle(handle, options = {}) {
@@ -6633,83 +6901,115 @@ function syncParticipantDirectoryFromAllSessions() {
   persistSettings();
 }
 
-function loadAiModelCatalog() {
-  try {
-    const stored = localStorage.getItem(AI_MODEL_CATALOG_KEY);
-    if (!stored) {
-      return filterRelevantAiModels(DEFAULT_AI_MODEL_CATALOG.map((model) => ({ ...model })));
-    }
-
-    const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed) || !parsed.length) {
-      return filterRelevantAiModels(DEFAULT_AI_MODEL_CATALOG.map((model) => ({ ...model })));
-    }
-
-    const byId = new Map(parsed.map((model) => [model.id, model]));
-    return filterRelevantAiModels(DEFAULT_AI_MODEL_CATALOG.map((model) => ({
-      ...model,
-      ...(byId.get(model.id) || {}),
-    })));
-  } catch {
-    return filterRelevantAiModels(DEFAULT_AI_MODEL_CATALOG.map((model) => ({ ...model })));
-  }
-}
-
 function persistAiModelCatalog() {
   localStorage.setItem(AI_MODEL_CATALOG_KEY, JSON.stringify(aiModelCatalog));
+  void writeAppStateValue(AI_MODEL_CATALOG_KEY, aiModelCatalog);
 }
 
-function loadSettings() {
-  try {
-    const stored = localStorage.getItem(SETTINGS_KEY);
-    if (!stored) {
-      return createDefaultSettings();
-    }
-
-    const parsed = JSON.parse(stored);
-    const legacyThemeMode = parsed.theme === "dark" ? "dark" : "light";
-    const exportStylePreset = EXPORT_STYLE_PRESETS[parsed.exportStylePreset] ? parsed.exportStylePreset : DEFAULT_EXPORT_PRESET;
-
-    return {
-      ...createDefaultSettings(),
-      ...parsed,
-      apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
-      lastBackupAt: Number.isFinite(parsed.lastBackupAt) ? Number(parsed.lastBackupAt) : 0,
-      themeMode: parsed.themeMode === "dark" || parsed.themeMode === "light" ? parsed.themeMode : legacyThemeMode,
-      transcriptionModel: resolveSelectedTranscriptionModel(parsed.transcriptionModel),
-      recentSessionsExpanded: parsed.recentSessionsExpanded === true,
-      abbreviationDirectory: normalizeAbbreviationDirectory(parsed.abbreviationDirectory),
-      todoItems: normalizeTodoItems(parsed.todoItems),
-      participantDirectory: normalizeParticipantDirectory(parsed.participantDirectory),
-      participantDirectoryInitialized: parsed.participantDirectoryInitialized === true
-        || normalizeParticipantDirectory(parsed.participantDirectory).length > 0,
-      defaultCustomHeaders: normalizeCustomHeaders(parsed.defaultCustomHeaders),
-      customTemplates: normalizeCustomTemplates(parsed.customTemplates),
-      templateUsageCounts: normalizeTemplateUsageCounts(parsed.templateUsageCounts),
-      exportStylePreset,
-      exportStyle: normalizeExportStyle({
-        ...EXPORT_STYLE_PRESETS[exportStylePreset].style,
-        ...(parsed.exportStyle || {}),
-      }),
-      promptSettings: normalizePromptSettings(parsed.promptSettings),
-      storageMode: parsed.storageMode === STORAGE_MODES.file ? STORAGE_MODES.file : STORAGE_MODES.browser,
-      storageFileName: typeof parsed.storageFileName === "string" ? parsed.storageFileName : "",
-      storageFileConnected: parsed.storageFileConnected === true,
-      storageLastSyncAt: Number.isFinite(parsed.storageLastSyncAt) ? Number(parsed.storageLastSyncAt) : 0,
-    };
-  } catch {
+function normalizeStoredSettings(parsed) {
+  if (!parsed || typeof parsed !== "object") {
     return createDefaultSettings();
   }
+
+  const legacyThemeMode = parsed.theme === "dark" ? "dark" : "light";
+  const legacyThemeFamilyMap = {
+    olive: "stone-olive",
+    blue: "atlas-blue",
+    teal: "nordic-teal",
+    forest: "graphite-forest",
+  };
+  const normalizedThemeFamily = THEME_DESCRIPTIONS[parsed.themeFamily]
+    ? parsed.themeFamily
+    : legacyThemeFamilyMap[parsed.themeFamily] || createDefaultSettings().themeFamily;
+  const legacyExportPresetMap = {
+    "refined-garamond": "board-briefing",
+  };
+  const normalizedExportStylePreset = legacyExportPresetMap[parsed.exportStylePreset] || parsed.exportStylePreset;
+  const exportStylePreset = EXPORT_STYLE_PRESETS[normalizedExportStylePreset] ? normalizedExportStylePreset : DEFAULT_EXPORT_PRESET;
+
+  return {
+    ...createDefaultSettings(),
+    ...parsed,
+    apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
+    lastBackupAt: Number.isFinite(parsed.lastBackupAt) ? Number(parsed.lastBackupAt) : 0,
+    themeFamily: normalizedThemeFamily,
+    themeMode: parsed.themeMode === "dark" || parsed.themeMode === "light" ? parsed.themeMode : legacyThemeMode,
+    transcriptionModel: resolveSelectedTranscriptionModel(parsed.transcriptionModel),
+    recentSessionsExpanded: parsed.recentSessionsExpanded === true,
+    abbreviationDirectory: normalizeAbbreviationDirectory(parsed.abbreviationDirectory),
+    todoItems: normalizeTodoItems(parsed.todoItems),
+    participantDirectory: normalizeParticipantDirectory(parsed.participantDirectory),
+    participantDirectoryInitialized: parsed.participantDirectoryInitialized === true
+      || normalizeParticipantDirectory(parsed.participantDirectory).length > 0,
+    defaultCustomHeaders: normalizeCustomHeaders(parsed.defaultCustomHeaders),
+    customTemplates: normalizeCustomTemplates(parsed.customTemplates),
+    templateUsageCounts: normalizeTemplateUsageCounts(parsed.templateUsageCounts),
+    exportStylePreset,
+    exportStyle: normalizeExportStyle({
+      ...EXPORT_STYLE_PRESETS[exportStylePreset].style,
+      ...(parsed.exportStyle || {}),
+    }),
+    promptSettings: normalizePromptSettings(parsed.promptSettings),
+    storageMode: parsed.storageMode === STORAGE_MODES.file ? STORAGE_MODES.file : STORAGE_MODES.browser,
+    storageFileName: typeof parsed.storageFileName === "string" ? parsed.storageFileName : "",
+    storageFileConnected: parsed.storageFileConnected === true,
+    storageLastSyncAt: Number.isFinite(parsed.storageLastSyncAt) ? Number(parsed.storageLastSyncAt) : 0,
+  };
+}
+
+async function loadAiModelCatalog() {
+  const persisted = await readAppStateValue(AI_MODEL_CATALOG_KEY);
+  const source = Array.isArray(persisted) && persisted.length
+    ? persisted
+    : readLegacyLocalStorageJson(AI_MODEL_CATALOG_KEY);
+
+  if (!Array.isArray(source) || !source.length) {
+    return filterRelevantAiModels(DEFAULT_AI_MODEL_CATALOG.map((model) => ({ ...model })));
+  }
+
+  const byId = new Map(source.map((model) => [model.id, model]));
+  const normalized = filterRelevantAiModels(DEFAULT_AI_MODEL_CATALOG.map((model) => ({
+    ...model,
+    ...(byId.get(model.id) || {}),
+  })));
+  if (!persisted) {
+    void writeAppStateValue(AI_MODEL_CATALOG_KEY, normalized);
+  }
+  return normalized;
+}
+
+async function loadSettings() {
+  const persisted = await readAppStateValue(SETTINGS_KEY);
+  if (persisted) {
+    return normalizeStoredSettings(persisted);
+  }
+
+  const legacy = readLegacyLocalStorageJson(SETTINGS_KEY);
+  const normalized = normalizeStoredSettings(legacy);
+  if (legacy) {
+    void writeAppStateValue(SETTINGS_KEY, normalized);
+  }
+  return normalized;
 }
 
 function normalizePromptSettings(promptSettings) {
   return {
-    generationSystem: typeof promptSettings?.generationSystem === "string" && promptSettings.generationSystem.trim()
-      ? promptSettings.generationSystem
-      : DEFAULT_PROMPT_SETTINGS.generationSystem,
-    generationRules: typeof promptSettings?.generationRules === "string" && promptSettings.generationRules.trim()
-      ? promptSettings.generationRules
-      : DEFAULT_PROMPT_SETTINGS.generationRules,
+    meetingMinutesSystem: typeof promptSettings?.meetingMinutesSystem === "string" && promptSettings.meetingMinutesSystem.trim()
+      ? promptSettings.meetingMinutesSystem
+      : (typeof promptSettings?.generationSystem === "string" && promptSettings.generationSystem.trim()
+        ? promptSettings.generationSystem
+        : DEFAULT_PROMPT_SETTINGS.meetingMinutesSystem),
+    meetingMinutesRules: typeof promptSettings?.meetingMinutesRules === "string" && promptSettings.meetingMinutesRules.trim()
+      ? promptSettings.meetingMinutesRules
+      : (typeof promptSettings?.generationRules === "string" && promptSettings.generationRules.trim()
+        ? promptSettings.generationRules
+        : DEFAULT_PROMPT_SETTINGS.meetingMinutesRules),
+    personalNotesSystem: typeof promptSettings?.personalNotesSystem === "string" && promptSettings.personalNotesSystem.trim()
+      ? promptSettings.personalNotesSystem
+      : DEFAULT_PROMPT_SETTINGS.personalNotesSystem,
+    personalNotesRules: typeof promptSettings?.personalNotesRules === "string" && promptSettings.personalNotesRules.trim()
+      ? promptSettings.personalNotesRules
+      : DEFAULT_PROMPT_SETTINGS.personalNotesRules,
     revisionRules: typeof promptSettings?.revisionRules === "string" && promptSettings.revisionRules.trim()
       ? promptSettings.revisionRules
       : DEFAULT_PROMPT_SETTINGS.revisionRules,
@@ -6736,6 +7036,7 @@ function normalizeAdditionalPrompts(additionalPrompts) {
 
 function persistSettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  void writeAppStateValue(SETTINGS_KEY, settings);
   queueStorageFilePersist();
 }
 
@@ -6970,13 +7271,13 @@ function addAbbreviationToDirectory(shortValue, fullValue) {
 }
 
 function applyTheme(themeFamily, themeMode) {
-  const resolvedFamily = THEME_DESCRIPTIONS[themeFamily] ? themeFamily : "olive";
+  const resolvedFamily = THEME_DESCRIPTIONS[themeFamily] ? themeFamily : "fluent-slate";
   const resolvedMode = themeMode === "dark" ? "dark" : "light";
   document.documentElement.setAttribute("data-theme", `${resolvedFamily}-${resolvedMode}`);
 }
 
 function syncSettingsForm() {
-  themeFamilySelect.value = THEME_DESCRIPTIONS[settings.themeFamily] ? settings.themeFamily : "olive";
+  themeFamilySelect.value = THEME_DESCRIPTIONS[settings.themeFamily] ? settings.themeFamily : "fluent-slate";
   themeModeSelect.value = settings.themeMode === "dark" ? "dark" : "light";
   exportStylePresetSelect.value = EXPORT_STYLE_PRESETS[settings.exportStylePreset] ? settings.exportStylePreset : "custom";
   writeExportStyleInputs(getCurrentExportStyle());
@@ -6991,8 +7292,10 @@ function syncSettingsForm() {
 
 function syncPromptSettingsUi() {
   const promptSettings = normalizePromptSettings(settings.promptSettings);
-  promptGenerationSystemInput.value = promptSettings.generationSystem;
-  promptGenerationRulesInput.value = promptSettings.generationRules;
+  promptGenerationSystemInput.value = promptSettings.meetingMinutesSystem;
+  promptGenerationRulesInput.value = promptSettings.meetingMinutesRules;
+  promptPersonalNotesSystemInput.value = promptSettings.personalNotesSystem;
+  promptPersonalNotesRulesInput.value = promptSettings.personalNotesRules;
   promptRevisionRulesInput.value = promptSettings.revisionRules;
   promptTranslationRulesInput.value = promptSettings.translationRules;
   renderAdditionalPromptBlocks(promptSettings.additionalPrompts);
@@ -7035,7 +7338,7 @@ function updateStorageUi() {
   }
 
   if (!isFileMode) {
-    storageModeCopy.textContent = "Browser storage is active. Your data stays in this browser profile, and you can still back it up from the Data Backup menu.";
+    storageModeCopy.textContent = "Browser storage is active in this browser's local IndexedDB database. Your data stays in this browser profile, and you can still back it up from the Data Backup menu.";
     storageStatusCopy.textContent = "No local data file is connected.";
     reconnectStorageFileButton.disabled = true;
     disconnectStorageFileButton.disabled = true;
@@ -7066,17 +7369,19 @@ function updateRecentSessionsPanelUi() {
 
 function getThemeDisplayName(themeFamily) {
   const themeNames = {
-    olive: "Modern Olive",
-    blue: "Classic Blue SaaS",
-    teal: "Teal Enterprise",
-    forest: "Graphite Forest",
+    "fluent-slate": "Fluent Slate",
+    "atlas-blue": "Atlas Blue",
+    "graphite-forest": "Graphite Forest",
+    "stone-olive": "Stone Olive",
+    "nordic-teal": "Nordic Teal",
+    "copper-ink": "Copper Ink",
   };
 
-  return themeNames[themeFamily] || themeNames.olive;
+  return themeNames[themeFamily] || themeNames["fluent-slate"];
 }
 
 function updateThemeDescription() {
-  settingsThemeDescription.textContent = THEME_DESCRIPTIONS[themeFamilySelect.value] || THEME_DESCRIPTIONS.olive;
+  settingsThemeDescription.textContent = THEME_DESCRIPTIONS[themeFamilySelect.value] || THEME_DESCRIPTIONS["fluent-slate"];
 }
 
 function previewThemeSelection() {

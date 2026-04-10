@@ -10,7 +10,7 @@ For the structured product, reference, architecture, and development docs, start
 
 ## Overview
 
-NoteSmith helps users capture rough business notes, combine manual writing with live transcript text, and turn that material into structured, professional output. It works as a static web app, supports installation as a PWA, and stores sessions locally in the browser.
+NoteSmith helps users capture rough business notes, combine manual writing with live transcript text, and turn that material into structured, professional output. It works as a static web app, supports installation as a PWA, and stores sessions locally in the browser with IndexedDB-backed persistence.
 
 ## Screenshots
 
@@ -26,12 +26,12 @@ NoteSmith helps users capture rough business notes, combine manual writing with 
 
 | Area | Included |
 | --- | --- |
-| Capture | Manual notes, live transcript, quick highlights, participants, meeting date, start time, end time |
+| Capture | Manual notes, live transcript, dictation, browser meeting capture with graceful fallback, uploaded audio, quick highlights, participants, meeting date, start time, end time |
 | Categories | `Meeting`, `Personal Note`, plus user-created custom templates |
 | AI | OpenAI API key support, model selection, output language selection, custom instructions, detail slider |
 | Output structure | Summary, highlights, decisions, action items, custom sections |
 | Revision loop | Improve polished output from user comments and revert to previous version |
-| Local storage | Sessions, settings, themes, export styles, custom templates, AI catalog snapshot |
+| Local storage | IndexedDB-backed sessions, settings, themes, export styles, custom templates, AI catalog snapshot |
 | Session management | Create, edit, delete, import, export, save to local file |
 | Exports | Word and PDF export with configurable document typography |
 | Appearance | Multiple light/dark themes and saved preferences |
@@ -85,20 +85,22 @@ If no API key is present, the app falls back to a local formatting pass.
 
 - Export the current polished session to Word
 - Export the current polished session to PDF
-- Choose from five document typography presets:
+- Choose from five document typography presets aligned with the desktop app:
   - Modern Aptos
-  - Enterprise Helvetica
-  - Editorial Georgia
-  - Refined Garamond
+  - Enterprise Sans
+  - Editorial Serif
+  - Board Briefing
   - Digital Inter
 - Create and save a personal export style
 
 ### Themes
 
-- Modern Olive
-- Classic Blue SaaS
-- Teal Enterprise
+- Fluent Slate
+- Atlas Blue
 - Graphite Forest
+- Stone Olive
+- Nordic Teal
+- Copper Ink
 
 Each theme supports both light and dark appearance modes.
 
@@ -138,7 +140,7 @@ When a new version is deployed, the installed PWA updates automatically in the b
 
 ## Local data and backup
 
-The app stores data in browser local storage, including:
+The app stores data primarily in browser IndexedDB, including:
 
 - sessions
 - settings
@@ -152,6 +154,8 @@ For backup and transfer, users can:
 - export all sessions as JSON
 - import sessions from JSON
 - save sessions directly to a local file on supported desktop browsers
+
+On first run after the browser-storage upgrade, existing localStorage data is migrated into IndexedDB automatically when available.
 
 ## Running the project locally
 
