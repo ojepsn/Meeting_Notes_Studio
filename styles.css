@@ -555,13 +555,14 @@ button {
 
 .sessions-panel {
   position: fixed;
-  top: 50%;
-  left: 50%;
+  top: 18px;
+  right: 18px;
   z-index: 26;
-  width: min(640px, calc(100vw - 32px));
-  max-height: min(84vh, calc(100vh - 48px));
+  width: min(420px, calc(100vw - 36px));
+  height: calc(100vh - 36px);
+  max-height: none;
   overflow: auto;
-  transform: translate(-50%, calc(-50% + 28px));
+  transform: translateX(calc(100% + 24px));
   opacity: 0;
   pointer-events: none;
   transition: transform 220ms ease, opacity 220ms ease;
@@ -575,6 +576,7 @@ button {
 }
 
 .sessions-panel-backdrop {
+  display: none;
   position: fixed;
   inset: 0;
   z-index: 25;
@@ -582,12 +584,8 @@ button {
   backdrop-filter: blur(4px);
 }
 
-body.sessions-panel-open {
-  overflow: hidden;
-}
-
 .sessions-panel.is-open {
-  transform: translate(-50%, -50%);
+  transform: translateX(0);
   opacity: 1;
   pointer-events: auto;
 }
@@ -669,10 +667,10 @@ body.sessions-panel-open {
 
 .panel-heading {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .panel-heading-copy {
@@ -683,10 +681,11 @@ body.sessions-panel-open {
 .panel-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 12px;
   flex: 0 0 auto;
-  width: auto;
+  width: 100%;
+  flex-wrap: wrap;
 }
 
 .panel-actions-page,
@@ -699,6 +698,14 @@ body.sessions-panel-open {
 
 .panel-actions-shared {
   margin-left: auto;
+}
+
+.panel-actions-capture-top {
+  justify-content: flex-end;
+}
+
+.panel-actions-output-top {
+  margin-bottom: 16px;
 }
 
 .panel-actions-shared .status-pill {
@@ -722,7 +729,9 @@ body.sessions-panel-open {
   margin: 0;
   font-size: clamp(1.6rem, 2vw, 2rem);
   line-height: 1;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status-pill {
@@ -2258,6 +2267,12 @@ textarea:focus {
   color: var(--ink);
 }
 
+.ghost-button.is-active {
+  background: rgba(224, 236, 255, 0.9);
+  color: #17345e;
+  box-shadow: inset 0 0 0 1px rgba(60, 110, 198, 0.22);
+}
+
 :root[data-theme$="-dark"] .secondary-button {
   background: #2b3950;
   color: var(--text);
@@ -2736,9 +2751,20 @@ textarea:focus {
 
   .sessions-panel {
     top: 50%;
+    right: auto;
     left: 50%;
     width: min(640px, calc(100vw - 36px));
+    height: auto;
     max-height: calc(100vh - 36px);
+    transform: translate(-50%, calc(-50% + 28px));
+  }
+
+  .sessions-panel.is-open {
+    transform: translate(-50%, -50%);
+  }
+
+  .sessions-panel-backdrop {
+    display: block;
   }
 
   .output-empty {

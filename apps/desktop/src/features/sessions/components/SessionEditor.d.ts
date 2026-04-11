@@ -1,6 +1,6 @@
 import { type StructureOptions } from "../../../lib/structure/options";
 import type { RecordingMode } from "../../../lib/files/recording";
-import { type CaptureWorkspaceDensity, type AttachmentRecord, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
+import { type AttachmentRecord, type CaptureWorkspaceDensity, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 interface SessionEditorProps {
     session: SessionRecord;
     templates: TemplateDefinition[];
@@ -33,6 +33,10 @@ interface SessionEditorProps {
     onRemoveAttachment: (attachmentId: string) => void;
     onUpdateAttachment: (attachment: AttachmentRecord) => void;
     onOpenDetails?: () => void;
+    selectedNewTemplateId?: string;
+    onSelectNewTemplate?: (templateId: string) => void;
+    onCreateSessionFromTemplate?: () => void;
+    onOpenInstructions?: () => void;
 }
-export declare const SessionEditor: ({ session, templates, attachments, presentation, showPresentationActions, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isTranscribingAudio, recordingMode, isRecordingAudio, recordingStatusNote, onChange, onImportTranscript, onImportAudio, onImportImage, onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment, onUpdateAttachment, onOpenDetails, }: SessionEditorProps) => import("react/jsx-runtime").JSX.Element;
+export declare const SessionEditor: ({ session, templates, attachments, presentation, showPresentationActions, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isTranscribingAudio, recordingMode, isRecordingAudio, recordingStatusNote, onChange, onImportTranscript, onImportAudio, onImportImage, onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment, onUpdateAttachment, onOpenDetails, selectedNewTemplateId, onSelectNewTemplate, onCreateSessionFromTemplate, onOpenInstructions, }: SessionEditorProps) => import("react/jsx-runtime").JSX.Element;
 export {};

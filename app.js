@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.12";
+const APP_VERSION = "v0.10.13";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -81,7 +81,6 @@ const saveLocalFileButton = document.querySelector("#save-local-file");
 const importSessionsInput = document.querySelector("#import-sessions-input");
 const sessionStorageStatus = document.querySelector("#session-storage-status");
 const openSessionsMainButton = document.querySelector("#open-sessions-main");
-const openSessionsOutputButton = document.querySelector("#open-sessions-output");
 const openTodoMainButton = document.querySelector("#open-todo-main");
 const openTodoOutputButton = document.querySelector("#open-todo-output");
 const openBackupPanelButton = document.querySelector("#open-backup-panel");
@@ -950,12 +949,6 @@ void initializeApp().catch((error) => {
   mobileOpenOutputBarButton?.addEventListener("click", openMobileOutputSheet);
   closeMobileOutputButton?.addEventListener("click", closeMobileSheets);
   mobileSheetBackdrop?.addEventListener("click", closeMobileSheets);
-  mobileOpenSessionsButton?.addEventListener("click", () => {
-    closeMobileSheets();
-    settings.recentSessionsExpanded = true;
-    persistSettings();
-    updateRecentSessionsPanelUi();
-  });
   mobileOpenTodoButton?.addEventListener("click", () => {
     closeMobileSheets();
     openTodoPanel();
@@ -1010,16 +1003,12 @@ void initializeApp().catch((error) => {
   });
 
   toggleSessionsPanelButton?.addEventListener("click", () => {
-    settings.recentSessionsExpanded = true;
-    persistSettings();
-    updateRecentSessionsPanelUi();
+    toggleRecentSessionsPanel();
   });
 
   [collapseSessionsPanelButton, sessionsPanelBackdrop].forEach((button) => {
     button?.addEventListener("click", () => {
-      settings.recentSessionsExpanded = false;
-      persistSettings();
-      updateRecentSessionsPanelUi();
+      setRecentSessionsExpanded(false);
     });
   });
 
@@ -1039,13 +1028,6 @@ void initializeApp().catch((error) => {
     await saveSessionsToLocalFile();
   });
 
-  [openSessionsMainButton, openSessionsOutputButton].forEach((button) => {
-    button?.addEventListener("click", () => {
-      settings.recentSessionsExpanded = true;
-      persistSettings();
-      updateRecentSessionsPanelUi();
-    });
-  });
   [openTodoMainButton, openTodoOutputButton].forEach((button) => {
     button?.addEventListener("click", openTodoPanel);
   });
@@ -1068,9 +1050,7 @@ void initializeApp().catch((error) => {
   confirmModalConfirmButton.addEventListener("click", () => closeConfirmModal(true));
   openSessionsShortcutButton.addEventListener("click", () => {
     closeWorkspacePanel();
-    settings.recentSessionsExpanded = true;
-    persistSettings();
-    updateRecentSessionsPanelUi();
+    setRecentSessionsExpanded(true);
   });
   openBackupShortcutButton.addEventListener("click", () => {
     closeWorkspacePanel();
@@ -2061,9 +2041,7 @@ void initializeApp().catch((error) => {
     }
 
     if (event.key === "Escape" && getRecentSessionsExpanded()) {
-      settings.recentSessionsExpanded = false;
-      persistSettings();
-      updateRecentSessionsPanelUi();
+      setRecentSessionsExpanded(false);
     }
   });
 
@@ -3205,7 +3183,6 @@ function renderSessionList() {
           void stopAudioCapture();
         }
         activeSessionId = session.id;
-      settings.recentSessionsExpanded = false;
         persistSettings();
         render();
       });
@@ -5197,7 +5174,6 @@ function createAndOpenNewSession(templateId = null) {
   const nextSession = createSession(templateId);
   sessions.unshift(nextSession);
   activeSessionId = nextSession.id;
-  settings.recentSessionsExpanded = false;
   persistSettings();
   persistSessions();
   render();
@@ -6688,20 +6664,18 @@ function buildSessionPreview(session) {
 
 function handlePrimaryChromeClick(event) {
   const button = event.target.closest(
-    "#open-sessions-main, #open-sessions-output, #mobile-open-sessions, #open-settings, #mobile-open-settings, #open-instructions, #mobile-open-instructions, #open-backup-panel, #mobile-open-backup"
+    "#open-sessions-main, #mobile-open-sessions, #open-settings, #mobile-open-settings, #open-instructions, #mobile-open-instructions, #open-backup-panel, #mobile-open-backup"
   );
 
   if (!button) {
     return;
   }
 
-  if (button.matches("#open-sessions-main, #open-sessions-output, #mobile-open-sessions")) {
+  if (button.matches("#open-sessions-main, #mobile-open-sessions")) {
     if (button.matches("#mobile-open-sessions")) {
       closeMobileSheets();
     }
-    settings.recentSessionsExpanded = true;
-    persistSettings();
-    updateRecentSessionsPanelUi();
+    toggleRecentSessionsPanel(button.matches("#mobile-open-sessions") ? true : undefined);
     return;
   }
 
@@ -8012,14 +7986,28 @@ function getRecentSessionsExpanded() {
   return settings.recentSessionsExpanded === true;
 }
 
+function setRecentSessionsExpanded(nextExpanded) {
+  settings.recentSessionsExpanded = nextExpanded;
+  persistSettings();
+  updateRecentSessionsPanelUi();
+}
+
+function toggleRecentSessionsPanel(forceExpanded) {
+  const nextExpanded = typeof forceExpanded === "boolean" ? forceExpanded : !getRecentSessionsExpanded();
+  setRecentSessionsExpanded(nextExpanded);
+}
+
 function updateRecentSessionsPanelUi() {
   const isExpanded = getRecentSessionsExpanded();
   sessionsPanel.classList.toggle("is-open", isExpanded);
-  sessionsPanelBackdrop.hidden = !isExpanded;
-  sessionsPanelBackdrop.classList.toggle("is-visible", isExpanded);
+  const showBackdrop = isExpanded && window.innerWidth <= 1200;
+  sessionsPanelBackdrop.hidden = !showBackdrop;
+  sessionsPanelBackdrop.classList.toggle("is-visible", showBackdrop);
   document.body.classList.toggle("sessions-panel-open", isExpanded);
   toggleSessionsPanelButton?.setAttribute("aria-expanded", String(isExpanded));
+  openSessionsMainButton?.setAttribute("aria-expanded", String(isExpanded));
   collapseSessionsPanelButton?.setAttribute("aria-expanded", String(isExpanded));
+  openSessionsMainButton?.classList.toggle("is-active", isExpanded);
 }
 
 function getThemeDisplayName(themeFamily) {

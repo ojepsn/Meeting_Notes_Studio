@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCaptureMode, type CaptureMode, type CaptureWorkspaceDensity } from "@notesmith/domain";
+import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type CaptureMode, type CaptureWorkspaceDensity } from "@notesmith/domain";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
@@ -68,7 +68,7 @@ import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "
 import { parseTokenList } from "../components/peoplePickerUtils";
 
 type AppWorkspace = "notes" | "todos" | "activities" | "calendar" | "time" | "structure" | "assistant" | "files";
-type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | null;
+type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | "instructions" | null;
 type CommandAction = {
   id: string;
   label: string;
@@ -200,6 +200,8 @@ export const App = () => {
   const [openPanel, setOpenPanel] = useState<OverlayPanel>(null);
   const [captureDensityOverride, setCaptureDensityOverride] = useState<CaptureWorkspaceDensity | null>(null);
   const [outputDensityOverride, setOutputDensityOverride] = useState<CaptureWorkspaceDensity | null>(null);
+  const [selectedNewSessionTemplateId, setSelectedNewSessionTemplateId] = useState("meeting");
+  const [isNotesSessionsOpen, setIsNotesSessionsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
   const [requestedActivityId, setRequestedActivityId] = useState<string | null>(null);
   const [requestedTodoId, setRequestedTodoId] = useState<string | null>(null);
@@ -614,6 +616,19 @@ export const App = () => {
         : null,
     [activeSession, snapshot],
   );
+  const quickStartTemplates = useMemo(() => {
+    const templates = snapshot?.templates ?? [];
+    const preferredOrder = ["meeting", "personal-note", "one-on-one"];
+    const builtIns = preferredOrder
+      .map((templateId) => templates.find((template) => template.id === templateId))
+      .filter((template): template is NonNullable<typeof snapshot>["templates"][number] => Boolean(template));
+    const customs = templates.filter((template) => template.kind === "custom" && !preferredOrder.includes(template.id));
+    return [...builtIns, ...customs];
+  }, [snapshot]);
+  const selectedNewSessionTemplate =
+    quickStartTemplates.find((template) => template.id === selectedNewSessionTemplateId) ??
+    quickStartTemplates[0] ??
+    null;
   const activeCaptureMode: CaptureMode = activeSession?.captureMode ?? "meeting-note";
 
   const activeAttachments = useMemo(
@@ -678,6 +693,15 @@ export const App = () => {
     captureDensityOverride ?? snapshot?.settings.captureWorkspaceDensity ?? "full";
   const effectiveOutputDensity: CaptureWorkspaceDensity =
     outputDensityOverride ?? snapshot?.settings.outputWorkspaceDensity ?? "full";
+
+  useEffect(() => {
+    if (!quickStartTemplates.length) {
+      return;
+    }
+    if (!quickStartTemplates.some((template) => template.id === selectedNewSessionTemplateId)) {
+      setSelectedNewSessionTemplateId(quickStartTemplates[0].id);
+    }
+  }, [quickStartTemplates, selectedNewSessionTemplateId]);
   const selectedTextModelOption = modelPricingSnapshot.textModels
     .map(buildTextModelOption)
     .find((option) => option.id === snapshot?.settings.textModel);
@@ -1790,12 +1814,22 @@ export const App = () => {
     setOpenPanel(null);
     setCalendarOutputPreviewSessionId(null);
   };
-  const handleCreateSessionFromMode = async (captureMode: CaptureMode) => {
+  const handleCreateSessionFromTemplate = async (templateId?: string) => {
+    const template =
+      snapshot?.templates.find((entry) => entry.id === (templateId || selectedNewSessionTemplate?.id)) ??
+      selectedNewSessionTemplate;
+    if (!template) {
+      return;
+    }
+    const captureMode = getPrimaryCaptureMode(template);
     await createNewSession({
       captureMode,
-      templateId: DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode],
+      templateId: template.id,
     });
-    setStatusNote(`Started a new ${CAPTURE_MODE_UI[captureMode].label.toLowerCase()} session.`);
+    setSelectedNewSessionTemplateId(template.id);
+    setActiveWorkspace("notes");
+    setActiveView("capture");
+    setStatusNote(`Started a new ${template.name.toLowerCase()} session.`);
     closeOverlay();
   };
   const openCommandPalette = () => {
@@ -1808,8 +1842,8 @@ export const App = () => {
       {
         id: "new-session",
         label: "New note",
-        description: "Choose Meeting note, Quick note, or Voice note.",
-        keywords: ["create session note capture meeting quick voice"],
+        description: "Create a new session from the currently selected template.",
+        keywords: ["create session note capture meeting quick 1:1 template"],
         shortcut: "Ctrl/Cmd+N",
         action: () => openOverlay("new-note"),
       },
@@ -2109,21 +2143,57 @@ export const App = () => {
         return (
           <div className="sidebar-card overlay-card">
             <div>
-              <h3>Choose note type</h3>
-              <p>Pick the workflow first. Templates then refine the structure inside that mode.</p>
+              <h3>New session</h3>
+              <p>Select the template for the next session, then create it.</p>
             </div>
-            <div className="capture-mode-switch overlay-mode-switch">
-              {(Object.keys(CAPTURE_MODE_UI) as CaptureMode[]).map((captureMode) => (
-                <button
-                  key={captureMode}
-                  type="button"
-                  className="capture-mode-card"
-                  onClick={() => void handleCreateSessionFromMode(captureMode)}
-                >
-                  <strong>{CAPTURE_MODE_UI[captureMode].label}</strong>
-                  <span>{CAPTURE_MODE_UI[captureMode].description}</span>
-                </button>
-              ))}
+            <div className="session-quick-start-row">
+              <button className="primary-button session-new-button" type="button" onClick={() => void handleCreateSessionFromTemplate()}>
+                New
+              </button>
+              <div className="session-template-pill-row">
+                {quickStartTemplates.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    className="segment-button session-template-pill"
+                    data-active={selectedNewSessionTemplate?.id === template.id}
+                    onClick={() => setSelectedNewSessionTemplateId(template.id)}
+                  >
+                    {template.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      case "instructions":
+        return (
+          <div className="sidebar-card overlay-card">
+            <div>
+              <h3>Notes instructions</h3>
+              <p>Desktop Notes now follows the same calmer session workflow as the PWA, while keeping the stronger native desktop capture options.</p>
+            </div>
+            <div className="section-list">
+              <div className="list-item">
+                <strong>Starting sessions</strong>
+                <span className="muted">Choose a template first, then use New to create the next session. Meeting is the default, with quick notes and 1:1 calls close behind.</span>
+              </div>
+              <div className="list-item">
+                <strong>Capture</strong>
+                <span className="muted">Keep Details, People, transcript, and context folded away until needed. Manual notes stay central so the main writing surface is always easy to reach.</span>
+              </div>
+              <div className="list-item">
+                <strong>Recording</strong>
+                <span className="muted">Use room or hybrid capture when the space hears everything through microphones and speakers. Use direct computer audio when you need native in-computer sound from this device.</span>
+              </div>
+              <div className="list-item">
+                <strong>Output</strong>
+                <span className="muted">Generate, translate, export, and revise from the action row first. The Output document stays below, with follow-up work and details folded into calmer sections.</span>
+              </div>
+              <div className="list-item">
+                <strong>Technical design</strong>
+                <span className="muted">The desktop app runs in Tauri with React, TypeScript, local SQLite-backed storage, OpenAI text generation, and desktop-native recording, file, and export flows.</span>
+              </div>
             </div>
           </div>
         );
@@ -2403,13 +2473,18 @@ export const App = () => {
           <div className="topbar-actions topbar-actions-split">
             {activeWorkspace === "notes" ? (
               <button className="primary-button" type="button" onClick={() => openOverlay("new-note")}>
-                New note
+                New
               </button>
             ) : null}
             <div className="topbar-secondary-cluster">
               {activeWorkspace === "notes" && linkedDetailReturnWorkspace === "calendar" ? (
                 <button className="primary-button" type="button" onClick={returnFromLinkedDetail}>
                   Return to Calendar
+                </button>
+              ) : null}
+              {activeWorkspace === "notes" ? (
+                <button className="shell-button" type="button" onClick={() => openOverlay("instructions")}>
+                  Instructions
                 </button>
               ) : null}
               <button className="shell-button" type="button" onClick={openCommandPalette}>
@@ -2421,7 +2496,21 @@ export const App = () => {
               <button className="shell-button" type="button" onClick={() => openSettingsSection("ai")}>
                 Settings
               </button>
-              {activeWorkspace !== "calendar" ? (
+              {activeWorkspace === "notes" ? (
+                <>
+                  <button
+                    className="shell-button"
+                    type="button"
+                    aria-pressed={isNotesSessionsOpen}
+                    onClick={() => setIsNotesSessionsOpen((current) => !current)}
+                  >
+                    {isNotesSessionsOpen ? "Close Sessions" : "Sessions"}
+                  </button>
+                  <button className="shell-button" type="button" onClick={() => openOverlay("more")}>
+                    More
+                  </button>
+                </>
+              ) : activeWorkspace !== "calendar" ? (
                 <>
                   <button className="shell-button" type="button" onClick={() => openOverlay("sessions")}>
                     All Sessions
@@ -2456,7 +2545,11 @@ export const App = () => {
           </div>
         ) : null}
 
-        <main className={`notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}`}>
+        <main
+          className={`notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}${
+            activeWorkspace === "notes" && isNotesSessionsOpen ? " notes-shell-with-sessions" : ""
+          }`}
+        >
           <section className="workspace-canvas">
             {!(activeWorkspace === "calendar") ? (
             <div className="workspace-header card">
@@ -2539,15 +2632,6 @@ export const App = () => {
                   ) : null}
                 </div>
               </div>
-              {activeWorkspace === "notes" ? (
-                <div className="workspace-guide-row workspace-guide-row-quiet">
-                  <span className="tiny-text">
-                    {activeView === "capture"
-                      ? "Capture keeps the primary writing fields open first, with everything else tucked into calm sections below."
-                      : "Output keeps the document central, with details and export tools folded away until you need them."}
-                  </span>
-                </div>
-              ) : null}
               {activeWorkspace === "notes" && linkedDetailReturnWorkspace ? (
                 <div className="workspace-guide-row workspace-guide-row-quiet">
                   <button className="shell-button" type="button" onClick={returnFromLinkedDetail}>
@@ -2828,6 +2912,10 @@ export const App = () => {
                 onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
                 onUpdateAttachment={(attachment) => void handleUpdateAttachment(attachment)}
                 onOpenDetails={() => openOverlay("capture-details")}
+                selectedNewTemplateId={selectedNewSessionTemplate?.id}
+                onSelectNewTemplate={setSelectedNewSessionTemplateId}
+                onCreateSessionFromTemplate={() => void handleCreateSessionFromTemplate()}
+                onOpenInstructions={() => openOverlay("instructions")}
               />
             ) : (
               <OutputWorkspace
@@ -2877,88 +2965,20 @@ export const App = () => {
 
           {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) ? (
           <aside className="workspace-inspector stack">
-            <SessionsSidebar
-              sessions={snapshot.sessions}
-              activeSessionId={activeSession.id}
-              onSelect={(id) => setActiveSessionId(id)}
-              onCreate={() => openOverlay("new-note")}
-              onDelete={(id) => void deleteSession(id)}
-              onRestore={(id) => void restoreSession(id)}
-              onDeleteForever={(id) => void permanentlyDeleteSession(id)}
-              compact
-              title="Sessions"
-            />
-
             <div className="sidebar-card">
               <div>
-                <h3>{activeView === "capture" ? "Capture tools" : "Output tools"}</h3>
+                <h3>Notes status</h3>
               </div>
-              {activeWorkspace === "notes" && activeView === "capture" ? (
+              {activeWorkspace === "notes" ? (
                 <div className="sidebar-actions">
-                  {activeCaptureMode !== "quick-note" ? (
-                    <button className="primary-button" type="button" onClick={() => void (isRecordingAudio ? handleStopRecording() : handleStartRecording())}>
-                      {isRecordingAudio ? "Stop recording" : "Record audio"}
-                    </button>
-                  ) : (
-                    <button className="primary-button" type="button" onClick={() => void handleImportTranscript()}>
-                      Upload note text
-                    </button>
-                  )}
-                  <details className="inspector-disclosure">
-                    <summary>More capture tools</summary>
-                    <div className="stack">
-                      <button className="small-button" type="button" onClick={() => void handleImportImage()}>
-                        Upload image
-                      </button>
-                      {activeCaptureMode !== "quick-note" ? (
-                        <>
-                          <button className="small-button" type="button" onClick={() => void handleImportAudio()}>
-                            Upload audio
-                          </button>
-                          <button className="small-button" type="button" onClick={() => void handleTranscribeAudio()}>
-                            {isTranscribingAudio ? "Transcribing..." : "Transcribe audio"}
-                          </button>
-                          <button className="small-button" type="button" onClick={() => void handleImportTranscript()}>
-                            Upload transcript
-                          </button>
-                        </>
-                      ) : null}
-                    </div>
-                  </details>
-                </div>
-              ) : activeWorkspace === "notes" ? (
-                <div className="sidebar-actions">
-                  <button className="primary-button" type="button" onClick={outputActionConfig.onPrimary} disabled={outputActionConfig.isPrimaryRunning}>
-                    {outputActionConfig.isPrimaryRunning ? `${outputActionConfig.primaryLabel}...` : outputActionConfig.primaryLabel}
+                  <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
+                  <span className="status-chip">{activeAttachments.length} attachment{activeAttachments.length === 1 ? "" : "s"}</span>
+                  <span className="status-chip">
+                    {activeTemplate?.sections.length ?? 0} output section{(activeTemplate?.sections.length ?? 0) === 1 ? "" : "s"}
+                  </span>
+                  <button className="small-button" type="button" onClick={() => openOverlay("instructions")}>
+                    Open instructions
                   </button>
-                  <details className="inspector-disclosure">
-                    <summary>More output tools</summary>
-                    <div className="stack">
-                      {outputActionConfig.secondaryLabel && outputActionConfig.onSecondary ? (
-                        <button className="small-button" type="button" onClick={outputActionConfig.onSecondary} disabled={outputActionConfig.isSecondaryRunning}>
-                          {outputActionConfig.isSecondaryRunning ? `${outputActionConfig.secondaryLabel}...` : outputActionConfig.secondaryLabel}
-                        </button>
-                      ) : null}
-                      <button className="small-button" type="button" onClick={() => void handleTranslate()}>
-                        Translate
-                      </button>
-                      <button className="small-button" type="button" onClick={() => exportOutputAsText({ title: activeSession.title, output: activeSession.output })}>
-                        Export text
-                      </button>
-                      <button className="small-button" type="button" onClick={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}>
-                        Export markdown
-                      </button>
-                      <button className="small-button" type="button" onClick={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}>
-                        Export HTML
-                      </button>
-                      <button className="small-button" type="button" onClick={() => void exportOutputAsDocx({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}>
-                        Export Word
-                      </button>
-                      <button className="small-button" type="button" onClick={() => void exportOutputAsPdf({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}>
-                        Export PDF
-                      </button>
-                    </div>
-                  </details>
                 </div>
               ) : activeWorkspace === "todos" || activeWorkspace === "activities" || activeWorkspace === "calendar" ? (
                 <div className="sidebar-actions">
@@ -2979,14 +2999,7 @@ export const App = () => {
                 <h3>Status</h3>
               </div>
               <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
-              {activeWorkspace === "notes" ? (
-                <>
-                  <span className="status-chip">{activeAttachments.length} attachment{activeAttachments.length === 1 ? "" : "s"}</span>
-                  <span className="status-chip">
-                    {activeTemplate?.sections.length ?? 0} output section{(activeTemplate?.sections.length ?? 0) === 1 ? "" : "s"}
-                  </span>
-                </>
-              ) : activeWorkspace === "todos" ? (
+              {activeWorkspace === "todos" ? (
                 <>
                   <span className="status-chip">{snapshot.todos.filter((todo) => !todo.isDone).length} open todos</span>
                   <span className="status-chip">{snapshot.todos.filter((todo) => todo.isDone).length} completed</span>
@@ -3001,6 +3014,21 @@ export const App = () => {
             </div>
 
           </aside>
+          ) : null}
+          {activeWorkspace === "notes" && isNotesSessionsOpen ? (
+            <aside className="notes-sessions-shelf stack">
+              <SessionsSidebar
+                sessions={snapshot.sessions}
+                activeSessionId={activeSession.id}
+                onSelect={(id) => setActiveSessionId(id)}
+                onCreate={() => openOverlay("new-note")}
+                onDelete={(id) => void deleteSession(id)}
+                onRestore={(id) => void restoreSession(id)}
+                onDeleteForever={(id) => void permanentlyDeleteSession(id)}
+                compact
+                title="Sessions"
+              />
+            </aside>
           ) : null}
         </main>
       </div>

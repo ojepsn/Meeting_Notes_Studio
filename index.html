@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.10.12">
+  <link rel="stylesheet" href="styles.css?v=0.10.13">
 </head>
 <body>
   <main class="page-shell">
@@ -24,7 +24,7 @@
           Capture rough notes and turn them into professional meeting notes without leaving the page.
         </p>
         <div class="hero-meta">
-        <div class="version-pill" id="app-version">v0.10.12</div>
+        <div class="version-pill" id="app-version">v0.10.13</div>
           <div class="version-pill model-pill" id="app-models">Output: GPT-5 mini · Audio: GPT-4o mini transcribe</div>
           <div class="update-notice is-hidden-field" id="app-update-notice">New version available</div>
         </div>
@@ -81,19 +81,19 @@
 
       <section class="editor-panel">
         <div class="panel-heading">
-          <div class="panel-heading-copy">
-            <p class="section-label">Capture</p>
-            <h2 id="session-title">Untitled session</h2>
-          </div>
-            <div class="panel-actions">
+            <div class="panel-actions panel-actions-capture-top">
               <div class="panel-actions-shared desktop-only">
-                <button class="ghost-button" id="open-sessions-main" type="button">All Sessions</button>
+                <button class="ghost-button" id="open-sessions-main" type="button" aria-expanded="false" aria-controls="sessions-panel">Sessions</button>
                 <button class="ghost-button" id="open-backup-panel" type="button">Back-up</button>
                 <button class="ghost-button" id="open-instructions" type="button">Instructions</button>
                 <button class="ghost-button" id="open-settings" type="button">Settings</button>
                 <div class="status-pill" id="save-status" data-state="idle">Saved locally</div>
               </div>
             </div>
+          <div class="panel-heading-copy">
+            <p class="section-label">Capture</p>
+            <h2 id="session-title">Untitled session</h2>
+          </div>
         </div>
         <div class="editor-header-row">
           <div class="template-quick-selectors" id="template-quick-selectors" aria-label="Quick new-session templates"></div>
@@ -241,7 +241,7 @@
             </div>
 
                 <div class="mobile-sheet-shortcuts mobile-only">
-                  <button class="ghost-button" id="mobile-open-sessions" type="button">All Sessions</button>
+                  <button class="ghost-button" id="mobile-open-sessions" type="button">Sessions</button>
                   <button class="ghost-button" id="mobile-open-settings" type="button">Settings</button>
                   <button class="ghost-button" id="mobile-open-instructions" type="button">Instructions</button>
                   <button class="ghost-button" id="mobile-open-backup" type="button">Data Backup</button>
@@ -308,17 +308,17 @@
         <div class="panel-heading">
           <div class="panel-heading-copy">
             <p class="section-label">Output</p>
-            <h2>Output</h2>
+          </div>
+        </div>
+        <div class="panel-actions panel-actions-output-top">
+          <div class="panel-actions-page">
+            <button class="ghost-button mobile-only" id="close-mobile-output" type="button">Close</button>
+            <button class="ghost-button" id="export-word" type="button">Export Word</button>
+            <button class="ghost-button" id="export-pdf" type="button">Export PDF</button>
+            <button class="ghost-button" id="translate-output" type="button">Translate</button>
           </div>
           <div class="panel-actions">
-            <div class="panel-actions-page">
-              <button class="ghost-button mobile-only" id="close-mobile-output" type="button">Close</button>
-              <button class="ghost-button" id="export-word" type="button">Export Word</button>
-              <button class="ghost-button" id="export-pdf" type="button">Export PDF</button>
-              <button class="ghost-button" id="translate-output" type="button">Translate</button>
-            </div>
             <div class="panel-actions-shared desktop-only">
-              <button class="ghost-button" id="open-sessions-output" type="button">All Sessions</button>
             </div>
           </div>
         </div>
@@ -1337,7 +1337,7 @@
             <h3>Reopen and protect your work</h3>
           </div>
           <p class="support-text">
-            Use <strong>All Sessions</strong> to reopen recent work quickly. Use <strong>Back-up</strong> to export sessions, import a backup, or save directly to a local file when your browser supports it.
+            Use <strong>Sessions</strong> to reopen recent work quickly. Use <strong>Back-up</strong> to export sessions, import a backup, or save directly to a local file when your browser supports it.
           </p>
           <p class="support-text">
             This app stores sessions locally in the browser by default, so regular backups are important if the notes matter to you.
@@ -1535,7 +1535,7 @@
 
       <div class="modal-form workspace-shortcuts">
         <button class="ghost-button workspace-shortcut" id="open-sessions-shortcut" type="button">
-          <strong>All Sessions</strong>
+          <strong>Sessions</strong>
           <span>Open the full session drawer, filter older notes, and switch quickly between sessions.</span>
         </button>
         <button class="ghost-button workspace-shortcut" id="open-backup-shortcut" type="button">
@@ -1572,7 +1572,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.17/mammoth.browser.min.js"></script>
-  <script src="app.js?v=0.10.12"></script>
+  <script src="app.js?v=0.10.13"></script>
 </body>
 </html>
 

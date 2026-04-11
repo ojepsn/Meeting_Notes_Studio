@@ -189,32 +189,31 @@ export const OutputWorkspace = ({
 
   return (
     <div className={`card output-workspace${isMinimal ? " output-workspace-minimal" : ""}`}>
-      <div className={`card-header${isMinimal ? " session-editor-header-minimal" : ""}`}>
-        <div>
-          <h2>Output</h2>
-          {!isMinimal ? (
-            <p>Use Output when you want polished notes, translation, revision, and exports. The document stays central; advanced actions stay secondary.</p>
-          ) : null}
+      {isMinimal && showPresentationActions ? (
+        <div className="card-header session-editor-header-minimal">
+          <div className="capture-minimal-actions"><span className="tiny-text">Minimal mode</span></div>
         </div>
-        {isMinimal && showPresentationActions ? (
-          <div className="capture-minimal-actions">
-            <span className="tiny-text">Minimal mode</span>
-          </div>
-        ) : (
-          <div className="page-actions">
-            <button className="primary-button" type="button" onClick={onPrimaryAction}>
-              {isPrimaryActionRunning ? `${primaryActionLabel}...` : primaryActionLabel}
+      ) : null}
+      <div className="field field-wide output-actions-card">
+        <div className="page-actions">
+          <button className="primary-button" type="button" onClick={onPrimaryAction}>
+            {isPrimaryActionRunning ? `${primaryActionLabel}...` : primaryActionLabel}
+          </button>
+          {secondaryActionLabel && onSecondaryAction ? (
+            <button className="shell-button" type="button" onClick={onSecondaryAction}>
+              {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
             </button>
-            {secondaryActionLabel && onSecondaryAction ? (
-              <button className="shell-button" type="button" onClick={onSecondaryAction}>
-                {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
-              </button>
-            ) : null}
-            <button className="shell-button" type="button" onClick={onTranslate}>
-              Translate
-            </button>
-          </div>
-        )}
+          ) : null}
+          <button className="shell-button" type="button" onClick={onTranslate}>
+            Translate
+          </button>
+          <button className="shell-button" type="button" onClick={onExportDocx}>
+            Export Word
+          </button>
+          <button className="shell-button" type="button" onClick={onExportPdf}>
+            Export PDF
+          </button>
+        </div>
       </div>
       {!hasOutput ? (
         <div className={`empty-state-card compact-empty-state${isMinimal ? " output-empty-state-minimal" : ""}`}>
@@ -489,39 +488,39 @@ export const OutputWorkspace = ({
           </div>
         </details>
       ) : null}
-      <div className={`capture-top-row field field-wide${isMinimal ? " capture-top-row-minimal" : ""}`}>
-        <div className={`field${isMinimal ? " capture-title-field-minimal" : ""}`}>
-          <label htmlFor="output-title">Title</label>
-          <input
-            className={isMinimal ? "minimal-title-input" : undefined}
-            id="output-title"
-            value={session.title}
-            onChange={(event) => onChange({ ...session, title: event.target.value })}
-            placeholder={isMeetingNote ? "Weekly project meeting" : "Note title"}
-          />
-        </div>
-        <div className={`field${isMinimal ? " capture-meta-field" : ""}`}>
-          <label htmlFor="output-date">Date</label>
-          <DateInput id="output-date" value={session.date} onChange={(event) => onChange({ ...session, date: event.target.value })} />
-        </div>
-        <div className={`field capture-private-field${isMinimal ? " capture-meta-field" : ""}`}>
-          <span>Private</span>
-          <div className="compact-private-toggle">
-            <input
-              id="output-private"
-              type="checkbox"
-              checked={session.isPrivate}
-              onChange={(event) => onChange({ ...session, isPrivate: event.target.checked })}
-            />
-            <label htmlFor="output-private" className="checkbox-label">
-              Private
-            </label>
-          </div>
-        </div>
+      <div className="field field-wide">
+        <label htmlFor="session-output">Output</label>
+        <textarea
+          className={`editor-textarea${isMinimal ? " editor-textarea-primary output-textarea-minimal" : ""}`}
+          id="session-output"
+          value={session.output}
+          onChange={(event) => onChange({ ...session, output: event.target.value })}
+          onSelect={(event) => {
+            const nextExcerpt = event.currentTarget.value
+              .slice(event.currentTarget.selectionStart ?? 0, event.currentTarget.selectionEnd ?? 0)
+              .trim();
+            setSelectedExcerpt(nextExcerpt);
+          }}
+          placeholder="Generated notes will appear here."
+        />
       </div>
       <details className="field field-wide workspace-disclosure">
-        <summary>{isMeetingNote ? "Meeting details" : "Optional note details"}</summary>
+        <summary>Details</summary>
         <div className="workspace-disclosure-body form-grid">
+          <div className={`field field-wide${isMinimal ? " capture-title-field-minimal" : ""}`}>
+            <label htmlFor="output-title">Title</label>
+            <input
+              className={isMinimal ? "minimal-title-input" : undefined}
+              id="output-title"
+              value={session.title}
+              onChange={(event) => onChange({ ...session, title: event.target.value })}
+              placeholder={isMeetingNote ? "Weekly project meeting" : "Note title"}
+            />
+          </div>
+          <div className={`field${isMinimal ? " capture-meta-field" : ""}`}>
+            <label htmlFor="output-date">Date</label>
+            <DateInput id="output-date" value={session.date} onChange={(event) => onChange({ ...session, date: event.target.value })} />
+          </div>
           <div className="field">
             <label htmlFor="output-people">People</label>
             <PeoplePicker
@@ -619,24 +618,22 @@ export const OutputWorkspace = ({
               onChange={(value) => onChange({ ...session, tagsText: value })}
             />
           </div>
+          <div className={`field capture-private-field${isMinimal ? " capture-meta-field" : ""}`}>
+            <span>Privacy</span>
+            <div className="compact-private-toggle">
+              <input
+                id="output-private"
+                type="checkbox"
+                checked={session.isPrivate}
+                onChange={(event) => onChange({ ...session, isPrivate: event.target.checked })}
+              />
+              <label htmlFor="output-private" className="checkbox-label">
+                Private
+              </label>
+            </div>
+          </div>
         </div>
       </details>
-      <div className="field field-wide">
-        <label htmlFor="session-output">Polished output</label>
-        <textarea
-          className={`editor-textarea${isMinimal ? " editor-textarea-primary output-textarea-minimal" : ""}`}
-          id="session-output"
-          value={session.output}
-          onChange={(event) => onChange({ ...session, output: event.target.value })}
-          onSelect={(event) => {
-            const nextExcerpt = event.currentTarget.value
-              .slice(event.currentTarget.selectionStart ?? 0, event.currentTarget.selectionEnd ?? 0)
-              .trim();
-            setSelectedExcerpt(nextExcerpt);
-          }}
-          placeholder="Generated notes will appear here. In the Tauri app this will later be backed by AI jobs, versioned outputs, and editable drafts."
-        />
-      </div>
       {includedImages.length ? (
         <div className="field field-wide">
           <label>Images marked for polished output</label>
@@ -688,12 +685,6 @@ export const OutputWorkspace = ({
             </button>
             <button className="shell-button" type="button" onClick={onExportHtml}>
               Export HTML
-            </button>
-            <button className="shell-button" type="button" onClick={onExportDocx}>
-              Export Word
-            </button>
-            <button className="shell-button" type="button" onClick={onExportPdf}>
-              Export PDF
             </button>
           </div>
         </div>
