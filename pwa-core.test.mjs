@@ -299,4 +299,16 @@ runTest("quick-start strip includes New and the split meeting capture wording", 
   assert.match(indexHtmlSource, /id="dictation-toggle"[\s\S]*?Start dictation[\s\S]*?Best for personal dictation/);
 });
 
+runTest("output panel places actions before the polished document and removes empty disclosures", () => {
+  const sidebarIndex = indexHtmlSource.indexOf('<aside class="output-sidebar">');
+  const mainIndex = indexHtmlSource.indexOf('<div class="output-main">');
+  assert.ok(sidebarIndex >= 0);
+  assert.ok(mainIndex >= 0);
+  assert.ok(sidebarIndex < mainIndex);
+  assert.doesNotMatch(indexHtmlSource, /More output options/);
+  assert.match(indexHtmlSource, /<p class="section-label">Output<\/p>/);
+  assert.match(indexHtmlSource, /<h2>Output<\/h2>/);
+  assert.match(indexHtmlSource, /Add notes or transcript in the Capture section to the left, include highlights if useful, then click <strong>Generate<\/strong>\./);
+});
+
 console.log("PWA core tests passed.");
