@@ -2407,30 +2407,36 @@ export const App = () => {
       </aside>
 
       <div className="workspace-shell">
-        <header className={`topbar app-header${activeWorkspace === "calendar" ? " app-header-compact app-header-calendar-home" : ""}${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " app-header-compact" : ""}`}>
+        <header className={`topbar app-header${activeWorkspace === "notes" ? " app-header-notes-pwa" : ""}${activeWorkspace === "calendar" ? " app-header-compact app-header-calendar-home" : ""}${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " app-header-compact" : ""}`}>
           <div className="topbar-copy">
-            <div className="topbar-eyebrow">Focused workspace</div>
-            <h1>{activeWorkspace === "notes" ? "Notes workspace" : `${WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}`}</h1>
-            <div className="topbar-status-strip">
-              <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
-              <span className="status-chip">{desktopVersion ? `v${desktopVersion}` : "Desktop"}</span>
-              {activeWorkspace !== "calendar" ? <span className="status-chip">{aiActivityLabel}</span> : null}
-              {activeWorkspace !== "calendar" ? (
-                <>
-                  <span className="status-chip">{selectedTextModelOption?.label || snapshot.settings.textModel}</span>
-                  <span className="status-chip">{selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel}</span>
-                </>
-              ) : null}
-              {isCheckingForUpdates ? <span className="status-chip">Checking updates...</span> : null}
-            </div>
-            <span className="tiny-text topbar-status-note">{statusNote}</span>
+            {activeWorkspace === "notes" ? (
+              <div className="topbar-status-strip">
+                <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
+                <span className="status-chip">{desktopVersion ? `v${desktopVersion}` : "Desktop"}</span>
+                <span className="status-chip">{selectedTextModelOption?.label || snapshot.settings.textModel}</span>
+                <span className="status-chip">{selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel}</span>
+              </div>
+            ) : (
+              <>
+                <div className="topbar-eyebrow">Focused workspace</div>
+                <h1>{`${WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}`}</h1>
+                <div className="topbar-status-strip">
+                  <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
+                  <span className="status-chip">{desktopVersion ? `v${desktopVersion}` : "Desktop"}</span>
+                  {activeWorkspace !== "calendar" ? <span className="status-chip">{aiActivityLabel}</span> : null}
+                  {activeWorkspace !== "calendar" ? (
+                    <>
+                      <span className="status-chip">{selectedTextModelOption?.label || snapshot.settings.textModel}</span>
+                      <span className="status-chip">{selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel}</span>
+                    </>
+                  ) : null}
+                  {isCheckingForUpdates ? <span className="status-chip">Checking updates...</span> : null}
+                </div>
+                <span className="tiny-text topbar-status-note">{statusNote}</span>
+              </>
+            )}
           </div>
           <div className="topbar-actions topbar-actions-split">
-            {activeWorkspace === "notes" ? (
-              <button className="primary-button" type="button" onClick={() => openOverlay("new-note")}>
-                New
-              </button>
-            ) : null}
             <div className="topbar-secondary-cluster">
               {activeWorkspace === "notes" && linkedDetailReturnWorkspace === "calendar" ? (
                 <button className="primary-button" type="button" onClick={returnFromLinkedDetail}>
@@ -2438,35 +2444,40 @@ export const App = () => {
                 </button>
               ) : null}
               {activeWorkspace === "notes" ? (
-                <button className="shell-button" type="button" onClick={() => openOverlay("instructions")}>
-                  Instructions
-                </button>
-              ) : null}
-              <button className="shell-button" type="button" onClick={openCommandPalette}>
-                Command palette
-              </button>
-              <button className="shell-button" type="button" onClick={() => void (availableUpdateVersion ? handleInstallUpdate() : handleCheckForUpdates())}>
-                {availableUpdateVersion ? `Install ${availableUpdateVersion}` : "Check updates"}
-              </button>
-              <button className="shell-button" type="button" onClick={() => openSettingsSection("ai")}>
-                Settings
-              </button>
-              {activeWorkspace === "notes" ? (
                 <>
+                  <button className="shell-button" type="button" onClick={() => openOverlay("backup")}>
+                    Back-up
+                  </button>
+                  <button className="shell-button" type="button" onClick={() => openOverlay("instructions")}>
+                    Instructions
+                  </button>
+                  <button className="shell-button" type="button" onClick={() => openSettingsSection("ai")}>
+                    Settings
+                  </button>
                   <button
                     className="shell-button"
                     type="button"
                     aria-pressed={isNotesSessionsOpen}
                     onClick={() => setIsNotesSessionsOpen((current) => !current)}
                   >
-                    {isNotesSessionsOpen ? "Close Sessions" : "Sessions"}
+                    Sessions
                   </button>
-                  <button className="shell-button" type="button" onClick={() => openOverlay("more")}>
-                    More
+                  <button className="primary-button" type="button" onClick={() => openOverlay("new-note")}>
+                    New
                   </button>
                 </>
-              ) : activeWorkspace !== "calendar" ? (
+              ) : null}
+              {activeWorkspace !== "notes" ? (
                 <>
+                  <button className="shell-button" type="button" onClick={openCommandPalette}>
+                    Command palette
+                  </button>
+                  <button className="shell-button" type="button" onClick={() => void (availableUpdateVersion ? handleInstallUpdate() : handleCheckForUpdates())}>
+                    {availableUpdateVersion ? `Install ${availableUpdateVersion}` : "Check updates"}
+                  </button>
+                  <button className="shell-button" type="button" onClick={() => openSettingsSection("ai")}>
+                    Settings
+                  </button>
                   <button className="shell-button" type="button" onClick={() => openOverlay("sessions")}>
                     All Sessions
                   </button>
