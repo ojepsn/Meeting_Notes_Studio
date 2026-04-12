@@ -613,10 +613,15 @@ select {
   gap: 1.25rem;
   padding: 1.5rem;
   align-items: start;
+  position: relative;
 }
 
 .notes-shell-with-sessions {
-  grid-template-columns: minmax(0, 1fr) 320px 340px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.notes-shell-notes-mode {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .notes-shell-calendar-fullscreen {
@@ -642,9 +647,61 @@ select {
 }
 
 .notes-sessions-shelf {
-  align-self: start;
+  position: fixed;
+  top: 5.6rem;
+  right: 1.4rem;
+  width: min(360px, calc(100vw - 2.8rem));
+  max-height: calc(100vh - 7rem);
+  overflow: auto;
+  z-index: 25;
+  transform: translateX(calc(100% + 1.2rem));
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 220ms ease, opacity 220ms ease;
+}
+
+.notes-shell-with-sessions .notes-sessions-shelf {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.notes-pwa-workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.notes-pwa-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.notes-pwa-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.notes-pwa-capture,
+.notes-pwa-output {
+  min-width: 0;
+}
+
+.notes-pwa-output {
   position: sticky;
-  top: 5.9rem;
+  top: 5.6rem;
+}
+
+.notes-shell-notes-mode .workspace-canvas {
+  max-width: min(1380px, calc(100vw - 4rem));
+}
+
+.notes-shell-notes-mode .session-editor,
+.notes-shell-notes-mode .output-workspace {
+  border-radius: 28px;
 }
 
 .card,
@@ -3329,6 +3386,20 @@ select {
     grid-template-columns: 1fr;
   }
 
+  .notes-pwa-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .notes-pwa-output {
+    position: static;
+  }
+
+  .notes-sessions-shelf {
+    top: 5rem;
+    right: 1rem;
+    width: min(360px, calc(100vw - 2rem));
+  }
+
   .calendar-layout {
     grid-template-columns: 1fr;
   }
@@ -3383,6 +3454,13 @@ select {
   .minimal-audio-strip-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .notes-sessions-shelf {
+    top: 4.5rem;
+    right: 0.75rem;
+    width: calc(100vw - 1.5rem);
+    max-height: calc(100vh - 5.5rem);
   }
 }
 .timelog-editor-card {

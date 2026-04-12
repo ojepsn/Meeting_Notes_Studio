@@ -1989,10 +1989,6 @@ void initializeApp().catch((error) => {
     if (recognition && !isRecording) {
       recognition.lang = currentDictationLanguage;
     }
-
-    dictationStatus.textContent = settings.dictationLanguage === "auto"
-      ? `Dictation language is set to Auto. Current preference: ${formatDictationLanguage(currentDictationLanguage)}.`
-      : `Dictation language is locked to ${formatDictationLanguage(settings.dictationLanguage)}.`;
   });
 
   window.addEventListener("keydown", (event) => {

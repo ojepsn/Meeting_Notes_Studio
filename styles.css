@@ -913,6 +913,7 @@ button {
 
 .session-button {
   width: 100%;
+  min-width: 0;
   display: grid;
   gap: 3px;
   padding: 8px 9px;
@@ -935,17 +936,22 @@ button {
   font-size: 0.86rem;
   font-weight: 800;
   color: var(--ink);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .session-meta {
   font-size: 0.72rem;
   line-height: 1.35;
+  min-width: 0;
 }
 
 .session-preview {
   font-size: 0.76rem;
   line-height: 1.35;
   color: var(--muted);
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

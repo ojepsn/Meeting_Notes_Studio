@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type CaptureMode, type CaptureWorkspaceDensity } from "@notesmith/domain";
+import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type CaptureMode } from "@notesmith/domain";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
@@ -108,35 +108,6 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
 const PRIMARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(0, 1);
 const SECONDARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(2);
 
-const CAPTURE_MODE_UI: Record<
-  CaptureMode,
-  {
-    label: string;
-    description: string;
-    primaryOutputLabel: string;
-    secondaryOutputLabel?: string;
-  }
-> = {
-  "meeting-note": {
-    label: "Meeting note",
-    description: "Best for meetings, calls, and structured minutes.",
-    primaryOutputLabel: "Generate meeting notes",
-  },
-  "quick-note": {
-    label: "Quick note",
-    description: "Best for fast typed notes with minimal setup.",
-    primaryOutputLabel: "Create output",
-    secondaryOutputLabel: "Polish with AI",
-  },
-  "voice-note": {
-    label: "Voice note",
-    description: "Best for spoken capture, dictation, and audio-first notes.",
-    primaryOutputLabel: "Create output",
-    secondaryOutputLabel: "Polish with AI",
-  },
-};
-
-
 const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
   recordAIRequestHistory(event);
   if (event.type === "request-failure") {
@@ -158,7 +129,6 @@ export const App = () => {
   const {
     snapshot,
     activeSessionId,
-    activeView,
     saveState,
     lastSavedAt,
     isLoaded,
@@ -198,8 +168,6 @@ export const App = () => {
   } = useDesktopStore();
   const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("calendar");
   const [openPanel, setOpenPanel] = useState<OverlayPanel>(null);
-  const [captureDensityOverride, setCaptureDensityOverride] = useState<CaptureWorkspaceDensity | null>(null);
-  const [outputDensityOverride, setOutputDensityOverride] = useState<CaptureWorkspaceDensity | null>(null);
   const [selectedNewSessionTemplateId, setSelectedNewSessionTemplateId] = useState("meeting");
   const [isNotesSessionsOpen, setIsNotesSessionsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
@@ -689,10 +657,6 @@ export const App = () => {
     () => activeAttachments.find((attachment) => attachment.kind === "audio") ?? null,
     [activeAttachments],
   );
-  const effectiveCaptureDensity: CaptureWorkspaceDensity =
-    captureDensityOverride ?? snapshot?.settings.captureWorkspaceDensity ?? "full";
-  const effectiveOutputDensity: CaptureWorkspaceDensity =
-    outputDensityOverride ?? snapshot?.settings.outputWorkspaceDensity ?? "full";
 
   useEffect(() => {
     if (!quickStartTemplates.length) {
@@ -748,15 +712,6 @@ export const App = () => {
     setMetadataSuggestions(nextReview);
     setSelectedMetadataSuggestions(nextReview);
     setOpenPanel("metadata-review");
-  };
-
-  const handleCaptureDensityChange = (nextDensity: CaptureWorkspaceDensity) => {
-    const defaultDensity = snapshot?.settings.captureWorkspaceDensity ?? "full";
-    setCaptureDensityOverride(nextDensity === defaultDensity ? null : nextDensity);
-  };
-  const handleOutputDensityChange = (nextDensity: CaptureWorkspaceDensity) => {
-    const defaultDensity = snapshot?.settings.outputWorkspaceDensity ?? "full";
-    setOutputDensityOverride(nextDensity === defaultDensity ? null : nextDensity);
   };
 
   const handleGlobalTodoShortcut = async (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -2548,104 +2503,17 @@ export const App = () => {
         <main
           className={`notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}${
             activeWorkspace === "notes" && isNotesSessionsOpen ? " notes-shell-with-sessions" : ""
-          }`}
+          }${activeWorkspace === "notes" ? " notes-shell-notes-mode" : ""}`}
         >
           <section className="workspace-canvas">
-            {!(activeWorkspace === "calendar") ? (
+            {activeWorkspace !== "notes" && !(activeWorkspace === "calendar") ? (
             <div className="workspace-header card">
               <div className="card-header">
                 <div>
-                  <div className="topbar-eyebrow">
-                    {activeWorkspace === "notes"
-                      ? activeView === "capture"
-                        ? "Capture surface"
-                        : "Output surface"
-                      : "Workspace"}
-                  </div>
-                  <h2>
-                    {activeWorkspace === "notes"
-                      ? activeView === "capture"
-                        ? CAPTURE_MODE_UI[activeCaptureMode].label
-                        : `${CAPTURE_MODE_UI[activeCaptureMode].label} output`
-                      : WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}
-                  </h2>
-                </div>
-                <div className="page-actions">
-                  {activeWorkspace === "notes" ? (
-                    <div className="view-switch">
-                      <button
-                        className="segment-button"
-                        data-active={activeView === "capture"}
-                        type="button"
-                        onClick={() => setActiveView("capture")}
-                      >
-                        Capture
-                      </button>
-                      <button
-                        className="segment-button"
-                        data-active={activeView === "output"}
-                        type="button"
-                        onClick={() => setActiveView("output")}
-                      >
-                        Output
-                      </button>
-                    </div>
-                  ) : null}
-                  {activeWorkspace === "notes" && activeView === "capture" ? (
-                    <div className="capture-density-toggle">
-                      <button
-                        className="segment-button"
-                        data-active={effectiveCaptureDensity === "minimal"}
-                        type="button"
-                        onClick={() => handleCaptureDensityChange("minimal")}
-                      >
-                        Focused
-                      </button>
-                      <button
-                        className="segment-button"
-                        data-active={effectiveCaptureDensity === "full"}
-                        type="button"
-                        onClick={() => handleCaptureDensityChange("full")}
-                      >
-                        Expanded
-                      </button>
-                    </div>
-                  ) : activeWorkspace === "notes" && activeView === "output" ? (
-                    <div className="capture-density-toggle">
-                      <button
-                        className="segment-button"
-                        data-active={effectiveOutputDensity === "minimal"}
-                        type="button"
-                        onClick={() => handleOutputDensityChange("minimal")}
-                      >
-                        Focused
-                      </button>
-                      <button
-                        className="segment-button"
-                        data-active={effectiveOutputDensity === "full"}
-                        type="button"
-                        onClick={() => handleOutputDensityChange("full")}
-                      >
-                        Expanded
-                      </button>
-                    </div>
-                  ) : null}
+                  <div className="topbar-eyebrow">Workspace</div>
+                  <h2>{WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.label || "Workspace"}</h2>
                 </div>
               </div>
-              {activeWorkspace === "notes" && linkedDetailReturnWorkspace ? (
-                <div className="workspace-guide-row workspace-guide-row-quiet">
-                  <button className="shell-button" type="button" onClick={returnFromLinkedDetail}>
-                    Back to {linkedDetailReturnWorkspace === "calendar" ? "Calendar" : linkedDetailReturnWorkspace === "activities" ? "Activities" : linkedDetailReturnWorkspace === "time" ? "Time" : linkedDetailReturnWorkspace === "structure" ? "Structure" : "previous workspace"}
-                  </button>
-                </div>
-              ) : null}
-              {activeWorkspace === "notes" && activeLinkedActivity ? (
-                <div className="workspace-guide-row workspace-guide-row-quiet">
-                  <button className="shell-button" type="button" onClick={() => openActivityFromLink(activeLinkedActivity.id, "notes")}>
-                    Linked activity: {activeLinkedActivity.description}
-                  </button>
-                </div>
-              ) : null}
             </div>
             ) : null}
 
@@ -2880,107 +2748,123 @@ export const App = () => {
                   <li>This workspace will use the same center-canvas plus right-inspector pattern when it ships.</li>
                 </ol>
               </div>
-            ) : activeView === "capture" ? (
-              <SessionEditor
-                session={activeSession}
-                templates={snapshot.templates}
-                attachments={activeAttachments}
-                presentation={effectiveCaptureDensity}
-                savedPeople={snapshot.settings.savedParticipants}
-                suggestedPeople={suggestedPeople}
-                savedProjects={snapshot.settings.savedProjects}
-                suggestedProjects={suggestedProjects}
-                savedDomains={snapshot.settings.savedDomains}
-                suggestedDomains={suggestedDomains}
-                savedActivities={snapshot.settings.savedActivities}
-                suggestedActivities={suggestedActivities}
-                structureOptions={structureOptions}
-                savedTags={snapshot.settings.savedTags}
-                suggestedTags={suggestedTags}
-                isTranscribingAudio={isTranscribingAudio}
-                recordingMode={recordingMode}
-                isRecordingAudio={isRecordingAudio}
-                recordingStatusNote={recordingStatusNote}
-                onChange={(session) => void saveSession(session)}
-                onImportImage={() => void handleImportImage()}
-                onImportAudio={() => void handleImportAudio()}
-                onTranscribeAudio={() => void handleTranscribeAudio()}
-                onChangeRecordingMode={setRecordingMode}
-                onStartRecording={() => void handleStartRecording()}
-                onStopRecording={() => void handleStopRecording()}
-                onImportTranscript={() => void handleImportTranscript()}
-                onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
-                onUpdateAttachment={(attachment) => void handleUpdateAttachment(attachment)}
-                onOpenDetails={() => openOverlay("capture-details")}
-                selectedNewTemplateId={selectedNewSessionTemplate?.id}
-                onSelectNewTemplate={setSelectedNewSessionTemplateId}
-                onCreateSessionFromTemplate={() => void handleCreateSessionFromTemplate()}
-                onOpenInstructions={() => openOverlay("instructions")}
-              />
             ) : (
-              <OutputWorkspace
-                session={activeSession}
-                attachments={activeAttachments}
-                presentation={effectiveOutputDensity}
-                onChange={(session) => void saveSession(session)}
-                savedPeople={snapshot.settings.savedParticipants}
-                suggestedPeople={suggestedPeople}
-                savedProjects={snapshot.settings.savedProjects}
-                suggestedProjects={suggestedProjects}
-                savedDomains={snapshot.settings.savedDomains}
-                suggestedDomains={suggestedDomains}
-                savedActivities={snapshot.settings.savedActivities}
-                suggestedActivities={suggestedActivities}
-                structureOptions={structureOptions}
-                savedTags={snapshot.settings.savedTags}
-                suggestedTags={suggestedTags}
-                isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
-                isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
-                isRevising={isRevising}
-                onPrimaryAction={outputActionConfig.onPrimary}
-                onSecondaryAction={outputActionConfig.onSecondary}
-                onTranslate={() => void handleTranslate()}
-                onRevise={(instructions) => void handleRevise(instructions)}
-                onExportText={() => exportOutputAsText({ title: activeSession.title, output: activeSession.output })}
-                onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}
-                onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
-                onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
-                onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
-                primaryActionLabel={outputActionConfig.primaryLabel}
-                secondaryActionLabel={outputActionConfig.secondaryLabel}
-                emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
-                emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
-                linkedActivity={activeLinkedActivity}
-                onOpenLinkedActivity={(activityId) => openActivityFromLink(activityId, "notes")}
-                onAddFollowUpTodo={(description, options) =>
-                  void addTodo(description, {
-                    ...getMeetingTodoDefaults(),
-                    ...options,
-                  })
-                }
-                onAddFollowUpMeeting={(description, options) => void addActivity(description, "meeting", options)}
-              />
+              <div className="notes-pwa-workbench">
+                {linkedDetailReturnWorkspace ? (
+                  <div className="notes-pwa-toolbar">
+                    <button className="shell-button" type="button" onClick={returnFromLinkedDetail}>
+                      Back to {linkedDetailReturnWorkspace === "calendar" ? "Calendar" : linkedDetailReturnWorkspace === "activities" ? "Activities" : linkedDetailReturnWorkspace === "time" ? "Time" : linkedDetailReturnWorkspace === "structure" ? "Structure" : "previous workspace"}
+                    </button>
+                    {activeLinkedActivity ? (
+                      <button className="shell-button" type="button" onClick={() => openActivityFromLink(activeLinkedActivity.id, "notes")}>
+                        Linked activity: {activeLinkedActivity.description}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : activeLinkedActivity ? (
+                  <div className="notes-pwa-toolbar">
+                    <button className="shell-button" type="button" onClick={() => openActivityFromLink(activeLinkedActivity.id, "notes")}>
+                      Linked activity: {activeLinkedActivity.description}
+                    </button>
+                  </div>
+                ) : null}
+                <div className="notes-pwa-grid">
+                  <div className="notes-pwa-capture">
+                    <SessionEditor
+                      session={activeSession}
+                      templates={snapshot.templates}
+                      attachments={activeAttachments}
+                      presentation="minimal"
+                      showPresentationActions={false}
+                      savedPeople={snapshot.settings.savedParticipants}
+                      suggestedPeople={suggestedPeople}
+                      savedProjects={snapshot.settings.savedProjects}
+                      suggestedProjects={suggestedProjects}
+                      savedDomains={snapshot.settings.savedDomains}
+                      suggestedDomains={suggestedDomains}
+                      savedActivities={snapshot.settings.savedActivities}
+                      suggestedActivities={suggestedActivities}
+                      structureOptions={structureOptions}
+                      savedTags={snapshot.settings.savedTags}
+                      suggestedTags={suggestedTags}
+                      isTranscribingAudio={isTranscribingAudio}
+                      recordingMode={recordingMode}
+                      isRecordingAudio={isRecordingAudio}
+                      recordingStatusNote={recordingStatusNote}
+                      onChange={(session) => void saveSession(session)}
+                      onImportImage={() => void handleImportImage()}
+                      onImportAudio={() => void handleImportAudio()}
+                      onTranscribeAudio={() => void handleTranscribeAudio()}
+                      onChangeRecordingMode={setRecordingMode}
+                      onStartRecording={() => void handleStartRecording()}
+                      onStopRecording={() => void handleStopRecording()}
+                      onImportTranscript={() => void handleImportTranscript()}
+                      onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
+                      onUpdateAttachment={(attachment) => void handleUpdateAttachment(attachment)}
+                      onOpenDetails={() => openOverlay("capture-details")}
+                      selectedNewTemplateId={selectedNewSessionTemplate?.id}
+                      onSelectNewTemplate={setSelectedNewSessionTemplateId}
+                      onCreateSessionFromTemplate={() => void handleCreateSessionFromTemplate()}
+                      onOpenInstructions={() => openOverlay("instructions")}
+                    />
+                  </div>
+                  <div className="notes-pwa-output">
+                    <OutputWorkspace
+                      session={activeSession}
+                      attachments={activeAttachments}
+                      presentation="minimal"
+                      showPresentationActions={false}
+                      onChange={(session) => void saveSession(session)}
+                      savedPeople={snapshot.settings.savedParticipants}
+                      suggestedPeople={suggestedPeople}
+                      savedProjects={snapshot.settings.savedProjects}
+                      suggestedProjects={suggestedProjects}
+                      savedDomains={snapshot.settings.savedDomains}
+                      suggestedDomains={suggestedDomains}
+                      savedActivities={snapshot.settings.savedActivities}
+                      suggestedActivities={suggestedActivities}
+                      structureOptions={structureOptions}
+                      savedTags={snapshot.settings.savedTags}
+                      suggestedTags={suggestedTags}
+                      isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
+                      isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
+                      isRevising={isRevising}
+                      onPrimaryAction={outputActionConfig.onPrimary}
+                      onSecondaryAction={outputActionConfig.onSecondary}
+                      onTranslate={() => void handleTranslate()}
+                      onRevise={(instructions) => void handleRevise(instructions)}
+                      onExportText={() => exportOutputAsText({ title: activeSession.title, output: activeSession.output })}
+                      onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}
+                      onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                      onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                      onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                      primaryActionLabel={outputActionConfig.primaryLabel}
+                      secondaryActionLabel={outputActionConfig.secondaryLabel}
+                      emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
+                      emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
+                      linkedActivity={activeLinkedActivity}
+                      onOpenLinkedActivity={(activityId) => openActivityFromLink(activityId, "notes")}
+                      onAddFollowUpTodo={(description, options) =>
+                        void addTodo(description, {
+                          ...getMeetingTodoDefaults(),
+                          ...options,
+                        })
+                      }
+                      onAddFollowUpMeeting={(description, options) => void addActivity(description, "meeting", options)}
+                    />
+                  </div>
+                </div>
+              </div>
             )}
           </section>
 
-          {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) ? (
+          {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && activeWorkspace !== "notes" ? (
           <aside className="workspace-inspector stack">
             <div className="sidebar-card">
               <div>
                 <h3>Notes status</h3>
               </div>
-              {activeWorkspace === "notes" ? (
-                <div className="sidebar-actions">
-                  <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
-                  <span className="status-chip">{activeAttachments.length} attachment{activeAttachments.length === 1 ? "" : "s"}</span>
-                  <span className="status-chip">
-                    {activeTemplate?.sections.length ?? 0} output section{(activeTemplate?.sections.length ?? 0) === 1 ? "" : "s"}
-                  </span>
-                  <button className="small-button" type="button" onClick={() => openOverlay("instructions")}>
-                    Open instructions
-                  </button>
-                </div>
-              ) : activeWorkspace === "todos" || activeWorkspace === "activities" || activeWorkspace === "calendar" ? (
+              {activeWorkspace === "todos" || activeWorkspace === "activities" || activeWorkspace === "calendar" ? (
                 <div className="sidebar-actions">
                   <button className="primary-button" type="button" onClick={() => setActiveWorkspace("notes")}>
                     Back to Notes
