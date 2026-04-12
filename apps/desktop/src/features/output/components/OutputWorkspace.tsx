@@ -187,6 +187,284 @@ export const OutputWorkspace = ({
     });
   };
 
+  if (isMinimal) {
+    return (
+      <div className="card output-workspace output-workspace-minimal output-workspace-pwa">
+        <div className="panel-heading output-workspace-pwa-heading">
+          <div className="panel-heading-copy">
+            <p className="section-label">Output</p>
+          </div>
+        </div>
+
+        <div className="panel-actions panel-actions-output-top output-actions-row-pwa">
+          <div className="panel-actions-page">
+            <button className="ghost-button" type="button" onClick={onExportDocx}>
+              Export Word
+            </button>
+            <button className="ghost-button" type="button" onClick={onExportPdf}>
+              Export PDF
+            </button>
+            <button className="ghost-button" type="button" onClick={onTranslate}>
+              Translate
+            </button>
+          </div>
+        </div>
+
+        <div className="output-layout output-layout-pwa">
+          <aside className="output-sidebar">
+            <section className="config-card workflow-card output-workflow-card" aria-label="Generation controls">
+              <div className="config-card-copy">
+                <p className="section-label">Generate</p>
+                <h3>Output actions</h3>
+              </div>
+
+              <div className="capture-toolbar capture-toolbar-sidebar">
+                <button className="primary-button" type="button" onClick={onPrimaryAction}>
+                  {isPrimaryActionRunning ? `${primaryActionLabel}...` : primaryActionLabel}
+                </button>
+                {secondaryActionLabel && onSecondaryAction ? (
+                  <button className="ghost-button" type="button" onClick={onSecondaryAction}>
+                    {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
+                  </button>
+                ) : null}
+                <button className="ghost-button" type="button" onClick={onTranslate}>
+                  Translate
+                </button>
+                <button className="ghost-button" type="button" onClick={onExportDocx}>
+                  Export Word
+                </button>
+                <button className="ghost-button" type="button" onClick={onExportPdf}>
+                  Export PDF
+                </button>
+              </div>
+            </section>
+          </aside>
+
+          <div className="output-main">
+            {!hasOutput ? (
+              <div className="empty-state-card compact-empty-state output-empty-state-minimal">
+                <h3>Ready to generate</h3>
+                <ol className="empty-state-steps">
+                  <li>Add notes or transcript in the Capture section to the left, include highlights if useful, then click Generate.</li>
+                  <li>Click {emptyStatePrimaryLabel} to create the first Output draft for this session.</li>
+                  {emptyStateSecondaryLabel ? <li>Or click {emptyStateSecondaryLabel} if you want the alternate output path instead.</li> : null}
+                  <li>Use Translate, Revise, and Export after the first polished draft appears here.</li>
+                </ol>
+              </div>
+            ) : null}
+
+            <div className="field field-wide output-field-pwa">
+              <label htmlFor="session-output">Output</label>
+              <textarea
+                className="editor-textarea editor-textarea-primary output-textarea-minimal"
+                id="session-output"
+                value={session.output}
+                onChange={(event) => onChange({ ...session, output: event.target.value })}
+                onSelect={(event) => {
+                  const nextExcerpt = event.currentTarget.value
+                    .slice(event.currentTarget.selectionStart ?? 0, event.currentTarget.selectionEnd ?? 0)
+                    .trim();
+                  setSelectedExcerpt(nextExcerpt);
+                }}
+                placeholder="Generated notes will appear here."
+              />
+            </div>
+
+            <details className="workspace-disclosure pwa-disclosure-card">
+              <summary>Details</summary>
+              <div className="workspace-disclosure-body form-grid">
+                <div className="field field-wide">
+                  <label htmlFor="output-title">Title</label>
+                  <input
+                    className="minimal-title-input"
+                    id="output-title"
+                    value={session.title}
+                    onChange={(event) => onChange({ ...session, title: event.target.value })}
+                    placeholder={isMeetingNote ? "Weekly project meeting" : "Note title"}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="output-date">Date</label>
+                  <DateInput id="output-date" value={session.date} onChange={(event) => onChange({ ...session, date: event.target.value })} />
+                </div>
+                <div className="field">
+                  <label htmlFor="output-people">People</label>
+                  <PeoplePicker
+                    value={session.participantText}
+                    savedPeople={savedPeople}
+                    suggestedPeople={suggestedPeople}
+                    onChange={(value) => onChange({ ...session, participantText: value })}
+                    placeholder={isMeetingNote ? "Search or add people" : "Search or add optional context"}
+                  />
+                </div>
+                <div className="field field-wide metadata-triplet">
+                  <div className="metadata-triplet-grid">
+                    <div className="field metadata-subfield">
+                      <label htmlFor="output-domain">Domain</label>
+                      <TokenPicker
+                        value={session.domain}
+                        savedOptions={structureOptions.domains.length ? structureOptions.domains : savedDomains}
+                        suggestedOptions={suggestedDomains}
+                        placeholder="Search or add domain"
+                        suggestionSummary="Recent domains"
+                        suggestionBadgeText="From saved Domains"
+                        mode="single"
+                        onChange={handleDomainChange}
+                      />
+                    </div>
+                    <div className="field metadata-subfield">
+                      <label htmlFor="output-project">Project</label>
+                      <TokenPicker
+                        value={session.project}
+                        savedOptions={projectPickerOptions}
+                        suggestedOptions={suggestedProjectsForSelection}
+                        placeholder="Search or add project"
+                        suggestionSummary="Recent projects"
+                        suggestionBadgeText="From saved Projects"
+                        mode="single"
+                        onChange={handleProjectChange}
+                      />
+                    </div>
+                    <div className="field metadata-subfield">
+                      <label htmlFor="output-activity">Activity</label>
+                      <TokenPicker
+                        value={session.activity}
+                        savedOptions={activityPickerOptions}
+                        suggestedOptions={suggestedActivitiesForSelection}
+                        placeholder="Search or add activity"
+                        suggestionSummary="Recent activities"
+                        suggestionBadgeText="From saved Activities"
+                        mode="single"
+                        onChange={(value) => onChange({ ...session, activity: value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <details className="workspace-disclosure pwa-disclosure-card">
+              <summary>Refine and export</summary>
+              <div className="workspace-disclosure-body stack">
+                <div className="field field-wide">
+                  <label htmlFor="revision-instructions">Revision instructions</label>
+                  <textarea
+                    id="revision-instructions"
+                    value={revisionInstructions}
+                    onChange={(event) => setRevisionInstructions(event.target.value)}
+                    placeholder="Example: Make the summary more concise, keep action owners explicit, and translate jargon into clearer client language."
+                  />
+                </div>
+                <div className="page-actions">
+                  <button
+                    className="shell-button"
+                    type="button"
+                    onClick={() => {
+                      onRevise(revisionInstructions);
+                      if (revisionInstructions.trim()) {
+                        setRevisionInstructions("");
+                      }
+                    }}
+                  >
+                    {isRevising ? "Revising..." : "Revise with instructions"}
+                  </button>
+                  <button className="shell-button" type="button" onClick={onExportText}>
+                    Export text
+                  </button>
+                  <button className="shell-button" type="button" onClick={onExportMarkdown}>
+                    Export markdown
+                  </button>
+                  <button className="shell-button" type="button" onClick={onExportHtml}>
+                    Export HTML
+                  </button>
+                </div>
+              </div>
+            </details>
+
+            {linkedActivity ? (
+              <details className="workspace-disclosure pwa-disclosure-card">
+                <summary>Linked activity and follow-up</summary>
+                <div className="workspace-disclosure-body stack">
+                  <div className="prompt-actions-row">
+                    <div className="prompt-actions-copy">
+                      <strong>{linkedActivity.description}</strong>
+                      <span className="muted">
+                        Keep follow-up work tied to the same activity so Calendar, Notes, and work execution stay aligned.
+                      </span>
+                    </div>
+                    {onOpenLinkedActivity ? (
+                      <button className="small-button" type="button" onClick={() => onOpenLinkedActivity(linkedActivity.id)}>
+                        Open linked activity
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="todos-workspace-input-row">
+                    <div className="field field-wide">
+                      <label htmlFor="output-follow-up">Add follow-up todo</label>
+                      <input
+                        id="output-follow-up"
+                        value={followUpDraft}
+                        onChange={(event) => setFollowUpDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey && followUpDraft.trim() && onAddFollowUpTodo) {
+                            event.preventDefault();
+                            onAddFollowUpTodo(followUpDraft.trim(), { activityId: linkedActivity.id, doOn: session.date });
+                            setFollowUpDraft("");
+                          }
+                        }}
+                        placeholder="Add a follow-up into this activity"
+                      />
+                    </div>
+                    <button
+                      className="small-button"
+                      type="button"
+                      onClick={() => {
+                        if (!followUpDraft.trim() || !onAddFollowUpTodo) return;
+                        onAddFollowUpTodo(followUpDraft.trim(), { activityId: linkedActivity.id, doOn: session.date });
+                        setFollowUpDraft("");
+                      }}
+                    >
+                      Add follow-up
+                    </button>
+                  </div>
+                  {selectedExcerpt && (onAddFollowUpTodo || onAddFollowUpMeeting) ? (
+                    <div className="selected-output-excerpt-card">
+                      <div className="prompt-actions-row">
+                        <div className="prompt-actions-copy">
+                          <strong>Selected output text</strong>
+                          <span className="muted">Turn any selected output text into a follow-up item, not only bullet suggestions.</span>
+                        </div>
+                        <button className="small-button" type="button" onClick={() => setSelectedExcerpt("")}>
+                          Clear selection
+                        </button>
+                      </div>
+                      <p>{excerptPreview}</p>
+                      <div className="page-actions">
+                        <button className="small-button" type="button" onClick={() => applyReviewSeed(selectedExcerpt, "todo")}>
+                          Review selected text
+                        </button>
+                        {onAddFollowUpTodo ? (
+                          <button className="small-button" type="button" onClick={() => onAddFollowUpTodo(selectedExcerpt, { activityId: linkedActivity.id, doOn: session.date })}>
+                            Add selected as todo
+                          </button>
+                        ) : null}
+                        {onAddFollowUpMeeting ? (
+                          <button className="small-button" type="button" onClick={() => onAddFollowUpMeeting(selectedExcerpt, { parentActivityId: linkedActivity.id, doOn: session.date })}>
+                            Add selected as meeting
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </details>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`card output-workspace${isMinimal ? " output-workspace-minimal" : ""}`}>
       {isMinimal && showPresentationActions ? (

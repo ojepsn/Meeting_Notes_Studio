@@ -125,6 +125,10 @@ export const SessionEditor = ({
   const hasDateField = Boolean(activeTemplate?.fields.find((field) => field.key === "date" && field.enabled));
   const hasStartTimeField = Boolean(activeTemplate?.fields.find((field) => field.key === "startTime" && field.enabled));
   const hasEndTimeField = Boolean(activeTemplate?.fields.find((field) => field.key === "endTime" && field.enabled));
+  const selectedQuickTemplate = quickStartTemplates.find((template) => template.id === selectedQuickTemplateId) ?? quickStartTemplates[0] ?? activeTemplate;
+  const selectedQuickMode = selectedQuickTemplate ? getPrimaryCaptureMode(selectedQuickTemplate) : session.captureMode;
+  const shouldShowLiveTranscript = selectedQuickMode === "voice-note" || Boolean(session.liveTranscript.trim());
+  const titleLabel = titleField?.label || "Title";
 
   const handleDomainChange = (domain: string) => {
     const nextProjects = getProjectsForDomain(structureOptions, domain);
@@ -148,6 +152,283 @@ export const SessionEditor = ({
       .map((field) => [field.id, session.customFieldValues[field.id] ?? ""]));
     onChange({ ...session, captureMode: nextCaptureMode, templateId, customFieldValues: nextFieldValues, excludedSectionIds: [] });
   };
+
+  if (isMinimal) {
+    return (
+      <div className="card session-editor session-editor-minimal session-editor-pwa">
+        <div className="panel-heading session-editor-pwa-heading">
+          <div className="panel-heading-copy">
+            <p className="section-label">Capture</p>
+            <h2>{session.title || "Untitled session"}</h2>
+          </div>
+          <div className="panel-actions panel-actions-capture-top">
+            <div className="panel-actions-shared">
+              {onOpenInstructions ? (
+                <button className="shell-button" type="button" onClick={onOpenInstructions}>
+                  Instructions
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="editor-header-row session-editor-pwa-template-row">
+          <div className="template-quick-selectors template-quick-selectors-desktop">
+            <button className="primary-button session-new-button" type="button" onClick={onCreateSessionFromTemplate} disabled={!onCreateSessionFromTemplate}>
+              New
+            </button>
+            {quickStartTemplates.map((template) => (
+              <button
+                key={template.id}
+                className="ghost-button session-template-pill-pwa"
+                data-active={selectedQuickTemplateId === template.id}
+                type="button"
+                onClick={() => onSelectNewTemplate?.(template.id)}
+              >
+                {template.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="session-capture-copy session-capture-copy-pwa">
+          <strong>{modeMeta.label}</strong>
+          <span className="muted">{modeMeta.subtitle}</span>
+        </div>
+
+        <div className="editor-layout session-editor-pwa-layout">
+          <div className="editor-main">
+            <section className="form-section" aria-label="Session details">
+              <details className="workspace-disclosure pwa-disclosure-card" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
+                <summary>
+                  <div className="form-section-header">
+                    <p className="section-label">Details</p>
+                  </div>
+                </summary>
+                <div className="workspace-disclosure-body form-grid">
+                  <div className="field field-wide">
+                    <label htmlFor="session-title">{titleLabel}</label>
+                    <input
+                      className="minimal-title-input"
+                      id="session-title"
+                      value={session.title}
+                      onChange={(event) => update("title", event.target.value)}
+                      placeholder={session.captureMode === "meeting-note" ? "Weekly project meeting" : session.captureMode === "voice-note" ? "Voice memo" : "Quick note title"}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="template-select">Template</label>
+                    <select id="template-select" value={activeTemplate?.id ?? ""} onChange={(event) => handleTemplateChange(event.target.value)}>
+                      {availableTemplates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {hasDateField ? (
+                    <div className="field">
+                      <label htmlFor="session-date">Date</label>
+                      <DateInput id="session-date" value={session.date} onChange={(event) => update("date", event.target.value)} />
+                    </div>
+                  ) : null}
+                  {hasStartTimeField ? (
+                    <div className="field">
+                      <label htmlFor="session-start">Start time</label>
+                      <input id="session-start" type="time" value={session.startTime} onChange={(event) => update("startTime", event.target.value)} />
+                    </div>
+                  ) : null}
+                  {hasEndTimeField ? (
+                    <div className="field">
+                      <label htmlFor="session-end">End time</label>
+                      <input id="session-end" type="time" value={session.endTime} onChange={(event) => update("endTime", event.target.value)} />
+                    </div>
+                  ) : null}
+                </div>
+              </details>
+            </section>
+
+            {participantsField ? (
+              <section className="form-section" aria-label="People">
+                <details className="workspace-disclosure pwa-disclosure-card" open={peopleOpen} onToggle={(event) => setPeopleOpen(event.currentTarget.open)}>
+                  <summary>
+                    <div className="form-section-header">
+                      <p className="section-label">People</p>
+                    </div>
+                  </summary>
+                  <div className="workspace-disclosure-body form-grid">
+                    <div className="field field-wide">
+                      <label htmlFor="session-participants">{participantsField.label}</label>
+                      <PeoplePicker value={session.participantText} savedPeople={savedPeople} suggestedPeople={suggestedPeople} onChange={(value) => update("participantText", value)} placeholder="Search or add people" />
+                    </div>
+                    {customFields.map((field) => (
+                      <div key={field.id} className={field.type === "textarea" ? "field field-wide" : "field"}>
+                        <label htmlFor={`custom-field-${field.id}`}>{field.label}</label>
+                        {field.type === "textarea" ? (
+                          <textarea id={`custom-field-${field.id}`} value={session.customFieldValues[field.id] ?? ""} onChange={(event) => update("customFieldValues", { ...session.customFieldValues, [field.id]: event.target.value })} />
+                        ) : (
+                          <input id={`custom-field-${field.id}`} type={field.type === "number" ? "number" : field.type} value={session.customFieldValues[field.id] ?? ""} onChange={(event) => update("customFieldValues", { ...session.customFieldValues, [field.id]: event.target.value })} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </section>
+            ) : customFields.length ? (
+              <section className="form-section" aria-label="Details">
+                <details className="workspace-disclosure pwa-disclosure-card">
+                  <summary>
+                    <div className="form-section-header">
+                      <p className="section-label">Details</p>
+                    </div>
+                  </summary>
+                  <div className="workspace-disclosure-body form-grid">
+                    {customFields.map((field) => (
+                      <div key={field.id} className={field.type === "textarea" ? "field field-wide" : "field"}>
+                        <label htmlFor={`custom-field-${field.id}`}>{field.label}</label>
+                        {field.type === "textarea" ? (
+                          <textarea id={`custom-field-${field.id}`} value={session.customFieldValues[field.id] ?? ""} onChange={(event) => update("customFieldValues", { ...session.customFieldValues, [field.id]: event.target.value })} />
+                        ) : (
+                          <input id={`custom-field-${field.id}`} type={field.type === "number" ? "number" : field.type} value={session.customFieldValues[field.id] ?? ""} onChange={(event) => update("customFieldValues", { ...session.customFieldValues, [field.id]: event.target.value })} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </section>
+            ) : null}
+
+            <section className="form-section notes-transcript-section" aria-label="Notes and transcripts">
+              <details className="workspace-disclosure pwa-disclosure-card" open>
+                <summary>Manual notes</summary>
+                <div className="workspace-disclosure-body">
+                  <div className="field field-wide">
+                    <textarea
+                      className="editor-textarea editor-textarea-primary"
+                      id="manual-notes"
+                      value={session.manualNotes}
+                      onChange={(event) => update("manualNotes", event.target.value)}
+                      placeholder="Write your own notes here, which will be included in the Output"
+                    />
+                  </div>
+                </div>
+              </details>
+
+              {shouldShowLiveTranscript ? (
+                <details className="workspace-disclosure pwa-disclosure-card" open={transcriptOpen} onToggle={(event) => setTranscriptOpen(event.currentTarget.open)}>
+                  <summary>{selectedQuickMode === "voice-note" ? "Live transcript" : "Transcript"}</summary>
+                  <div className="workspace-disclosure-body">
+                    <div className="field field-wide">
+                      <textarea
+                        className="editor-textarea editor-textarea-secondary"
+                        id="session-transcript"
+                        value={session.liveTranscript}
+                        onChange={(event) => update("liveTranscript", event.target.value)}
+                        placeholder={selectedQuickMode === "voice-note" ? "Dictation appears here while recording..." : "Transcript text will appear here."}
+                      />
+                    </div>
+                  </div>
+                </details>
+              ) : null}
+
+              <details className="workspace-disclosure pwa-disclosure-card" open={uploadedTranscriptOpen} onToggle={(event) => setUploadedTranscriptOpen(event.currentTarget.open)}>
+                <summary>Uploaded transcript</summary>
+                <div className="workspace-disclosure-body">
+                  <div className="field field-wide">
+                    <textarea
+                      className="editor-textarea editor-textarea-secondary"
+                      id="session-uploaded-transcript"
+                      value={session.uploadedTranscript}
+                      onChange={(event) => update("uploadedTranscript", event.target.value)}
+                      placeholder="Uploaded transcript text will appear here..."
+                    />
+                  </div>
+                </div>
+              </details>
+            </section>
+          </div>
+
+          <aside className="editor-sidebar">
+            <section className="config-card workflow-card" aria-label="Capture methods">
+              <div className="config-card-copy">
+                <p className="section-label">Capture</p>
+                <h3>Choose how to bring notes in</h3>
+              </div>
+
+              <section className="audio-capture-card session-editor-audio-pwa" data-recording={isRecordingAudio}>
+                <div className="audio-capture-copy">
+                  <p className="section-label">Recording & transcription</p>
+                  <h3>Choose your capture mode</h3>
+                </div>
+                <div className="capture-toolbar audio-capture-actions session-editor-audio-actions-pwa">
+                  <button className="secondary-button capture-mode-button" type="button" onClick={() => onChangeRecordingMode("microphone")}>
+                    <span className="capture-mode-title">Start room / hybrid meeting</span>
+                    <span className="capture-mode-hint">Use mic for room voices and nearby speakers</span>
+                  </button>
+                  <button className="secondary-button capture-mode-button" type="button" onClick={() => onChangeRecordingMode("system-audio")}>
+                    <span className="capture-mode-title">Start direct computer audio</span>
+                    <span className="capture-mode-hint">Use direct in-computer sound from this device</span>
+                  </button>
+                  <button className="secondary-button capture-mode-button" type="button" onClick={() => onChangeRecordingMode("hybrid")}>
+                    <span className="capture-mode-title">Start room + computer audio</span>
+                    <span className="capture-mode-hint">Combine mic and direct computer audio together</span>
+                  </button>
+                  <button className="ghost-button" type="button" onClick={isRecordingAudio ? onStopRecording : onStartRecording}>
+                    {isRecordingAudio ? "Stop recording" : "Record"}
+                  </button>
+                  <button className="ghost-button" type="button" onClick={onImportAudio}>
+                    Upload audio
+                  </button>
+                  <button className="ghost-button" type="button" onClick={onImportTranscript}>
+                    Upload transcript
+                  </button>
+                  <button className="ghost-button" type="button" onClick={onTranscribeAudio}>
+                    {isTranscribingAudio ? "Transcribing audio..." : "Transcribe audio"}
+                  </button>
+                  <button className="ghost-button" type="button" onClick={onImportImage}>
+                    Upload image
+                  </button>
+                </div>
+                <p className="support-text">{recordingStatusNote || RECORDING_MODE_META[recordingMode].helper}</p>
+              </section>
+            </section>
+
+            <details className="workspace-disclosure pwa-disclosure-card">
+              <summary>Advanced capture tools</summary>
+              <div className="workspace-disclosure-body form-grid">
+                {showQuickHighlights ? (
+                  <div className="field field-wide">
+                    <label htmlFor="quick-highlights">Highlights</label>
+                    <textarea id="quick-highlights" value={session.quickHighlights} onChange={(event) => update("quickHighlights", event.target.value)} placeholder="Short key points, names, or topics to emphasize in the final output." />
+                  </div>
+                ) : null}
+                <div className="field field-wide metadata-triplet">
+                  <div className="metadata-triplet-grid">
+                    <div className="field metadata-subfield">
+                      <label htmlFor="session-domain">Domain</label>
+                      <TokenPicker value={session.domain} savedOptions={structureOptions.domains.length ? structureOptions.domains : savedDomains} suggestedOptions={suggestedDomains} placeholder="Search or add domain" suggestionSummary="Recent domains" suggestionBadgeText="From saved Domains" mode="single" onChange={handleDomainChange} />
+                    </div>
+                    <div className="field metadata-subfield">
+                      <label htmlFor="session-project">Project</label>
+                      <TokenPicker value={session.project} savedOptions={projectPickerOptions} suggestedOptions={suggestedProjectsForSelection} placeholder="Search or add project" suggestionSummary="Recent projects" suggestionBadgeText="From saved Projects" mode="single" onChange={handleProjectChange} />
+                    </div>
+                    <div className="field metadata-subfield">
+                      <label htmlFor="session-activity">Activity</label>
+                      <TokenPicker value={session.activity} savedOptions={activityPickerOptions} suggestedOptions={suggestedActivitiesForSelection} placeholder="Search or add activity" suggestionSummary="Recent activities" suggestionBadgeText="From saved Activities" mode="single" onChange={(value) => update("activity", value)} />
+                    </div>
+                  </div>
+                </div>
+                <div className="field field-wide">
+                  <label htmlFor="session-tags">Tags</label>
+                  <TokenPicker value={session.tagsText} savedOptions={savedTags} suggestedOptions={suggestedTags} placeholder="Add tags like q2-planning, budget, hiring" suggestionSummary="Recent tags" suggestionBadgeText="From saved Tags" onChange={(value) => update("tagsText", value)} />
+                </div>
+              </div>
+            </details>
+          </aside>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`card session-editor${isMinimal ? " session-editor-minimal" : ""}`}>

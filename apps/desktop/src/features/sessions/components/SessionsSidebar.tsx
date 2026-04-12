@@ -6,6 +6,7 @@ interface SessionsSidebarProps {
   activeSessionId: string | null;
   onSelect: (id: string) => void;
   onCreate: () => void;
+  onClose?: () => void;
   onDelete: (id: string) => void;
   onRestore: (id: string) => void;
   onDeleteForever: (id: string) => void;
@@ -29,6 +30,7 @@ export const SessionsSidebar = ({
   activeSessionId,
   onSelect,
   onCreate,
+  onClose,
   onDelete,
   onRestore,
   onDeleteForever,
@@ -77,6 +79,64 @@ export const SessionsSidebar = ({
         .includes(query);
     });
   }, [filter, sessions, showPrivate, showPublic, showTrash]);
+
+  if (compact) {
+    return (
+      <aside className="sidebar-card sessions-sidebar-pwa" id="desktop-sessions-card">
+        <div className="panel-heading sessions-sidebar-pwa-heading">
+          <div>
+            <p className="section-label">Recent Sessions</p>
+            <h3>Your note shelf</h3>
+          </div>
+          {onClose ? (
+            <button className="ghost-button sessions-panel-toggle" type="button" onClick={onClose}>
+              Close
+            </button>
+          ) : null}
+        </div>
+        <div className="field field-tight session-filter-field">
+          <label htmlFor="session-filter-compact">Filter sessions</label>
+          <input
+            id="session-filter-compact"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder="Type to filter sessions"
+          />
+        </div>
+        <div className="session-list session-list-compact session-list-pwa-compact">
+          {filteredSessions.filter((session) => !session.deletedAt).map((session) => {
+            const isActive = session.id === activeSessionId;
+            const subtitle = [session.captureMode === "meeting-note" ? "Meeting" : session.captureMode === "voice-note" ? "Voice note" : "Quick note", session.date, session.startTime].filter(Boolean).join(" · ");
+            const preview = session.output.trim() || session.manualNotes.trim() || session.liveTranscript.trim() || "Open to continue capturing or polishing this session.";
+
+            return (
+              <div key={session.id} className={`list-item compact-session-item session-card-pwa${isActive ? " session-card-pwa-active" : ""}`}>
+                <div className="compact-session-row compact-session-row-pwa">
+                  <button className="compact-session-link compact-session-link-pwa" type="button" onClick={() => onSelect(session.id)}>
+                    <div className="compact-session-main compact-session-main-pwa">
+                      <strong>{session.title || "Untitled session"}</strong>
+                      <span className="muted">{subtitle || "No metadata yet"}</span>
+                      <p className="compact-session-preview">{preview}</p>
+                    </div>
+                  </button>
+                  <div className="compact-session-actions">
+                    <button className="compact-session-delete" type="button" onClick={() => onDelete(session.id)}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {!filteredSessions.filter((session) => !session.deletedAt).length ? (
+            <div className="empty-sessions">
+              <p>No saved sessions yet. Start with a fresh note and it will appear here automatically.</p>
+            </div>
+          ) : null}
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside className="sidebar-card" id="desktop-sessions-card">

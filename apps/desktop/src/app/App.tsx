@@ -2917,6 +2917,7 @@ export const App = () => {
                 activeSessionId={activeSession.id}
                 onSelect={(id) => setActiveSessionId(id)}
                 onCreate={() => openOverlay("new-note")}
+                onClose={() => setIsNotesSessionsOpen(false)}
                 onDelete={(id) => void deleteSession(id)}
                 onRestore={(id) => void restoreSession(id)}
                 onDeleteForever={(id) => void permanentlyDeleteSession(id)}
