@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.13";
+const APP_VERSION = "v0.10.14";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -410,7 +410,8 @@ Prefer reliable synthesis over coverage for its own sake.`,
 - Neutral, professional, business-ready.
 - Specific and information-dense.
 - Avoid transcript phrasing, conversational clutter, and unnecessary scene-setting.
-- Prefer short paragraphs and tight bullets over long narrative blocks.
+- For each discussion point heading, prefer flowing text that captures the substance of the discussion.
+- Use bullets only when they materially improve scanability, such as for decisions or action items.
 - Make the result easy for a busy colleague to scan in under a minute.
 
 # Output priorities
@@ -829,6 +830,7 @@ let currentDictationLanguage = getInitialDictationLanguage();
 let pendingLanguageRestart = false;
 let draftSaveTimeout = null;
 let aiCatalogRefreshCounter = 0;
+let lastAiCatalogRefreshAttemptAt = 0;
 let serviceWorkerRegistration = null;
 let hasPendingAppUpdate = false;
 let isRefreshingForUpdate = false;
@@ -855,6 +857,7 @@ let activeAudioCaptureMode = "meeting";
 const audioDrafts = new Map();
 let pendingAudioDbPromise = null;
 let appStateDbPromise = null;
+const AI_MODEL_REFRESH_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 async function initializeApp() {
   if (!eventsBound) {
@@ -894,6 +897,7 @@ async function initializeApp() {
   render();
   registerServiceWorker();
   updateHeroMeta();
+  maybeRefreshAiModelCatalog({ force: true });
   try {
     await initializeStorageMode();
   } catch (error) {
@@ -2410,9 +2414,13 @@ void initializeApp().catch((error) => {
       const transcriptText = await readTranscriptFile(file);
       updateActiveSession({ uploadedTranscript: transcriptText }, false);
       syncFieldsFromSession();
-      setElementVisibility(uploadedTranscriptDisclosure, Boolean(transcriptText.trim()));
+      setElementVisibility(uploadedTranscriptDisclosure, true);
+      if (uploadedTranscriptDisclosure) {
+        uploadedTranscriptDisclosure.open = true;
+      }
+      applyTemplateUi(getActiveSession());
       revealTranscriptSurface("uploaded", { focus: true });
-      audioCaptureStatus.textContent = `Transcript uploaded from ${file.name} and added to the Uploaded transcript field.`;
+      audioCaptureStatus.textContent = `Transcript uploaded from ${file.name} and added to the Transcript field.`;
     } catch (error) {
       audioCaptureStatus.textContent = error.message || "That transcript file could not be read in this browser.";
     } finally {
@@ -2643,6 +2651,7 @@ function registerServiceWorker() {
       });
     });
   window.addEventListener("focus", () => {
+    maybeRefreshAiModelCatalog();
     if (serviceWorkerRegistration) {
       serviceWorkerRegistration.update().catch(() => {
         // Ignore focus refresh failures.
@@ -3368,7 +3377,7 @@ function applyTemplateUi(session) {
   const showMeetingSchedule = showMeetingDate || showMeetingStartTime || showMeetingEndTime;
   const showManualNotes = fields.manualNotes !== false;
   const showLiveTranscript = liveTranscriptEnabled && isDictationActive;
-  const showUploadedTranscript = Boolean(session.uploadedTranscript?.trim());
+  const showUploadedTranscript = liveTranscriptEnabled;
   const showTitle = fields.title !== false;
   const templateCustomFields = normalizeTemplateCustomFields(template.customFields);
   const showContextDisclosure = showParticipants || templateCustomFields.length > 0;
@@ -3392,6 +3401,8 @@ function applyTemplateUi(session) {
   setElementVisibility(uploadedTranscriptDisclosure, showUploadedTranscript);
   if (!showUploadedTranscript && uploadedTranscriptDisclosure) {
     uploadedTranscriptDisclosure.open = false;
+  } else if (showUploadedTranscript && session.uploadedTranscript?.trim() && uploadedTranscriptDisclosure) {
+    uploadedTranscriptDisclosure.open = true;
   }
   renderTemplateCustomFields(session, template);
   titleFieldLabel.textContent = getTemplateTitleFieldLabel(template);
@@ -3926,7 +3937,7 @@ function openAiSettings(options = {}) {
   aiSettingsModal.setAttribute("aria-hidden", "false");
   syncModalScrollLock();
   setActiveAiSettingsSection(activeAiSettingsSection);
-  refreshAiModelCatalog();
+  maybeRefreshAiModelCatalog({ force: true });
   const targetControl = aiSettingsModal.querySelector(`[data-ai-settings-section="${activeAiSettingsSection}"] input, [data-ai-settings-section="${activeAiSettingsSection}"] select, [data-ai-settings-section="${activeAiSettingsSection}"] button`);
   targetControl?.focus();
 }
@@ -4536,8 +4547,8 @@ function updateModelPricingStatus(message) {
     .at(-1);
 
   modelPricingStatus.textContent = latestDate
-    ? `Showing cost-eligible OpenAI models from the latest saved snapshot on ${formatCatalogDate(latestDate)}. Live catalog refresh starts automatically when this window opens.`
-    : "Showing bundled model guidance. Live pricing refresh starts automatically when this window opens.";
+    ? `Showing cost-eligible OpenAI models from the latest saved snapshot on ${formatCatalogDate(latestDate)}. Live catalog refresh starts automatically when the app opens.`
+    : "Showing bundled model guidance. Live catalog refresh starts automatically when the app opens.";
 }
 
 function getVisibleAiModels() {
@@ -4561,6 +4572,7 @@ function filterRelevantAiModels(models) {
 }
 
 async function refreshAiModelCatalog() {
+  lastAiCatalogRefreshAttemptAt = Date.now();
   const refreshId = ++aiCatalogRefreshCounter;
   updateModelPricingStatus("Refreshing the official OpenAI model catalog and pricing in the background...");
 
@@ -4581,6 +4593,14 @@ async function refreshAiModelCatalog() {
 
     updateModelPricingStatus("Using the saved model snapshot. Live catalog refresh from official OpenAI docs could not be completed in this browser.");
   }
+}
+
+function maybeRefreshAiModelCatalog({ force = false } = {}) {
+  if (!force && Date.now() - lastAiCatalogRefreshAttemptAt < AI_MODEL_REFRESH_MIN_INTERVAL_MS) {
+    return;
+  }
+
+  void refreshAiModelCatalog();
 }
 
 async function fetchLatestAiModelCatalog() {

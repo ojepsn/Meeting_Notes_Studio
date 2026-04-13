@@ -481,4 +481,4 @@ export const buildTranscriptionModelOption = (entry) => ({
     metadataLines: [`Latency: ${entry.latency}`],
     tags: entry.tags || [],
 });
-export const buildModelPricingStatus = (snapshot) => `Pricing and model guidance are sourced from OpenAI and refreshed daily at 05:00 Stockholm time or on app open when due. Last refresh: ${formatPricingRefreshDateTime(snapshot.refreshedAt)}.`;
+export const buildModelPricingStatus = (snapshot) => `Pricing and model guidance are sourced from OpenAI and refreshed on app start plus daily at 05:00 Stockholm time. Last refresh: ${formatPricingRefreshDateTime(snapshot.refreshedAt)}.`;

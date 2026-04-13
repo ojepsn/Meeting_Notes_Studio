@@ -296,7 +296,7 @@ export const App = () => {
         };
         void (async () => {
             const savedSnapshot = (await repository.loadAIModelPricing()) || createDefaultModelPricingSnapshot();
-            const nextSnapshot = await refreshPricing(savedSnapshot, false);
+            const nextSnapshot = await refreshPricing(savedSnapshot, true);
             if (!cancelled) {
                 setModelPricingSnapshot(nextSnapshot);
                 scheduleNextRefresh();

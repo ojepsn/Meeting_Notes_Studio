@@ -806,18 +806,23 @@ select {
 
 .shell-button,
 .segment-button,
-.primary-button {
+.primary-button,
+.ghost-button,
+.secondary-button {
   border: 1px solid var(--app-border-strong);
   border-radius: 999px;
   background: var(--app-input);
   color: var(--app-text);
   padding: 0.7rem 1rem;
   cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
 .shell-button:disabled,
 .segment-button:disabled,
 .primary-button:disabled,
+.ghost-button:disabled,
+.secondary-button:disabled,
 .small-button:disabled {
   opacity: 0.72;
   cursor: wait;
@@ -827,6 +832,51 @@ select {
   background: var(--app-accent);
   color: var(--app-accent-text);
   border-color: transparent;
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--app-accent) 24%, transparent 76%);
+}
+
+.shell-button,
+.ghost-button {
+  background: color-mix(in srgb, var(--app-surface-soft) 82%, white 18%);
+}
+
+.secondary-button {
+  background: color-mix(in srgb, var(--app-accent-soft) 52%, var(--app-surface-soft) 48%);
+  border-color: var(--app-accent-border);
+}
+
+.shell-button:hover,
+.ghost-button:hover,
+.secondary-button:hover,
+.primary-button:hover,
+.segment-button:hover,
+.small-button:hover {
+  transform: translateY(-1px);
+}
+
+.shell-button:hover,
+.ghost-button:hover {
+  background: color-mix(in srgb, var(--app-accent-soft) 28%, var(--app-surface) 72%);
+  border-color: var(--app-accent-border);
+}
+
+.secondary-button:hover {
+  background: color-mix(in srgb, var(--app-accent-soft) 68%, var(--app-surface) 32%);
+  border-color: var(--app-accent-strong-border);
+}
+
+.primary-button:hover {
+  box-shadow: 0 16px 30px color-mix(in srgb, var(--app-accent) 30%, transparent 70%);
+}
+
+.shell-button:focus-visible,
+.ghost-button:focus-visible,
+.secondary-button:focus-visible,
+.primary-button:focus-visible,
+.segment-button:focus-visible,
+.small-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent-soft) 68%, transparent 32%);
 }
 
 .segment-button[data-active="true"] {
@@ -930,11 +980,14 @@ select {
 
 .session-template-pill-pwa {
   border-radius: 999px;
+  background: color-mix(in srgb, var(--app-surface-soft) 86%, white 14%);
+  font-weight: 600;
 }
 
 .session-template-pill-pwa[data-active="true"] {
   background: var(--app-accent-soft);
   border-color: var(--app-accent-border);
+  color: var(--app-text);
 }
 
 .session-capture-copy-pwa {
@@ -1006,6 +1059,8 @@ select {
   justify-items: start;
   text-align: left;
   gap: 0.1rem;
+  border-radius: 18px;
+  padding: 0.9rem 1rem;
 }
 
 .capture-mode-title {
@@ -1036,6 +1091,14 @@ select {
 
 .sessions-sidebar-pwa {
   padding: 1.25rem;
+}
+
+.sessions-sidebar-pwa .ghost-button,
+.session-editor-pwa .ghost-button,
+.output-workspace-pwa .ghost-button,
+.session-editor-pwa .secondary-button,
+.output-workspace-pwa .secondary-button {
+  font-weight: 600;
 }
 
 .sessions-sidebar-pwa .session-filter-field {

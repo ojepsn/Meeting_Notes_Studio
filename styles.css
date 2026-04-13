@@ -866,6 +866,18 @@ button {
 .checkbox-field input {
   margin: 0;
   flex: 0 0 auto;
+  width: 16px;
+  min-width: 16px;
+  max-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  appearance: auto;
+  -webkit-appearance: checkbox;
 }
 
 .compact-checkbox {

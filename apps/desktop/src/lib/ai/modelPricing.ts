@@ -685,4 +685,4 @@ export const buildTranscriptionModelOption = (entry: TranscriptionModelPricingEn
 });
 
 export const buildModelPricingStatus = (snapshot: AIModelPricingSnapshot) =>
-  `Pricing and model guidance are sourced from OpenAI and refreshed daily at 05:00 Stockholm time or on app open when due. Last refresh: ${formatPricingRefreshDateTime(snapshot.refreshedAt)}.`;
+  `Pricing and model guidance are sourced from OpenAI and refreshed on app start plus daily at 05:00 Stockholm time. Last refresh: ${formatPricingRefreshDateTime(snapshot.refreshedAt)}.`;

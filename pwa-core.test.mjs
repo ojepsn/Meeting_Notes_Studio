@@ -237,7 +237,8 @@ runTest("capture shell keeps the core minimal defaults visible in markup", () =>
   assert.match(indexHtmlSource, /Write your own notes here, which will be included in the Output/);
   assert.match(indexHtmlSource, /id="live-transcript-disclosure" hidden/);
   assert.match(indexHtmlSource, /id="uploaded-transcript-disclosure" hidden/);
-  assert.match(indexHtmlSource, /<summary>Uploaded transcript<\/summary>/);
+  assert.match(indexHtmlSource, /<summary>Transcript<\/summary>/);
+  assert.match(indexHtmlSource, /Paste a transcript here, or upload one from a file\./);
   assert.doesNotMatch(indexHtmlSource, /Optional emphasis/);
   assert.doesNotMatch(indexHtmlSource, /Work from notes, transcript, or both/);
   assert.doesNotMatch(indexHtmlSource, /Imported text/);

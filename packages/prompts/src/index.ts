@@ -51,7 +51,8 @@ export const DEFAULT_MEETING_MINUTES_RULES = `# Core instructions
 - Neutral, professional, business-ready.
 - Specific and information-dense.
 - Avoid transcript phrasing, conversational clutter, and unnecessary scene-setting.
-- Prefer short paragraphs and tight bullets over long narrative blocks.
+- For each discussion point heading, prefer flowing text that captures the substance of the discussion.
+- Use bullets only when they materially improve scanability, such as for decisions or action items.
 - Make the result easy for a busy colleague to scan in under a minute.
 
 # Output priorities
