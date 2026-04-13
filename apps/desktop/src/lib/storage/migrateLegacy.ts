@@ -103,13 +103,35 @@ const normalizePromptBlocks = (blocks: LegacyPromptBlock[] | undefined): PromptB
         .filter((block) => block.label || block.body)
     : [];
 
+const LEGACY_MEETING_MINUTES_SYSTEM_PROMPTS = new Set([
+  "You are an executive note assistant. Convert rough notes and transcripts into structured professional notes. Synthesize spoken content instead of reproducing it line by line.",
+]);
+
+const LEGACY_MEETING_MINUTES_RULES = new Set([
+  "Prefer concise business language, preserve important decisions and action items, remove filler and repeated phrasing, and organize the output under clear sections.",
+  "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.",
+]);
+
+const LEGACY_REVISION_RULES = new Set([
+  "Apply only the requested improvements, keep the existing structure, and avoid unnecessary rewrites.",
+]);
+
+const LEGACY_TRANSLATION_RULES = new Set([
+  "Translate the current output faithfully while preserving the same structure, tone, and action items.",
+]);
+
+const normalizePromptText = (value: string | undefined, fallback: string, legacyDefaults: Set<string> = new Set()) => {
+  const trimmedValue = value?.trim();
+  if (!trimmedValue) return fallback;
+  if (legacyDefaults.has(trimmedValue)) return fallback;
+  return trimmedValue;
+};
+
 const normalizePromptProfile = (settings: LegacySettings | null): PromptProfile => {
-  const legacyMeetingMinutesBulletRule =
-    "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
   const migrateMeetingMinutesRules = (rules: string) =>
-    rules.includes(legacyMeetingMinutesBulletRule)
+    rules.includes("- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.")
       ? rules.replace(
-          legacyMeetingMinutesBulletRule,
+          "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.",
           [
             "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
             "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
@@ -118,26 +140,27 @@ const normalizePromptProfile = (settings: LegacySettings | null): PromptProfile 
       : rules;
 
   return {
-    meetingMinutesSystem:
-      typeof settings?.promptSettings?.generationSystem === "string" && settings.promptSettings.generationSystem.trim()
-        ? settings.promptSettings.generationSystem
-        : DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
+    meetingMinutesSystem: normalizePromptText(
+      settings?.promptSettings?.generationSystem,
+      DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
+      LEGACY_MEETING_MINUTES_SYSTEM_PROMPTS,
+    ),
     meetingMinutesRules:
       migrateMeetingMinutesRules(
-        typeof settings?.promptSettings?.generationRules === "string" && settings.promptSettings.generationRules.trim()
-          ? settings.promptSettings.generationRules
-          : DEFAULT_MEETING_MINUTES_RULES,
+        normalizePromptText(
+          settings?.promptSettings?.generationRules,
+          DEFAULT_MEETING_MINUTES_RULES,
+          LEGACY_MEETING_MINUTES_RULES,
+        ),
       ),
     personalNotesSystem: DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
     personalNotesRules: DEFAULT_PERSONAL_NOTES_RULES,
-    revisionRules:
-      typeof settings?.promptSettings?.revisionRules === "string" && settings.promptSettings.revisionRules.trim()
-        ? settings.promptSettings.revisionRules
-        : DEFAULT_REVISION_RULES,
-    translationRules:
-      typeof settings?.promptSettings?.translationRules === "string" && settings.promptSettings.translationRules.trim()
-        ? settings.promptSettings.translationRules
-        : DEFAULT_TRANSLATION_RULES,
+    revisionRules: normalizePromptText(settings?.promptSettings?.revisionRules, DEFAULT_REVISION_RULES, LEGACY_REVISION_RULES),
+    translationRules: normalizePromptText(
+      settings?.promptSettings?.translationRules,
+      DEFAULT_TRANSLATION_RULES,
+      LEGACY_TRANSLATION_RULES,
+    ),
     extraBlocks: normalizePromptBlocks(settings?.promptSettings?.additionalPrompts),
   };
 };

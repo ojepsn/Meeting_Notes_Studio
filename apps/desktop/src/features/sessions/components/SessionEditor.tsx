@@ -373,19 +373,19 @@ export const SessionEditor = ({
                     <span className="capture-mode-title">Start room + computer audio</span>
                     <span className="capture-mode-hint">Combine mic and direct computer audio together</span>
                   </button>
-                  <button className="ghost-button" type="button" onClick={isRecordingAudio ? onStopRecording : onStartRecording}>
+                  <button className="primary-button" type="button" onClick={isRecordingAudio ? onStopRecording : onStartRecording}>
                     {isRecordingAudio ? "Stop recording" : "Record"}
                   </button>
-                  <button className="ghost-button" type="button" onClick={onImportAudio}>
+                  <button className="shell-button" type="button" onClick={onImportAudio}>
                     Upload audio
                   </button>
-                  <button className="ghost-button" type="button" onClick={onImportTranscript}>
+                  <button className="shell-button" type="button" onClick={onImportTranscript}>
                     Upload transcript
                   </button>
-                  <button className="ghost-button" type="button" onClick={onTranscribeAudio}>
+                  <button className="shell-button" type="button" onClick={onTranscribeAudio}>
                     {isTranscribingAudio ? "Transcribing audio..." : "Transcribe audio"}
                   </button>
-                  <button className="ghost-button" type="button" onClick={onImportImage}>
+                  <button className="shell-button" type="button" onClick={onImportImage}>
                     Upload image
                   </button>
                 </div>

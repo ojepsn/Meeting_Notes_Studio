@@ -51,6 +51,44 @@ const STORAGE_KEYS = {
 
 const now = () => new Date().toISOString();
 
+const LEGACY_MEETING_MINUTES_SYSTEM_PROMPTS = new Set([
+  "You are an executive note assistant. Convert rough notes and transcripts into structured professional notes. Synthesize spoken content instead of reproducing it line by line.",
+]);
+
+const LEGACY_MEETING_MINUTES_RULES = new Set([
+  "Prefer concise business language, preserve important decisions and action items, remove filler and repeated phrasing, and organize the output under clear sections.",
+  "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.",
+]);
+
+const LEGACY_REVISION_RULES = new Set([
+  "Apply only the requested improvements, keep the existing structure, and avoid unnecessary rewrites.",
+]);
+
+const LEGACY_TRANSLATION_RULES = new Set([
+  "Translate the current output faithfully while preserving the same structure, tone, and action items.",
+]);
+
+const normalizePromptText = (value: string | undefined, fallback: string, legacyDefaults: Set<string> = new Set()) => {
+  const trimmedValue = value?.trim();
+  if (!trimmedValue) return fallback;
+  if (legacyDefaults.has(trimmedValue)) return fallback;
+  return trimmedValue;
+};
+
+const migrateMeetingMinutesRules = (rules: string) => {
+  const legacyMeetingMinutesBulletRule =
+    "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
+  return rules.includes(legacyMeetingMinutesBulletRule)
+    ? rules.replace(
+        legacyMeetingMinutesBulletRule,
+        [
+          "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
+          "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
+        ].join("\n"),
+      )
+    : rules;
+};
+
 const normalizeDetailLevel = (value: number | undefined) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 3;
@@ -203,36 +241,31 @@ const normalizePromptProfile = (promptProfile: Partial<LocalAppSettings["promptP
         generationRules?: string;
       })
     | undefined;
-  const legacyMeetingMinutesBulletRule =
-    "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
-  const migrateMeetingMinutesRules = (rules: string) =>
-    rules.includes(legacyMeetingMinutesBulletRule)
-      ? rules.replace(
-          legacyMeetingMinutesBulletRule,
-          [
-            "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
-            "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
-          ].join("\n"),
-        )
-      : rules;
 
   return {
     ...defaults,
     ...(promptProfile || {}),
-    meetingMinutesSystem:
-      promptProfile?.meetingMinutesSystem?.trim() ||
-      legacyPromptProfile?.generationSystem?.trim() ||
+    meetingMinutesSystem: normalizePromptText(
+      promptProfile?.meetingMinutesSystem || legacyPromptProfile?.generationSystem,
       defaults.meetingMinutesSystem,
+      LEGACY_MEETING_MINUTES_SYSTEM_PROMPTS,
+    ),
     meetingMinutesRules:
       migrateMeetingMinutesRules(
-        promptProfile?.meetingMinutesRules?.trim() ||
-          legacyPromptProfile?.generationRules?.trim() ||
+        normalizePromptText(
+          promptProfile?.meetingMinutesRules || legacyPromptProfile?.generationRules,
           defaults.meetingMinutesRules,
+          LEGACY_MEETING_MINUTES_RULES,
+        ),
       ),
-    personalNotesSystem: promptProfile?.personalNotesSystem?.trim() || defaults.personalNotesSystem,
-    personalNotesRules: promptProfile?.personalNotesRules?.trim() || defaults.personalNotesRules,
-    revisionRules: promptProfile?.revisionRules?.trim() || defaults.revisionRules,
-    translationRules: promptProfile?.translationRules?.trim() || defaults.translationRules,
+    personalNotesSystem: normalizePromptText(promptProfile?.personalNotesSystem, defaults.personalNotesSystem),
+    personalNotesRules: normalizePromptText(promptProfile?.personalNotesRules, defaults.personalNotesRules),
+    revisionRules: normalizePromptText(promptProfile?.revisionRules, defaults.revisionRules, LEGACY_REVISION_RULES),
+    translationRules: normalizePromptText(
+      promptProfile?.translationRules,
+      defaults.translationRules,
+      LEGACY_TRANSLATION_RULES,
+    ),
     extraBlocks: Array.isArray(promptProfile?.extraBlocks) ? promptProfile.extraBlocks : [],
   };
 };

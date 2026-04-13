@@ -37,6 +37,18 @@ describe("resolvePromptProfile", () => {
             { id: "2", label: "Extra prompt", body: "", enabled: false },
         ]);
     });
+    it("promotes legacy built-in short prompts to the richer current defaults", () => {
+        const resolved = resolvePromptProfile({
+            meetingMinutesSystem: "You are an executive note assistant. Convert rough notes and transcripts into structured professional notes. Synthesize spoken content instead of reproducing it line by line.",
+            meetingMinutesRules: "Prefer concise business language, preserve important decisions and action items, remove filler and repeated phrasing, and organize the output under clear sections.",
+            revisionRules: "Apply only the requested improvements, keep the existing structure, and avoid unnecessary rewrites.",
+            translationRules: "Translate the current output faithfully while preserving the same structure, tone, and action items.",
+        });
+        expect(resolved.profile.meetingMinutesSystem).toContain("expert business meeting-minutes writer");
+        expect(resolved.profile.meetingMinutesRules).toContain("flowing text that captures the substance of the discussion");
+        expect(resolved.profile.revisionRules).toContain("Make the smallest set of changes needed");
+        expect(resolved.profile.translationRules).toContain("Preserve the same structure, headings, emphasis, and practical meaning");
+    });
 });
 describe("formatEnabledPromptBlocks", () => {
     it("formats only enabled blocks with non-empty bodies", () => {

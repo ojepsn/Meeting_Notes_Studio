@@ -809,6 +809,16 @@ select {
 .primary-button,
 .ghost-button,
 .secondary-button {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 42px;
   border: 1px solid var(--app-border-strong);
   border-radius: 999px;
   background: var(--app-input);
@@ -838,11 +848,13 @@ select {
 .shell-button,
 .ghost-button {
   background: color-mix(in srgb, var(--app-surface-soft) 82%, white 18%);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--app-shadow) 72%, transparent 28%);
 }
 
 .secondary-button {
   background: color-mix(in srgb, var(--app-accent-soft) 52%, var(--app-surface-soft) 48%);
   border-color: var(--app-accent-border);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--app-accent-border) 38%, transparent 62%);
 }
 
 .shell-button:hover,
@@ -1061,10 +1073,13 @@ select {
   gap: 0.1rem;
   border-radius: 18px;
   padding: 0.9rem 1rem;
+  min-height: 74px;
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--app-shadow) 55%, transparent 45%);
 }
 
 .capture-mode-title {
   font-weight: 700;
+  font-size: 1rem;
 }
 
 .capture-mode-hint {
@@ -1074,6 +1089,27 @@ select {
 
 .output-actions-row-pwa {
   margin-bottom: 1rem;
+}
+
+.panel-actions-page {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.capture-toolbar-sidebar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.capture-toolbar-sidebar > .primary-button {
+  width: 100%;
+}
+
+.capture-toolbar-sidebar > .shell-button,
+.capture-toolbar-sidebar > .secondary-button {
+  flex: 1 1 160px;
 }
 
 .output-layout-pwa {
@@ -1111,11 +1147,14 @@ select {
 
 .session-card-pwa {
   padding: 0.7rem 0.8rem;
+  background: color-mix(in srgb, var(--app-surface-soft) 88%, white 12%);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--app-shadow) 52%, transparent 48%);
 }
 
 .session-card-pwa-active {
-  background: var(--app-accent-soft);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 86%, white 14%) 0%, var(--app-surface) 100%);
   border-color: var(--app-accent-border);
+  box-shadow: 0 18px 34px color-mix(in srgb, var(--app-accent-border) 38%, transparent 62%);
 }
 
 .compact-session-row-pwa {
@@ -1124,6 +1163,8 @@ select {
 
 .compact-session-link-pwa {
   width: 100%;
+  border-radius: 16px;
+  padding: 0.15rem 0.1rem;
 }
 
 .compact-session-main-pwa {
@@ -1180,6 +1221,7 @@ select {
 
 .session-new-button {
   flex: 0 0 auto;
+  min-width: 78px;
 }
 
 .session-template-pill-row {
@@ -1433,23 +1475,25 @@ select {
 .compact-session-delete {
   border: 1px solid var(--app-danger-border);
   border-radius: 999px;
-  background: transparent;
+  background: color-mix(in srgb, var(--app-danger-border) 28%, var(--app-surface) 72%);
   color: var(--app-danger);
   font-size: 0.72rem;
-  padding: 0.2rem 0.5rem;
+  padding: 0.35rem 0.65rem;
   cursor: pointer;
   flex: 0 0 auto;
+  font-weight: 700;
 }
 
 .compact-session-restore {
   border: 1px solid var(--app-border-strong);
   border-radius: 999px;
-  background: var(--app-input);
+  background: color-mix(in srgb, var(--app-surface-soft) 84%, white 16%);
   color: var(--app-text);
   font-size: 0.72rem;
-  padding: 0.2rem 0.5rem;
+  padding: 0.35rem 0.65rem;
   cursor: pointer;
   flex: 0 0 auto;
+  font-weight: 700;
 }
 
 .compact-session-actions {
@@ -1594,12 +1638,17 @@ select {
 }
 
 .small-button {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  font-weight: 600;
   border: 1px solid var(--app-border-strong);
   border-radius: 14px;
-  background: var(--app-input);
+  background: color-mix(in srgb, var(--app-surface-soft) 84%, white 16%);
   color: var(--app-text);
   padding: 0.55rem 0.8rem;
   cursor: pointer;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--app-shadow) 62%, transparent 38%);
 }
 
 .danger-button {
@@ -3556,6 +3605,9 @@ select {
 }
 
 .recording-mode-card {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
   border: 1px solid var(--app-border);
   border-radius: 20px;
   background: color-mix(in srgb, var(--app-surface-soft) 86%, white 14%);
@@ -3566,6 +3618,8 @@ select {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--app-shadow) 55%, transparent 45%);
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
 }
 
 .recording-mode-card[data-active="true"] {
@@ -3573,11 +3627,18 @@ select {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 72%, white 28%) 0%, var(--app-surface) 100%),
     var(--app-surface);
+  box-shadow: 0 18px 34px color-mix(in srgb, var(--app-accent-border) 38%, transparent 62%);
 }
 
 .recording-mode-card:disabled {
   cursor: not-allowed;
   opacity: 0.72;
+}
+
+.recording-mode-card:hover,
+.compact-session-delete:hover,
+.compact-session-restore:hover {
+  transform: translateY(-1px);
 }
 
 .recording-mode-card p {

@@ -198,13 +198,13 @@ export const OutputWorkspace = ({
 
         <div className="panel-actions panel-actions-output-top output-actions-row-pwa">
           <div className="panel-actions-page">
-            <button className="ghost-button" type="button" onClick={onExportDocx}>
+            <button className="shell-button" type="button" onClick={onExportDocx}>
               Export Word
             </button>
-            <button className="ghost-button" type="button" onClick={onExportPdf}>
+            <button className="shell-button" type="button" onClick={onExportPdf}>
               Export PDF
             </button>
-            <button className="ghost-button" type="button" onClick={onTranslate}>
+            <button className="shell-button" type="button" onClick={onTranslate}>
               Translate
             </button>
           </div>
@@ -223,17 +223,17 @@ export const OutputWorkspace = ({
                   {isPrimaryActionRunning ? `${primaryActionLabel}...` : primaryActionLabel}
                 </button>
                 {secondaryActionLabel && onSecondaryAction ? (
-                  <button className="ghost-button" type="button" onClick={onSecondaryAction}>
+                  <button className="secondary-button" type="button" onClick={onSecondaryAction}>
                     {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
                   </button>
                 ) : null}
-                <button className="ghost-button" type="button" onClick={onTranslate}>
+                <button className="shell-button" type="button" onClick={onTranslate}>
                   Translate
                 </button>
-                <button className="ghost-button" type="button" onClick={onExportDocx}>
+                <button className="shell-button" type="button" onClick={onExportDocx}>
                   Export Word
                 </button>
-                <button className="ghost-button" type="button" onClick={onExportPdf}>
+                <button className="shell-button" type="button" onClick={onExportPdf}>
                   Export PDF
                 </button>
               </div>
