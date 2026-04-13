@@ -125,6 +125,8 @@ const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
   }
 };
 
+const clampNotesCapturePaneWidth = (value: number) => Math.min(980, Math.max(420, Math.round(value)));
+
 export const App = () => {
   const {
     snapshot,
@@ -171,6 +173,7 @@ export const App = () => {
   const [selectedNewSessionTemplateId, setSelectedNewSessionTemplateId] = useState("meeting");
   const [isNotesSessionsOpen, setIsNotesSessionsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
+  const [notesCapturePaneWidth, setNotesCapturePaneWidth] = useState(640);
   const [requestedActivityId, setRequestedActivityId] = useState<string | null>(null);
   const [requestedTodoId, setRequestedTodoId] = useState<string | null>(null);
   const [requestedActivityDomain, setRequestedActivityDomain] = useState<string | null>(null);
@@ -208,6 +211,8 @@ export const App = () => {
   const [isRefreshingModelPricing, setIsRefreshingModelPricing] = useState(false);
   const [metadataSuggestions, setMetadataSuggestions] = useState<MetadataReviewState>(EMPTY_METADATA_REVIEW);
   const [selectedMetadataSuggestions, setSelectedMetadataSuggestions] = useState<MetadataReviewState>(EMPTY_METADATA_REVIEW);
+  const notesLayoutRef = useRef<HTMLDivElement | null>(null);
+  const notesSplitterDraggingRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const captureSourceStreamsRef = useRef<MediaStream[]>([]);
@@ -248,6 +253,38 @@ export const App = () => {
     activeWorkspace,
     snapshot,
   ]);
+
+  useEffect(() => {
+    if (!snapshot) return;
+    setNotesCapturePaneWidth(snapshot.settings.notesCapturePaneWidth);
+  }, [snapshot?.settings.notesCapturePaneWidth]);
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!notesSplitterDraggingRef.current || !notesLayoutRef.current) return;
+      const rect = notesLayoutRef.current.getBoundingClientRect();
+      setNotesCapturePaneWidth(clampNotesCapturePaneWidth(event.clientX - rect.left));
+    };
+
+    const handleMouseUp = () => {
+      if (!notesSplitterDraggingRef.current) return;
+      notesSplitterDraggingRef.current = false;
+      document.body.style.cursor = "";
+      if (snapshot && snapshot.settings.notesCapturePaneWidth !== notesCapturePaneWidth) {
+        void saveSettings({
+          ...snapshot.settings,
+          notesCapturePaneWidth,
+        });
+      }
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [notesCapturePaneWidth, saveSettings, snapshot]);
 
   useEffect(() => {
     if (!isLoaded || loadError) {
@@ -2792,7 +2829,11 @@ export const App = () => {
                     </button>
                   </div>
                 ) : null}
-                <div className="notes-pwa-grid">
+                <div
+                  ref={notesLayoutRef}
+                  className="notes-pwa-grid notes-pwa-grid-resizable"
+                  style={{ gridTemplateColumns: `${notesCapturePaneWidth}px 12px minmax(360px, 1fr)` }}
+                >
                   <div className="notes-pwa-capture">
                     <SessionEditor
                       session={activeSession}
@@ -2832,6 +2873,16 @@ export const App = () => {
                       onOpenInstructions={() => openOverlay("instructions")}
                     />
                   </div>
+                  <div
+                    className="notes-pwa-splitter"
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="Resize capture and output panels"
+                    onMouseDown={() => {
+                      notesSplitterDraggingRef.current = true;
+                      document.body.style.cursor = "col-resize";
+                    }}
+                  />
                   <div className="notes-pwa-output">
                     <OutputWorkspace
                       session={activeSession}

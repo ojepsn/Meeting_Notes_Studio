@@ -9,6 +9,7 @@ const settings: LocalAppSettings = {
   outputLanguage: "same",
   preferredDesktopTemplateId: "meeting",
   outputLayoutPresetId: "modern-aptos",
+  notesCapturePaneWidth: 640,
   captureWorkspaceDensity: "full",
   outputWorkspaceDensity: "full",
   calendarDaysInView: 5,

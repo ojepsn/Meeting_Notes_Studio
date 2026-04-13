@@ -221,6 +221,7 @@ export const loadLegacyBrowserSnapshot = () => {
                 outputLayoutPresetId: typeof legacyExportPresetId === "string" && isOutputLayoutPresetId(legacyExportPresetId)
                     ? legacyExportPresetId
                     : DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
+                notesCapturePaneWidth: 640,
                 captureWorkspaceDensity: "minimal",
                 outputWorkspaceDensity: "minimal",
                 calendarDaysInView: 5,

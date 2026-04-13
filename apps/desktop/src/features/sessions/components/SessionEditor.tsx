@@ -64,6 +64,7 @@ const RECORDING_MODE_META: Record<RecordingMode, { label: string; description: s
 };
 
 const DETAIL_LEVEL_LABELS: Record<number, string> = { 1: "Minimal", 2: "Concise", 3: "Balanced", 4: "Detailed", 5: "Comprehensive" };
+const STANDARD_TEMPLATE_FIELD_KEYS = ["title", "participants", "date", "startTime", "endTime", "agenda"] as const;
 const CAPTURE_MODE_META = {
   "meeting-note": { label: "Meeting", subtitle: "Best for meetings, calls, interviews, and structured minutes.", primaryFieldLabel: "Manual notes", primaryFieldPlaceholder: "Write your own notes here. The AI will combine them with transcript and context." },
   "quick-note": { label: "Quick note", subtitle: "Best for fast typed notes with minimal setup.", primaryFieldLabel: "Manual notes", primaryFieldPlaceholder: "Write your own notes here. They will be included in the Output." },
@@ -103,7 +104,11 @@ export const SessionEditor = ({
     return [...builtIns, ...customs];
   }, [templates]);
   const selectedQuickTemplateId = quickStartTemplates.find((template) => template.id === selectedNewTemplateId)?.id ?? quickStartTemplates[0]?.id ?? "meeting";
-  const customFields = activeTemplate?.fields.filter((field) => field.enabled && !["title", "participants", "date", "startTime", "endTime"].includes(field.key)) ?? [];
+  const agendaField = activeTemplate?.fields.find((field) => field.key === "agenda" && field.enabled);
+  const customFields =
+    activeTemplate?.fields.filter(
+      (field) => field.enabled && !STANDARD_TEMPLATE_FIELD_KEYS.includes(field.key as (typeof STANDARD_TEMPLATE_FIELD_KEYS)[number]),
+    ) ?? [];
   const enabledSections = activeTemplate?.sections.map((section) => ({ ...section, checked: !session.excludedSectionIds.includes(section.id) })) ?? [];
   const imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
   const otherAttachments = attachments.filter((attachment) => attachment.kind !== "image");
@@ -148,7 +153,9 @@ export const SessionEditor = ({
     const nextTemplate = templates.find((template) => template.id === templateId);
     const nextCaptureMode = nextTemplate ? getPrimaryCaptureMode(nextTemplate) : session.captureMode;
     const nextFieldValues = Object.fromEntries((nextTemplate?.fields ?? [])
-      .filter((field) => field.enabled && !["title", "participants", "date", "startTime", "endTime"].includes(field.key))
+      .filter(
+        (field) => field.enabled && !STANDARD_TEMPLATE_FIELD_KEYS.includes(field.key as (typeof STANDARD_TEMPLATE_FIELD_KEYS)[number]),
+      )
       .map((field) => [field.id, session.customFieldValues[field.id] ?? ""]));
     onChange({ ...session, captureMode: nextCaptureMode, templateId, customFieldValues: nextFieldValues, excludedSectionIds: [] });
   };
@@ -242,6 +249,19 @@ export const SessionEditor = ({
                     <div className="field">
                       <label htmlFor="session-end">End time</label>
                       <input id="session-end" type="time" value={session.endTime} onChange={(event) => update("endTime", event.target.value)} />
+                    </div>
+                  ) : null}
+                  {agendaField ? (
+                    <div className="field field-wide">
+                      <label htmlFor="session-agenda">{agendaField.label}</label>
+                      <textarea
+                        id="session-agenda"
+                        value={session.customFieldValues[agendaField.id] ?? ""}
+                        onChange={(event) =>
+                          update("customFieldValues", { ...session.customFieldValues, [agendaField.id]: event.target.value })
+                        }
+                        placeholder="List the planned agenda, topics, or framing points for this meeting."
+                      />
                     </div>
                   ) : null}
                 </div>
@@ -470,6 +490,17 @@ export const SessionEditor = ({
             {hasDateField ? <div className={`field${isMinimal ? " capture-meta-field" : ""}`}><label htmlFor="session-date">Date</label><DateInput id="session-date" value={session.date} onChange={(event) => update("date", event.target.value)} /></div> : null}
             {hasStartTimeField ? <div className={`field${isMinimal ? " capture-meta-field" : ""}`}><label htmlFor="session-start">Start time</label><input id="session-start" type="time" value={session.startTime} onChange={(event) => update("startTime", event.target.value)} /></div> : null}
             {hasEndTimeField ? <div className={`field${isMinimal ? " capture-meta-field" : ""}`}><label htmlFor="session-end">End time</label><input id="session-end" type="time" value={session.endTime} onChange={(event) => update("endTime", event.target.value)} /></div> : null}
+            {agendaField ? (
+              <div className="field field-wide">
+                <label htmlFor="session-agenda">{agendaField.label}</label>
+                <textarea
+                  id="session-agenda"
+                  value={session.customFieldValues[agendaField.id] ?? ""}
+                  onChange={(event) => update("customFieldValues", { ...session.customFieldValues, [agendaField.id]: event.target.value })}
+                  placeholder="List the planned agenda, topics, or framing points for this meeting."
+                />
+              </div>
+            ) : null}
           </div>
         </details>
 

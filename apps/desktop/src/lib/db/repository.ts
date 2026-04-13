@@ -202,6 +202,7 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   outputLanguage: "same",
   preferredDesktopTemplateId: "meeting",
   outputLayoutPresetId: DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
+  notesCapturePaneWidth: 640,
   captureWorkspaceDensity: "minimal",
   outputWorkspaceDensity: "minimal",
   calendarDaysInView: 5,
@@ -361,6 +362,9 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
   outputLayoutPresetId: typeof settings.outputLayoutPresetId === "string" && isOutputLayoutPresetId(settings.outputLayoutPresetId)
     ? settings.outputLayoutPresetId
     : DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
+  notesCapturePaneWidth: Number.isFinite(Number(settings.notesCapturePaneWidth))
+    ? Math.min(980, Math.max(420, Math.round(Number(settings.notesCapturePaneWidth))))
+    : 640,
   captureWorkspaceDensity: settings.captureWorkspaceDensity === "minimal" ? "minimal" : "full",
   outputWorkspaceDensity: settings.outputWorkspaceDensity === "minimal" ? "minimal" : "full",
   calendarDaysInView:

@@ -138,6 +138,11 @@
                     </label>
                   </div>
 
+                  <label class="field" id="meeting-agenda-field">
+                    <span class="field-label">Agenda</span>
+                    <textarea id="meeting-agenda" rows="4" placeholder="List the planned agenda, topics, or framing points for this meeting."></textarea>
+                  </label>
+
                   <details class="context-disclosure">
                     <summary>People</summary>
                     <div class="context-disclosure-body">
@@ -360,6 +365,10 @@
                     Select the sections you want in the generated output. Checked sections are included, and unchecked sections are left out.
                   </p>
                   <div class="config-grid config-grid-inline">
+                    <label class="config-option">
+                      <input id="include-agenda" type="checkbox">
+                      <span>Agenda</span>
+                    </label>
                     <label class="config-option">
                       <input id="include-summary" type="checkbox">
                       <span>Summary</span>
@@ -620,6 +629,10 @@
           <label class="config-option">
             <input class="custom-template-show-highlights" type="checkbox">
             <span>Quick highlights</span>
+          </label>
+          <label class="config-option">
+            <input class="custom-template-show-agenda" type="checkbox">
+            <span>Agenda</span>
           </label>
           <label class="config-option">
             <input class="custom-template-show-manual-notes" type="checkbox">

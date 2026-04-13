@@ -9,11 +9,14 @@ import {
 describe("template routing", () => {
   it("keeps built-in templates scoped to one top-level capture mode", () => {
     const templateMap = Object.fromEntries(BUILTIN_TEMPLATES.map((template) => [template.id, template.captureModes]));
+    const meetingTemplate = BUILTIN_TEMPLATES.find((template) => template.id === "meeting");
 
     expect(templateMap.meeting).toEqual(["meeting-note"]);
     expect(templateMap["one-on-one"]).toEqual(["quick-note"]);
     expect(templateMap["personal-note"]).toEqual(["quick-note"]);
     expect(templateMap["voice-memo"]).toEqual(["voice-note"]);
+    expect(meetingTemplate?.fields.some((field) => field.key === "agenda" && field.enabled)).toBe(true);
+    expect(meetingTemplate?.sections[0]?.id).toBe("agenda");
   });
 
   it("filters templates by their primary capture mode", () => {

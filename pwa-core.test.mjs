@@ -151,6 +151,7 @@ runTest("built-in session templates preserve intended defaults", () => {
   assert.ok(BUILT_IN_TEMPLATES.oneToOneCall);
 
   assert.equal(BUILT_IN_TEMPLATES.meeting.fields.participants, true);
+  assert.equal(BUILT_IN_TEMPLATES.meeting.fields.agenda, true);
   assert.equal(BUILT_IN_TEMPLATES.personalNote.fields.participants, false);
   assert.equal(BUILT_IN_TEMPLATES.personalNote.fields.meetingDate, true);
   assert.equal(BUILT_IN_TEMPLATES.personalNote.fields.meetingStartTime, true);
@@ -159,8 +160,10 @@ runTest("built-in session templates preserve intended defaults", () => {
   assert.equal(BUILT_IN_TEMPLATES.oneToOneCall.fields.meetingDate, true);
   assert.equal(BUILT_IN_TEMPLATES.oneToOneCall.fields.meetingStartTime, true);
   assert.equal(BUILT_IN_TEMPLATES.oneToOneCall.fields.meetingEndTime, false);
+  assert.equal(BUILT_IN_TEMPLATES.meeting.sections[0], "Overview");
   assert.equal(getPreferredDesktopTemplateId(), "meeting");
   assert.match(appJsSource, /selectedQuickTemplateId: "meeting"/);
+  assert.match(indexHtmlSource, /id="include-agenda"/);
 });
 
 runTest("only relevant OpenAI transcription models are exposed in the selector", () => {

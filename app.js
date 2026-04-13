@@ -21,6 +21,7 @@ const BUILT_IN_TEMPLATES = {
     fields: {
       title: true,
       participants: true,
+      agenda: true,
       highlights: true,
       manualNotes: true,
       liveTranscript: true,
@@ -38,6 +39,7 @@ const BUILT_IN_TEMPLATES = {
     fields: {
       title: true,
       participants: true,
+      agenda: false,
       highlights: false,
       manualNotes: true,
       liveTranscript: true,
@@ -55,6 +57,7 @@ const BUILT_IN_TEMPLATES = {
     fields: {
       title: true,
       participants: false,
+      agenda: false,
       highlights: false,
       manualNotes: true,
       liveTranscript: true,
@@ -197,6 +200,7 @@ const contextCardDisclosure = document.querySelector("#context-card-disclosure")
 const meetingDateField = document.querySelector("#meeting-date-field");
 const meetingStartTimeField = document.querySelector("#meeting-start-time-field");
 const meetingEndTimeField = document.querySelector("#meeting-end-time-field");
+const meetingAgendaField = document.querySelector("#meeting-agenda-field");
 const templateCustomFieldsContainer = document.querySelector("#template-custom-fields");
 const highlightsField = document.querySelector("#highlights-field");
 const highlightsCardDisclosure = document.querySelector("#highlights-card-disclosure");
@@ -239,6 +243,8 @@ const abbreviationDirectoryList = document.querySelector("#abbreviation-director
 const meetingDateInput = document.querySelector("#meeting-date");
 const meetingStartTimeInput = document.querySelector("#meeting-start-time");
 const meetingEndTimeInput = document.querySelector("#meeting-end-time");
+const meetingAgendaInput = document.querySelector("#meeting-agenda");
+const includeAgendaInput = document.querySelector("#include-agenda");
 const includeSummaryInput = document.querySelector("#include-summary");
 const includeHighlightsInput = document.querySelector("#include-highlights");
 const includeDecisionsInput = document.querySelector("#include-decisions");
@@ -2115,6 +2121,7 @@ void initializeApp().catch((error) => {
     meetingDateInput,
     meetingStartTimeInput,
     meetingEndTimeInput,
+    meetingAgendaInput,
     rawNotesInput,
   ].forEach((field) => {
     field.addEventListener("input", () => {
@@ -2132,6 +2139,8 @@ void initializeApp().catch((error) => {
                   ? "meetingStartTime"
                   : field.id === "meeting-end-time"
                     ? "meetingEndTime"
+                    : field.id === "meeting-agenda"
+                      ? "agenda"
               : "rawNotes"]: field.value,
       };
 
@@ -2183,6 +2192,7 @@ void initializeApp().catch((error) => {
 
   [
     transcribeOnlyInput,
+    includeAgendaInput,
     includeSummaryInput,
     includeHighlightsInput,
     includeDecisionsInput,
@@ -2192,6 +2202,7 @@ void initializeApp().catch((error) => {
       updateActiveSession({
         transcribeOnly: transcribeOnlyInput.checked,
         sections: {
+          includeAgenda: includeAgendaInput.checked,
           includeSummary: includeSummaryInput.checked,
           includeHighlights: includeHighlightsInput.checked,
           includeDecisions: includeDecisionsInput.checked,
@@ -3396,6 +3407,7 @@ function getVisibleSessions() {
       session.title,
       getTemplateDefinition(session.template).label,
       session.participants,
+      session.agenda,
       session.meetingDate,
       session.rawNotes,
       session.liveTranscript,
@@ -3438,6 +3450,7 @@ function applyTemplateUi(session) {
   const showMeetingDate = fields.meetingDate === true;
   const showMeetingStartTime = fields.meetingStartTime === true;
   const showMeetingEndTime = fields.meetingEndTime === true;
+  const showAgenda = fields.agenda === true;
   const showMeetingSchedule = showMeetingDate || showMeetingStartTime || showMeetingEndTime;
   const showManualNotes = fields.manualNotes !== false;
   const showLiveTranscript = liveTranscriptEnabled && isDictationActive;
@@ -3454,6 +3467,7 @@ function applyTemplateUi(session) {
   setElementVisibility(meetingDateField, showMeetingDate);
   setElementVisibility(meetingStartTimeField, showMeetingStartTime);
   setElementVisibility(meetingEndTimeField, showMeetingEndTime);
+  setElementVisibility(meetingAgendaField, showAgenda);
   setElementVisibility(highlightsField, showHighlights);
   setElementVisibility(highlightChips, showHighlights);
   setElementVisibility(highlightsSection, showHighlights);
@@ -3895,6 +3909,7 @@ function renderCustomTemplates(focusTemplateId = null) {
     instructionsInput.value = template.templateInstructions;
     fragment.querySelector(".custom-template-show-title").checked = template.fields.title !== false;
     fragment.querySelector(".custom-template-show-participants").checked = template.fields.participants !== false;
+    fragment.querySelector(".custom-template-show-agenda").checked = template.fields.agenda === true;
     fragment.querySelector(".custom-template-show-highlights").checked = template.fields.highlights !== false;
     fragment.querySelector(".custom-template-show-manual-notes").checked = template.fields.manualNotes !== false;
     fragment.querySelector(".custom-template-show-live-transcript").checked = template.fields.liveTranscript !== false;
@@ -3959,6 +3974,8 @@ function syncFieldsFromSession() {
   meetingDateInput.value = session.meetingDate ?? "";
   meetingStartTimeInput.value = session.meetingStartTime ?? "";
   meetingEndTimeInput.value = session.meetingEndTime ?? "";
+  meetingAgendaInput.value = session.agenda ?? "";
+  includeAgendaInput.checked = session.sections.includeAgenda;
   transcribeOnlyInput.checked = session.transcribeOnly === true;
   includeSummaryInput.checked = session.sections.includeSummary;
   includeHighlightsInput.checked = session.sections.includeHighlights;
@@ -5227,6 +5244,7 @@ function createSession(templateId = null) {
     meetingDate: defaultSchedule.meetingDate,
     meetingStartTime: defaultSchedule.meetingStartTime,
     meetingEndTime: defaultSchedule.meetingEndTime,
+    agenda: "",
     sections: createDefaultSections(),
     transcribeOnly: getDefaultTranscribeOnlyForTemplate(defaultTemplate),
     outputLanguage: "auto",
@@ -5285,6 +5303,7 @@ function createCustomTemplate() {
     fields: {
       title: true,
       participants: true,
+      agenda: false,
       highlights: true,
       manualNotes: true,
       liveTranscript: true,
@@ -5299,6 +5318,7 @@ function buildTemplateSummary(template) {
   const enabledFields = [
     template.fields.title !== false ? "title" : null,
     template.fields.participants !== false ? "participants" : null,
+    template.fields.agenda === true ? "agenda" : null,
     template.fields.highlights !== false ? "highlights" : null,
     template.fields.manualNotes !== false ? "manual notes" : null,
     template.fields.liveTranscript !== false ? "live transcript" : null,
@@ -5345,6 +5365,7 @@ function readCustomTemplateItem(item, fallbackTemplate) {
     fields: {
       title: item.querySelector(".custom-template-show-title").checked,
       participants: item.querySelector(".custom-template-show-participants").checked,
+      agenda: item.querySelector(".custom-template-show-agenda").checked,
       highlights: item.querySelector(".custom-template-show-highlights").checked,
       manualNotes: item.querySelector(".custom-template-show-manual-notes").checked,
       liveTranscript: item.querySelector(".custom-template-show-live-transcript").checked,
@@ -5438,6 +5459,7 @@ function buildLocalPolishedNotes(session) {
   const decisions = deriveDecisions(normalizedLines);
   const summary = buildSummary(session, template, normalizedLines, highlights, actions, outputLanguage);
   const customSectionsMarkup = buildLocalCustomSectionsMarkup(session, copy, template);
+  const agenda = session.agenda?.trim() || "";
   const participants = session.participants
     .split(",")
     .map((name) => name.trim())
@@ -5471,6 +5493,13 @@ function buildLocalPolishedNotes(session) {
           ${showParticipants && participants.length ? ` - Participants: ${escapeHtml(participants.join(", "))}` : ""}
         </p>
       </header>
+
+      ${sectionConfig.includeAgenda ? `
+        <section class="output-section">
+            <h4>${escapeHtml(copy.agendaHeading)}</h4>
+          <p>${escapeHtml(agenda || copy.noAgenda)}</p>
+        </section>
+      ` : ""}
 
       ${sectionConfig.includeSummary ? `
         <section class="output-section">
@@ -5589,6 +5618,7 @@ async function polishWithOpenAI(session, activeSettings) {
             additionalProperties: false,
             properties: {
               title: { type: "string" },
+              agenda: { type: "string" },
               summary: { type: "string" },
               highlights: {
                 type: "array",
@@ -5630,7 +5660,7 @@ async function polishWithOpenAI(session, activeSettings) {
                 },
               },
             },
-            required: ["title", "summary", "highlights", "discussionPoints", "decisions", "actionItems", "customSections"],
+            required: ["title", "agenda", "summary", "highlights", "discussionPoints", "decisions", "actionItems", "customSections"],
           },
         },
       },
@@ -6049,6 +6079,7 @@ async function revisePolishedNotesWithOpenAI(session, activeSettings, feedback) 
               title: { type: "string" },
               summary: { type: "string" },
               highlights: { type: "array", items: { type: "string" } },
+              agenda: { type: "string" },
               discussionPoints: {
                 type: "array",
                 items: {
@@ -6076,7 +6107,7 @@ async function revisePolishedNotesWithOpenAI(session, activeSettings, feedback) 
                 },
               },
             },
-            required: ["title", "summary", "highlights", "discussionPoints", "decisions", "actionItems", "customSections"],
+            required: ["title", "agenda", "summary", "highlights", "discussionPoints", "decisions", "actionItems", "customSections"],
           },
         },
       },
@@ -6119,9 +6150,11 @@ function buildAiPrompt(session, template, outputLanguage) {
     `Meeting title: ${session.title.trim() || "Untitled session"}`,
     `Meeting schedule: ${buildMeetingSchedulePromptText(session)}`,
     `Participants: ${template.fields?.participants === false ? "Not applicable for this template" : session.participants.trim() || "Not provided"}`,
+    `Agenda: ${session.agenda?.trim() || "Not provided"}`,
     `User-added highlights: ${session.highlights.length ? session.highlights.join(" | ") : "None"}`,
     `Output language: ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}`,
     `Detail level: ${getDetailLevelLabel(session.detailLevel ?? 3)}`,
+    `Include agenda: ${sectionConfig.includeAgenda ? "yes" : "no"}`,
     `Include executive summary: ${sectionConfig.includeSummary ? "yes" : "no"}`,
     `Include highlights: ${sectionConfig.includeHighlights ? "yes" : "no"}`,
     `Include decisions: ${sectionConfig.includeDecisions ? "yes" : "no"}`,
@@ -6181,8 +6214,10 @@ function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
     `Meeting title: ${session.title.trim() || "Untitled session"}`,
     `Meeting schedule: ${buildMeetingSchedulePromptText(session)}`,
     `Participants: ${template.fields?.participants === false ? "Not applicable for this template" : session.participants.trim() || "Not provided"}`,
+    `Agenda: ${session.agenda?.trim() || "Not provided"}`,
     `Output language: ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}`,
     `Detail level: ${getDetailLevelLabel(session.detailLevel ?? 3)}`,
+    `Include agenda: ${sectionConfig.includeAgenda ? "yes" : "no"}`,
     `Include executive summary: ${sectionConfig.includeSummary ? "yes" : "no"}`,
     `Include highlights: ${sectionConfig.includeHighlights ? "yes" : "no"}`,
     `Include decisions: ${sectionConfig.includeDecisions ? "yes" : "no"}`,
@@ -6237,6 +6272,7 @@ function buildAiOutputHtml(session, template, aiNotes, outputLanguage) {
   const sectionConfig = normalizeSectionConfig(session.sections);
   const copy = getOutputCopy(outputLanguage);
   const customSectionsMarkup = buildAiCustomSectionsMarkup(aiNotes.customSections);
+  const agendaText = typeof aiNotes.agenda === "string" ? aiNotes.agenda.trim() : "";
   const participants = session.participants
     .split(",")
     .map((name) => name.trim())
@@ -6270,6 +6306,13 @@ function buildAiOutputHtml(session, template, aiNotes, outputLanguage) {
           ${showParticipants && participants.length ? ` - Participants: ${escapeHtml(participants.join(", "))}` : ""}
         </p>
       </header>
+
+      ${sectionConfig.includeAgenda ? `
+        <section class="output-section">
+          <h4>${escapeHtml(copy.agendaHeading)}</h4>
+          <p>${escapeHtml(agendaText || session.agenda?.trim() || copy.noAgenda)}</p>
+        </section>
+      ` : ""}
 
       ${sectionConfig.includeSummary ? `
         <section class="output-section">
@@ -6319,6 +6362,7 @@ function buildRevisedLocalPolishedNotes(session, feedback) {
 
 function createDefaultSections() {
   return {
+    includeAgenda: true,
     includeSummary: true,
     includeHighlights: true,
     includeDecisions: true,
@@ -6339,7 +6383,8 @@ function normalizeOutputLanguagePreference(value) {
 
 function buildCombinedNotes(session) {
   const scheduleLine = buildMeetingScheduleText(session);
-  return [scheduleLine, session.liveTranscript?.trim(), session.uploadedTranscript?.trim(), session.rawNotes?.trim()]
+  const agendaLine = session.agenda?.trim() ? `Agenda: ${session.agenda.trim()}` : "";
+  return [scheduleLine, agendaLine, session.liveTranscript?.trim(), session.uploadedTranscript?.trim(), session.rawNotes?.trim()]
     .filter(Boolean)
     .map((part) => expandKnownAbbreviations(part, settings.abbreviationDirectory))
     .join("\n\n");
@@ -8649,6 +8694,7 @@ function normalizeImportedSessions(importedSessions) {
       meetingDate: typeof session.meetingDate === "string" ? session.meetingDate : "",
       meetingStartTime: typeof session.meetingStartTime === "string" ? session.meetingStartTime : "",
       meetingEndTime: typeof session.meetingEndTime === "string" ? session.meetingEndTime : "",
+      agenda: typeof session.agenda === "string" ? session.agenda : "",
       sections: normalizeSectionConfig(session.sections),
       transcribeOnly: typeof session.transcribeOnly === "boolean"
         ? session.transcribeOnly
@@ -8720,6 +8766,7 @@ function normalizeTemplateFields(fields) {
   return {
     title: fields?.title !== false,
     participants: fields?.participants !== false,
+    agenda: fields?.agenda === true,
     highlights: fields?.highlights !== false,
     manualNotes: fields?.manualNotes !== false,
     liveTranscript: fields?.liveTranscript !== false,
@@ -8897,6 +8944,7 @@ function detectSourceLanguage(session) {
   const sample = [
     session.title,
     session.participants,
+    session.agenda,
     ...(session.highlights || []),
     session.rawNotes,
   ]
@@ -8941,11 +8989,13 @@ function getOutputLanguageLabel(outputLanguage) {
 function getOutputCopy(outputLanguage) {
   if (outputLanguage === OUTPUT_LANGUAGES.swedish) {
     return {
+      agendaHeading: "Agenda",
       summaryHeading: "Sammanfattning",
       highlightsHeading: "H\u00f6jdpunkter",
       decisionsHeading: "Beslut",
       actionsHeading: "\u00c5tg\u00e4rder",
       participantsLabel: "Deltagare",
+      noAgenda: "Ingen agenda angavs.",
       noHighlights: "Inga h\u00f6jdpunkter har lagts till \u00e4n.",
       noDecisions: "Inga tydliga beslut dokumenterades.",
       noActions: "Inga \u00e5tg\u00e4rder identifierades.",
@@ -8973,11 +9023,13 @@ function getOutputCopy(outputLanguage) {
   }
 
   return {
+    agendaHeading: "Agenda",
     summaryHeading: "Summary",
     highlightsHeading: "Highlights",
     decisionsHeading: "Decisions",
     actionsHeading: "Action Items",
     participantsLabel: "Participants",
+    noAgenda: "No agenda was provided.",
     noHighlights: "No highlights added yet.",
     noDecisions: "No explicit decisions were recorded.",
     noActions: "No action items were identified.",

@@ -182,6 +182,7 @@ export interface LocalAppSettings {
   outputLanguage: "same" | "sv" | "en";
   preferredDesktopTemplateId: string;
   outputLayoutPresetId: string;
+  notesCapturePaneWidth: number;
   captureWorkspaceDensity: CaptureWorkspaceDensity;
   outputWorkspaceDensity: CaptureWorkspaceDensity;
   calendarDaysInView: 3 | 5 | 7 | 14;
@@ -247,13 +248,15 @@ export const BUILTIN_TEMPLATES: TemplateDefinition[] = [
       { id: "meeting-participants", key: "participants", label: "Participants", type: "text", enabled: true, required: false, position: 2 },
       { id: "meeting-date", key: "date", label: "Date", type: "date", enabled: true, required: false, position: 3 },
       { id: "meeting-start", key: "startTime", label: "Start time", type: "time", enabled: true, required: false, position: 4 },
-      { id: "meeting-end", key: "endTime", label: "End time", type: "time", enabled: true, required: false, position: 5 }
+      { id: "meeting-end", key: "endTime", label: "End time", type: "time", enabled: true, required: false, position: 5 },
+      { id: "meeting-agenda", key: "agenda", label: "Agenda", type: "textarea", enabled: true, required: false, position: 6 }
     ],
     sections: [
-      { id: "summary", title: "Summary", instructions: "Summarize the most important outcome from the meeting.", enabledByDefault: true, position: 1 },
-      { id: "discussion", title: "Key discussion points", instructions: "Organize the main business themes discussed.", enabledByDefault: true, position: 2 },
-      { id: "decisions", title: "Decisions", instructions: "Capture explicit decisions that were made.", enabledByDefault: true, position: 3 },
-      { id: "actions", title: "Action items", instructions: "List concrete next actions with owners when possible.", enabledByDefault: true, position: 4 }
+      { id: "agenda", title: "Agenda", instructions: "Capture the planned agenda, topics, or framing points that set up the meeting.", enabledByDefault: true, position: 1 },
+      { id: "summary", title: "Summary", instructions: "Summarize the most important outcome from the meeting.", enabledByDefault: true, position: 2 },
+      { id: "discussion", title: "Key discussion points", instructions: "Organize the main business themes discussed.", enabledByDefault: true, position: 3 },
+      { id: "decisions", title: "Decisions", instructions: "Capture explicit decisions that were made.", enabledByDefault: true, position: 4 },
+      { id: "actions", title: "Action items", instructions: "List concrete next actions with owners when possible.", enabledByDefault: true, position: 5 }
     ]
   },
   {

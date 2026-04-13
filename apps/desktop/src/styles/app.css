@@ -720,9 +720,33 @@ select {
   align-items: start;
 }
 
+.notes-pwa-grid-resizable {
+  gap: 0.9rem;
+}
+
 .notes-pwa-capture,
 .notes-pwa-output {
   min-width: 0;
+}
+
+.notes-pwa-splitter {
+  width: 12px;
+  align-self: stretch;
+  cursor: col-resize;
+  position: relative;
+}
+
+.notes-pwa-splitter::before {
+  content: "";
+  position: absolute;
+  inset: 0.35rem 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-border) 72%, transparent);
+  transition: background 160ms ease;
+}
+
+.notes-pwa-splitter:hover::before {
+  background: color-mix(in srgb, var(--app-accent) 42%, var(--app-border));
 }
 
 .notes-pwa-output {
@@ -3748,6 +3772,14 @@ select {
 
   .notes-pwa-grid {
     grid-template-columns: 1fr;
+  }
+
+  .notes-pwa-grid-resizable {
+    grid-template-columns: 1fr !important;
+  }
+
+  .notes-pwa-splitter {
+    display: none;
   }
 
   .notes-pwa-output {
