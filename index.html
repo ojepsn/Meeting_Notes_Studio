@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.10.14">
+  <link rel="stylesheet" href="styles.css?v=0.10.15">
 </head>
 <body>
   <main class="page-shell">
@@ -24,7 +24,7 @@
           Capture rough notes and turn them into professional meeting notes without leaving the page.
         </p>
         <div class="hero-meta">
-        <div class="version-pill" id="app-version">v0.10.14</div>
+        <div class="version-pill" id="app-version">v0.10.15</div>
           <div class="version-pill model-pill" id="app-models">Output: GPT-5 mini · Audio: GPT-4o mini transcribe</div>
           <div class="update-notice is-hidden-field" id="app-update-notice">New version available</div>
         </div>
@@ -1011,6 +1011,14 @@
                     <span class="field-label">Translation rules</span>
                     <textarea id="prompt-translation-rules" rows="6" placeholder="How translated output should preserve structure and meaning"></textarea>
                   </label>
+
+                  <div class="capture-toolbar settings-inline-actions">
+                    <button class="ghost-button" id="reset-prompt-settings" type="button">Restore prompt defaults</button>
+                  </div>
+
+                  <p class="support-text">
+                    Reload the latest built-in prompt defaults from the app while keeping your reusable prompt blocks.
+                  </p>
                 </div>
               </details>
 
@@ -1032,9 +1040,6 @@
                     <button class="secondary-button" id="add-prompt-block" type="button">Add prompt block</button>
                   </div>
 
-                  <div class="capture-toolbar settings-inline-actions">
-                    <button class="ghost-button" id="reset-prompt-settings" type="button">Reset to recommended defaults</button>
-                  </div>
                 </div>
               </details>
             </section>
@@ -1572,7 +1577,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.17/mammoth.browser.min.js"></script>
-  <script src="app.js?v=0.10.14"></script>
+  <script src="app.js?v=0.10.15"></script>
 </body>
 </html>
 

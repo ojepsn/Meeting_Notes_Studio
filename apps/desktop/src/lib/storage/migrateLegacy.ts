@@ -103,27 +103,44 @@ const normalizePromptBlocks = (blocks: LegacyPromptBlock[] | undefined): PromptB
         .filter((block) => block.label || block.body)
     : [];
 
-const normalizePromptProfile = (settings: LegacySettings | null): PromptProfile => ({
-  meetingMinutesSystem:
-    typeof settings?.promptSettings?.generationSystem === "string" && settings.promptSettings.generationSystem.trim()
-      ? settings.promptSettings.generationSystem
-      : DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
-  meetingMinutesRules:
-    typeof settings?.promptSettings?.generationRules === "string" && settings.promptSettings.generationRules.trim()
-      ? settings.promptSettings.generationRules
-      : DEFAULT_MEETING_MINUTES_RULES,
-  personalNotesSystem: DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
-  personalNotesRules: DEFAULT_PERSONAL_NOTES_RULES,
-  revisionRules:
-    typeof settings?.promptSettings?.revisionRules === "string" && settings.promptSettings.revisionRules.trim()
-      ? settings.promptSettings.revisionRules
-      : DEFAULT_REVISION_RULES,
-  translationRules:
-    typeof settings?.promptSettings?.translationRules === "string" && settings.promptSettings.translationRules.trim()
-      ? settings.promptSettings.translationRules
-      : DEFAULT_TRANSLATION_RULES,
-  extraBlocks: normalizePromptBlocks(settings?.promptSettings?.additionalPrompts),
-});
+const normalizePromptProfile = (settings: LegacySettings | null): PromptProfile => {
+  const legacyMeetingMinutesBulletRule =
+    "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
+  const migrateMeetingMinutesRules = (rules: string) =>
+    rules.includes(legacyMeetingMinutesBulletRule)
+      ? rules.replace(
+          legacyMeetingMinutesBulletRule,
+          [
+            "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
+            "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
+          ].join("\n"),
+        )
+      : rules;
+
+  return {
+    meetingMinutesSystem:
+      typeof settings?.promptSettings?.generationSystem === "string" && settings.promptSettings.generationSystem.trim()
+        ? settings.promptSettings.generationSystem
+        : DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
+    meetingMinutesRules:
+      migrateMeetingMinutesRules(
+        typeof settings?.promptSettings?.generationRules === "string" && settings.promptSettings.generationRules.trim()
+          ? settings.promptSettings.generationRules
+          : DEFAULT_MEETING_MINUTES_RULES,
+      ),
+    personalNotesSystem: DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
+    personalNotesRules: DEFAULT_PERSONAL_NOTES_RULES,
+    revisionRules:
+      typeof settings?.promptSettings?.revisionRules === "string" && settings.promptSettings.revisionRules.trim()
+        ? settings.promptSettings.revisionRules
+        : DEFAULT_REVISION_RULES,
+    translationRules:
+      typeof settings?.promptSettings?.translationRules === "string" && settings.promptSettings.translationRules.trim()
+        ? settings.promptSettings.translationRules
+        : DEFAULT_TRANSLATION_RULES,
+    extraBlocks: normalizePromptBlocks(settings?.promptSettings?.additionalPrompts),
+  };
+};
 
 const mapLegacyTemplateId = (legacyId?: string) => {
   if (legacyId === "personalNote") return "personal-note";

@@ -301,7 +301,7 @@ export const SettingsCard = ({
 
   const updateThemeFamily = (familyId: string) => onChange({ ...settings, theme: buildThemeValue(familyId, selectedTheme.mode) });
   const updateThemeMode = (mode: ThemeMode) => onChange({ ...settings, theme: buildThemeValue(selectedTheme.familyId, mode) });
-  const loadLatestRecommendedPrompts = () =>
+  const restorePromptDefaults = () =>
     updatePromptProfile({
       meetingMinutesSystem: DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
       meetingMinutesRules: DEFAULT_MEETING_MINUTES_RULES,
@@ -1170,17 +1170,17 @@ export const SettingsCard = ({
             </details>
             <div className="prompt-actions-row">
               <div className="prompt-actions-copy">
-                <strong>Built-in recommendations</strong>
-                <p className="tiny-text">Load the latest recommended built-in prompt families for meeting minutes, personal notes, revision, and translation. Your reusable extra prompt blocks stay in place.</p>
+                <strong>Restore prompt defaults</strong>
+                <p className="tiny-text">Reload the latest built-in prompt families from the app for meeting minutes, personal notes, revision, and translation. Your reusable extra prompt blocks stay in place.</p>
               </div>
               <div className="inline-row">
-                <button className="small-button" type="button" onClick={loadLatestRecommendedPrompts}>
-                  Load latest recommended prompts
+                <button className="small-button" type="button" onClick={restorePromptDefaults}>
+                  Restore prompt defaults
                 </button>
               </div>
             </div>
             <p className="tiny-text">
-              Use this when the app's built-in prompt families have improved and you want to reload them explicitly.
+              Use this when you want to replace edited built-in prompt families with the latest versions from the app without losing your reusable prompt blocks.
             </p>
             <div className="section-divider">
               <div>

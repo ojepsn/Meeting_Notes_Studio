@@ -154,15 +154,22 @@ export const createDefaultSettings = () => ({
 const normalizePromptProfile = (promptProfile) => {
     const defaults = createDefaultSettings().promptProfile;
     const legacyPromptProfile = promptProfile;
+    const legacyMeetingMinutesBulletRule = "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
+    const migrateMeetingMinutesRules = (rules) => rules.includes(legacyMeetingMinutesBulletRule)
+        ? rules.replace(legacyMeetingMinutesBulletRule, [
+            "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
+            "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
+        ].join("\n"))
+        : rules;
     return {
         ...defaults,
         ...(promptProfile || {}),
         meetingMinutesSystem: promptProfile?.meetingMinutesSystem?.trim() ||
             legacyPromptProfile?.generationSystem?.trim() ||
             defaults.meetingMinutesSystem,
-        meetingMinutesRules: promptProfile?.meetingMinutesRules?.trim() ||
+        meetingMinutesRules: migrateMeetingMinutesRules(promptProfile?.meetingMinutesRules?.trim() ||
             legacyPromptProfile?.generationRules?.trim() ||
-            defaults.meetingMinutesRules,
+            defaults.meetingMinutesRules),
         personalNotesSystem: promptProfile?.personalNotesSystem?.trim() || defaults.personalNotesSystem,
         personalNotesRules: promptProfile?.personalNotesRules?.trim() || defaults.personalNotesRules,
         revisionRules: promptProfile?.revisionRules?.trim() || defaults.revisionRules,

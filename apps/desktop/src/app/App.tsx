@@ -2153,16 +2153,29 @@ export const App = () => {
           </div>
         );
       case "metadata-review":
+        const hasPeopleSuggestions = metadataSuggestions.people.length > 0;
+        const hasNonPeopleSuggestions =
+          metadataSuggestions.domains.length > 0 ||
+          metadataSuggestions.projects.length > 0 ||
+          metadataSuggestions.activities.length > 0;
+        const reviewTitle = hasPeopleSuggestions
+          ? hasNonPeopleSuggestions
+            ? "Update saved participants and reusable values?"
+            : "Update saved participants?"
+          : "Save new reusable values?";
+        const reviewDescription = hasPeopleSuggestions
+          ? hasNonPeopleSuggestions
+            ? "These participant names and other values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future quick selection."
+            : "These names appear in the meeting Participants field but are not yet saved in the app's saved Participants list. Save the ones you want available for future quick selection."
+          : "These values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future search and quick selection.";
         return (
           <div className="sidebar-card overlay-card">
             <div>
-              <h3>Save new reusable values?</h3>
-              <p>
-                These values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future search and quick selection.
-              </p>
+              <h3>{reviewTitle}</h3>
+              <p>{reviewDescription}</p>
             </div>
             {([
-              { key: "people", label: "People", helper: "Save these names to reuse in future notes." },
+              { key: "people", label: "People", helper: "Save these names to reuse in future notes and participant pickers." },
               { key: "domains", label: "Domains", helper: "Save these top-level business areas for future notes." },
               { key: "projects", label: "Projects", helper: "Save these projects to reuse in future notes." },
               { key: "activities", label: "Activities", helper: "Save these activities to reuse in future notes." },

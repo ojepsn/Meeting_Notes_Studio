@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.14";
+const APP_VERSION = "v0.10.15";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -491,6 +491,12 @@ const RELEVANT_TRANSCRIPTION_MODEL_IDS = [
   "gpt-4o-mini-transcribe",
   "gpt-4o-transcribe",
   "gpt-4o-transcribe-diarize",
+];
+const LEGACY_MEETING_MINUTES_BULLET_RULE =
+  "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
+const UPDATED_MEETING_MINUTES_PROSE_RULES = [
+  "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
+  "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
 ];
 const THEME_DESCRIPTIONS = {
   "fluent-slate": "A calm professional default with restrained blue accents and quiet neutral surfaces.",
@@ -1880,7 +1886,7 @@ void initializeApp().catch((error) => {
     });
     persistSettings();
     syncPromptSettingsUi();
-    dictationStatus.textContent = "Recommended prompt defaults restored. Your added prompt blocks were kept and unchecked.";
+    dictationStatus.textContent = "Prompt defaults restored from the latest built-in app prompts. Your reusable prompt blocks were kept and unchecked.";
   });
   addPromptBlockButton?.addEventListener("click", () => {
     settings.promptSettings = normalizePromptSettings({
@@ -2326,18 +2332,21 @@ void initializeApp().catch((error) => {
 
       updateActiveSession({ polishedHtml }, false);
       syncTodoItemsFromSession(getActiveSession());
-      syncParticipantDirectoryWithSession(getActiveSession().participants);
       renderOutput();
+      const addedParticipants = await maybeOfferParticipantDirectoryUpdate(getActiveSession().participants);
       if (isMobileLayout()) {
         openMobileOutputSheet();
       } else {
         setDesktopWorkspaceView("output");
       }
-      dictationStatus.textContent = settings.apiKey
+      const generationStatus = settings.apiKey
         ? (session.transcribeOnly ? "AI transcription complete." : "AI polishing complete.")
         : session.outputLanguage && session.outputLanguage !== "auto"
           ? "No API key found in AI Settings, so a local polish pass was used. Language translation requires AI polishing."
           : (session.transcribeOnly ? "No API key found in AI Settings, so a local transcription cleanup was used instead." : "No API key found in AI Settings, so a local polish pass was used instead.");
+      dictationStatus.textContent = addedParticipants
+        ? `${generationStatus} Added ${addedParticipants} ${addedParticipants === 1 ? "participant" : "participants"} to the saved list.`
+        : generationStatus;
     } catch (error) {
       if (settings.apiKey) {
         dictationStatus.textContent = session.transcribeOnly
@@ -2348,14 +2357,18 @@ void initializeApp().catch((error) => {
         updateActiveSession({ polishedHtml }, false);
         syncTodoItemsFromSession(getActiveSession());
         renderOutput();
+        const addedParticipants = await maybeOfferParticipantDirectoryUpdate(getActiveSession().participants);
         if (isMobileLayout()) {
           openMobileOutputSheet();
         } else {
           setDesktopWorkspaceView("output");
         }
-        dictationStatus.textContent = session.transcribeOnly
+        const fallbackStatus = session.transcribeOnly
           ? `AI transcription failed: ${error.message}. A local transcription cleanup was used instead.`
           : `AI polishing failed: ${error.message}. A local polish pass was used instead.`;
+        dictationStatus.textContent = addedParticipants
+          ? `${fallbackStatus} Added ${addedParticipants} ${addedParticipants === 1 ? "participant" : "participants"} to the saved list.`
+          : fallbackStatus;
       }
     } finally {
       polishButton.disabled = false;
@@ -7638,17 +7651,31 @@ async function loadSettings() {
 }
 
 function normalizePromptSettings(promptSettings) {
+  const migrateMeetingMinutesRules = (rules) => {
+    if (typeof rules !== "string" || !rules.trim()) {
+      return "";
+    }
+    if (!rules.includes(LEGACY_MEETING_MINUTES_BULLET_RULE)) {
+      return rules;
+    }
+    return rules.replace(LEGACY_MEETING_MINUTES_BULLET_RULE, UPDATED_MEETING_MINUTES_PROSE_RULES.join("\n"));
+  };
+
   return {
     meetingMinutesSystem: typeof promptSettings?.meetingMinutesSystem === "string" && promptSettings.meetingMinutesSystem.trim()
       ? promptSettings.meetingMinutesSystem
       : (typeof promptSettings?.generationSystem === "string" && promptSettings.generationSystem.trim()
         ? promptSettings.generationSystem
         : DEFAULT_PROMPT_SETTINGS.meetingMinutesSystem),
-    meetingMinutesRules: typeof promptSettings?.meetingMinutesRules === "string" && promptSettings.meetingMinutesRules.trim()
-      ? promptSettings.meetingMinutesRules
-      : (typeof promptSettings?.generationRules === "string" && promptSettings.generationRules.trim()
-        ? promptSettings.generationRules
-        : DEFAULT_PROMPT_SETTINGS.meetingMinutesRules),
+    meetingMinutesRules: (() => {
+      const storedRules =
+        typeof promptSettings?.meetingMinutesRules === "string" && promptSettings.meetingMinutesRules.trim()
+          ? promptSettings.meetingMinutesRules
+          : (typeof promptSettings?.generationRules === "string" && promptSettings.generationRules.trim()
+            ? promptSettings.generationRules
+            : DEFAULT_PROMPT_SETTINGS.meetingMinutesRules);
+      return migrateMeetingMinutesRules(storedRules) || DEFAULT_PROMPT_SETTINGS.meetingMinutesRules;
+    })(),
     personalNotesSystem: typeof promptSettings?.personalNotesSystem === "string" && promptSettings.personalNotesSystem.trim()
       ? promptSettings.personalNotesSystem
       : DEFAULT_PROMPT_SETTINGS.personalNotesSystem,
@@ -7846,6 +7873,38 @@ function syncParticipantDirectoryWithSession(value) {
   persistSettings();
   renderParticipantSuggestions();
   renderParticipantDirectoryManager();
+}
+
+function getUnsavedParticipantNames(value) {
+  const knownParticipants = new Set(
+    normalizeParticipantDirectory(settings.participantDirectory || []).map((name) => name.toLocaleLowerCase())
+  );
+  return parseParticipants(value).filter((name) => !knownParticipants.has(name.toLocaleLowerCase()));
+}
+
+async function maybeOfferParticipantDirectoryUpdate(value) {
+  const newParticipants = getUnsavedParticipantNames(value);
+  if (!newParticipants.length) {
+    return 0;
+  }
+
+  const confirmed = await showConfirmModal({
+    eyebrow: "Participants",
+    title: newParticipants.length === 1 ? "Add new participant to saved list?" : "Add new participants to saved list?",
+    message:
+      newParticipants.length === 1
+        ? `"${newParticipants[0]}" appears in the meeting Participants field but is not yet saved. Add it to the saved Participants list for future quick selection?`
+        : `${newParticipants.join(", ")} appear in the meeting Participants field but are not yet saved. Add them to the saved Participants list for future quick selection?`,
+    confirmLabel: newParticipants.length === 1 ? "Add participant" : "Add participants",
+    cancelLabel: "Not now",
+  });
+
+  if (!confirmed) {
+    return 0;
+  }
+
+  syncParticipantDirectoryWithSession(newParticipants.join(", "));
+  return newParticipants.length;
 }
 
 function addParticipantToDirectory(value) {

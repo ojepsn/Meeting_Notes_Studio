@@ -1626,8 +1626,22 @@ export const App = () => {
             case "instructions":
                 return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Notes instructions" }), _jsx("p", { children: "Desktop Notes now follows the same calmer session workflow as the PWA, while keeping the stronger native desktop capture options." })] }), _jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Starting sessions" }), _jsx("span", { className: "muted", children: "Choose a template first, then use New to create the next session. Meeting is the default, with quick notes and 1:1 calls close behind." })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Capture" }), _jsx("span", { className: "muted", children: "Keep Details, People, transcript, and context folded away until needed. Manual notes stay central so the main writing surface is always easy to reach." })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Recording" }), _jsx("span", { className: "muted", children: "Use room or hybrid capture when the space hears everything through microphones and speakers. Use direct computer audio when you need native in-computer sound from this device." })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Output" }), _jsx("span", { className: "muted", children: "Generate, translate, export, and revise from the action row first. The Output document stays below, with follow-up work and details folded into calmer sections." })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Technical design" }), _jsx("span", { className: "muted", children: "The desktop app runs in Tauri with React, TypeScript, local SQLite-backed storage, OpenAI text generation, and desktop-native recording, file, and export flows." })] })] })] }));
             case "metadata-review":
-                return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Save new reusable values?" }), _jsx("p", { children: "These values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future search and quick selection." })] }), [
-                            { key: "people", label: "People", helper: "Save these names to reuse in future notes." },
+                const hasPeopleSuggestions = metadataSuggestions.people.length > 0;
+                const hasNonPeopleSuggestions = metadataSuggestions.domains.length > 0 ||
+                    metadataSuggestions.projects.length > 0 ||
+                    metadataSuggestions.activities.length > 0;
+                const reviewTitle = hasPeopleSuggestions
+                    ? hasNonPeopleSuggestions
+                        ? "Update saved participants and reusable values?"
+                        : "Update saved participants?"
+                    : "Save new reusable values?";
+                const reviewDescription = hasPeopleSuggestions
+                    ? hasNonPeopleSuggestions
+                        ? "These participant names and other values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future quick selection."
+                        : "These names appear in the meeting Participants field but are not yet saved in the app's saved Participants list. Save the ones you want available for future quick selection."
+                    : "These values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future search and quick selection.";
+                return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: reviewTitle }), _jsx("p", { children: reviewDescription })] }), [
+                            { key: "people", label: "People", helper: "Save these names to reuse in future notes and participant pickers." },
                             { key: "domains", label: "Domains", helper: "Save these top-level business areas for future notes." },
                             { key: "projects", label: "Projects", helper: "Save these projects to reuse in future notes." },
                             { key: "activities", label: "Activities", helper: "Save these activities to reuse in future notes." },

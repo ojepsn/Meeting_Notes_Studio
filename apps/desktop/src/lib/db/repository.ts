@@ -203,6 +203,18 @@ const normalizePromptProfile = (promptProfile: Partial<LocalAppSettings["promptP
         generationRules?: string;
       })
     | undefined;
+  const legacyMeetingMinutesBulletRule =
+    "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
+  const migrateMeetingMinutesRules = (rules: string) =>
+    rules.includes(legacyMeetingMinutesBulletRule)
+      ? rules.replace(
+          legacyMeetingMinutesBulletRule,
+          [
+            "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
+            "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
+          ].join("\n"),
+        )
+      : rules;
 
   return {
     ...defaults,
@@ -212,9 +224,11 @@ const normalizePromptProfile = (promptProfile: Partial<LocalAppSettings["promptP
       legacyPromptProfile?.generationSystem?.trim() ||
       defaults.meetingMinutesSystem,
     meetingMinutesRules:
-      promptProfile?.meetingMinutesRules?.trim() ||
-      legacyPromptProfile?.generationRules?.trim() ||
-      defaults.meetingMinutesRules,
+      migrateMeetingMinutesRules(
+        promptProfile?.meetingMinutesRules?.trim() ||
+          legacyPromptProfile?.generationRules?.trim() ||
+          defaults.meetingMinutesRules,
+      ),
     personalNotesSystem: promptProfile?.personalNotesSystem?.trim() || defaults.personalNotesSystem,
     personalNotesRules: promptProfile?.personalNotesRules?.trim() || defaults.personalNotesRules,
     revisionRules: promptProfile?.revisionRules?.trim() || defaults.revisionRules,
