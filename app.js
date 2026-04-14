@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.17";
+const APP_VERSION = "v0.10.18";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -8627,32 +8627,14 @@ function downloadBlob(blob, filename) {
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
+  link.rel = "noopener";
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 async function saveBlobAsFile(blob, filename, mimeType) {
-  if (typeof window.showSaveFilePicker === "function") {
-    const handle = await window.showSaveFilePicker({
-      suggestedName: filename,
-      types: [
-        {
-          description: mimeType === "application/pdf" ? "PDF document" : "Word document",
-          accept: {
-            [mimeType]: [filename.endsWith(".pdf") ? ".pdf" : ".doc"],
-          },
-        },
-      ],
-    });
-
-    const writable = await handle.createWritable();
-    await writable.write(blob);
-    await writable.close();
-    return "saved";
-  }
-
   downloadBlob(blob, filename);
   return "downloaded";
 }
