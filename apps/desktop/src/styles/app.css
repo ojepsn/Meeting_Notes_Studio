@@ -2106,9 +2106,43 @@ select {
   outline: none;
 }
 
+.rich-text-surface[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: var(--app-muted);
+  pointer-events: none;
+}
+
 .todo-rich-text-surface:focus {
   border-color: var(--app-accent-border);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent-soft) 40%, transparent 60%);
+}
+
+.agenda-rich-text-surface {
+  min-height: 120px;
+  line-height: 1.5;
+}
+
+.agenda-rich-text-surface p,
+.agenda-rich-text-surface ul,
+.agenda-rich-text-surface ol {
+  margin: 0 0 0.7rem;
+}
+
+.agenda-rich-text-surface p:last-child,
+.agenda-rich-text-surface ul:last-child,
+.agenda-rich-text-surface ol:last-child {
+  margin-bottom: 0;
+}
+
+.rich-text-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.6rem;
+}
+
+.rich-text-command {
+  min-width: 0;
 }
 
 .section-divider {

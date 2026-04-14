@@ -138,10 +138,23 @@
                     </label>
                   </div>
 
-                  <label class="field" id="meeting-agenda-field">
-                    <span class="field-label">Agenda</span>
-                    <textarea id="meeting-agenda" rows="4" placeholder="List the planned agenda, topics, or framing points for this meeting."></textarea>
-                  </label>
+                  <details class="field field-wide context-disclosure" id="meeting-agenda-field">
+                    <summary>Agenda</summary>
+                    <div class="context-disclosure-body">
+                      <div class="rich-text-toolbar" aria-label="Agenda formatting">
+                        <button class="ghost-button rich-text-command" data-target="meeting-agenda" data-command="bold" type="button">Bold</button>
+                        <button class="ghost-button rich-text-command" data-target="meeting-agenda" data-command="italic" type="button">Italic</button>
+                        <button class="ghost-button rich-text-command" data-target="meeting-agenda" data-command="insertUnorderedList" type="button">Bullets</button>
+                      </div>
+                      <div
+                        id="meeting-agenda"
+                        class="rich-text-editor-surface"
+                        contenteditable="true"
+                        data-placeholder="List the planned agenda, topics, or framing points for this meeting."
+                        data-empty="true"
+                      ></div>
+                    </div>
+                  </details>
 
                   <details class="context-disclosure">
                     <summary>People</summary>

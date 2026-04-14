@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.16";
+const APP_VERSION = "v0.10.17";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -2121,7 +2121,6 @@ void initializeApp().catch((error) => {
     meetingDateInput,
     meetingStartTimeInput,
     meetingEndTimeInput,
-    meetingAgendaInput,
     rawNotesInput,
   ].forEach((field) => {
     field.addEventListener("input", () => {
@@ -2137,10 +2136,8 @@ void initializeApp().catch((error) => {
                 ? "meetingDate"
                 : field.id === "meeting-start-time"
                   ? "meetingStartTime"
-                  : field.id === "meeting-end-time"
-                    ? "meetingEndTime"
-                    : field.id === "meeting-agenda"
-                      ? "agenda"
+                    : field.id === "meeting-end-time"
+                      ? "meetingEndTime"
               : "rawNotes"]: field.value,
       };
 
@@ -2163,6 +2160,19 @@ void initializeApp().catch((error) => {
       if (field.id === "participants") {
         renderParticipantSuggestions();
       }
+    });
+  });
+
+  meetingAgendaInput.addEventListener("input", () => {
+    const richTextValue = getRichTextContent(meetingAgendaInput);
+    setRichTextContent(meetingAgendaInput, richTextValue);
+    updateActiveSession({ agenda: richTextValue }, true);
+  });
+
+  document.querySelectorAll(".rich-text-command[data-target=\"meeting-agenda\"]").forEach((button) => {
+    button.addEventListener("click", () => {
+      applyRichTextCommand(meetingAgendaInput, button.dataset.command);
+      updateActiveSession({ agenda: getRichTextContent(meetingAgendaInput) }, true);
     });
   });
 
@@ -3407,7 +3417,7 @@ function getVisibleSessions() {
       session.title,
       getTemplateDefinition(session.template).label,
       session.participants,
-      session.agenda,
+      getAgendaText(session),
       session.meetingDate,
       session.rawNotes,
       session.liveTranscript,
@@ -3974,7 +3984,7 @@ function syncFieldsFromSession() {
   meetingDateInput.value = session.meetingDate ?? "";
   meetingStartTimeInput.value = session.meetingStartTime ?? "";
   meetingEndTimeInput.value = session.meetingEndTime ?? "";
-  meetingAgendaInput.value = session.agenda ?? "";
+  setRichTextContent(meetingAgendaInput, session.agenda ?? "");
   includeAgendaInput.checked = session.sections.includeAgenda;
   transcribeOnlyInput.checked = session.transcribeOnly === true;
   includeSummaryInput.checked = session.sections.includeSummary;
@@ -5459,7 +5469,7 @@ function buildLocalPolishedNotes(session) {
   const decisions = deriveDecisions(normalizedLines);
   const summary = buildSummary(session, template, normalizedLines, highlights, actions, outputLanguage);
   const customSectionsMarkup = buildLocalCustomSectionsMarkup(session, copy, template);
-  const agenda = session.agenda?.trim() || "";
+  const agenda = getAgendaText(session);
   const participants = session.participants
     .split(",")
     .map((name) => name.trim())
@@ -5497,7 +5507,7 @@ function buildLocalPolishedNotes(session) {
       ${sectionConfig.includeAgenda ? `
         <section class="output-section">
             <h4>${escapeHtml(copy.agendaHeading)}</h4>
-          <p>${escapeHtml(agenda || copy.noAgenda)}</p>
+          <p>${escapeHtml(agenda || copy.noAgenda).replace(/\n/g, "<br>")}</p>
         </section>
       ` : ""}
 
@@ -6150,7 +6160,7 @@ function buildAiPrompt(session, template, outputLanguage) {
     `Meeting title: ${session.title.trim() || "Untitled session"}`,
     `Meeting schedule: ${buildMeetingSchedulePromptText(session)}`,
     `Participants: ${template.fields?.participants === false ? "Not applicable for this template" : session.participants.trim() || "Not provided"}`,
-    `Agenda: ${session.agenda?.trim() || "Not provided"}`,
+    `Agenda: ${getAgendaText(session) || "Not provided"}`,
     `User-added highlights: ${session.highlights.length ? session.highlights.join(" | ") : "None"}`,
     `Output language: ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}`,
     `Detail level: ${getDetailLevelLabel(session.detailLevel ?? 3)}`,
@@ -6214,7 +6224,7 @@ function buildAiRevisionPrompt(session, template, outputLanguage, feedback) {
     `Meeting title: ${session.title.trim() || "Untitled session"}`,
     `Meeting schedule: ${buildMeetingSchedulePromptText(session)}`,
     `Participants: ${template.fields?.participants === false ? "Not applicable for this template" : session.participants.trim() || "Not provided"}`,
-    `Agenda: ${session.agenda?.trim() || "Not provided"}`,
+    `Agenda: ${getAgendaText(session) || "Not provided"}`,
     `Output language: ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}`,
     `Detail level: ${getDetailLevelLabel(session.detailLevel ?? 3)}`,
     `Include agenda: ${sectionConfig.includeAgenda ? "yes" : "no"}`,
@@ -6310,7 +6320,7 @@ function buildAiOutputHtml(session, template, aiNotes, outputLanguage) {
       ${sectionConfig.includeAgenda ? `
         <section class="output-section">
           <h4>${escapeHtml(copy.agendaHeading)}</h4>
-          <p>${escapeHtml(agendaText || session.agenda?.trim() || copy.noAgenda)}</p>
+          <p>${escapeHtml(agendaText || getAgendaText(session) || copy.noAgenda).replace(/\n/g, "<br>")}</p>
         </section>
       ` : ""}
 
@@ -6383,7 +6393,8 @@ function normalizeOutputLanguagePreference(value) {
 
 function buildCombinedNotes(session) {
   const scheduleLine = buildMeetingScheduleText(session);
-  const agendaLine = session.agenda?.trim() ? `Agenda: ${session.agenda.trim()}` : "";
+  const agendaText = getAgendaText(session);
+  const agendaLine = agendaText ? `Agenda: ${agendaText}` : "";
   return [scheduleLine, agendaLine, session.liveTranscript?.trim(), session.uploadedTranscript?.trim(), session.rawNotes?.trim()]
     .filter(Boolean)
     .map((part) => expandKnownAbbreviations(part, settings.abbreviationDirectory))
@@ -6393,7 +6404,60 @@ function buildCombinedNotes(session) {
 function htmlToPlainText(html) {
   const wrapper = document.createElement("div");
   wrapper.innerHTML = html || "";
-  return wrapper.textContent?.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim() || "";
+  const text = typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "";
+  return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function sanitizeRichTextHtml(html) {
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = String(html || "");
+  const allowedTags = new Set(["p", "br", "strong", "b", "em", "i", "ul", "ol", "li"]);
+  wrapper.querySelectorAll("*").forEach((element) => {
+    const tagName = element.tagName.toLowerCase();
+    if (!allowedTags.has(tagName)) {
+      const fragment = document.createDocumentFragment();
+      while (element.firstChild) {
+        fragment.appendChild(element.firstChild);
+      }
+      element.replaceWith(fragment);
+      return;
+    }
+    [...element.attributes].forEach((attribute) => element.removeAttribute(attribute.name));
+  });
+  const normalized = wrapper.innerHTML
+    .replace(/<div>/gi, "<p>")
+    .replace(/<\/div>/gi, "</p>")
+    .trim();
+  if (!normalized) return "";
+  if (!/<(p|ul|ol|li|br)\b/i.test(normalized)) {
+    return `<p>${normalized}</p>`;
+  }
+  return normalized;
+}
+
+function setRichTextContent(element, html) {
+  if (!element) return;
+  const normalized = sanitizeRichTextHtml(html);
+  if (element.innerHTML !== normalized) {
+    element.innerHTML = normalized;
+  }
+  element.dataset.empty = htmlToPlainText(normalized).trim() ? "false" : "true";
+}
+
+function getRichTextContent(element) {
+  if (!element) return "";
+  return sanitizeRichTextHtml(element.innerHTML);
+}
+
+function getAgendaText(session) {
+  return htmlToPlainText(session?.agenda || "");
+}
+
+function applyRichTextCommand(target, command) {
+  if (!target || !command) return;
+  target.focus();
+  document.execCommand(command);
+  setRichTextContent(target, target.innerHTML);
 }
 
 function stripCodeFences(text) {
@@ -8944,7 +9008,7 @@ function detectSourceLanguage(session) {
   const sample = [
     session.title,
     session.participants,
-    session.agenda,
+    getAgendaText(session),
     ...(session.highlights || []),
     session.rawNotes,
   ]

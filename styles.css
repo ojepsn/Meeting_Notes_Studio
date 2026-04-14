@@ -1155,6 +1155,53 @@ button {
   justify-content: flex-end;
 }
 
+.rich-text-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.rich-text-command {
+  min-width: 0;
+  padding: 7px 12px;
+  font-size: 0.82rem;
+}
+
+.rich-text-editor-surface {
+  min-height: 128px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--card);
+  padding: 14px 16px;
+  color: var(--ink);
+  outline: none;
+  line-height: 1.5;
+}
+
+.rich-text-editor-surface:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.rich-text-editor-surface[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.rich-text-editor-surface p,
+.rich-text-editor-surface ul,
+.rich-text-editor-surface ol {
+  margin: 0 0 0.7rem;
+}
+
+.rich-text-editor-surface p:last-child,
+.rich-text-editor-surface ul:last-child,
+.rich-text-editor-surface ol:last-child {
+  margin-bottom: 0;
+}
+
 .todo-item-remove {
   white-space: nowrap;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
 import { DateInput } from "../../../components/DateInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
@@ -6,6 +6,37 @@ import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import type { RecordingMode } from "../../../lib/files/recording";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type AttachmentRecord, type CaptureWorkspaceDensity, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
+
+const richTextToPlainText = (value: string) => {
+  if (!value) return "";
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = value;
+  const text = typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "";
+  return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+};
+
+const normalizeRichTextHtml = (value: string) => {
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = value || "";
+  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI"]);
+  wrapper.querySelectorAll("*").forEach((element) => {
+    if (!allowedTags.has(element.tagName)) {
+      const fragment = document.createDocumentFragment();
+      while (element.firstChild) {
+        fragment.appendChild(element.firstChild);
+      }
+      element.replaceWith(fragment);
+      return;
+    }
+    [...element.attributes].forEach((attribute) => element.removeAttribute(attribute.name));
+  });
+  const normalized = wrapper.innerHTML.replace(/<div>/gi, "<p>").replace(/<\/div>/gi, "</p>").trim();
+  if (!normalized) return "";
+  if (!/<(p|ul|ol|li|br)\b/i.test(normalized)) {
+    return `<p>${normalized}</p>`;
+  }
+  return normalized;
+};
 
 interface SessionEditorProps {
   session: SessionRecord;
@@ -81,6 +112,7 @@ export const SessionEditor = ({
   onOpenInstructions,
 }: SessionEditorProps) => {
   const update = <K extends keyof SessionRecord>(key: K, value: SessionRecord[K]) => onChange({ ...session, [key]: value });
+  const agendaEditorRef = useRef<HTMLDivElement | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(session.captureMode === "meeting-note");
   const [peopleOpen, setPeopleOpen] = useState(Boolean(session.participantText.trim()));
   const [contextOpen, setContextOpen] = useState(false);
@@ -134,6 +166,31 @@ export const SessionEditor = ({
   const selectedQuickMode = selectedQuickTemplate ? getPrimaryCaptureMode(selectedQuickTemplate) : session.captureMode;
   const shouldShowLiveTranscript = selectedQuickMode === "voice-note" || Boolean(session.liveTranscript.trim());
   const titleLabel = titleField?.label || "Title";
+
+  useEffect(() => {
+    if (!agendaEditorRef.current || !agendaField) return;
+    const nextHtml = normalizeRichTextHtml(session.customFieldValues[agendaField.id] ?? "");
+    if (agendaEditorRef.current.innerHTML !== nextHtml) {
+      agendaEditorRef.current.innerHTML = nextHtml;
+    }
+    agendaEditorRef.current.dataset.empty = richTextToPlainText(nextHtml) ? "false" : "true";
+  }, [agendaField, session.customFieldValues, session.id]);
+
+  const updateAgenda = (html: string) => {
+    if (!agendaField) return;
+    const normalized = normalizeRichTextHtml(html);
+    update("customFieldValues", { ...session.customFieldValues, [agendaField.id]: normalized });
+    if (agendaEditorRef.current) {
+      agendaEditorRef.current.dataset.empty = richTextToPlainText(normalized) ? "false" : "true";
+    }
+  };
+
+  const applyAgendaCommand = (command: "bold" | "italic" | "insertUnorderedList") => {
+    if (!agendaEditorRef.current) return;
+    agendaEditorRef.current.focus();
+    document.execCommand(command);
+    updateAgenda(agendaEditorRef.current.innerHTML);
+  };
 
   const handleDomainChange = (domain: string) => {
     const nextProjects = getProjectsForDomain(structureOptions, domain);
@@ -252,17 +309,26 @@ export const SessionEditor = ({
                     </div>
                   ) : null}
                   {agendaField ? (
-                    <div className="field field-wide">
-                      <label htmlFor="session-agenda">{agendaField.label}</label>
-                      <textarea
-                        id="session-agenda"
-                        value={session.customFieldValues[agendaField.id] ?? ""}
-                        onChange={(event) =>
-                          update("customFieldValues", { ...session.customFieldValues, [agendaField.id]: event.target.value })
-                        }
-                        placeholder="List the planned agenda, topics, or framing points for this meeting."
-                      />
-                    </div>
+                    <details className="field field-wide workspace-disclosure">
+                      <summary>{agendaField.label}</summary>
+                      <div className="workspace-disclosure-body">
+                        <div className="rich-text-toolbar">
+                          <button className="shell-button rich-text-command" type="button" onClick={() => applyAgendaCommand("bold")}>Bold</button>
+                          <button className="shell-button rich-text-command" type="button" onClick={() => applyAgendaCommand("italic")}>Italic</button>
+                          <button className="shell-button rich-text-command" type="button" onClick={() => applyAgendaCommand("insertUnorderedList")}>Bullets</button>
+                        </div>
+                        <div
+                          id="session-agenda"
+                          ref={agendaEditorRef}
+                          className="rich-text-surface agenda-rich-text-surface"
+                          contentEditable
+                          suppressContentEditableWarning
+                          data-placeholder="List the planned agenda, topics, or framing points for this meeting."
+                          data-empty="true"
+                          onInput={(event) => updateAgenda((event.currentTarget as HTMLDivElement).innerHTML)}
+                        />
+                      </div>
+                    </details>
                   ) : null}
                 </div>
               </details>
@@ -491,15 +557,26 @@ export const SessionEditor = ({
             {hasStartTimeField ? <div className={`field${isMinimal ? " capture-meta-field" : ""}`}><label htmlFor="session-start">Start time</label><input id="session-start" type="time" value={session.startTime} onChange={(event) => update("startTime", event.target.value)} /></div> : null}
             {hasEndTimeField ? <div className={`field${isMinimal ? " capture-meta-field" : ""}`}><label htmlFor="session-end">End time</label><input id="session-end" type="time" value={session.endTime} onChange={(event) => update("endTime", event.target.value)} /></div> : null}
             {agendaField ? (
-              <div className="field field-wide">
-                <label htmlFor="session-agenda">{agendaField.label}</label>
-                <textarea
-                  id="session-agenda"
-                  value={session.customFieldValues[agendaField.id] ?? ""}
-                  onChange={(event) => update("customFieldValues", { ...session.customFieldValues, [agendaField.id]: event.target.value })}
-                  placeholder="List the planned agenda, topics, or framing points for this meeting."
-                />
-              </div>
+              <details className="field field-wide workspace-disclosure">
+                <summary>{agendaField.label}</summary>
+                <div className="workspace-disclosure-body">
+                  <div className="rich-text-toolbar">
+                    <button className="small-button rich-text-command" type="button" onClick={() => applyAgendaCommand("bold")}>Bold</button>
+                    <button className="small-button rich-text-command" type="button" onClick={() => applyAgendaCommand("italic")}>Italic</button>
+                    <button className="small-button rich-text-command" type="button" onClick={() => applyAgendaCommand("insertUnorderedList")}>Bullets</button>
+                  </div>
+                  <div
+                    id="session-agenda"
+                    ref={agendaEditorRef}
+                    className="rich-text-surface agenda-rich-text-surface"
+                    contentEditable
+                    suppressContentEditableWarning
+                    data-placeholder="List the planned agenda, topics, or framing points for this meeting."
+                    data-empty="true"
+                    onInput={(event) => updateAgenda((event.currentTarget as HTMLDivElement).innerHTML)}
+                  />
+                </div>
+              </details>
             ) : null}
           </div>
         </details>

@@ -8,6 +8,14 @@ const buildTemplateSectionPrompt = (template: TemplateDefinition) =>
     .map((section) => `- ${section.title}: ${section.instructions}`)
     .join("\n");
 
+const richTextToPlainText = (value: string) => {
+  if (!value) return "";
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = value;
+  const text = typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "";
+  return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+};
+
 const buildTemplateFieldPrompt = ({
   template,
   session,
@@ -24,7 +32,11 @@ const buildTemplateFieldPrompt = ({
   }
 
   return customFields
-    .map((field) => `- ${field.label}: ${session.customFieldValues[field.id]?.trim() || "Not provided"}`)
+    .map((field) => {
+      const rawValue = session.customFieldValues[field.id] ?? "";
+      const normalizedValue = field.type === "textarea" ? richTextToPlainText(rawValue) : rawValue.trim();
+      return `- ${field.label}: ${normalizedValue || "Not provided"}`;
+    })
     .join("\n");
 };
 
