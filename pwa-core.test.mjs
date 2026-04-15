@@ -6,9 +6,11 @@ import vm from "node:vm";
 const rootDir = process.cwd();
 const appJsPath = path.join(rootDir, "app.js");
 const indexHtmlPath = path.join(rootDir, "index.html");
+const stylesPath = path.join(rootDir, "styles.css");
 
 const appJsSource = fs.readFileSync(appJsPath, "utf8");
 const indexHtmlSource = fs.readFileSync(indexHtmlPath, "utf8");
+const stylesSource = fs.readFileSync(stylesPath, "utf8");
 
 function extractConst(source, name) {
   const declaration = `const ${name} =`;
@@ -289,6 +291,15 @@ runTest("top chrome hosts the save-status pill instead of the right sidebar", ()
   const sidebarPrefix = indexHtmlSource.split('<aside class="editor-sidebar">')[1] ?? "";
   const earlySidebarSlice = sidebarPrefix.slice(0, 400);
   assert.doesNotMatch(earlySidebarSlice, /id="save-status"/);
+});
+
+runTest("theme families have distinct light and dark background treatments", () => {
+  const themeFamilies = ["fluent-slate", "atlas-blue", "nordic-teal", "graphite-forest", "stone-olive", "copper-ink"];
+  themeFamilies.forEach((family) => {
+    assert.match(stylesSource, new RegExp(`:root\\[data-theme="${family}-light"\\] body \\{[\\s\\S]*?linear-gradient`, "m"));
+    assert.match(stylesSource, new RegExp(`:root\\[data-theme="${family}-dark"\\] body \\{[\\s\\S]*?linear-gradient`, "m"));
+    assert.match(indexHtmlSource, new RegExp(`<option value="${family}">`));
+  });
 });
 
 runTest("quick-start strip creates sessions directly and keeps the split meeting capture wording", () => {

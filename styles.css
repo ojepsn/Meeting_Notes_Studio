@@ -265,10 +265,59 @@ body.modal-open {
   overflow: hidden;
 }
 
+:root[data-theme="fluent-slate-light"] body {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.88), transparent 24%),
+    radial-gradient(circle at 82% 14%, rgba(79, 119, 184, 0.14), transparent 20%),
+    linear-gradient(135deg, #f7faff 0%, #e9f0f9 52%, #dce7f4 100%);
+}
+
+:root[data-theme="atlas-blue-light"] body {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.88), transparent 24%),
+    radial-gradient(circle at 82% 14%, rgba(45, 98, 201, 0.18), transparent 20%),
+    linear-gradient(135deg, #f5f9ff 0%, #e6effd 50%, #d9e7fb 100%);
+}
+
+:root[data-theme="nordic-teal-light"] body {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.84), transparent 24%),
+    radial-gradient(circle at 82% 14%, rgba(47, 127, 121, 0.18), transparent 20%),
+    linear-gradient(135deg, #f2fbfa 0%, #e0f2ef 50%, #d0e8e4 100%);
+}
+
+:root[data-theme="graphite-forest-light"] body {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.82), transparent 24%),
+    radial-gradient(circle at 82% 14%, rgba(72, 104, 84, 0.16), transparent 20%),
+    linear-gradient(135deg, #f7faf7 0%, #e9eee9 50%, #dce5dd 100%);
+}
+
+:root[data-theme="stone-olive-light"] body {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.82), transparent 24%),
+    radial-gradient(circle at 82% 14%, rgba(106, 116, 64, 0.18), transparent 20%),
+    linear-gradient(135deg, #fbf7ef 0%, #eee7d8 50%, #e2d9c8 100%);
+}
+
+:root[data-theme="copper-ink-light"] body {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.82), transparent 24%),
+    radial-gradient(circle at 82% 14%, rgba(154, 101, 70, 0.2), transparent 20%),
+    linear-gradient(135deg, #fff7f0 0%, #f1e5da 50%, #e5d4c7 100%);
+}
+
 :root[data-theme$="-dark"] body {
   background:
     radial-gradient(circle at top left, rgba(212, 123, 81, 0.1), transparent 22%),
     radial-gradient(circle at 85% 15%, rgba(124, 216, 160, 0.08), transparent 18%),
+    linear-gradient(140deg, #0f1620 0%, #182231 48%, #111925 100%);
+}
+
+:root[data-theme="fluent-slate-dark"] body {
+  background:
+    radial-gradient(circle at top left, rgba(212, 123, 81, 0.11), transparent 22%),
+    radial-gradient(circle at 85% 15%, rgba(94, 134, 193, 0.1), transparent 18%),
     linear-gradient(140deg, #0f1620 0%, #182231 48%, #111925 100%);
 }
 
@@ -291,6 +340,20 @@ body.modal-open {
     radial-gradient(circle at top left, rgba(106, 148, 121, 0.13), transparent 22%),
     radial-gradient(circle at 85% 15%, rgba(132, 208, 160, 0.08), transparent 18%),
     linear-gradient(140deg, #101513 0%, #17211d 48%, #111916 100%);
+}
+
+:root[data-theme="stone-olive-dark"] body {
+  background:
+    radial-gradient(circle at top left, rgba(168, 181, 122, 0.14), transparent 22%),
+    radial-gradient(circle at 85% 15%, rgba(142, 196, 148, 0.08), transparent 18%),
+    linear-gradient(140deg, #151410 0%, #211f18 48%, #17150f 100%);
+}
+
+:root[data-theme="copper-ink-dark"] body {
+  background:
+    radial-gradient(circle at top left, rgba(208, 154, 107, 0.16), transparent 22%),
+    radial-gradient(circle at 85% 15%, rgba(144, 201, 155, 0.07), transparent 18%),
+    linear-gradient(140deg, #13100d 0%, #211a15 48%, #17110d 100%);
 }
 
 button,
@@ -508,7 +571,8 @@ button {
 .workspace {
   display: grid;
   --output-panel-width: 460px;
-  grid-template-columns: minmax(0, 1fr) 10px minmax(340px, var(--output-panel-width));
+  --workspace-panel-min-width: 300px;
+  grid-template-columns: minmax(var(--workspace-panel-min-width), 1fr) 10px minmax(var(--workspace-panel-min-width), var(--output-panel-width));
   gap: 18px;
   align-items: start;
 }
