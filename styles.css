@@ -571,7 +571,7 @@ button {
 .workspace {
   display: grid;
   --output-panel-width: 460px;
-  --workspace-panel-min-width: 300px;
+  --workspace-panel-min-width: 260px;
   grid-template-columns: minmax(var(--workspace-panel-min-width), 1fr) 10px minmax(var(--workspace-panel-min-width), var(--output-panel-width));
   gap: 18px;
   align-items: start;
@@ -657,6 +657,8 @@ button {
 .editor-panel {
   grid-column: 1;
   grid-row: 1;
+  min-width: 0;
+  container-type: inline-size;
 }
 
 .output-panel {
@@ -666,6 +668,7 @@ button {
   position: sticky;
   top: 18px;
   align-self: start;
+  min-width: 0;
 }
 
 .output-resize-handle {
@@ -690,7 +693,7 @@ button {
 
 .editor-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, min(340px, 36%));
   gap: 20px;
   align-items: start;
 }
@@ -705,6 +708,31 @@ button {
   min-width: 0;
   display: grid;
   gap: 14px;
+}
+
+@container (max-width: 620px) {
+  .editor-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .field-grid,
+  .field-grid-three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel-actions-shared,
+  .panel-actions-page,
+  .template-quick-selectors,
+  .capture-toolbar {
+    gap: 8px;
+  }
+
+  .template-quick-button,
+  .ghost-button,
+  .secondary-button,
+  .primary-button {
+    white-space: normal;
+  }
 }
 
 .output-layout {

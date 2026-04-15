@@ -302,6 +302,13 @@ runTest("theme families have distinct light and dark background treatments", () 
   });
 });
 
+runTest("capture and output divider supports symmetric narrow panels", () => {
+  assert.match(appJsSource, /const MIN_WORKSPACE_PANEL_WIDTH = 260/);
+  assert.match(stylesSource, /--workspace-panel-min-width: 260px/);
+  assert.match(stylesSource, /\.editor-panel \{[\s\S]*?container-type: inline-size;/);
+  assert.match(stylesSource, /@container \(max-width: 620px\) \{[\s\S]*?\.editor-layout \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
+});
+
 runTest("quick-start strip creates sessions directly and keeps the split meeting capture wording", () => {
   assert.match(appJsSource, /const preferredOrder = \["meeting", "personalNote", "oneToOneCall"\]/);
   assert.match(appJsSource, /button\.textContent = `New \$\{template\.label\}`/);

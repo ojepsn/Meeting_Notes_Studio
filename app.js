@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.20";
+const APP_VERSION = "v0.10.21";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -360,7 +360,7 @@ const APPROX_TOKENS_PER_PAGE = 750;
   const AUDIO_CHUNK_TARGET_BYTES = 23 * 1024 * 1024;
   const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
   const DEFAULT_OUTPUT_PANEL_WIDTH = 460;
-  const MIN_WORKSPACE_PANEL_WIDTH = 300;
+  const MIN_WORKSPACE_PANEL_WIDTH = 260;
   const MIN_OUTPUT_PANEL_WIDTH = MIN_WORKSPACE_PANEL_WIDTH;
   const MAX_OUTPUT_PANEL_WIDTH = 720;
 const DEFAULT_PROMPT_SETTINGS = {
