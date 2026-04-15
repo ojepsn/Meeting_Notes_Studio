@@ -291,12 +291,10 @@ runTest("top chrome hosts the save-status pill instead of the right sidebar", ()
   assert.doesNotMatch(earlySidebarSlice, /id="save-status"/);
 });
 
-runTest("quick-start strip includes New and the split meeting capture wording", () => {
-  assert.match(appJsSource, /newButton\.textContent = "New"/);
-  assert.match(appJsSource, /createAndOpenNewSession\(activeTemplateId\)/);
+runTest("quick-start strip creates sessions directly and keeps the split meeting capture wording", () => {
   assert.match(appJsSource, /const preferredOrder = \["meeting", "personalNote", "oneToOneCall"\]/);
-  assert.match(appJsSource, /settings\.selectedQuickTemplateId = template\.id/);
-  assert.match(appJsSource, /template-create-button/);
+  assert.match(appJsSource, /button\.textContent = `New \$\{template\.label\}`/);
+  assert.match(appJsSource, /createAndOpenNewSession\(template\.id\)/);
   assert.match(appJsSource, /contextCardDisclosure\.open = nextSession\.template === "meeting"/);
   assert.match(indexHtmlSource, /id="audio-record-toggle"[\s\S]*?Start room \/ hybrid meeting[\s\S]*?Use mic for room voices and nearby speakers/);
   assert.match(indexHtmlSource, /id="audio-screen-toggle"[\s\S]*?Start screen \/ browser audio[\s\S]*?Use direct in-computer audio from a tab or screen/);

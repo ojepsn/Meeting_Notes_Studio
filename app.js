@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.18";
+const APP_VERSION = "v0.10.19";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -3122,11 +3122,6 @@ function getPreferredDesktopTemplateId() {
   return "meeting";
 }
 
-function getSelectedQuickTemplateId() {
-  const templateId = typeof settings.selectedQuickTemplateId === "string" ? settings.selectedQuickTemplateId : "";
-  return getTemplateDefinition(templateId).id || "meeting";
-}
-
 function recordTemplateUsage(templateId) {
   if (!templateId) {
     return;
@@ -3187,7 +3182,6 @@ function renderTemplateQuickSelectors() {
     return;
   }
 
-  const activeTemplateId = getSelectedQuickTemplateId();
   settings.templateLauncherTemplateIds = normalizeTemplateLauncherIds(settings.templateLauncherTemplateIds);
   const preferredOrder = ["meeting", "personalNote", "oneToOneCall"];
   const rankedTemplates = getAllTemplates()
@@ -3206,15 +3200,6 @@ function renderTemplateQuickSelectors() {
 
   templateQuickSelectors.innerHTML = "";
 
-  const newButton = document.createElement("button");
-  newButton.type = "button";
-  newButton.className = "ghost-button template-quick-button template-create-button";
-  newButton.textContent = "New";
-  newButton.addEventListener("click", () => {
-    createAndOpenNewSession(activeTemplateId);
-  });
-  templateQuickSelectors.appendChild(newButton);
-
   rankedTemplates.forEach((template) => {
     if (!template) {
       return;
@@ -3223,12 +3208,9 @@ function renderTemplateQuickSelectors() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "ghost-button template-quick-button";
-    button.textContent = template.label;
-    button.classList.toggle("is-active", template.id === activeTemplateId);
+    button.textContent = `New ${template.label}`;
     button.addEventListener("click", () => {
-      settings.selectedQuickTemplateId = template.id;
-      persistSettings();
-      renderTemplateQuickSelectors();
+      createAndOpenNewSession(template.id);
     });
     templateQuickSelectors.appendChild(button);
   });

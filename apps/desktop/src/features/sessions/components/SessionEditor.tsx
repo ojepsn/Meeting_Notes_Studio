@@ -70,9 +70,7 @@ interface SessionEditorProps {
   onRemoveAttachment: (attachmentId: string) => void;
   onUpdateAttachment: (attachment: AttachmentRecord) => void;
   onOpenDetails?: () => void;
-  selectedNewTemplateId?: string;
-  onSelectNewTemplate?: (templateId: string) => void;
-  onCreateSessionFromTemplate?: () => void;
+  onCreateSessionFromTemplate?: (templateId: string) => void;
   onOpenInstructions?: () => void;
 }
 
@@ -108,7 +106,7 @@ export const SessionEditor = ({
   suggestedActivities, structureOptions, savedTags, suggestedTags, isTranscribingAudio, recordingMode,
   isRecordingAudio, recordingStatusNote, onChange, onImportTranscript, onImportAudio, onImportImage,
   onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment,
-  onUpdateAttachment, onOpenDetails, selectedNewTemplateId, onSelectNewTemplate, onCreateSessionFromTemplate,
+  onUpdateAttachment, onOpenDetails, onCreateSessionFromTemplate,
   onOpenInstructions,
 }: SessionEditorProps) => {
   const update = <K extends keyof SessionRecord>(key: K, value: SessionRecord[K]) => onChange({ ...session, [key]: value });
@@ -135,7 +133,6 @@ export const SessionEditor = ({
     const customs = templates.filter((template) => template.kind === "custom" && !preferredOrder.includes(template.id));
     return [...builtIns, ...customs];
   }, [templates]);
-  const selectedQuickTemplateId = quickStartTemplates.find((template) => template.id === selectedNewTemplateId)?.id ?? quickStartTemplates[0]?.id ?? "meeting";
   const agendaField = activeTemplate?.fields.find((field) => field.key === "agenda" && field.enabled);
   const customFields =
     activeTemplate?.fields.filter(
@@ -162,9 +159,7 @@ export const SessionEditor = ({
   const hasDateField = Boolean(activeTemplate?.fields.find((field) => field.key === "date" && field.enabled));
   const hasStartTimeField = Boolean(activeTemplate?.fields.find((field) => field.key === "startTime" && field.enabled));
   const hasEndTimeField = Boolean(activeTemplate?.fields.find((field) => field.key === "endTime" && field.enabled));
-  const selectedQuickTemplate = quickStartTemplates.find((template) => template.id === selectedQuickTemplateId) ?? quickStartTemplates[0] ?? activeTemplate;
-  const selectedQuickMode = selectedQuickTemplate ? getPrimaryCaptureMode(selectedQuickTemplate) : session.captureMode;
-  const shouldShowLiveTranscript = selectedQuickMode === "voice-note" || Boolean(session.liveTranscript.trim());
+  const shouldShowLiveTranscript = session.captureMode === "voice-note" || Boolean(session.liveTranscript.trim());
   const titleLabel = titleField?.label || "Title";
 
   useEffect(() => {
@@ -238,18 +233,15 @@ export const SessionEditor = ({
 
         <div className="editor-header-row session-editor-pwa-template-row">
           <div className="template-quick-selectors template-quick-selectors-desktop">
-            <button className="primary-button session-new-button" type="button" onClick={onCreateSessionFromTemplate} disabled={!onCreateSessionFromTemplate}>
-              New
-            </button>
             {quickStartTemplates.map((template) => (
               <button
                 key={template.id}
                 className="ghost-button session-template-pill-pwa"
-                data-active={selectedQuickTemplateId === template.id}
                 type="button"
-                onClick={() => onSelectNewTemplate?.(template.id)}
+                onClick={() => onCreateSessionFromTemplate?.(template.id)}
+                disabled={!onCreateSessionFromTemplate}
               >
-                {template.name}
+                {`New ${template.name}`}
               </button>
             ))}
           </div>
@@ -402,7 +394,7 @@ export const SessionEditor = ({
 
               {shouldShowLiveTranscript ? (
                 <details className="workspace-disclosure pwa-disclosure-card" open={transcriptOpen} onToggle={(event) => setTranscriptOpen(event.currentTarget.open)}>
-                  <summary>{selectedQuickMode === "voice-note" ? "Live transcript" : "Transcript"}</summary>
+              <summary>{session.captureMode === "voice-note" ? "Live transcript" : "Transcript"}</summary>
                   <div className="workspace-disclosure-body">
                     <div className="field field-wide">
                       <textarea
@@ -410,7 +402,7 @@ export const SessionEditor = ({
                         id="session-transcript"
                         value={session.liveTranscript}
                         onChange={(event) => update("liveTranscript", event.target.value)}
-                        placeholder={selectedQuickMode === "voice-note" ? "Dictation appears here while recording..." : "Transcript text will appear here."}
+                        placeholder={session.captureMode === "voice-note" ? "Dictation appears here while recording..." : "Transcript text will appear here."}
                       />
                     </div>
                   </div>
@@ -527,11 +519,10 @@ export const SessionEditor = ({
       </div>
 
       <div className={`session-quick-start-row${isMinimal ? " session-quick-start-row-minimal" : ""}`}>
-        <button className="primary-button session-new-button" type="button" onClick={onCreateSessionFromTemplate} disabled={!onCreateSessionFromTemplate}>New</button>
         <div className="session-template-pill-row">
           {quickStartTemplates.map((template) => (
-            <button key={template.id} className="segment-button session-template-pill" data-active={selectedQuickTemplateId === template.id} type="button" onClick={() => onSelectNewTemplate?.(template.id)}>
-              {template.name}
+            <button key={template.id} className="segment-button session-template-pill" type="button" onClick={() => onCreateSessionFromTemplate?.(template.id)} disabled={!onCreateSessionFromTemplate}>
+              {`New ${template.name}`}
             </button>
           ))}
         </div>

@@ -170,7 +170,6 @@ export const App = () => {
   } = useDesktopStore();
   const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("calendar");
   const [openPanel, setOpenPanel] = useState<OverlayPanel>(null);
-  const [selectedNewSessionTemplateId, setSelectedNewSessionTemplateId] = useState("meeting");
   const [isNotesSessionsOpen, setIsNotesSessionsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
   const [notesCapturePaneWidth, setNotesCapturePaneWidth] = useState(640);
@@ -630,10 +629,6 @@ export const App = () => {
     const customs = templates.filter((template) => template.kind === "custom" && !preferredOrder.includes(template.id));
     return [...builtIns, ...customs];
   }, [snapshot]);
-  const selectedNewSessionTemplate =
-    quickStartTemplates.find((template) => template.id === selectedNewSessionTemplateId) ??
-    quickStartTemplates[0] ??
-    null;
   const activeCaptureMode: CaptureMode = activeSession?.captureMode ?? "meeting-note";
 
   const activeAttachments = useMemo(
@@ -695,14 +690,6 @@ export const App = () => {
     [activeAttachments],
   );
 
-  useEffect(() => {
-    if (!quickStartTemplates.length) {
-      return;
-    }
-    if (!quickStartTemplates.some((template) => template.id === selectedNewSessionTemplateId)) {
-      setSelectedNewSessionTemplateId(quickStartTemplates[0].id);
-    }
-  }, [quickStartTemplates, selectedNewSessionTemplateId]);
   const selectedTextModelOption = modelPricingSnapshot.textModels
     .map(buildTextModelOption)
     .find((option) => option.id === snapshot?.settings.textModel);
@@ -1808,8 +1795,10 @@ export const App = () => {
   };
   const handleCreateSessionFromTemplate = async (templateId?: string) => {
     const template =
-      snapshot?.templates.find((entry) => entry.id === (templateId || selectedNewSessionTemplate?.id)) ??
-      selectedNewSessionTemplate;
+      snapshot?.templates.find((entry) => entry.id === templateId) ??
+      quickStartTemplates.find((entry) => entry.id === templateId) ??
+      quickStartTemplates[0] ??
+      null;
     if (!template) {
       return;
     }
@@ -1818,7 +1807,6 @@ export const App = () => {
       captureMode,
       templateId: template.id,
     });
-    setSelectedNewSessionTemplateId(template.id);
     setActiveWorkspace("notes");
     setActiveView("capture");
     setStatusNote(`Started a new ${template.name.toLowerCase()} session.`);
@@ -1834,7 +1822,7 @@ export const App = () => {
       {
         id: "new-session",
         label: "New note",
-        description: "Create a new session from the currently selected template.",
+        description: "Choose the kind of session you want to start.",
         keywords: ["create session note capture meeting quick 1:1 template"],
         shortcut: "Ctrl/Cmd+N",
         action: () => openOverlay("new-note"),
@@ -2136,22 +2124,18 @@ export const App = () => {
           <div className="sidebar-card overlay-card">
             <div>
               <h3>New session</h3>
-              <p>Select the template for the next session, then create it.</p>
+              <p>Choose the type of session you want to start.</p>
             </div>
             <div className="session-quick-start-row">
-              <button className="primary-button session-new-button" type="button" onClick={() => void handleCreateSessionFromTemplate()}>
-                New
-              </button>
               <div className="session-template-pill-row">
                 {quickStartTemplates.map((template) => (
                   <button
                     key={template.id}
                     type="button"
                     className="segment-button session-template-pill"
-                    data-active={selectedNewSessionTemplate?.id === template.id}
-                    onClick={() => setSelectedNewSessionTemplateId(template.id)}
+                    onClick={() => void handleCreateSessionFromTemplate(template.id)}
                   >
-                    {template.name}
+                    {`New ${template.name}`}
                   </button>
                 ))}
               </div>
@@ -2168,7 +2152,7 @@ export const App = () => {
             <div className="section-list">
               <div className="list-item">
                 <strong>Starting sessions</strong>
-                <span className="muted">Choose a template first, then use New to create the next session. Meeting is the default, with quick notes and 1:1 calls close behind.</span>
+                <span className="muted">Start directly with the session type you want. Use New Meeting, New Quick note, or New 1:1 / Phone call to jump straight into capture.</span>
               </div>
               <div className="list-item">
                 <strong>Capture</strong>
@@ -2867,9 +2851,7 @@ export const App = () => {
                       onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
                       onUpdateAttachment={(attachment) => void handleUpdateAttachment(attachment)}
                       onOpenDetails={() => openOverlay("capture-details")}
-                      selectedNewTemplateId={selectedNewSessionTemplate?.id}
-                      onSelectNewTemplate={setSelectedNewSessionTemplateId}
-                      onCreateSessionFromTemplate={() => void handleCreateSessionFromTemplate()}
+                      onCreateSessionFromTemplate={(templateId) => void handleCreateSessionFromTemplate(templateId)}
                       onOpenInstructions={() => openOverlay("instructions")}
                     />
                   </div>
