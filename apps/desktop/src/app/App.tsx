@@ -125,7 +125,11 @@ const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
   }
 };
 
-const clampNotesCapturePaneWidth = (value: number) => Math.min(980, Math.max(420, Math.round(value)));
+const NOTES_PANEL_MIN_WIDTH = 300;
+const NOTES_PANEL_MAX_WIDTH = 980;
+
+const clampNotesCapturePaneWidth = (value: number, maxWidth = NOTES_PANEL_MAX_WIDTH) =>
+  Math.min(maxWidth, Math.max(NOTES_PANEL_MIN_WIDTH, Math.round(value)));
 
 export const App = () => {
   const {
@@ -262,7 +266,11 @@ export const App = () => {
     const handleMouseMove = (event: MouseEvent) => {
       if (!notesSplitterDraggingRef.current || !notesLayoutRef.current) return;
       const rect = notesLayoutRef.current.getBoundingClientRect();
-      setNotesCapturePaneWidth(clampNotesCapturePaneWidth(event.clientX - rect.left));
+      const computedStyles = window.getComputedStyle(notesLayoutRef.current);
+      const columnGap = parseFloat(computedStyles.columnGap || computedStyles.gap || "0") || 0;
+      const splitterWidth = notesLayoutRef.current.querySelector(".notes-pwa-splitter")?.getBoundingClientRect().width ?? 12;
+      const maxCaptureWidth = rect.width - splitterWidth - columnGap * 2 - NOTES_PANEL_MIN_WIDTH;
+      setNotesCapturePaneWidth(clampNotesCapturePaneWidth(event.clientX - rect.left, maxCaptureWidth));
     };
 
     const handleMouseUp = () => {
@@ -2816,7 +2824,7 @@ export const App = () => {
                 <div
                   ref={notesLayoutRef}
                   className="notes-pwa-grid notes-pwa-grid-resizable"
-                  style={{ gridTemplateColumns: `${notesCapturePaneWidth}px 12px minmax(360px, 1fr)` }}
+                  style={{ gridTemplateColumns: `${notesCapturePaneWidth}px 12px minmax(${NOTES_PANEL_MIN_WIDTH}px, 1fr)` }}
                 >
                   <div className="notes-pwa-capture">
                     <SessionEditor
