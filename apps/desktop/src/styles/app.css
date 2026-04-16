@@ -1149,6 +1149,16 @@ select {
   min-height: 420px;
 }
 
+.output-version-row {
+  align-items: center;
+}
+
+.output-version-row .list-item-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
 .sessions-sidebar-pwa {
   padding: 1.25rem;
 }

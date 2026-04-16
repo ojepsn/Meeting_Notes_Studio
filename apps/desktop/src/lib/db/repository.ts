@@ -109,6 +109,26 @@ const normalizeSessionRecord = (session: SessionRecord): SessionRecord => ({
   customFieldValues:
     session.customFieldValues && typeof session.customFieldValues === "object" ? session.customFieldValues : {},
   excludedSectionIds: Array.isArray(session.excludedSectionIds) ? session.excludedSectionIds : [],
+  outputVersions: Array.isArray(session.outputVersions)
+    ? session.outputVersions
+        .filter(
+          (version): version is SessionRecord["outputVersions"][number] =>
+            Boolean(version) &&
+            typeof version.id === "string" &&
+            typeof version.output === "string" &&
+            typeof version.generatedAt === "string",
+        )
+        .filter((version) => version.output.trim())
+        .sort((left, right) => right.generatedAt.localeCompare(left.generatedAt))
+    : session.output.trim()
+      ? [
+          {
+            id: crypto.randomUUID(),
+            output: session.output,
+            generatedAt: session.updatedAt || session.createdAt || now(),
+          },
+        ]
+      : [],
 });
 
 const normalizeAttachmentRecord = (attachment: AttachmentRecord): AttachmentRecord => ({
@@ -296,6 +316,7 @@ export const createDefaultSnapshot = (): DesktopAppSnapshot => ({
       customFieldValues: {},
       excludedSectionIds: [],
       output: "",
+      outputVersions: [],
       createdAt: now(),
       updatedAt: now(),
     },
@@ -581,6 +602,7 @@ class TauriSqliteRepository implements AppRepository {
         await db.execute("ALTER TABLE sessions ADD COLUMN detail_level INTEGER NOT NULL DEFAULT 3").catch(() => {});
         await db.execute("ALTER TABLE sessions ADD COLUMN custom_field_values TEXT NOT NULL DEFAULT '{}'").catch(() => {});
         await db.execute("ALTER TABLE sessions ADD COLUMN excluded_section_ids TEXT NOT NULL DEFAULT '[]'").catch(() => {});
+        await db.execute("ALTER TABLE sessions ADD COLUMN output_versions TEXT NOT NULL DEFAULT '[]'").catch(() => {});
         await db.execute("ALTER TABLE sessions ADD COLUMN capture_mode TEXT NOT NULL DEFAULT 'meeting-note'").catch(() => {});
         await db.execute("ALTER TABLE sessions ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0").catch(() => {});
         await db.execute("ALTER TABLE sessions ADD COLUMN deleted_at TEXT NOT NULL DEFAULT ''").catch(() => {});
@@ -624,6 +646,7 @@ class TauriSqliteRepository implements AppRepository {
       uploaded_transcript: string;
       custom_field_values: string;
       excluded_section_ids: string;
+      output_versions: string;
       output_text: string;
       created_at: string;
       updated_at: string;
@@ -651,6 +674,9 @@ class TauriSqliteRepository implements AppRepository {
       uploadedTranscript: row.uploaded_transcript,
       customFieldValues: row.custom_field_values ? (JSON.parse(row.custom_field_values) as Record<string, string>) : {},
       excludedSectionIds: row.excluded_section_ids ? (JSON.parse(row.excluded_section_ids) as string[]) : [],
+      outputVersions: row.output_versions
+        ? (JSON.parse(row.output_versions) as SessionRecord["outputVersions"])
+        : [],
       output: row.output_text,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -666,8 +692,8 @@ class TauriSqliteRepository implements AppRepository {
           `INSERT INTO sessions (
             id, template_id, title, deleted_at, is_private, participant_text, project, domain, activity, tags_text, session_date, start_time, end_time,
             quick_highlights, detail_level, capture_mode, manual_notes, live_transcript, uploaded_transcript, custom_field_values, excluded_section_ids, output_text,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+            output_versions, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
           [
             record.id,
             record.templateId,
@@ -691,6 +717,7 @@ class TauriSqliteRepository implements AppRepository {
             JSON.stringify(record.customFieldValues),
             JSON.stringify(record.excludedSectionIds),
             record.output,
+            JSON.stringify(record.outputVersions),
             record.createdAt,
             record.updatedAt,
           ],
@@ -1028,6 +1055,7 @@ export const createSessionRecord = (
     customFieldValues: {},
     excludedSectionIds: [],
     output: "",
+    outputVersions: [],
     createdAt: now(),
     updatedAt: now(),
   };

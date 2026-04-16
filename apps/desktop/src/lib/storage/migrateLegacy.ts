@@ -233,6 +233,16 @@ const mapLegacySessions = (sessions: LegacySession[] | null): SessionRecord[] =>
           session.customFieldValues && typeof session.customFieldValues === "object" ? session.customFieldValues : {},
         excludedSectionIds: [],
         output: typeof session.polishedHtml === "string" ? toHtmlText(session.polishedHtml) : "",
+        outputVersions:
+          typeof session.polishedHtml === "string" && session.polishedHtml.trim()
+            ? [
+                {
+                  id: crypto.randomUUID(),
+                  output: toHtmlText(session.polishedHtml),
+                  generatedAt: new Date(typeof session.updatedAt === "number" ? session.updatedAt : Date.now()).toISOString(),
+                },
+              ]
+            : [],
         createdAt: new Date(typeof session.updatedAt === "number" ? session.updatedAt : Date.now()).toISOString(),
         updatedAt: new Date(typeof session.updatedAt === "number" ? session.updatedAt : Date.now()).toISOString(),
       }))

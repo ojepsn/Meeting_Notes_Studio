@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.10.22">
+  <link rel="stylesheet" href="styles.css?v=0.10.23">
 </head>
 <body>
   <main class="page-shell">
@@ -24,7 +24,7 @@
           Capture rough notes and turn them into professional meeting notes without leaving the page.
         </p>
         <div class="hero-meta">
-        <div class="version-pill" id="app-version">v0.10.22</div>
+        <div class="version-pill" id="app-version">v0.10.23</div>
           <div class="version-pill model-pill" id="app-models">Output: GPT-5 mini · Audio: GPT-4o mini transcribe</div>
           <div class="update-notice is-hidden-field" id="app-update-notice">New version available</div>
         </div>
@@ -474,6 +474,14 @@
 
               <p class="support-text" id="output-feedback-status">
                 Add comments here when you want the polished output adjusted. You can always revert the latest revision.
+              </p>
+            </details>
+
+            <details class="output-feedback-card output-feedback-disclosure" id="output-versions-disclosure">
+              <summary>Version history</summary>
+              <div class="output-version-list" id="output-version-list"></div>
+              <p class="support-text" id="output-version-status">
+                Each generated output version is saved here with the time it was created.
               </p>
             </details>
           </div>
@@ -1603,7 +1611,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.17/mammoth.browser.min.js"></script>
-  <script src="app.js?v=0.10.22"></script>
+  <script src="app.js?v=0.10.23"></script>
 </body>
 </html>
 

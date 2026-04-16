@@ -78,6 +78,12 @@ type CommandAction = {
   action: () => void;
 };
 
+type OutputVersionRecord = {
+  id: string;
+  output: string;
+  generatedAt: string;
+};
+
 const splitStructuredOutput = (output: string) =>
   output
     .replace(/\r\n/g, "\n")
@@ -131,6 +137,54 @@ const NOTES_PANEL_MAX_WIDTH = 980;
 const clampNotesCapturePaneWidth = (value: number, maxWidth = NOTES_PANEL_MAX_WIDTH) =>
   Math.min(maxWidth, Math.max(NOTES_PANEL_MIN_WIDTH, Math.round(value)));
 
+const normalizeOutputVersionHistory = (
+  outputVersions: OutputVersionRecord[] | undefined,
+  currentOutput: string,
+  updatedAt: string,
+) => {
+  const normalized = Array.isArray(outputVersions)
+    ? outputVersions
+        .filter(
+          (version): version is OutputVersionRecord =>
+            Boolean(version) &&
+            typeof version.id === "string" &&
+            typeof version.output === "string" &&
+            typeof version.generatedAt === "string" &&
+            version.output.trim().length > 0,
+        )
+        .sort((left, right) => right.generatedAt.localeCompare(left.generatedAt))
+    : [];
+
+  if (currentOutput.trim() && !normalized.some((version) => version.output === currentOutput)) {
+    normalized.unshift({
+      id: crypto.randomUUID(),
+      output: currentOutput,
+      generatedAt: updatedAt,
+    });
+  }
+
+  return normalized;
+};
+
+const buildOutputVersionPatch = (
+  session: { output: string; outputVersions?: OutputVersionRecord[]; updatedAt: string },
+  nextOutput: string,
+): Pick<{ output: string; outputVersions: OutputVersionRecord[] }, "output" | "outputVersions"> => {
+  const generatedAt = new Date().toISOString();
+  const previousHistory = normalizeOutputVersionHistory(session.outputVersions, session.output, session.updatedAt);
+  return {
+    output: nextOutput,
+    outputVersions: [
+      {
+        id: crypto.randomUUID(),
+        output: nextOutput,
+        generatedAt,
+      },
+      ...previousHistory,
+    ],
+  };
+};
+
 export const App = () => {
   const {
     snapshot,
@@ -175,6 +229,7 @@ export const App = () => {
   const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("calendar");
   const [openPanel, setOpenPanel] = useState<OverlayPanel>(null);
   const [isNotesSessionsOpen, setIsNotesSessionsOpen] = useState(false);
+  const [selectedOutputVersionId, setSelectedOutputVersionId] = useState<string | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
   const [notesCapturePaneWidth, setNotesCapturePaneWidth] = useState(640);
   const [requestedActivityId, setRequestedActivityId] = useState<string | null>(null);
@@ -261,6 +316,10 @@ export const App = () => {
     if (!snapshot) return;
     setNotesCapturePaneWidth(snapshot.settings.notesCapturePaneWidth);
   }, [snapshot?.settings.notesCapturePaneWidth]);
+
+  useEffect(() => {
+    setSelectedOutputVersionId(null);
+  }, [activeSessionId]);
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -697,6 +756,15 @@ export const App = () => {
     () => activeAttachments.find((attachment) => attachment.kind === "audio") ?? null,
     [activeAttachments],
   );
+  const activeOutputVersions = useMemo(
+    () => normalizeOutputVersionHistory(activeSession?.outputVersions, activeSession?.output ?? "", activeSession?.updatedAt ?? new Date().toISOString()),
+    [activeSession],
+  );
+  const selectedOutputVersion = useMemo(
+    () => activeOutputVersions.find((version) => version.id === selectedOutputVersionId) ?? null,
+    [activeOutputVersions, selectedOutputVersionId],
+  );
+  const displayedOutput = selectedOutputVersion?.output ?? activeSession?.output ?? "";
 
   const selectedTextModelOption = modelPricingSnapshot.textModels
     .map(buildTextModelOption)
@@ -1232,7 +1300,8 @@ export const App = () => {
           },
         }),
       });
-      await saveSession({ ...sessionForGeneration, output });
+      setSelectedOutputVersionId(null);
+      await saveSession({ ...sessionForGeneration, ...buildOutputVersionPatch(sessionForGeneration, output) });
       setStatusNote(
         usedCache
           ? "Loaded structured output from a matching local AI cache entry."
@@ -1267,7 +1336,8 @@ export const App = () => {
           liveTranscript: [activeSession.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n"),
         };
         const rawOutput = buildRawOutput(nextSession);
-        await saveSession({ ...nextSession, output: rawOutput });
+        setSelectedOutputVersionId(null);
+        await saveSession({ ...nextSession, ...buildOutputVersionPatch(nextSession, rawOutput) });
         setStatusNote("Transcribed the voice note into Output without AI polishing.");
         openMetadataReviewIfNeeded(nextSession);
         openNotesTarget({ sessionId: nextSession.id, view: "output" });
@@ -1285,7 +1355,8 @@ export const App = () => {
       return;
     }
 
-    await saveSession({ ...activeSession, output: rawOutput });
+    setSelectedOutputVersionId(null);
+    await saveSession({ ...activeSession, ...buildOutputVersionPatch(activeSession, rawOutput) });
     setStatusNote(
       activeCaptureMode === "voice-note"
         ? "Created Output from the current voice note without AI polishing."
@@ -1316,7 +1387,8 @@ export const App = () => {
           },
         }),
       });
-      await saveSession({ ...activeSession, output: translated });
+      setSelectedOutputVersionId(null);
+      await saveSession({ ...activeSession, ...buildOutputVersionPatch(activeSession, translated) });
       setStatusNote(
         usedCache
           ? `Loaded a cached translation to ${targetLanguage}.`
@@ -1342,7 +1414,8 @@ export const App = () => {
           },
         }),
       });
-      await saveSession({ ...activeSession, output: revised });
+      setSelectedOutputVersionId(null);
+      await saveSession({ ...activeSession, ...buildOutputVersionPatch(activeSession, revised) });
       setStatusNote(
         usedCache
           ? "Loaded a cached revision for the current output."
@@ -1378,6 +1451,57 @@ export const App = () => {
     } catch (error) {
       setStatusNote(error instanceof Error ? error.message : "Transcript import failed.");
     }
+  };
+
+  const handleOpenOutputVersion = (versionId: string) => {
+    if (!activeSession) {
+      return;
+    }
+    setSelectedOutputVersionId(versionId);
+    openNotesTarget({ sessionId: activeSession.id, view: "output" });
+  };
+
+  const handleOpenLatestOutputVersion = () => {
+    setSelectedOutputVersionId(null);
+  };
+
+  const handleOutputWorkspaceChange = async (nextSession: typeof activeSession) => {
+    if (!nextSession) {
+      return;
+    }
+
+    if (!activeSession) {
+      await saveSession(nextSession);
+      return;
+    }
+
+    if (nextSession.output !== activeSession.output) {
+      const nextVersions = normalizeOutputVersionHistory(
+        nextSession.outputVersions,
+        activeSession.output,
+        activeSession.updatedAt,
+      );
+      if (nextVersions[0]) {
+        nextVersions[0] = {
+          ...nextVersions[0],
+          output: nextSession.output,
+        };
+      } else if (nextSession.output.trim()) {
+        nextVersions.unshift({
+          id: crypto.randomUUID(),
+          output: nextSession.output,
+          generatedAt: new Date().toISOString(),
+        });
+      }
+
+      await saveSession({
+        ...nextSession,
+        outputVersions: nextVersions,
+      });
+      return;
+    }
+
+    await saveSession(nextSession);
   };
 
   const handleImportAudio = async () => {
@@ -2037,10 +2161,13 @@ export const App = () => {
         return (
           <OutputWorkspace
             session={activeSession}
+            displayedOutput={displayedOutput}
+            outputVersions={activeOutputVersions}
+            selectedOutputVersionId={selectedOutputVersionId}
             attachments={activeAttachments}
             presentation="full"
             showPresentationActions={false}
-            onChange={(session) => void saveSession(session)}
+            onChange={(session) => void handleOutputWorkspaceChange(session)}
             savedPeople={snapshot.settings.savedParticipants}
             suggestedPeople={suggestedPeople}
             savedProjects={snapshot.settings.savedProjects}
@@ -2059,11 +2186,13 @@ export const App = () => {
             onSecondaryAction={outputActionConfig.onSecondary}
             onTranslate={() => void handleTranslate()}
             onRevise={(instructions) => void handleRevise(instructions)}
-            onExportText={() => exportOutputAsText({ title: activeSession.title, output: activeSession.output })}
-            onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}
-            onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
-            onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
-            onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+            onOpenOutputVersion={handleOpenOutputVersion}
+            onOpenLatestOutputVersion={handleOpenLatestOutputVersion}
+            onExportText={() => exportOutputAsText({ title: activeSession.title, output: displayedOutput })}
+            onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: displayedOutput })}
+            onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+            onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+            onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
             primaryActionLabel={outputActionConfig.primaryLabel}
             secondaryActionLabel={outputActionConfig.secondaryLabel}
             emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
@@ -2876,10 +3005,13 @@ export const App = () => {
                   <div className="notes-pwa-output">
                     <OutputWorkspace
                       session={activeSession}
+                      displayedOutput={displayedOutput}
+                      outputVersions={activeOutputVersions}
+                      selectedOutputVersionId={selectedOutputVersionId}
                       attachments={activeAttachments}
                       presentation="minimal"
                       showPresentationActions={false}
-                      onChange={(session) => void saveSession(session)}
+                      onChange={(session) => void handleOutputWorkspaceChange(session)}
                       savedPeople={snapshot.settings.savedParticipants}
                       suggestedPeople={suggestedPeople}
                       savedProjects={snapshot.settings.savedProjects}
@@ -2898,11 +3030,13 @@ export const App = () => {
                       onSecondaryAction={outputActionConfig.onSecondary}
                       onTranslate={() => void handleTranslate()}
                       onRevise={(instructions) => void handleRevise(instructions)}
-                      onExportText={() => exportOutputAsText({ title: activeSession.title, output: activeSession.output })}
-                      onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: activeSession.output })}
-                      onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
-                      onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
-                      onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: activeSession.output, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                      onOpenOutputVersion={handleOpenOutputVersion}
+                      onOpenLatestOutputVersion={handleOpenLatestOutputVersion}
+                      onExportText={() => exportOutputAsText({ title: activeSession.title, output: displayedOutput })}
+                      onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: displayedOutput })}
+                      onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                      onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                      onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
                       primaryActionLabel={outputActionConfig.primaryLabel}
                       secondaryActionLabel={outputActionConfig.secondaryLabel}
                       emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}

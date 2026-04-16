@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.22";
+const APP_VERSION = "v0.10.23";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -292,10 +292,13 @@ const translateOutputButton = document.querySelector("#translate-output");
 const polishedOutput = document.querySelector("#polished-output");
 const outputFeedbackInput = document.querySelector("#output-feedback");
 const improveOutputButton = document.querySelector("#improve-output");
-  const revertOutputButton = document.querySelector("#revert-output");
-  const outputFeedbackStatus = document.querySelector("#output-feedback-status");
-  const outputResizeHandle = document.querySelector("#output-resize-handle");
-  const appVersionLabel = document.querySelector("#app-version");
+const revertOutputButton = document.querySelector("#revert-output");
+const outputFeedbackStatus = document.querySelector("#output-feedback-status");
+const outputVersionsDisclosure = document.querySelector("#output-versions-disclosure");
+const outputVersionList = document.querySelector("#output-version-list");
+const outputVersionStatus = document.querySelector("#output-version-status");
+const outputResizeHandle = document.querySelector("#output-resize-handle");
+const appVersionLabel = document.querySelector("#app-version");
 const editorSidebar = document.querySelector(".editor-sidebar");
 const outputPanel = document.querySelector(".output-panel");
 const mobileOpenMoreButton = document.querySelector("#mobile-open-more");
@@ -886,6 +889,7 @@ let settings = createDefaultSettings();
 let sessions = [];
 let aiModelCatalog = filterRelevantAiModels(DEFAULT_AI_MODEL_CATALOG.map((model) => ({ ...model })));
 let activeSessionId = null;
+let selectedOutputVersionId = null;
 let recognition = null;
 let isRecording = false;
 let finalTranscript = "";
@@ -944,6 +948,7 @@ async function initializeApp() {
   }
 
   activeSessionId = sessions[0]?.id ?? null;
+  selectedOutputVersionId = null;
   
     applyTheme(settings.themeFamily, settings.themeMode);
     applyOutputPanelWidth();
@@ -954,6 +959,7 @@ async function initializeApp() {
     const startupSession = createSession();
     sessions = [startupSession];
     activeSessionId = startupSession.id;
+    selectedOutputVersionId = null;
     persistSessions();
   }
 
@@ -988,6 +994,7 @@ void initializeApp().catch((error) => {
     const startupSession = createSession();
     sessions = [startupSession];
     activeSessionId = startupSession.id;
+    selectedOutputVersionId = null;
   }
   render();
   if (dictationStatus) {
@@ -1561,6 +1568,7 @@ void initializeApp().catch((error) => {
         await stopAudioCapture();
       }
       activeSessionId = sessionId;
+      selectedOutputVersionId = null;
       render();
       return;
     }
@@ -2407,7 +2415,8 @@ void initializeApp().catch((error) => {
         ? await polishWithOpenAI(session, settings)
         : buildLocalPolishedNotes(session);
 
-      updateActiveSession({ polishedHtml }, false);
+      selectedOutputVersionId = null;
+      updateActiveSession(buildGeneratedOutputPatch(session, polishedHtml), false);
       syncTodoItemsFromSession(getActiveSession());
       renderOutput();
       const addedParticipants = await maybeOfferParticipantDirectoryUpdate(getActiveSession().participants);
@@ -2431,7 +2440,8 @@ void initializeApp().catch((error) => {
           : `AI polishing failed: ${error.message}. No local fallback was applied, so the output was not replaced with a weaker local draft.`;
       } else {
         const polishedHtml = buildLocalPolishedNotes(session);
-        updateActiveSession({ polishedHtml }, false);
+        selectedOutputVersionId = null;
+        updateActiveSession(buildGeneratedOutputPatch(session, polishedHtml), false);
         syncTodoItemsFromSession(getActiveSession());
         renderOutput();
         const addedParticipants = await maybeOfferParticipantDirectoryUpdate(getActiveSession().participants);
@@ -2616,9 +2626,9 @@ void initializeApp().catch((error) => {
 
     try {
       const translatedHtml = await translateOutputWithOpenAI(session, settings, targetLanguage);
+      selectedOutputVersionId = null;
       updateActiveSession({
-        polishedHtml: translatedHtml,
-        previousPolishedHtml: session.polishedHtml,
+        ...buildGeneratedOutputPatch(session, translatedHtml),
         outputLanguage: targetLanguage === OUTPUT_LANGUAGES.swedish ? "sv" : "en",
       }, false);
       renderOutput();
@@ -2642,11 +2652,11 @@ void initializeApp().catch((error) => {
 
   polishedOutput.addEventListener("input", () => {
     const session = getActiveSession();
-    if (!session?.polishedHtml) {
+    if (!session?.polishedHtml || getSelectedOutputVersion(session)) {
       return;
     }
 
-    updateActiveSessionSilently({ polishedHtml: polishedOutput.innerHTML });
+    syncLatestOutputVersionHtml(polishedOutput.innerHTML);
     updateExportButtons();
     outputFeedbackStatus.textContent = "Output edits are saved automatically.";
   });
@@ -2674,9 +2684,9 @@ void initializeApp().catch((error) => {
         ? await revisePolishedNotesWithOpenAI(session, settings, feedback)
         : buildRevisedLocalPolishedNotes(session, feedback);
 
+      selectedOutputVersionId = null;
       updateActiveSession({
-        polishedHtml: revisedHtml,
-        previousPolishedHtml: session.polishedHtml,
+        ...buildGeneratedOutputPatch(session, revisedHtml),
         outputFeedback: "",
       }, false);
       renderOutput();
@@ -2695,21 +2705,18 @@ void initializeApp().catch((error) => {
   });
 
   revertOutputButton.addEventListener("click", () => {
-    const session = getActiveSession();
-    if (!session.previousPolishedHtml) {
-      outputFeedbackStatus.textContent = "There is no previous polished version to revert to.";
-      return;
+    if (selectedOutputVersionId) {
+      openLatestOutputVersion();
+      outputFeedbackStatus.textContent = "Back on the latest generated version.";
+    } else {
+      openPreviousOutputVersion();
+      if (selectedOutputVersionId) {
+        outputFeedbackStatus.textContent = "Opened the previous generated version. Use Open latest version to return.";
+      }
     }
-
-    updateActiveSession({
-      polishedHtml: session.previousPolishedHtml,
-      previousPolishedHtml: "",
-    }, false);
-    renderOutput();
     if (isMobileLayout()) {
       openMobileOutputSheet();
     }
-    outputFeedbackStatus.textContent = "Reverted to the previous polished version.";
   });
 }
 
@@ -3260,6 +3267,7 @@ function renderSessionList() {
           void stopAudioCapture();
         }
         activeSessionId = session.id;
+        selectedOutputVersionId = null;
         persistSettings();
         render();
       });
@@ -3995,7 +4003,7 @@ function syncFieldsFromSession() {
   renderTemplateCustomFields(session, template);
   outputFeedbackInput.value = session.outputFeedback ?? "";
   outputFeedbackStatus.textContent = session.polishedHtml
-    ? "Add comments here when you want the polished output adjusted. You can always revert the latest revision."
+    ? "Add comments here when you want the polished output adjusted. Every generated version is saved in Version history."
     : "Generate polished notes first, then use comments here to request improvements.";
   setAppStatus("Saved locally", APP_STATUS_STATES.idle);
   syncAudioCaptureUi(session);
@@ -5074,9 +5082,194 @@ function updateDetailLevelLabel() {
   detailLevelLabel.textContent = getDetailLevelLabel(Number(detailLevelInput.value));
 }
 
+function createOutputVersionRecord(html, generatedAt = Date.now(), versionId = crypto.randomUUID()) {
+  return {
+    id: versionId,
+    html,
+    generatedAt,
+  };
+}
+
+function normalizeOutputVersionHistory(outputVersions, polishedHtml = "", previousPolishedHtml = "", updatedAt = Date.now()) {
+  const normalized = Array.isArray(outputVersions)
+    ? outputVersions
+      .filter((version) => version && typeof version === "object" && typeof version.html === "string" && version.html.trim())
+      .map((version) => createOutputVersionRecord(
+        version.html,
+        typeof version.generatedAt === "number" ? version.generatedAt : updatedAt,
+        typeof version.id === "string" && version.id ? version.id : crypto.randomUUID()
+      ))
+    : [];
+
+  const hasCurrentVersion = normalized.some((version) => version.html === polishedHtml);
+  if (typeof polishedHtml === "string" && polishedHtml.trim() && !hasCurrentVersion) {
+    normalized.push(createOutputVersionRecord(polishedHtml, updatedAt));
+  }
+
+  const hasPreviousVersion = normalized.some((version) => version.html === previousPolishedHtml);
+  if (typeof previousPolishedHtml === "string" && previousPolishedHtml.trim() && !hasPreviousVersion) {
+    normalized.push(createOutputVersionRecord(previousPolishedHtml, Math.max(0, updatedAt - 1)));
+  }
+
+  return normalized.sort((first, second) => second.generatedAt - first.generatedAt);
+}
+
+function getOutputVersionHistory(session = getActiveSession()) {
+  if (!session) {
+    return [];
+  }
+
+  return normalizeOutputVersionHistory(
+    session.outputVersions,
+    session.polishedHtml,
+    session.previousPolishedHtml,
+    session.updatedAt
+  );
+}
+
+function getSelectedOutputVersion(session = getActiveSession()) {
+  if (!session || !selectedOutputVersionId) {
+    return null;
+  }
+
+  return getOutputVersionHistory(session).find((version) => version.id === selectedOutputVersionId) || null;
+}
+
+function getDisplayedOutputHtml(session = getActiveSession()) {
+  const selectedVersion = getSelectedOutputVersion(session);
+  return selectedVersion?.html || session?.polishedHtml || "";
+}
+
+function buildGeneratedOutputPatch(session, nextHtml, generatedAt = Date.now()) {
+  const versionHistory = getOutputVersionHistory(session);
+  const nextVersion = createOutputVersionRecord(nextHtml, generatedAt);
+  const nextHistory = [nextVersion, ...versionHistory];
+
+  return {
+    polishedHtml: nextHtml,
+    previousPolishedHtml: versionHistory[0]?.html || "",
+    outputVersions: nextHistory,
+  };
+}
+
+function syncLatestOutputVersionHtml(nextHtml) {
+  const session = getActiveSession();
+  if (!session) {
+    return;
+  }
+
+  const nextHistory = getOutputVersionHistory(session);
+  if (nextHistory[0]) {
+    nextHistory[0] = {
+      ...nextHistory[0],
+      html: nextHtml,
+    };
+  } else if (typeof nextHtml === "string" && nextHtml.trim()) {
+    nextHistory.unshift(createOutputVersionRecord(nextHtml, Date.now()));
+  }
+
+  updateActiveSessionSilently({
+    polishedHtml: nextHtml,
+    previousPolishedHtml: nextHistory[1]?.html || "",
+    outputVersions: nextHistory,
+  });
+}
+
+function openLatestOutputVersion() {
+  selectedOutputVersionId = null;
+  renderOutput();
+}
+
+function openPreviousOutputVersion() {
+  const session = getActiveSession();
+  const versionHistory = getOutputVersionHistory(session);
+  const previousVersion = versionHistory[1];
+  if (!previousVersion) {
+    outputFeedbackStatus.textContent = "There is no previous generated version to open yet.";
+    return;
+  }
+
+  selectedOutputVersionId = previousVersion.id;
+  renderOutput();
+}
+
+function renderOutputVersionHistory() {
+  if (!outputVersionList || !outputVersionStatus) {
+    return;
+  }
+
+  const session = getActiveSession();
+  const versionHistory = getOutputVersionHistory(session);
+  outputVersionList.replaceChildren();
+
+  if (!versionHistory.length) {
+    outputVersionStatus.textContent = "Generated versions will appear here after the first output is created.";
+    if (outputVersionsDisclosure) {
+      outputVersionsDisclosure.open = false;
+    }
+    return;
+  }
+
+  outputVersionStatus.textContent = "Open any previous generated version to review it without losing the current one.";
+  versionHistory.forEach((version, index) => {
+    const item = document.createElement("div");
+    item.className = "output-version-item";
+
+    const copy = document.createElement("div");
+    copy.className = "output-version-copy";
+
+    const title = document.createElement("div");
+    title.className = "output-version-title";
+    title.textContent = index === 0 ? "Current version" : `Version ${versionHistory.length - index}`;
+
+    if (index === 0) {
+      const badge = document.createElement("span");
+      badge.className = "output-version-badge";
+      badge.textContent = selectedOutputVersionId ? "Latest saved" : "Open now";
+      title.appendChild(badge);
+    } else if (selectedOutputVersionId === version.id) {
+      const badge = document.createElement("span");
+      badge.className = "output-version-badge";
+      badge.textContent = "Viewing";
+      title.appendChild(badge);
+    }
+
+    const time = document.createElement("div");
+    time.className = "output-version-time";
+    time.textContent = formatDate(version.generatedAt);
+
+    const preview = document.createElement("div");
+    preview.className = "output-version-preview";
+    preview.textContent = htmlToPlainText(version.html).replace(/\s+/g, " ").trim() || "No preview available.";
+
+    copy.append(title, time, preview);
+
+    const actionButton = document.createElement("button");
+    actionButton.type = "button";
+    actionButton.className = selectedOutputVersionId === version.id ? "secondary-button" : "ghost-button";
+    if (index === 0) {
+      actionButton.textContent = selectedOutputVersionId ? "Open latest" : "Viewing latest";
+      actionButton.disabled = !selectedOutputVersionId;
+      actionButton.addEventListener("click", openLatestOutputVersion);
+    } else {
+      actionButton.textContent = selectedOutputVersionId === version.id ? "Viewing" : "Open";
+      actionButton.disabled = selectedOutputVersionId === version.id;
+      actionButton.addEventListener("click", () => {
+        selectedOutputVersionId = version.id;
+        renderOutput();
+      });
+    }
+
+    item.append(copy, actionButton);
+    outputVersionList.appendChild(item);
+  });
+}
+
 function renderOutput() {
   const session = getActiveSession();
   const exportStyle = getCurrentExportStyle();
+  const selectedVersion = getSelectedOutputVersion(session);
+  const displayedHtml = getDisplayedOutputHtml(session);
   polishedOutput.style.setProperty("--output-title-font", exportStyle.titleFont);
   polishedOutput.style.setProperty("--output-heading-font", exportStyle.headingFont);
   polishedOutput.style.setProperty("--output-body-font", exportStyle.bodyFont);
@@ -5087,7 +5280,7 @@ function renderOutput() {
   polishedOutput.style.setProperty("--output-meta-size", `${exportStyle.metaSize}pt`);
   polishedOutput.style.setProperty("--output-line-height", String(exportStyle.lineHeight));
 
-  if (!session.polishedHtml) {
+  if (!displayedHtml) {
     polishedOutput.contentEditable = "false";
     polishedOutput.spellcheck = false;
     polishedOutput.classList.remove("is-editable");
@@ -5095,29 +5288,41 @@ function renderOutput() {
       <div class="output-empty">
         <div>
           <h3>Your finished notes will appear here.</h3>
-          <p>Add notes or transcript above, include highlights if useful, then click <strong>Generate</strong>.</p>
+          <p>Add notes or transcript in the Capture section to the left, include highlights if useful, then click <strong>Generate</strong>.</p>
         </div>
       </div>
     `;
+    renderOutputVersionHistory();
     updateTranslateButton();
+    outputFeedbackInput.disabled = true;
     return;
   }
 
-  polishedOutput.innerHTML = session.polishedHtml;
-  polishedOutput.contentEditable = "true";
-  polishedOutput.spellcheck = true;
-  polishedOutput.classList.add("is-editable");
+  polishedOutput.innerHTML = displayedHtml;
+  polishedOutput.contentEditable = selectedVersion ? "false" : "true";
+  polishedOutput.spellcheck = !selectedVersion;
+  polishedOutput.classList.toggle("is-editable", !selectedVersion);
+  outputFeedbackInput.disabled = Boolean(selectedVersion);
+  if (selectedVersion) {
+    outputFeedbackStatus.textContent = `Viewing the version generated ${formatDate(selectedVersion.generatedAt)}. Open the latest version to continue editing or refining.`;
+  }
+  renderOutputVersionHistory();
   updateTranslateButton();
   syncMobileUi();
 }
 
 function updateExportButtons() {
-  const hasOutput = Boolean(getActiveSession()?.polishedHtml);
-  exportWordButton.disabled = !hasOutput;
-  exportPdfButton.disabled = !hasOutput;
-  translateOutputButton.disabled = !hasOutput;
-  improveOutputButton.disabled = !hasOutput;
-  revertOutputButton.disabled = !Boolean(getActiveSession()?.previousPolishedHtml);
+  const session = getActiveSession();
+  const hasDisplayedOutput = Boolean(getDisplayedOutputHtml(session));
+  const hasLatestOutput = Boolean(session?.polishedHtml);
+  const isViewingHistoricalVersion = Boolean(getSelectedOutputVersion(session));
+  exportWordButton.disabled = !hasDisplayedOutput;
+  exportPdfButton.disabled = !hasDisplayedOutput;
+  translateOutputButton.disabled = !hasLatestOutput || isViewingHistoricalVersion;
+  outputFeedbackInput.disabled = !hasLatestOutput || isViewingHistoricalVersion;
+  improveOutputButton.disabled = !hasLatestOutput || isViewingHistoricalVersion;
+  revertOutputButton.disabled = getOutputVersionHistory(session).length < 2;
+  revertOutputButton.textContent = isViewingHistoricalVersion ? "Open latest version" : "Open previous version";
   updateTranslateButton();
   syncMobileUi();
 }
@@ -5258,6 +5463,7 @@ function createSession(templateId = null) {
     outputFeedback: "",
     polishedHtml: "",
     previousPolishedHtml: "",
+    outputVersions: [],
     updatedAt: createdAt,
   };
 }
@@ -5269,6 +5475,7 @@ function createAndOpenNewSession(templateId = null) {
   const nextSession = createSession(templateId);
   sessions.unshift(nextSession);
   activeSessionId = nextSession.id;
+  selectedOutputVersionId = null;
   persistSettings();
   persistSessions();
   render();
@@ -5400,8 +5607,10 @@ function deleteSession(sessionId) {
     const nextSession = createSession();
     sessions = [nextSession];
     activeSessionId = nextSession.id;
+    selectedOutputVersionId = null;
   } else if (activeSessionId === sessionId) {
     activeSessionId = sessions[0].id;
+    selectedOutputVersionId = null;
   }
 
   persistSessions();
@@ -5420,8 +5629,10 @@ function deleteSessions(sessionIds) {
     const nextSession = createSession();
     sessions = [nextSession];
     activeSessionId = nextSession.id;
+    selectedOutputVersionId = null;
   } else if (idsToDelete.has(activeSessionId)) {
     activeSessionId = sessions[0].id;
+    selectedOutputVersionId = null;
   }
 
   persistSessions();
@@ -5664,12 +5875,7 @@ async function polishWithOpenAI(session, activeSettings) {
     }),
   });
 
-  const payload = await response.json();
-
-  if (!response.ok) {
-    const message = payload?.error?.message || "The OpenAI request did not complete successfully.";
-    throw new Error(message);
-  }
+  const payload = await parseOpenAIResponse(response, "The OpenAI request did not complete successfully.");
 
   const responseText = extractResponseText(payload);
 
@@ -5732,11 +5938,7 @@ async function transcribeWithOpenAI(session, activeSettings) {
     }),
   });
 
-  const payload = await response.json();
-  if (!response.ok) {
-    const message = payload?.error?.message || "The OpenAI transcription request did not complete successfully.";
-    throw new Error(message);
-  }
+  const payload = await parseOpenAIResponse(response, "The OpenAI transcription request did not complete successfully.");
 
   const responseText = extractResponseText(payload);
   if (!responseText) {
@@ -5790,11 +5992,7 @@ async function translateOutputWithOpenAI(session, activeSettings, targetLanguage
     }),
   });
 
-  const payload = await response.json();
-  if (!response.ok) {
-    const message = payload?.error?.message || "The OpenAI translation request did not complete successfully.";
-    throw new Error(message);
-  }
+  const payload = await parseOpenAIResponse(response, "The OpenAI translation request did not complete successfully.");
 
   const responseText = stripCodeFences(extractResponseText(payload));
   if (!responseText) {
@@ -5882,10 +6080,23 @@ async function transcribeSingleAudioFileWithOpenAI(file, activeSettings) {
     : await response.text();
 
   if (!response.ok) {
-    const message = typeof payload === "string"
+    const apiMessage = typeof payload === "string"
       ? payload
       : payload?.error?.message || "The OpenAI audio transcription request did not complete successfully.";
-    throw new Error(message);
+    const errorCode = typeof payload === "string" ? null : payload?.error?.code;
+
+    if (response.status === 429) {
+      if (errorCode === "insufficient_quota") {
+        throw new Error(`${apiMessage} Check your OpenAI billing, usage tier, or project spend limits, then try again.`);
+      }
+      throw new Error(`${apiMessage} This usually means a temporary OpenAI rate limit. Wait a moment and try again, or choose a lighter model in AI Settings.`);
+    }
+
+    if (response.status === 401) {
+      throw new Error(`${apiMessage} Check the API key in AI Settings.`);
+    }
+
+    throw new Error(apiMessage);
   }
 
   const transcriptText = typeof payload === "string"
@@ -6111,12 +6322,7 @@ async function revisePolishedNotesWithOpenAI(session, activeSettings, feedback) 
     }),
   });
 
-  const payload = await response.json();
-
-  if (!response.ok) {
-    const message = payload?.error?.message || "The OpenAI revision request did not complete successfully.";
-    throw new Error(message);
-  }
+  const payload = await parseOpenAIResponse(response, "The OpenAI revision request did not complete successfully.");
 
   const responseText = extractResponseText(payload);
   if (!responseText) {
@@ -6471,6 +6677,30 @@ function extractResponseText(payload) {
     .filter(Boolean);
 
   return textParts.join("\n").trim();
+}
+
+async function parseOpenAIResponse(response, fallbackMessage) {
+  const payload = await response.json().catch(() => null);
+
+  if (response.ok) {
+    return payload;
+  }
+
+  const apiMessage = payload?.error?.message || fallbackMessage;
+  const errorCode = payload?.error?.code;
+
+  if (response.status === 429) {
+    if (errorCode === "insufficient_quota") {
+      throw new Error(`${apiMessage} Check your OpenAI billing, usage tier, or project spend limits, then try again.`);
+    }
+    throw new Error(`${apiMessage} This usually means a temporary OpenAI rate limit. Wait a moment and try again, or choose a lighter model in AI Settings.`);
+  }
+
+  if (response.status === 401) {
+    throw new Error(`${apiMessage} Check the API key in AI Settings.`);
+  }
+
+  throw new Error(apiMessage);
 }
 
 function normalizeNotes(rawNotes) {
@@ -7446,6 +7676,7 @@ function applySharedDataPayload(payload) {
       sessions = [freshSession];
     }
     activeSessionId = sessions[0]?.id ?? null;
+    selectedOutputVersionId = null;
   } finally {
     isApplyingStoragePayload = false;
   }
@@ -7580,6 +7811,7 @@ async function connectLocalDataFileHandle(handle, options = {}) {
     const freshSession = createSession();
     sessions = [freshSession, ...sessions];
     activeSessionId = freshSession.id;
+    selectedOutputVersionId = null;
   }
   persistSessions();
   persistSettings();
@@ -8339,14 +8571,15 @@ function buildSessionsExportPayload() {
 
 function exportCurrentSessionAsWord() {
   const session = getActiveSession();
+  const displayedHtml = getDisplayedOutputHtml(session);
 
-  if (!session?.polishedHtml) {
+  if (!displayedHtml) {
     dictationStatus.textContent = "Create polished notes first, then export the session.";
     return;
   }
 
   const title = session.title.trim() || "Meeting Notes";
-  const documentHtml = buildWordDocumentHtml(title, session.polishedHtml, getCurrentExportStyle());
+  const documentHtml = buildWordDocumentHtml(title, displayedHtml, getCurrentExportStyle());
   const blob = new Blob([documentHtml], { type: "application/msword" });
   saveBlobAsFile(blob, `${toFileSafeName(title)}.doc`, "application/msword")
     .then((result) => {
@@ -8364,7 +8597,7 @@ function exportCurrentSessionAsWord() {
 function exportCurrentSessionAsPdf() {
   const session = getActiveSession();
 
-  if (!session?.polishedHtml) {
+  if (!getDisplayedOutputHtml(session)) {
     dictationStatus.textContent = "Create polished notes first, then export the session.";
     return;
   }
@@ -8528,6 +8761,7 @@ function exportCurrentSessionAsBasicPdf(session) {
 }
 
 function buildPdfPreviewElement(session, exportStyle) {
+  const displayedHtml = getDisplayedOutputHtml(session);
   const container = document.createElement("div");
   container.style.position = "fixed";
   container.style.left = "-99999px";
@@ -8554,7 +8788,7 @@ function buildPdfPreviewElement(session, exportStyle) {
       .pdf-export-doc .output-section ul { margin: 0; padding-left: 20px; }
       .pdf-export-doc .output-section li { margin: 0 0 8px; }
     </style>
-    <div class="pdf-export-doc">${session.polishedHtml}</div>
+    <div class="pdf-export-doc">${displayedHtml}</div>
   `;
 
   document.body.appendChild(container);
@@ -8563,8 +8797,9 @@ function buildPdfPreviewElement(session, exportStyle) {
 
 function getCurrentSessionExportData() {
   const session = getActiveSession();
+  const displayedHtml = getDisplayedOutputHtml(session);
   const wrapper = document.createElement("div");
-  wrapper.innerHTML = session.polishedHtml;
+  wrapper.innerHTML = displayedHtml;
 
   const title = wrapper.querySelector(".output-header h3")?.textContent?.trim() || session.title.trim() || "Meeting Notes";
   const meta = wrapper.querySelector(".output-meta")?.textContent?.replace(/\s+/g, " ").trim() || "";
@@ -8673,6 +8908,7 @@ async function importSessionsFromFile(event) {
 
     sessions = normalizeImportedSessions(importedSessions);
     activeSessionId = sessions[0].id;
+    selectedOutputVersionId = null;
     persistSessions();
     render();
     sessionStorageStatus.textContent = `Imported ${sessions.length} session${sessions.length === 1 ? "" : "s"} from file.`;
@@ -8753,6 +8989,12 @@ function normalizeImportedSessions(importedSessions) {
       outputFeedback: typeof session.outputFeedback === "string" ? session.outputFeedback : "",
       polishedHtml: typeof session.polishedHtml === "string" ? session.polishedHtml : "",
       previousPolishedHtml: typeof session.previousPolishedHtml === "string" ? session.previousPolishedHtml : "",
+      outputVersions: normalizeOutputVersionHistory(
+        session.outputVersions,
+        typeof session.polishedHtml === "string" ? session.polishedHtml : "",
+        typeof session.previousPolishedHtml === "string" ? session.previousPolishedHtml : "",
+        typeof session.updatedAt === "number" ? session.updatedAt : Date.now()
+      ),
       updatedAt: typeof session.updatedAt === "number" ? session.updatedAt : Date.now(),
     };
     })

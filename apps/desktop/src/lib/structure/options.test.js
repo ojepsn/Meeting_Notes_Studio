@@ -23,6 +23,7 @@ const sessions = [
         customFieldValues: {},
         excludedSectionIds: [],
         output: "",
+        outputVersions: [],
         createdAt: "2026-04-09T10:00:00.000Z",
         updatedAt: "2026-04-09T10:00:00.000Z",
     },

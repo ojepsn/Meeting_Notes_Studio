@@ -57,6 +57,7 @@ const session = {
     customFieldValues: {},
     excludedSectionIds: [],
     output: "",
+    outputVersions: [],
     createdAt: "",
     updatedAt: "",
 };

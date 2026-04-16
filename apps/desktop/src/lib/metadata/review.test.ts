@@ -60,6 +60,7 @@ const session: SessionRecord = {
   customFieldValues: {},
   excludedSectionIds: [],
   output: "",
+  outputVersions: [],
   createdAt: "",
   updatedAt: "",
 };

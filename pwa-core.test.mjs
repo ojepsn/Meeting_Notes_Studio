@@ -131,6 +131,30 @@ function loadPwaTemplateHelpers() {
   return context.__exports;
 }
 
+function loadPwaOutputVersionHelpers() {
+  const snippets = [
+    extractFunction(appJsSource, "createOutputVersionRecord"),
+    extractFunction(appJsSource, "normalizeOutputVersionHistory"),
+  ];
+
+  let versionCounter = 0;
+  const context = {
+    crypto: {
+      randomUUID: () => `version-${versionCounter += 1}`,
+    },
+  };
+  vm.createContext(context);
+  const script = new vm.Script(`
+    ${snippets.join("\n;\n")}
+    ;globalThis.__exports = {
+      createOutputVersionRecord,
+      normalizeOutputVersionHistory
+    };
+  `);
+  script.runInContext(context);
+  return context.__exports;
+}
+
 function runTest(name, fn) {
   try {
     fn();
@@ -313,6 +337,28 @@ runTest("agenda rich-text input does not rewrite itself on every keystroke", () 
   assert.match(appJsSource, /meetingAgendaInput\.addEventListener\("input", \(\) => \{[\s\S]*?updateActiveSession\(\{ agenda: richTextValue \}, true\);[\s\S]*?\}\);/);
   assert.doesNotMatch(appJsSource, /meetingAgendaInput\.addEventListener\("input", \(\) => \{[\s\S]*?setRichTextContent\(meetingAgendaInput, richTextValue\);[\s\S]*?\}\);/);
   assert.match(appJsSource, /meetingAgendaInput\.addEventListener\("blur", \(\) => \{[\s\S]*?setRichTextContent\(meetingAgendaInput, getRichTextContent\(meetingAgendaInput\)\);[\s\S]*?\}\);/);
+});
+
+runTest("OpenAI rate-limit errors include actionable guidance", () => {
+  assert.match(appJsSource, /response\.status === 429/);
+  assert.match(appJsSource, /temporary OpenAI rate limit/);
+  assert.match(appJsSource, /Check your OpenAI billing, usage tier, or project spend limits/);
+  assert.match(appJsSource, /choose a lighter model in AI Settings/);
+});
+
+runTest("generated output versions are normalized into a reusable history", () => {
+  const { normalizeOutputVersionHistory } = loadPwaOutputVersionHelpers();
+  const history = normalizeVmObject(
+    normalizeOutputVersionHistory([], "<p>Current version</p>", "<p>Previous version</p>", 1200)
+  );
+
+  assert.equal(history.length, 2);
+  assert.equal(history[0].html, "<p>Current version</p>");
+  assert.equal(history[0].generatedAt, 1200);
+  assert.equal(history[1].html, "<p>Previous version</p>");
+  assert.equal(history[1].generatedAt, 1199);
+  assert.match(indexHtmlSource, /id="output-versions-disclosure"/);
+  assert.match(indexHtmlSource, /Version history/);
 });
 
 runTest("quick-start strip creates sessions directly and keeps the split meeting capture wording", () => {

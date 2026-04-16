@@ -47,6 +47,9 @@ const parseFollowUpCandidate = (value: string) => {
 
 interface OutputWorkspaceProps {
   session: SessionRecord;
+  displayedOutput?: string;
+  outputVersions?: SessionRecord["outputVersions"];
+  selectedOutputVersionId?: string | null;
   attachments: AttachmentRecord[];
   presentation?: CaptureWorkspaceDensity;
   showPresentationActions?: boolean;
@@ -69,6 +72,8 @@ interface OutputWorkspaceProps {
   onSecondaryAction?: () => void;
   onTranslate: () => void;
   onRevise: (instructions: string) => void;
+  onOpenOutputVersion?: (versionId: string) => void;
+  onOpenLatestOutputVersion?: () => void;
   onExportText: () => void;
   onExportMarkdown: () => void;
   onExportHtml: () => void;
@@ -86,6 +91,9 @@ interface OutputWorkspaceProps {
 
 export const OutputWorkspace = ({
   session,
+  displayedOutput = session.output,
+  outputVersions = [],
+  selectedOutputVersionId = null,
   attachments,
   presentation = "full",
   showPresentationActions = true,
@@ -108,6 +116,8 @@ export const OutputWorkspace = ({
   onSecondaryAction,
   onTranslate,
   onRevise,
+  onOpenOutputVersion,
+  onOpenLatestOutputVersion,
   onExportText,
   onExportMarkdown,
   onExportHtml,
@@ -133,7 +143,8 @@ export const OutputWorkspace = ({
   const includedImages = attachments
     .filter((attachment) => attachment.kind === "image" && attachment.includeInOutput)
     .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt));
-  const hasOutput = Boolean(session.output.trim());
+  const hasOutput = Boolean(displayedOutput.trim());
+  const isViewingHistoricalVersion = Boolean(selectedOutputVersionId);
   const isMeetingNote = session.captureMode === "meeting-note";
   const isMinimal = presentation === "minimal";
   const filteredProjects = getProjectsForDomain(structureOptions, session.domain);
@@ -144,7 +155,7 @@ export const OutputWorkspace = ({
   const filteredActivitySet = new Set(activityPickerOptions);
   const suggestedProjectsForSelection = suggestedProjects.filter((project) => filteredProjectSet.has(project));
   const suggestedActivitiesForSelection = suggestedActivities.filter((activity) => filteredActivitySet.has(activity));
-  const followUpSuggestions = session.output
+  const followUpSuggestions = displayedOutput
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => /^([-*]\s+|\d+[.)]\s+)/.test(line))
@@ -153,6 +164,63 @@ export const OutputWorkspace = ({
     .slice(0, 8);
   const excerptPreview =
     selectedExcerpt.length > 180 ? `${selectedExcerpt.slice(0, 177).trimEnd()}...` : selectedExcerpt;
+  const selectedOutputVersion = outputVersions.find((version) => version.id === selectedOutputVersionId) ?? null;
+
+  const formatOutputVersionLabel = (generatedAt: string) => {
+    const parsed = new Date(generatedAt);
+    if (Number.isNaN(parsed.getTime())) {
+      return generatedAt;
+    }
+
+    return parsed.toLocaleString([], {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const renderVersionHistory = () =>
+    outputVersions.length ? (
+      <details className={`workspace-disclosure pwa-disclosure-card${isMinimal ? "" : ""}`}>
+        <summary>Version history</summary>
+        <div className="workspace-disclosure-body stack">
+          <p className="muted">
+            Open any earlier generated version to review it without losing the latest output.
+          </p>
+          <div className="section-list">
+            {outputVersions.map((version, index) => (
+              <div key={version.id} className="list-item output-version-row">
+                <span className="list-item-copy">
+                  <strong>{index === 0 ? "Current version" : `Version ${outputVersions.length - index}`}</strong>
+                  <span className="muted">{formatOutputVersionLabel(version.generatedAt)}</span>
+                </span>
+                {index === 0 ? (
+                  <button
+                    className="small-button"
+                    type="button"
+                    onClick={onOpenLatestOutputVersion}
+                    disabled={!selectedOutputVersionId}
+                  >
+                    {selectedOutputVersionId ? "Open latest" : "Viewing latest"}
+                  </button>
+                ) : (
+                  <button
+                    className="small-button"
+                    type="button"
+                    onClick={() => onOpenOutputVersion?.(version.id)}
+                    disabled={selectedOutputVersionId === version.id}
+                  >
+                    {selectedOutputVersionId === version.id ? "Viewing" : "Open"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </details>
+    ) : null;
 
   const applyReviewSeed = (value: string, kind: FollowUpKind = "todo") => {
     const parsed = parseFollowUpCandidate(value);
@@ -227,7 +295,7 @@ export const OutputWorkspace = ({
                     {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
                   </button>
                 ) : null}
-                <button className="shell-button" type="button" onClick={onTranslate}>
+                <button className="shell-button" type="button" onClick={onTranslate} disabled={isViewingHistoricalVersion}>
                   Translate
                 </button>
                 <button className="shell-button" type="button" onClick={onExportDocx}>
@@ -255,10 +323,13 @@ export const OutputWorkspace = ({
 
             <div className="field field-wide output-field-pwa">
               <label htmlFor="session-output">Output</label>
+              {selectedOutputVersion ? (
+                <p className="muted">Viewing the version generated {formatOutputVersionLabel(selectedOutputVersion.generatedAt)}. Open the latest version to keep editing.</p>
+              ) : null}
               <textarea
                 className="editor-textarea editor-textarea-primary output-textarea-minimal"
                 id="session-output"
-                value={session.output}
+                value={displayedOutput}
                 onChange={(event) => onChange({ ...session, output: event.target.value })}
                 onSelect={(event) => {
                   const nextExcerpt = event.currentTarget.value
@@ -266,9 +337,12 @@ export const OutputWorkspace = ({
                     .trim();
                   setSelectedExcerpt(nextExcerpt);
                 }}
+                readOnly={isViewingHistoricalVersion}
                 placeholder="Generated notes will appear here."
               />
             </div>
+
+            {renderVersionHistory()}
 
             <details className="workspace-disclosure pwa-disclosure-card">
               <summary>Details</summary>
@@ -360,11 +434,13 @@ export const OutputWorkspace = ({
                     className="shell-button"
                     type="button"
                     onClick={() => {
+                      if (isViewingHistoricalVersion) return;
                       onRevise(revisionInstructions);
                       if (revisionInstructions.trim()) {
                         setRevisionInstructions("");
                       }
                     }}
+                    disabled={isViewingHistoricalVersion}
                   >
                     {isRevising ? "Revising..." : "Revise with instructions"}
                   </button>
@@ -482,7 +558,7 @@ export const OutputWorkspace = ({
               {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
             </button>
           ) : null}
-          <button className="shell-button" type="button" onClick={onTranslate}>
+          <button className="shell-button" type="button" onClick={onTranslate} disabled={isViewingHistoricalVersion}>
             Translate
           </button>
           <button className="shell-button" type="button" onClick={onExportDocx}>
@@ -768,10 +844,13 @@ export const OutputWorkspace = ({
       ) : null}
       <div className="field field-wide">
         <label htmlFor="session-output">Output</label>
+        {selectedOutputVersion ? (
+          <p className="muted">Viewing the version generated {formatOutputVersionLabel(selectedOutputVersion.generatedAt)}. Open the latest version to keep editing.</p>
+        ) : null}
         <textarea
           className={`editor-textarea${isMinimal ? " editor-textarea-primary output-textarea-minimal" : ""}`}
           id="session-output"
-          value={session.output}
+          value={displayedOutput}
           onChange={(event) => onChange({ ...session, output: event.target.value })}
           onSelect={(event) => {
             const nextExcerpt = event.currentTarget.value
@@ -779,9 +858,11 @@ export const OutputWorkspace = ({
               .trim();
             setSelectedExcerpt(nextExcerpt);
           }}
+          readOnly={isViewingHistoricalVersion}
           placeholder="Generated notes will appear here."
         />
       </div>
+      {renderVersionHistory()}
       <details className="field field-wide workspace-disclosure">
         <summary>Details</summary>
         <div className="workspace-disclosure-body form-grid">
@@ -943,18 +1024,20 @@ export const OutputWorkspace = ({
             />
           </div>
           <div className="page-actions">
-            <button
-              className="shell-button"
-              type="button"
-              onClick={() => {
-                onRevise(revisionInstructions);
-                if (revisionInstructions.trim()) {
-                  setRevisionInstructions("");
-                }
-              }}
-            >
-              {isRevising ? "Revising..." : "Revise with instructions"}
-            </button>
+                <button
+                  className="shell-button"
+                  type="button"
+                  onClick={() => {
+                    if (isViewingHistoricalVersion) return;
+                    onRevise(revisionInstructions);
+                    if (revisionInstructions.trim()) {
+                      setRevisionInstructions("");
+                    }
+                  }}
+                  disabled={isViewingHistoricalVersion}
+                >
+                  {isRevising ? "Revising..." : "Revise with instructions"}
+                </button>
             <button className="shell-button" type="button" onClick={onExportText}>
               Export text
             </button>

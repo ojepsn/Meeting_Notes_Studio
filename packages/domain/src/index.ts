@@ -54,6 +54,11 @@ export interface SessionRecord {
   customFieldValues: Record<string, string>;
   excludedSectionIds: string[];
   output: string;
+  outputVersions: Array<{
+    id: string;
+    output: string;
+    generatedAt: string;
+  }>;
   createdAt: string;
   updatedAt: string;
 }
