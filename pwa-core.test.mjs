@@ -309,6 +309,12 @@ runTest("capture and output divider supports symmetric narrow panels", () => {
   assert.match(stylesSource, /@container \(max-width: 620px\) \{[\s\S]*?\.editor-layout \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
 });
 
+runTest("agenda rich-text input does not rewrite itself on every keystroke", () => {
+  assert.match(appJsSource, /meetingAgendaInput\.addEventListener\("input", \(\) => \{[\s\S]*?updateActiveSession\(\{ agenda: richTextValue \}, true\);[\s\S]*?\}\);/);
+  assert.doesNotMatch(appJsSource, /meetingAgendaInput\.addEventListener\("input", \(\) => \{[\s\S]*?setRichTextContent\(meetingAgendaInput, richTextValue\);[\s\S]*?\}\);/);
+  assert.match(appJsSource, /meetingAgendaInput\.addEventListener\("blur", \(\) => \{[\s\S]*?setRichTextContent\(meetingAgendaInput, getRichTextContent\(meetingAgendaInput\)\);[\s\S]*?\}\);/);
+});
+
 runTest("quick-start strip creates sessions directly and keeps the split meeting capture wording", () => {
   assert.match(appJsSource, /const preferredOrder = \["meeting", "personalNote", "oneToOneCall"\]/);
   assert.match(appJsSource, /button\.textContent = `New \$\{template\.label\}`/);

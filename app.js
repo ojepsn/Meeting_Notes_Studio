@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.21";
+const APP_VERSION = "v0.10.22";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -2166,8 +2166,12 @@ void initializeApp().catch((error) => {
 
   meetingAgendaInput.addEventListener("input", () => {
     const richTextValue = getRichTextContent(meetingAgendaInput);
-    setRichTextContent(meetingAgendaInput, richTextValue);
+    meetingAgendaInput.dataset.empty = htmlToPlainText(richTextValue).trim() ? "false" : "true";
     updateActiveSession({ agenda: richTextValue }, true);
+  });
+
+  meetingAgendaInput.addEventListener("blur", () => {
+    setRichTextContent(meetingAgendaInput, getRichTextContent(meetingAgendaInput));
   });
 
   document.querySelectorAll(".rich-text-command[data-target=\"meeting-agenda\"]").forEach((button) => {
