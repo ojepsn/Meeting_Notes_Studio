@@ -78,14 +78,23 @@ const normalizePromptText = (value: string | undefined, fallback: string, legacy
 const migrateMeetingMinutesRules = (rules: string) => {
   const legacyMeetingMinutesBulletRule =
     "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
+  const previousProseRules = [
+    "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
+    "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
+  ];
+  const currentProseRules = [
+    "- For each discussion point heading, use flowing text that captures the substance of the discussion.",
+    "- Use bullets only for agenda, decisions or action items.",
+  ];
   return rules.includes(legacyMeetingMinutesBulletRule)
     ? rules.replace(
         legacyMeetingMinutesBulletRule,
-        [
-          "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
-          "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
-        ].join("\n"),
+        currentProseRules.join("\n"),
       )
+    : rules.includes(previousProseRules[0])
+      ? rules
+          .replace(previousProseRules[0], currentProseRules[0])
+          .replace(previousProseRules[1], currentProseRules[1])
     : rules;
 };
 

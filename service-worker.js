@@ -1,9 +1,9 @@
-const CACHE_NAME = "notesmith-pwa-v24";
+const CACHE_NAME = "notesmith-pwa-v25";
 const APP_SHELL_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=0.10.26",
-  "./app.js?v=0.10.26",
+  "./styles.css?v=0.10.27",
+  "./app.js?v=0.10.27",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

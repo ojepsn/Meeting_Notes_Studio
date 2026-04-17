@@ -20,7 +20,7 @@ export const DEFAULT_MEETING_MINUTES_RULES = `# Core instructions
 - Synthesize; do not retell the meeting minute-by-minute.
 - Prioritize outcomes, decisions, commitments, risks, blockers, and unresolved questions.
 - Use clear sectioning and concise business language.
-- Use bullets when they improve scanability; avoid bloated prose.
+- Prefer flowing prose for the main body of the minutes.
 - Remove filler, repetition, false starts, side chatter, and spoken-language clutter.
 
 # Source handling
@@ -51,8 +51,8 @@ export const DEFAULT_MEETING_MINUTES_RULES = `# Core instructions
 - Neutral, professional, business-ready.
 - Specific and information-dense.
 - Avoid transcript phrasing, conversational clutter, and unnecessary scene-setting.
-- For each discussion point heading, prefer flowing text that captures the substance of the discussion.
-- Use bullets only when they materially improve scanability, such as for decisions or action items.
+- For each discussion point heading, use flowing text that captures the substance of the discussion.
+- Use bullets only for agenda, decisions or action items.
 - Make the result easy for a busy colleague to scan in under a minute.
 
 # Output priorities

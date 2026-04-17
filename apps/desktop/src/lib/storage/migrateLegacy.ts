@@ -133,10 +133,20 @@ const normalizePromptProfile = (settings: LegacySettings | null): PromptProfile 
       ? rules.replace(
           "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.",
           [
-            "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
-            "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
+            "- For each discussion point heading, use flowing text that captures the substance of the discussion.",
+            "- Use bullets only for agenda, decisions or action items.",
           ].join("\n"),
         )
+      : rules.includes("- For each discussion point heading, prefer flowing text that captures the substance of the discussion.")
+        ? rules
+            .replace(
+              "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
+              "- For each discussion point heading, use flowing text that captures the substance of the discussion.",
+            )
+            .replace(
+              "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
+              "- Use bullets only for agenda, decisions or action items.",
+            )
       : rules;
 
   return {

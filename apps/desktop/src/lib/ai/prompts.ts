@@ -8,7 +8,7 @@ import {
   DEFAULT_TRANSLATION_RULES,
 } from "@notesmith/prompts";
 
-export const AI_PROMPT_PROFILE_VERSION = "2026-04-13";
+export const AI_PROMPT_PROFILE_VERSION = "2026-04-17";
 
 export interface ResolvedPromptProfile {
   profile: PromptProfile;
@@ -35,14 +35,23 @@ const LEGACY_TRANSLATION_RULES = new Set([
 const migrateMeetingMinutesRules = (value: string) => {
   const legacyBulletRule =
     "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
+  const previousProseRules = [
+    "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
+    "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
+  ];
+  const currentProseRules = [
+    "- For each discussion point heading, use flowing text that captures the substance of the discussion.",
+    "- Use bullets only for agenda, decisions or action items.",
+  ];
   return value.includes(legacyBulletRule)
     ? value.replace(
         legacyBulletRule,
-        [
-          "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
-          "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
-        ].join("\n"),
+        currentProseRules.join("\n"),
       )
+    : value.includes(previousProseRules[0])
+      ? value
+          .replace(previousProseRules[0], currentProseRules[0])
+          .replace(previousProseRules[1], currentProseRules[1])
     : value;
 };
 

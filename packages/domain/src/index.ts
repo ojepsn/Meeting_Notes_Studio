@@ -258,10 +258,10 @@ export const BUILTIN_TEMPLATES: TemplateDefinition[] = [
     ],
     sections: [
       { id: "agenda", title: "Agenda", instructions: "Capture the planned agenda, topics, or framing points that set up the meeting.", enabledByDefault: true, position: 1 },
-      { id: "summary", title: "Summary", instructions: "Summarize the most important outcome from the meeting.", enabledByDefault: true, position: 2 },
+      { id: "summary", title: "Summary", instructions: "Summarize the most important outcome from the meeting.", enabledByDefault: false, position: 2 },
       { id: "discussion", title: "Key discussion points", instructions: "Organize the main business themes discussed.", enabledByDefault: true, position: 3 },
-      { id: "decisions", title: "Decisions", instructions: "Capture explicit decisions that were made.", enabledByDefault: true, position: 4 },
-      { id: "actions", title: "Action items", instructions: "List concrete next actions with owners when possible.", enabledByDefault: true, position: 5 }
+      { id: "decisions", title: "Decisions", instructions: "Capture explicit decisions that were made.", enabledByDefault: false, position: 4 },
+      { id: "actions", title: "Action items", instructions: "List concrete next actions with owners when possible.", enabledByDefault: false, position: 5 }
     ]
   },
   {

@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.26";
+const APP_VERSION = "v0.10.27";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -214,6 +214,8 @@ const liveTranscriptBadge = document.querySelector("#live-transcript-badge");
 const uploadedTranscriptBadge = document.querySelector("#uploaded-transcript-badge");
 const mobileCaptureStatus = document.querySelector("#mobile-capture-status");
 const editorPanel = document.querySelector(".editor-panel");
+const editorLayout = document.querySelector(".editor-layout");
+const editorMain = document.querySelector(".editor-main");
 const workspaceLayout = document.querySelector(".workspace");
 const apiKeyInput = document.querySelector("#api-key");
 const modelSelect = document.querySelector("#model-select");
@@ -392,7 +394,7 @@ Prefer reliable synthesis over coverage for its own sake.`,
 - Synthesize; do not retell the meeting minute-by-minute.
 - Prioritize outcomes, decisions, commitments, risks, blockers, and unresolved questions.
 - Use clear sectioning and concise business language.
-- Use bullets when they improve scanability; avoid bloated prose.
+- Prefer flowing prose for the main body of the minutes.
 - Remove filler, repetition, false starts, side chatter, and spoken-language clutter.
 
 # Source handling
@@ -423,8 +425,8 @@ Prefer reliable synthesis over coverage for its own sake.`,
 - Neutral, professional, business-ready.
 - Specific and information-dense.
 - Avoid transcript phrasing, conversational clutter, and unnecessary scene-setting.
-- For each discussion point heading, prefer flowing text that captures the substance of the discussion.
-- Use bullets only when they materially improve scanability, such as for decisions or action items.
+- For each discussion point heading, use flowing text that captures the substance of the discussion.
+- Use bullets only for agenda, decisions or action items.
 - Make the result easy for a busy colleague to scan in under a minute.
 
 # Output priorities
@@ -558,9 +560,13 @@ const RELEVANT_TRANSCRIPTION_MODEL_IDS = [
 ];
 const LEGACY_MEETING_MINUTES_BULLET_RULE =
   "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
-const UPDATED_MEETING_MINUTES_PROSE_RULES = [
+const PREVIOUS_MEETING_MINUTES_PROSE_RULES = [
   "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
   "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
+];
+const CURRENT_MEETING_MINUTES_PROSE_RULES = [
+  "- For each discussion point heading, use flowing text that captures the substance of the discussion.",
+  "- Use bullets only for agenda, decisions or action items.",
 ];
 const THEME_DESCRIPTIONS = {
   "fluent-slate": "A calm professional default with restrained blue accents and quiet neutral surfaces.",
@@ -1086,6 +1092,16 @@ void initializeApp().catch((error) => {
       outputResizeHandle.addEventListener("pointerdown", startOutputResize);
       outputResizeHandle.addEventListener("mousedown", startOutputResize);
     }
+    window.addEventListener("resize", updateNotesTranscriptLayout);
+    if (typeof ResizeObserver !== "undefined" && editorMain && editorSidebar) {
+      const notesLayoutObserver = new ResizeObserver(() => updateNotesTranscriptLayout());
+      notesLayoutObserver.observe(editorMain);
+      notesLayoutObserver.observe(editorSidebar);
+      if (editorLayout) {
+        notesLayoutObserver.observe(editorLayout);
+      }
+    }
+    updateNotesTranscriptLayout();
   mobileDictationToggle?.addEventListener("click", () => {
     if (mobileDictationToggle.dataset.captureMode === "audio") {
       toggleAudioCapture("room");
@@ -3065,6 +3081,7 @@ function render() {
   syncSettingsForm();
   updateRecentSessionsPanelUi();
   syncMobileUi();
+  window.requestAnimationFrame(updateNotesTranscriptLayout);
 }
 
 function renderTemplateOptions() {
@@ -6619,10 +6636,10 @@ function buildRevisedLocalPolishedNotes(session, feedback) {
 function createDefaultSections() {
   return {
     includeAgenda: true,
-    includeSummary: true,
+    includeSummary: false,
     includeHighlights: true,
-    includeDecisions: true,
-    includeActions: true,
+    includeDecisions: false,
+    includeActions: false,
   };
 }
 
@@ -7214,6 +7231,22 @@ function applyOutputPanelWidth() {
   workspaceLayout.style.setProperty("--output-panel-width", `${width}px`);
 }
 
+function updateNotesTranscriptLayout() {
+  if (!editorLayout || !editorMain || !editorSidebar) {
+    return;
+  }
+
+  if (isMobileLayout()) {
+    editorLayout.classList.remove("editor-layout-notes-full-width");
+    return;
+  }
+
+  const mainRect = editorMain.getBoundingClientRect();
+  const sidebarRect = editorSidebar.getBoundingClientRect();
+  const shouldUseFullWidth = mainRect.bottom >= sidebarRect.bottom - 4;
+  editorLayout.classList.toggle("editor-layout-notes-full-width", shouldUseFullWidth);
+}
+
 function startOutputResize(event) {
   if (isMobileLayout() || !workspaceLayout) {
     return;
@@ -7239,6 +7272,7 @@ function startOutputResize(event) {
     );
     settings.outputPanelWidth = nextWidth;
     applyOutputPanelWidth();
+    updateNotesTranscriptLayout();
   };
 
   const onUp = () => {
@@ -8099,10 +8133,15 @@ function normalizePromptSettings(promptSettings) {
     if (typeof rules !== "string" || !rules.trim()) {
       return "";
     }
-    if (!rules.includes(LEGACY_MEETING_MINUTES_BULLET_RULE)) {
-      return rules;
+    if (rules.includes(LEGACY_MEETING_MINUTES_BULLET_RULE)) {
+      return rules.replace(LEGACY_MEETING_MINUTES_BULLET_RULE, CURRENT_MEETING_MINUTES_PROSE_RULES.join("\n"));
     }
-    return rules.replace(LEGACY_MEETING_MINUTES_BULLET_RULE, UPDATED_MEETING_MINUTES_PROSE_RULES.join("\n"));
+    if (rules.includes(PREVIOUS_MEETING_MINUTES_PROSE_RULES[0])) {
+      return rules
+        .replace(PREVIOUS_MEETING_MINUTES_PROSE_RULES[0], CURRENT_MEETING_MINUTES_PROSE_RULES[0])
+        .replace(PREVIOUS_MEETING_MINUTES_PROSE_RULES[1], CURRENT_MEETING_MINUTES_PROSE_RULES[1]);
+    }
+    return rules;
   };
 
   return {

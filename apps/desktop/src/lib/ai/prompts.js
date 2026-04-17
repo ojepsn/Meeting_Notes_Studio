@@ -1,5 +1,5 @@
 import { DEFAULT_MEETING_MINUTES_RULES, DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT, DEFAULT_PERSONAL_NOTES_RULES, DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT, DEFAULT_REVISION_RULES, DEFAULT_TRANSLATION_RULES, } from "@notesmith/prompts";
-export const AI_PROMPT_PROFILE_VERSION = "2026-04-13";
+export const AI_PROMPT_PROFILE_VERSION = "2026-04-17";
 const LEGACY_MEETING_MINUTES_SYSTEM_PROMPTS = new Set([
     "You are an executive note assistant. Convert rough notes and transcripts into structured professional notes. Synthesize spoken content instead of reproducing it line by line.",
 ]);
@@ -15,12 +15,21 @@ const LEGACY_TRANSLATION_RULES = new Set([
 ]);
 const migrateMeetingMinutesRules = (value) => {
     const legacyBulletRule = "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
+    const previousProseRules = [
+        "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
+        "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
+    ];
+    const currentProseRules = [
+        "- For each discussion point heading, use flowing text that captures the substance of the discussion.",
+        "- Use bullets only for agenda, decisions or action items.",
+    ];
     return value.includes(legacyBulletRule)
-        ? value.replace(legacyBulletRule, [
-            "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
-            "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
-        ].join("\n"))
-        : value;
+        ? value.replace(legacyBulletRule, currentProseRules.join("\n"))
+        : value.includes(previousProseRules[0])
+            ? value
+                .replace(previousProseRules[0], currentProseRules[0])
+                .replace(previousProseRules[1], currentProseRules[1])
+            : value;
 };
 const resolvePromptText = (value, fallback, legacyDefaults = new Set()) => {
     const trimmedValue = value?.trim();
