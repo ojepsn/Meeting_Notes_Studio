@@ -11,7 +11,7 @@ export declare const isHeadingLine: (line: string) => boolean;
 export declare const normalizeHeadingText: (line: string) => string;
 type StructuredOutputEntry = {
     kind: "heading";
-    level: 1 | 2 | 3;
+    level: 1 | 2 | 3 | 4;
     text: string;
 } | {
     kind: "body";

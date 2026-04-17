@@ -29,7 +29,7 @@ import {
   normalizeTranscriptionModelId,
   type AIModelPricingSnapshot,
 } from "../ai/modelPricing";
-import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, isOutputLayoutPresetId } from "../export/outputLayouts";
+import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, normalizeOutputLayoutPresetId } from "../export/outputLayouts";
 import { isTauriRuntime } from "../storage/environment";
 import { getDesktopStorageInfo } from "../storage/desktopStorage";
 import { sqliteBootstrapStatements } from "./schema";
@@ -380,9 +380,7 @@ const writeLocalJson = (key: string, value: unknown) => {
 const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSettings => ({
   ...createDefaultSettings(),
   ...settings,
-  outputLayoutPresetId: typeof settings.outputLayoutPresetId === "string" && isOutputLayoutPresetId(settings.outputLayoutPresetId)
-    ? settings.outputLayoutPresetId
-    : DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
+  outputLayoutPresetId: normalizeOutputLayoutPresetId(settings.outputLayoutPresetId),
   notesCapturePaneWidth: Number.isFinite(Number(settings.notesCapturePaneWidth))
     ? Math.min(980, Math.max(420, Math.round(Number(settings.notesCapturePaneWidth))))
     : 640,

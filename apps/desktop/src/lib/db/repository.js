@@ -1,7 +1,7 @@
 import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getPrimaryCaptureMode, } from "@notesmith/domain";
 import { DEFAULT_MEETING_MINUTES_RULES, DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT, DEFAULT_PERSONAL_NOTES_RULES, DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT, DEFAULT_REVISION_RULES, DEFAULT_TRANSLATION_RULES, } from "@notesmith/prompts";
 import { normalizeAIModelPricingSnapshot, normalizeTextModelId, normalizeTranscriptionModelId, } from "../ai/modelPricing";
-import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, isOutputLayoutPresetId } from "../export/outputLayouts";
+import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, normalizeOutputLayoutPresetId } from "../export/outputLayouts";
 import { isTauriRuntime } from "../storage/environment";
 import { getDesktopStorageInfo } from "../storage/desktopStorage";
 import { sqliteBootstrapStatements } from "./schema";
@@ -270,9 +270,7 @@ const writeLocalJson = (key, value) => {
 const normalizeSettings = (settings) => ({
     ...createDefaultSettings(),
     ...settings,
-    outputLayoutPresetId: typeof settings.outputLayoutPresetId === "string" && isOutputLayoutPresetId(settings.outputLayoutPresetId)
-        ? settings.outputLayoutPresetId
-        : DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
+    outputLayoutPresetId: normalizeOutputLayoutPresetId(settings.outputLayoutPresetId),
     notesCapturePaneWidth: Number.isFinite(Number(settings.notesCapturePaneWidth))
         ? Math.min(980, Math.max(420, Math.round(Number(settings.notesCapturePaneWidth))))
         : 640,

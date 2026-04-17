@@ -17,7 +17,7 @@ import {
   DEFAULT_REVISION_RULES,
   DEFAULT_TRANSLATION_RULES,
 } from "@notesmith/prompts";
-import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, isOutputLayoutPresetId } from "../export/outputLayouts";
+import { normalizeOutputLayoutPresetId } from "../export/outputLayouts";
 
 const LEGACY_SESSIONS_KEY = "notesmith-sessions";
 const LEGACY_SETTINGS_KEY = "notesmith-settings";
@@ -348,9 +348,7 @@ export const loadLegacyBrowserSnapshot = (): DesktopAppSnapshot | null => {
         theme: mapLegacyThemeFamily(parsedSettings?.themeFamily),
         outputLanguage: parsedSettings?.outputLanguage || "same",
         preferredDesktopTemplateId: mapLegacyTemplateId(preferredDesktopTemplateId),
-        outputLayoutPresetId: typeof legacyExportPresetId === "string" && isOutputLayoutPresetId(legacyExportPresetId)
-          ? legacyExportPresetId
-          : DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
+        outputLayoutPresetId: normalizeOutputLayoutPresetId(legacyExportPresetId),
         notesCapturePaneWidth: 640,
         captureWorkspaceDensity: "minimal",
         outputWorkspaceDensity: "minimal",

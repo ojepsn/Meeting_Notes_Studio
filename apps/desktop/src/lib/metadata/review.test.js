@@ -4,7 +4,7 @@ const settings = {
     theme: "fluent-slate-light",
     outputLanguage: "same",
     preferredDesktopTemplateId: "meeting",
-    outputLayoutPresetId: "modern-aptos",
+    outputLayoutPresetId: "modern-minutes",
     notesCapturePaneWidth: 640,
     captureWorkspaceDensity: "full",
     outputWorkspaceDensity: "full",

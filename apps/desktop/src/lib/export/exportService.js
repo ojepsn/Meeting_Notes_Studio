@@ -1,4 +1,4 @@
-import { AlignmentType, Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
+import { AlignmentType, BorderStyle, Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
 import { jsPDF } from "jspdf";
 import { loadPersistedAttachmentFile } from "../files/attachmentStore";
 import { getOutputLayoutPreset, getPrimaryFontFamily } from "./outputLayouts";
@@ -54,9 +54,9 @@ const parseStructuredLine = (line) => {
     const trimmed = line.trim();
     if (!trimmed)
         return null;
-    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+?)\s*#*$/);
+    const headingMatch = trimmed.match(/^(#{1,4})\s+(.+?)\s*#*$/);
     if (headingMatch) {
-        const level = Math.min(3, headingMatch[1].length);
+        const level = Math.min(4, headingMatch[1].length);
         return {
             kind: "heading",
             level,
@@ -124,7 +124,7 @@ const buildHtmlMarkup = (entries) => {
         }
         closeList();
         if (entry.kind === "heading") {
-            const tag = entry.level === 1 ? "h1" : entry.level === 2 ? "h2" : "h3";
+            const tag = entry.level === 1 ? "h1" : entry.level === 2 ? "h2" : entry.level === 3 ? "h3" : "h4";
             parts.push(`<${tag}>${escapeHtml(entry.text)}</${tag}>`);
             return;
         }
@@ -132,6 +132,16 @@ const buildHtmlMarkup = (entries) => {
     });
     closeList();
     return parts.join("");
+};
+const headingTextTransform = (text, headingCase) => headingCase === "uppercase" ? text.toUpperCase() : text;
+const getHeadingSize = (level, layout) => {
+    if (level === 1)
+        return layout.style.headingSize + 3;
+    if (level === 2)
+        return layout.style.headingSize;
+    if (level === 3)
+        return Math.max(layout.style.headingSize - 1.2, layout.style.bodySize + 1);
+    return Math.max(layout.style.headingSize - 2, layout.style.bodySize + 0.5);
 };
 const loadImageAttachments = async (attachments = []) => {
     const imageAttachments = getIncludedImageAttachments(attachments);
@@ -187,15 +197,17 @@ export const exportOutputAsHtml = ({ title, output, attachments = [], layoutPres
     const contentMarkup = buildHtmlMarkup(structuredOutput);
     downloadTextFile({
         content: `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title || "Meeting Notes")}</title><style>
-      body { font-family: ${layout.style.bodyFont}; font-size: ${layout.style.bodySize}pt; line-height: ${layout.style.lineHeight}; margin: 48px; color: #18222c; }
-      h1 { font-family: ${layout.style.titleFont}; font-size: ${layout.style.titleSize}pt; line-height: 1.2; margin: 0 0 20px; }
-      h2 { font-family: ${layout.style.headingFont}; font-size: ${layout.style.headingSize}pt; line-height: 1.3; margin: 22px 0 8px; }
-      h3 { font-family: ${layout.style.headingFont}; font-size: ${Math.max(layout.style.headingSize - 1, layout.style.bodySize + 0.5)}pt; line-height: 1.3; margin: 16px 0 8px; }
-      p { margin: 0 0 12px; }
-      ul, ol { margin: 0 0 12px 22px; padding: 0; }
+      body { font-family: ${layout.style.bodyFont}; font-size: ${layout.style.bodySize}pt; line-height: ${layout.style.lineHeight}; margin: ${layout.style.pageMargin}pt; color: #18222c; }
+      h1 { font-family: ${layout.style.titleFont}; font-size: ${layout.style.titleSize}pt; line-height: 1.15; margin: 0 0 ${layout.style.sectionSpacing}px; text-align: ${layout.style.titleAlign}; }
+      h2, h3, h4 { font-family: ${layout.style.headingFont}; color: ${layout.style.headingColor}; text-transform: ${layout.style.headingCase === "uppercase" ? "uppercase" : "none"}; }
+      h2 { font-size: ${getHeadingSize(1, layout)}pt; line-height: 1.25; margin: ${layout.style.sectionSpacing}px 0 8px; ${layout.style.sectionDivider === "line" ? "padding-top: 10px; border-top: 1px solid rgba(24,34,44,0.16);" : ""} }
+      h3 { font-size: ${getHeadingSize(2, layout)}pt; line-height: 1.28; margin: ${Math.max(layout.style.sectionSpacing - 4, 14)}px 0 8px; }
+      h4 { font-size: ${getHeadingSize(3, layout)}pt; line-height: 1.3; margin: ${Math.max(layout.style.sectionSpacing - 8, 12)}px 0 6px; }
+      p { margin: 0 0 ${layout.style.paragraphSpacing}px; }
+      ul, ol { margin: 0 0 ${layout.style.paragraphSpacing}px 22px; padding: 0; }
       li { margin: 0 0 6px; }
-      figcaption { font-family: ${layout.style.metaFont}; font-size: ${layout.style.metaSize}pt; color: #54606c; margin-top: 6px; }
-      figure { margin: 22px 0; }
+      figcaption { font-family: ${layout.style.metaFont}; font-size: ${layout.style.metaSize}pt; color: ${layout.style.metaColor}; margin-top: 6px; text-align: ${layout.style.metaAlign}; }
+      figure { margin: ${layout.style.sectionSpacing}px 0; }
     </style></head><body><h1>${escapeHtml(title || "Meeting Notes")}</h1>${contentMarkup}${imageMarkup}</body></html>`,
         filename: `${toFileSafeName(title)}.html`,
         mimeType: "text/html;charset=utf-8",
@@ -215,7 +227,9 @@ export const exportOutputAsDocx = async ({ title, output, attachments = [], layo
                 ? HeadingLevel.HEADING_1
                 : entry.level === 2
                     ? HeadingLevel.HEADING_2
-                    : HeadingLevel.HEADING_3
+                    : entry.level === 3
+                        ? HeadingLevel.HEADING_3
+                        : HeadingLevel.HEADING_4
             : undefined,
         bullet: entry.kind === "bullet" ? { level: 0 } : undefined,
         numbering: entry.kind === "numbered"
@@ -226,21 +240,24 @@ export const exportOutputAsDocx = async ({ title, output, attachments = [], layo
             : undefined,
         children: [
             new TextRun({
-                text: entry.text,
+                text: entry.kind === "heading" ? headingTextTransform(entry.text, layout.style.headingCase) : entry.text,
                 font: entry.kind === "heading" ? headingFontFamily : bodyFontFamily,
                 size: Math.round((entry.kind === "heading"
-                    ? entry.level === 1
-                        ? layout.style.titleSize
-                        : entry.level === 2
-                            ? layout.style.headingSize
-                            : Math.max(layout.style.headingSize - 1, layout.style.bodySize + 0.5)
+                    ? getHeadingSize(entry.level, layout)
                     : layout.style.bodySize) * 2),
                 bold: entry.kind === "heading",
+                color: entry.kind === "heading" ? layout.style.headingColor.replace("#", "") : undefined,
             }),
         ],
+        alignment: entry.kind === "heading" && entry.level === 1
+            ? layout.style.titleAlign === "center"
+                ? AlignmentType.CENTER
+                : AlignmentType.LEFT
+            : undefined,
+        thematicBreak: entry.kind === "heading" && entry.level <= 2 && layout.style.sectionDivider === "line",
         spacing: entry.kind === "heading"
-            ? { before: 220, after: 90 }
-            : { line: Math.round(layout.style.lineHeight * 240), after: entry.kind === "body" ? 120 : 80 },
+            ? { before: Math.round(layout.style.sectionSpacing * 12), after: 90 }
+            : { line: Math.round(layout.style.lineHeight * 240), after: Math.round(layout.style.paragraphSpacing * 10) },
     }));
     const imageParagraphs = imageAttachments.flatMap(({ attachment, bytes, file }) => {
         const imageType = getDocxImageType(file.type);
@@ -265,8 +282,10 @@ export const exportOutputAsDocx = async ({ title, output, attachments = [], layo
                         italics: true,
                         font: metaFontFamily,
                         size: Math.round(layout.style.metaSize * 2),
+                        color: layout.style.metaColor.replace("#", ""),
                     }),
                 ],
+                alignment: layout.style.metaAlign === "center" ? AlignmentType.CENTER : AlignmentType.LEFT,
                 spacing: { after: 240 },
             }),
         ];
@@ -304,11 +323,32 @@ export const exportOutputAsDocx = async ({ title, output, attachments = [], layo
                                 bold: true,
                             }),
                         ],
+                        alignment: layout.style.titleAlign === "center" ? AlignmentType.CENTER : AlignmentType.LEFT,
                         spacing: { after: 240 },
+                        border: layout.style.sectionDivider === "line"
+                            ? {
+                                bottom: {
+                                    color: "C9D2DB",
+                                    style: BorderStyle.SINGLE,
+                                    size: 6,
+                                    space: 8,
+                                },
+                            }
+                            : undefined,
                     }),
                     ...paragraphs,
                     ...imageParagraphs,
                 ],
+                properties: {
+                    page: {
+                        margin: {
+                            top: Math.round(layout.style.pageMargin * 20),
+                            right: Math.round(layout.style.pageMargin * 20),
+                            bottom: Math.round(layout.style.pageMargin * 20),
+                            left: Math.round(layout.style.pageMargin * 20),
+                        },
+                    },
+                },
             },
         ],
     });
@@ -327,34 +367,46 @@ export const exportOutputAsPdf = async ({ title, output, attachments = [], layou
     });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 54;
+    const margin = layout.style.pageMargin * 1.333;
     const contentWidth = pageWidth - margin * 2;
     let y = margin;
     pdf.setFont(layout.pdfFonts.title, "bold");
     pdf.setFontSize(layout.style.titleSize);
-    pdf.text(title || "Meeting Notes", margin, y);
+    pdf.setTextColor(layout.style.headingColor);
+    if (layout.style.titleAlign === "center") {
+        pdf.text(title || "Meeting Notes", pageWidth / 2, y, { align: "center" });
+    }
+    else {
+        pdf.text(title || "Meeting Notes", margin, y);
+    }
     y += layout.style.titleSize + 10;
+    if (layout.style.sectionDivider === "line") {
+        pdf.setDrawColor(201, 210, 219);
+        pdf.line(margin, y, pageWidth - margin, y);
+        y += 14;
+    }
     structuredOutput.forEach((entry) => {
         const isHeading = entry.kind === "heading";
         const fontFamily = isHeading ? layout.pdfFonts.heading : layout.pdfFonts.body;
-        const fontSize = entry.kind === "heading"
-            ? entry.level === 1
-                ? layout.style.titleSize
-                : entry.level === 2
-                    ? layout.style.headingSize
-                    : Math.max(layout.style.headingSize - 1, layout.style.bodySize + 0.5)
-            : layout.style.bodySize;
+        const fontSize = entry.kind === "heading" ? getHeadingSize(entry.level, layout) : layout.style.bodySize;
         const lineHeight = isHeading ? Math.round(fontSize * 1.45) : Math.round(fontSize * layout.style.lineHeight);
-        const gapAfter = isHeading ? 8 : entry.kind === "body" ? 10 : 6;
-        const prefix = entry.kind === "bullet" ? "• " : entry.kind === "numbered" ? `${entry.order ?? 1}. ` : "";
+        const gapAfter = entry.kind === "heading"
+            ? Math.max(layout.style.sectionSpacing - 8, 8)
+            : entry.kind === "body"
+                ? layout.style.paragraphSpacing
+                : 6;
         const indent = entry.kind === "body" || isHeading ? 0 : 18;
-        const lines = pdf.splitTextToSize(`${prefix}${entry.text}`, contentWidth - indent);
+        const text = entry.kind === "heading"
+            ? headingTextTransform(entry.text, layout.style.headingCase)
+            : entry.text;
+        const lines = pdf.splitTextToSize(`${entry.kind === "bullet" ? "� " : entry.kind === "numbered" ? `${entry.order ?? 1}. ` : ""}${text}`, contentWidth - indent);
         if (y + lines.length * lineHeight > pageHeight - margin) {
             pdf.addPage();
             y = margin;
         }
         pdf.setFont(fontFamily, isHeading ? "bold" : "normal");
         pdf.setFontSize(fontSize);
+        pdf.setTextColor(isHeading ? layout.style.headingColor : "#18222c");
         pdf.text(lines, margin + indent, y);
         y += lines.length * lineHeight + gapAfter;
     });
@@ -375,9 +427,11 @@ export const exportOutputAsPdf = async ({ title, output, attachments = [], layou
         y += 234;
         pdf.setFont(layout.pdfFonts.meta, "normal");
         pdf.setFontSize(layout.style.metaSize);
+        pdf.setTextColor(layout.style.metaColor);
         pdf.text(attachment.caption || attachment.filename, margin, y);
         pdf.setFont(layout.pdfFonts.body, "normal");
         pdf.setFontSize(layout.style.bodySize);
+        pdf.setTextColor("#18222c");
         y += 18;
     }
     pdf.save(`${toFileSafeName(title)}.pdf`);

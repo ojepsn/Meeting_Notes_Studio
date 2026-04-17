@@ -1,6 +1,6 @@
 import { BUILTIN_TEMPLATES } from "@notesmith/domain";
 import { DEFAULT_MEETING_MINUTES_RULES, DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT, DEFAULT_PERSONAL_NOTES_RULES, DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT, DEFAULT_REVISION_RULES, DEFAULT_TRANSLATION_RULES, } from "@notesmith/prompts";
-import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, isOutputLayoutPresetId } from "../export/outputLayouts";
+import { normalizeOutputLayoutPresetId } from "../export/outputLayouts";
 const LEGACY_SESSIONS_KEY = "notesmith-sessions";
 const LEGACY_SETTINGS_KEY = "notesmith-settings";
 const toHtmlText = (html) => html
@@ -227,9 +227,7 @@ export const loadLegacyBrowserSnapshot = () => {
                 theme: mapLegacyThemeFamily(parsedSettings?.themeFamily),
                 outputLanguage: parsedSettings?.outputLanguage || "same",
                 preferredDesktopTemplateId: mapLegacyTemplateId(preferredDesktopTemplateId),
-                outputLayoutPresetId: typeof legacyExportPresetId === "string" && isOutputLayoutPresetId(legacyExportPresetId)
-                    ? legacyExportPresetId
-                    : DEFAULT_OUTPUT_LAYOUT_PRESET_ID,
+                outputLayoutPresetId: normalizeOutputLayoutPresetId(legacyExportPresetId),
                 notesCapturePaneWidth: 640,
                 captureWorkspaceDensity: "minimal",
                 outputWorkspaceDensity: "minimal",
