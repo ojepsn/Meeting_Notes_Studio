@@ -40,4 +40,14 @@ describe("polishNonAiNotesText", () => {
       ].join("\n"),
     );
   });
+
+  it("does not misclassify ordinary rough prose as an action item and fixes common meeting shorthand", () => {
+    const polished = polishNonAiNotesText("Tesing to write asom notes whn many mistakens\nmtg booked 3/4", {
+      abbreviations: [],
+      sessionParticipants: "",
+      savedParticipants: [],
+    });
+
+    expect(polished).toBe("Testing to write some notes when many mistakes meeting booked 3/4.");
+  });
 });

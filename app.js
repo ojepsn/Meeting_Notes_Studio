@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.28";
+const APP_VERSION = "v0.10.29";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -6870,16 +6870,27 @@ function normalizeRuleBasedLabel(text) {
     .replace(/^agenda\s*[:\-]?\s*/i, "Agenda: ");
 }
 
-function standardizeRuleBasedActionPattern(text) {
+function standardizeRuleBasedActionPattern(text, participantsValue = "") {
   if (/^(Action|Decision|Risk|Next step|Agenda|Summary):/i.test(text)) {
     return text;
   }
 
-  if (/^[A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+)?\s+to\s+.+/.test(text)) {
+  if (startsWithKnownParticipantAction(text)) {
     return `Action: ${text}`;
   }
 
   return text;
+}
+
+function startsWithKnownParticipantAction(text, participantsValue = "", participantDirectory = settings.participantDirectory) {
+  const canonicalParticipants = [...new Set([...parseParticipants(participantsValue), ...normalizeParticipantDirectory(participantDirectory)])]
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length);
+
+  return canonicalParticipants.some((participant) => {
+    const pattern = new RegExp(`^${escapeRegExp(participant)}\\s+to\\s+`, "i");
+    return pattern.test(text);
+  });
 }
 
 function normalizeRuleBasedLinePunctuation(text) {
@@ -6912,6 +6923,11 @@ function normalizeRuleBasedTextLine(line, participantsValue, abbreviationDirecto
   nextLine = canonicalizeParticipantMentions(nextLine, participantsValue);
   [
     [/\bteh\b/gi, "the"],
+    [/\btesing\b/gi, "testing"],
+    [/\basom\b/gi, "some"],
+    [/\bwhn\b/gi, "when"],
+    [/\bmistakens\b/gi, "mistakes"],
+    [/\bthigns\b/gi, "things"],
     [/\bdont\b/gi, "don't"],
     [/\bcant\b/gi, "can't"],
     [/\bwont\b/gi, "won't"],
@@ -6922,6 +6938,7 @@ function normalizeRuleBasedTextLine(line, participantsValue, abbreviationDirecto
     [/\bbecuase\b/gi, "because"],
     [/\badress\b/gi, "address"],
     [/\bmangement\b/gi, "management"],
+    [/\bmtg\b/gi, "meeting"],
     [/\bw\/o\b/gi, "without"],
     [/\bw\/\b/gi, "with "],
   ].forEach(([pattern, replacement]) => {
@@ -6929,7 +6946,7 @@ function normalizeRuleBasedTextLine(line, participantsValue, abbreviationDirecto
   });
   nextLine = standardizeRuleBasedDateAndTime(nextLine);
   nextLine = normalizeRuleBasedLabel(nextLine);
-  nextLine = standardizeRuleBasedActionPattern(nextLine);
+  nextLine = standardizeRuleBasedActionPattern(nextLine, participantsValue);
   nextLine = normalizeRuleBasedLinePunctuation(nextLine);
 
   const bulletMatch = nextLine.match(/^([-*•]|\d+[.)])\s+(.+)$/);

@@ -8,6 +8,11 @@ type ManualPolishOptions = {
 
 const COMMON_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\bteh\b/gi, "the"],
+  [/\btesing\b/gi, "testing"],
+  [/\basom\b/gi, "some"],
+  [/\bwhn\b/gi, "when"],
+  [/\bmistakens\b/gi, "mistakes"],
+  [/\bthigns\b/gi, "things"],
   [/\bdont\b/gi, "don't"],
   [/\bcant\b/gi, "can't"],
   [/\bwont\b/gi, "won't"],
@@ -19,6 +24,7 @@ const COMMON_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\badress\b/gi, "address"],
   [/\bmangement\b/gi, "management"],
   [/\benvironment\b/gi, "environment"],
+  [/\bmtg\b/gi, "meeting"],
   [/\bw\/\b/gi, "with "],
   [/\bw\/o\b/gi, "without"],
 ];
@@ -100,12 +106,23 @@ const standardizeDateAndTime = (text: string) =>
     .replace(/\b(\d{4})\/(\d{2})\/(\d{2})\b/g, "$1-$2-$3")
     .replace(/\b(\d{1,2})[.,](\d{2})\b/g, (_, hours: string, minutes: string) => `${hours.padStart(2, "0")}:${minutes}`);
 
-const standardizeActionPattern = (text: string) => {
+const startsWithKnownParticipantAction = (text: string, options: ManualPolishOptions) => {
+  const canonicalParticipants = [...new Set([...normalizeParticipants(options.sessionParticipants || ""), ...(options.savedParticipants || [])])]
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length);
+
+  return canonicalParticipants.some((participant) => {
+    const pattern = new RegExp(`^${escapeRegExp(participant)}\\s+to\\s+`, "i");
+    return pattern.test(text);
+  });
+};
+
+const standardizeActionPattern = (text: string, options: ManualPolishOptions) => {
   if (/^(Action|Decision|Risk|Next step|Agenda|Summary):/i.test(text)) {
     return text;
   }
 
-  if (/^[A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+)?\s+to\s+.+/.test(text)) {
+  if (startsWithKnownParticipantAction(text, options)) {
     return `Action: ${text}`;
   }
 
@@ -153,7 +170,7 @@ const normalizeTextLine = (line: string, options: ManualPolishOptions) => {
   });
   nextLine = standardizeDateAndTime(nextLine);
   nextLine = normalizeLabelLine(nextLine);
-  nextLine = standardizeActionPattern(nextLine);
+  nextLine = standardizeActionPattern(nextLine, options);
   nextLine = normalizeLinePunctuation(nextLine);
 
   const bulletMatch = nextLine.match(/^([-*•]|\d+[.)])\s+(.+)$/);

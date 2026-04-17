@@ -165,6 +165,7 @@ function loadPwaManualPolishHelpers() {
     extractFunction(appJsSource, "canonicalizeParticipantMentions"),
     extractFunction(appJsSource, "standardizeRuleBasedDateAndTime"),
     extractFunction(appJsSource, "normalizeRuleBasedLabel"),
+    extractFunction(appJsSource, "startsWithKnownParticipantAction"),
     extractFunction(appJsSource, "standardizeRuleBasedActionPattern"),
     extractFunction(appJsSource, "normalizeRuleBasedLinePunctuation"),
     extractFunction(appJsSource, "capitalizeSentenceStarts"),
@@ -443,6 +444,16 @@ runTest("non-AI polishing expands abbreviations, canonicalizes participants, and
   );
 
   assert.equal(polished, "The meeting with Ola Jeppsson moved to 09:30 and the address was updated.");
+});
+
+runTest("non-AI polishing does not turn ordinary rough prose into an action item", () => {
+  const { polishNonAiNotesText } = loadPwaManualPolishHelpers();
+  const polished = polishNonAiNotesText("Tesing to write asom notes whn many mistakens\nmtg booked 3/4", {
+    participantsValue: "",
+    abbreviationDirectory: [],
+  });
+
+  assert.equal(polished, "Testing to write some notes when many mistakes meeting booked 3/4.");
 });
 
 console.log("PWA core tests passed.");
