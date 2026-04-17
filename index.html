@@ -201,52 +201,6 @@
               </details>
             </section>
 
-            <section class="form-section notes-transcript-section" aria-label="Notes and transcripts">
-              <div class="form-section-header">
-                <p class="section-label">Capture</p>
-              </div>
-
-                <details class="manual-notes-disclosure" id="manual-notes-disclosure" open>
-                  <summary>Manual notes</summary>
-                  <label class="field" id="manual-notes-field">
-                    <textarea
-                      id="raw-notes"
-                      rows="12"
-                      placeholder="Write your own notes here, which will be included in the Output"
-                    ></textarea>
-                  </label>
-                </details>
-
-                <details class="manual-notes-disclosure is-hidden-field" id="live-transcript-disclosure" hidden>
-                  <summary>
-                    <span>Live transcript</span>
-                    <span class="transcript-source-badge" id="live-transcript-badge">Ready for live notes</span>
-                  </summary>
-                  <label class="field transcript-field transcript-field-live" id="live-transcript-field" data-transcript-source="live-ready">
-                    <textarea
-                      id="live-transcript"
-                      rows="7"
-                      placeholder="Dictation appears here while recording..."
-                      readonly
-                    ></textarea>
-                  </label>
-                </details>
-
-              <p class="support-text mobile-capture-status mobile-only" id="mobile-capture-status">
-                Start dictation for live transcript, or use More to record audio instead.
-              </p>
-
-                <details class="manual-notes-disclosure is-hidden-field" id="uploaded-transcript-disclosure" hidden>
-                  <summary>Transcript</summary>
-                  <label class="field transcript-field transcript-field-uploaded" id="uploaded-transcript-field" data-transcript-source="uploaded-ready">
-                    <textarea
-                      id="uploaded-transcript"
-                      rows="7"
-                      placeholder="Paste a transcript here, or upload one from a file."
-                    ></textarea>
-                  </label>
-                </details>
-            </section>
           </div>
 
           <aside class="editor-sidebar">
@@ -319,6 +273,53 @@
             <p class="support-text" id="dictation-status" aria-live="polite"></p>
             </aside>
           </div>
+
+          <section class="form-section notes-transcript-section" aria-label="Notes and transcripts">
+            <div class="form-section-header">
+              <p class="section-label">Capture</p>
+            </div>
+
+            <details class="manual-notes-disclosure" id="manual-notes-disclosure" open>
+              <summary>Manual notes</summary>
+              <label class="field" id="manual-notes-field">
+                <textarea
+                  id="raw-notes"
+                  rows="12"
+                  placeholder="Write your own notes here, which will be included in the Output"
+                ></textarea>
+              </label>
+            </details>
+
+            <details class="manual-notes-disclosure is-hidden-field" id="live-transcript-disclosure" hidden>
+              <summary>
+                <span>Live transcript</span>
+                <span class="transcript-source-badge" id="live-transcript-badge">Ready for live notes</span>
+              </summary>
+              <label class="field transcript-field transcript-field-live" id="live-transcript-field" data-transcript-source="live-ready">
+                <textarea
+                  id="live-transcript"
+                  rows="7"
+                  placeholder="Dictation appears here while recording..."
+                  readonly
+                ></textarea>
+              </label>
+            </details>
+
+            <p class="support-text mobile-capture-status mobile-only" id="mobile-capture-status">
+              Start dictation for live transcript, or use More to record audio instead.
+            </p>
+
+            <details class="manual-notes-disclosure is-hidden-field" id="uploaded-transcript-disclosure" hidden>
+              <summary>Transcript</summary>
+              <label class="field transcript-field transcript-field-uploaded" id="uploaded-transcript-field" data-transcript-source="uploaded-ready">
+                <textarea
+                  id="uploaded-transcript"
+                  rows="7"
+                  placeholder="Paste a transcript here, or upload one from a file."
+                ></textarea>
+              </label>
+            </details>
+          </section>
         </section>
 
       <div class="output-resize-handle desktop-only" id="output-resize-handle" aria-hidden="true"></div>
