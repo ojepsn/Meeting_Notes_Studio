@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.24";
+const APP_VERSION = "v0.10.25";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -249,7 +249,8 @@ const includeSummaryInput = document.querySelector("#include-summary");
 const includeHighlightsInput = document.querySelector("#include-highlights");
 const includeDecisionsInput = document.querySelector("#include-decisions");
 const includeActionsInput = document.querySelector("#include-actions");
-const transcribeOnlyInput = document.querySelector("#transcribe-only");
+const generationModeManualInput = document.querySelector("#generation-mode-manual");
+const generationModeAiInput = document.querySelector("#generation-mode-ai");
 const templateSectionList = document.querySelector("#template-section-list");
 const outputLanguageSelect = document.querySelector("#output-language");
 const detailLevelInput = document.querySelector("#detail-level");
@@ -334,6 +335,8 @@ const structuredSectionInputs = [
   includeDecisionsInput,
   includeActionsInput,
 ];
+
+const isManualNotesOnlyMode = (session = getActiveSession()) => session?.transcribeOnly === true;
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const DICTATION_LANGUAGES = {
@@ -598,44 +601,14 @@ function hasSessionContent(session = getActiveSession()) {
     || customFieldValues
   );
 }
-const DEFAULT_EXPORT_PRESET = "modern-aptos";
+const DEFAULT_EXPORT_PRESET = "modern-minutes";
 const EXPORT_STYLE_PRESETS = {
-  "modern-aptos": {
-    label: "Modern Aptos",
-    description: "Balanced Microsoft 365-style business typography with a calm sans-serif hierarchy.",
+  "executive-brief": {
+    label: "Executive brief",
+    description: "A polished leadership-ready layout with centered title treatment, disciplined spacing, and calm contrast.",
     style: {
-      titleFont: "Aptos Display, Aptos, Calibri, Arial, sans-serif",
+      titleFont: "\"Aptos Display\", Aptos, Calibri, Arial, sans-serif",
       headingFont: "Aptos, Calibri, Arial, sans-serif",
-      bodyFont: "Aptos, Calibri, Arial, sans-serif",
-      metaFont: "Aptos, Calibri, Arial, sans-serif",
-      titleSize: 22,
-      headingSize: 12.5,
-      bodySize: 11,
-      metaSize: 9.5,
-      lineHeight: 1.5,
-    },
-  },
-  "enterprise-helvetica": {
-    label: "Enterprise Sans",
-    description: "Neutral, executive-ready sans serif pairing with slightly tighter spacing for efficient reading.",
-    style: {
-      titleFont: "\"Helvetica Neue\", Helvetica, Arial, sans-serif",
-      headingFont: "\"Helvetica Neue\", Helvetica, Arial, sans-serif",
-      bodyFont: "Arial, Helvetica, sans-serif",
-      metaFont: "Arial, Helvetica, sans-serif",
-      titleSize: 21,
-      headingSize: 12,
-      bodySize: 10.5,
-      metaSize: 9,
-      lineHeight: 1.45,
-    },
-  },
-  "editorial-georgia": {
-    label: "Editorial Serif",
-    description: "Serif headlines with clean sans-serif body text for a more formal, client-facing tone.",
-    style: {
-      titleFont: "Georgia, Cambria, \"Times New Roman\", serif",
-      headingFont: "Georgia, Cambria, \"Times New Roman\", serif",
       bodyFont: "Aptos, Calibri, Arial, sans-serif",
       metaFont: "Aptos, Calibri, Arial, sans-serif",
       titleSize: 24,
@@ -643,36 +616,135 @@ const EXPORT_STYLE_PRESETS = {
       bodySize: 11,
       metaSize: 9.5,
       lineHeight: 1.55,
+      pageMargin: 34,
+      titleAlign: "center",
+      metaAlign: "center",
+      headingCase: "sentence",
+      headingColor: "#274c77",
+      metaColor: "#5f6f85",
+      paragraphSpacing: 12,
+      sectionSpacing: 24,
+      sectionDivider: "line",
     },
   },
-  "board-briefing": {
-    label: "Board Briefing",
-    description: "Compact hierarchy and disciplined spacing for dense but readable briefing packs.",
+  "modern-minutes": {
+    label: "Modern minutes",
+    description: "The new default: crisp sans-serif minutes with efficient page use, sentence-case headings, and balanced spacing.",
     style: {
-      titleFont: "Aptos Display, Aptos, Arial, sans-serif",
-      headingFont: "Aptos, Arial, sans-serif",
-      bodyFont: "Aptos, Arial, sans-serif",
-      metaFont: "Aptos, Arial, sans-serif",
-      titleSize: 20,
-      headingSize: 11.5,
-      bodySize: 10.5,
-      metaSize: 8.5,
-      lineHeight: 1.4,
+      titleFont: "\"Aptos Display\", Aptos, Calibri, Arial, sans-serif",
+      headingFont: "Aptos, Calibri, Arial, sans-serif",
+      bodyFont: "Aptos, Calibri, Arial, sans-serif",
+      metaFont: "Aptos, Calibri, Arial, sans-serif",
+      titleSize: 22,
+      headingSize: 12.5,
+      bodySize: 11,
+      metaSize: 9.5,
+      lineHeight: 1.52,
+      pageMargin: 30,
+      titleAlign: "left",
+      metaAlign: "left",
+      headingCase: "sentence",
+      headingColor: "#2f5d43",
+      metaColor: "#667565",
+      paragraphSpacing: 11,
+      sectionSpacing: 20,
+      sectionDivider: "none",
     },
   },
-  "digital-inter": {
-    label: "Digital Inter",
-    description: "A contemporary product-and-operations style with strong clarity and a slightly tighter digital rhythm.",
+  "formal-board": {
+    label: "Formal board",
+    description: "A more traditional document voice with serif hierarchy, steadier rhythm, and formal section separation.",
+    style: {
+      titleFont: "Georgia, Cambria, \"Times New Roman\", serif",
+      headingFont: "Georgia, Cambria, \"Times New Roman\", serif",
+      bodyFont: "\"Helvetica Neue\", Arial, sans-serif",
+      metaFont: "\"Helvetica Neue\", Arial, sans-serif",
+      titleSize: 24,
+      headingSize: 13.5,
+      bodySize: 11,
+      metaSize: 9.5,
+      lineHeight: 1.62,
+      pageMargin: 44,
+      titleAlign: "left",
+      metaAlign: "left",
+      headingCase: "sentence",
+      headingColor: "#1d3557",
+      metaColor: "#6d6a64",
+      paragraphSpacing: 12,
+      sectionSpacing: 24,
+      sectionDivider: "line",
+    },
+  },
+  "narrative-memo": {
+    label: "Narrative memo",
+    description: "A paragraph-first memo style built for flowing prose, deeper discussion summaries, and less bullet-heavy minutes.",
+    style: {
+      titleFont: "Georgia, Cambria, \"Times New Roman\", serif",
+      headingFont: "Georgia, Cambria, \"Times New Roman\", serif",
+      bodyFont: "Georgia, Cambria, \"Times New Roman\", serif",
+      metaFont: "\"Helvetica Neue\", Arial, sans-serif",
+      titleSize: 23,
+      headingSize: 12.5,
+      bodySize: 11.5,
+      metaSize: 9,
+      lineHeight: 1.68,
+      pageMargin: 36,
+      titleAlign: "left",
+      metaAlign: "left",
+      headingCase: "sentence",
+      headingColor: "#5c4332",
+      metaColor: "#7a6b5d",
+      paragraphSpacing: 14,
+      sectionSpacing: 18,
+      sectionDivider: "none",
+    },
+  },
+  "decision-log": {
+    label: "Decision log",
+    description: "An operations-first layout with stronger section contrast and sharper separation of decisions and follow-ups.",
     style: {
       titleFont: "Inter, Segoe UI, Arial, sans-serif",
       headingFont: "Inter, Segoe UI, Arial, sans-serif",
       bodyFont: "\"Source Sans 3\", Inter, Arial, sans-serif",
       metaFont: "\"Source Sans 3\", Inter, Arial, sans-serif",
-      titleSize: 21,
-      headingSize: 12,
+      titleSize: 21.5,
+      headingSize: 12.5,
       bodySize: 10.5,
       metaSize: 9,
-      lineHeight: 1.45,
+      lineHeight: 1.46,
+      pageMargin: 28,
+      titleAlign: "left",
+      metaAlign: "left",
+      headingCase: "sentence",
+      headingColor: "#8b3d2f",
+      metaColor: "#6a6f7f",
+      paragraphSpacing: 10,
+      sectionSpacing: 22,
+      sectionDivider: "line",
+    },
+  },
+  "compact-action-pack": {
+    label: "Compact action pack",
+    description: "A denser, space-efficient layout with tighter margins and tighter rhythm for high-volume internal documentation.",
+    style: {
+      titleFont: "Inter, Segoe UI, Arial, sans-serif",
+      headingFont: "Inter, Segoe UI, Arial, sans-serif",
+      bodyFont: "\"Source Sans 3\", Inter, Arial, sans-serif",
+      metaFont: "\"Source Sans 3\", Inter, Arial, sans-serif",
+      titleSize: 19.5,
+      headingSize: 11.5,
+      bodySize: 10.25,
+      metaSize: 8.5,
+      lineHeight: 1.38,
+      pageMargin: 24,
+      titleAlign: "left",
+      metaAlign: "left",
+      headingCase: "sentence",
+      headingColor: "#314b6b",
+      metaColor: "#707987",
+      paragraphSpacing: 8,
+      sectionSpacing: 16,
+      sectionDivider: "line",
     },
   },
 };
@@ -2214,7 +2286,8 @@ void initializeApp().catch((error) => {
   });
 
   [
-    transcribeOnlyInput,
+    generationModeManualInput,
+    generationModeAiInput,
     includeAgendaInput,
     includeSummaryInput,
     includeHighlightsInput,
@@ -2223,7 +2296,7 @@ void initializeApp().catch((error) => {
   ].forEach((input) => {
     input.addEventListener("change", () => {
       updateActiveSession({
-        transcribeOnly: transcribeOnlyInput.checked,
+        transcribeOnly: generationModeManualInput.checked,
         sections: {
           includeAgenda: includeAgendaInput.checked,
           includeSummary: includeSummaryInput.checked,
@@ -2377,6 +2450,7 @@ void initializeApp().catch((error) => {
 
   polishButton.addEventListener("click", async () => {
     let session = getActiveSession();
+    let shouldUseManualMode = isManualNotesOnlyMode(session);
     polishButton.disabled = true;
     polishButton.textContent = "Generating output...";
     polishButton.classList.add("is-busy");
@@ -2384,7 +2458,12 @@ void initializeApp().catch((error) => {
 
     try {
       const pendingAudioDraft = await getAudioDraft(session.id);
-      const shouldAutoTranscribePendingAudio = Boolean(pendingAudioDraft) && !hasTextInputForGeneration(session);
+      if (shouldUseManualMode && !session.rawNotes?.trim()) {
+        throw new Error("Add text to Manual notes first. This mode transfers Manual notes directly into Output without AI generation.");
+      }
+
+      const shouldAutoTranscribePendingAudio =
+        !shouldUseManualMode && Boolean(pendingAudioDraft) && !hasTextInputForGeneration(session);
       if (shouldAutoTranscribePendingAudio) {
         if (!settings.apiKey) {
           throw new Error("Recorded audio is available, but it has not been transcribed yet. Add an OpenAI API key and click \"Transcribe audio\" first.");
@@ -2411,9 +2490,11 @@ void initializeApp().catch((error) => {
         audioCaptureStatus.textContent = "Using the notes and transcript already in this session. Pending audio was not auto-transcribed.";
       }
 
-      const polishedHtml = settings.apiKey
-        ? await polishWithOpenAI(session, settings)
-        : buildLocalPolishedNotes(session);
+      const polishedHtml = shouldUseManualMode
+        ? buildLocalPolishedNotes(session)
+        : settings.apiKey
+          ? await polishWithOpenAI(session, settings)
+          : buildLocalPolishedNotes(session);
 
       selectedOutputVersionId = null;
       updateActiveSession(buildGeneratedOutputPatch(session, polishedHtml), false);
@@ -2425,19 +2506,21 @@ void initializeApp().catch((error) => {
       } else {
         setDesktopWorkspaceView("output");
       }
-      const generationStatus = settings.apiKey
-        ? (session.transcribeOnly ? "AI transcription complete." : "AI polishing complete.")
-        : session.outputLanguage && session.outputLanguage !== "auto"
-          ? "No API key found in AI Settings, so a local polish pass was used. Language translation requires AI polishing."
-          : (session.transcribeOnly ? "No API key found in AI Settings, so a local transcription cleanup was used instead." : "No API key found in AI Settings, so a local polish pass was used instead.");
+      const generationStatus = shouldUseManualMode
+        ? "Manual notes were transferred to Output without AI generation."
+        : settings.apiKey
+          ? "AI generation complete."
+          : session.outputLanguage && session.outputLanguage !== "auto"
+            ? "No API key found in AI Settings, so a local polish pass was used. Language translation requires AI generation."
+            : "No API key found in AI Settings, so a local polish pass was used instead.";
       dictationStatus.textContent = addedParticipants
         ? `${generationStatus} Added ${addedParticipants} ${addedParticipants === 1 ? "participant" : "participants"} to the saved list.`
         : generationStatus;
     } catch (error) {
-      if (settings.apiKey) {
-        dictationStatus.textContent = session.transcribeOnly
-          ? `AI transcription failed: ${error.message}. No local fallback was applied.`
-          : `AI polishing failed: ${error.message}. No local fallback was applied, so the output was not replaced with a weaker local draft.`;
+      if (settings.apiKey || shouldUseManualMode) {
+        dictationStatus.textContent = shouldUseManualMode
+          ? `Manual-notes transfer failed: ${error.message}`
+          : `AI generation failed: ${error.message}. No local fallback was applied, so the output was not replaced with a weaker local draft.`;
       } else {
         const polishedHtml = buildLocalPolishedNotes(session);
         selectedOutputVersionId = null;
@@ -2450,9 +2533,7 @@ void initializeApp().catch((error) => {
         } else {
           setDesktopWorkspaceView("output");
         }
-        const fallbackStatus = session.transcribeOnly
-          ? `AI transcription failed: ${error.message}. A local transcription cleanup was used instead.`
-          : `AI polishing failed: ${error.message}. A local polish pass was used instead.`;
+        const fallbackStatus = `AI generation failed: ${error.message}. A local polish pass was used instead.`;
         dictationStatus.textContent = addedParticipants
           ? `${fallbackStatus} Added ${addedParticipants} ${addedParticipants === 1 ? "participant" : "participants"} to the saved list.`
           : fallbackStatus;
@@ -3181,12 +3262,13 @@ function applySelectedTemplate(templateId, options = {}) {
   }
 
   templateSelect.value = template.id;
-  transcribeOnlyInput.checked = patch.transcribeOnly;
+  generationModeManualInput.checked = patch.transcribeOnly;
+  generationModeAiInput.checked = !patch.transcribeOnly;
   updateActiveSession(patch, true);
   applyTemplateUi({ ...currentSession, ...patch });
   dictationStatus.textContent = patch.transcribeOnly
-    ? `Template selected: ${template.label}. This session will generate a cleaned transcript by default.`
-    : `Template selected: ${template.label}. Click "Generate" whenever you want a professional summary.`;
+    ? `Template selected: ${template.label}. This session is set to transfer Manual notes without AI.`
+    : `Template selected: ${template.label}. Click "Generate" whenever you want AI-generated professional notes.`;
 }
 
 function renderTemplateQuickSelectors() {
@@ -3549,7 +3631,10 @@ function renderTemplateCustomFields(session, template = getTemplateDefinition(se
 }
 
 function updateTranscribeOnlyUi(session = getActiveSession()) {
-  const isTranscriptOnly = session?.transcribeOnly === true;
+  const isTranscriptOnly = isManualNotesOnlyMode(session);
+
+  generationModeManualInput.checked = isTranscriptOnly;
+  generationModeAiInput.checked = !isTranscriptOnly;
 
   structuredSectionInputs.forEach((input) => {
     input.disabled = isTranscriptOnly;
@@ -3577,6 +3662,13 @@ function updateTranscribeOnlyUi(session = getActiveSession()) {
     .forEach((control) => {
       control.disabled = isTranscriptOnly;
     });
+
+  outputLanguageSelect.disabled = isTranscriptOnly;
+  outputLanguageSelect.closest(".field")?.classList.toggle("is-disabled", isTranscriptOnly);
+  detailLevelInput.disabled = isTranscriptOnly;
+  detailLevelInput.closest(".field")?.classList.toggle("is-disabled", isTranscriptOnly);
+  additionalInstructionsInput.disabled = isTranscriptOnly;
+  additionalInstructionsInput.closest(".field")?.classList.toggle("is-disabled", isTranscriptOnly);
 
   polishButton.textContent = "Generate";
 }
@@ -3981,7 +4073,8 @@ function syncFieldsFromSession() {
   meetingEndTimeInput.value = session.meetingEndTime ?? "";
   setRichTextContent(meetingAgendaInput, session.agenda ?? "");
   includeAgendaInput.checked = session.sections.includeAgenda;
-  transcribeOnlyInput.checked = session.transcribeOnly === true;
+  generationModeManualInput.checked = session.transcribeOnly === true;
+  generationModeAiInput.checked = session.transcribeOnly !== true;
   includeSummaryInput.checked = session.sections.includeSummary;
   includeHighlightsInput.checked = session.sections.includeHighlights;
   includeDecisionsInput.checked = session.sections.includeDecisions;
@@ -4894,6 +4987,15 @@ function normalizeExportStyle(style) {
     bodySize: clampNumber(style?.bodySize, 9, 18, fallback.bodySize),
     metaSize: clampNumber(style?.metaSize, 8, 16, fallback.metaSize),
     lineHeight: clampNumber(style?.lineHeight, 1.1, 2, fallback.lineHeight),
+    pageMargin: clampNumber(style?.pageMargin, 18, 60, fallback.pageMargin),
+    titleAlign: style?.titleAlign === "center" ? "center" : "left",
+    metaAlign: style?.metaAlign === "center" ? "center" : "left",
+    headingCase: style?.headingCase === "uppercase" ? "uppercase" : "sentence",
+    headingColor: typeof style?.headingColor === "string" && style.headingColor.trim() ? style.headingColor.trim() : fallback.headingColor,
+    metaColor: typeof style?.metaColor === "string" && style.metaColor.trim() ? style.metaColor.trim() : fallback.metaColor,
+    paragraphSpacing: clampNumber(style?.paragraphSpacing, 6, 20, fallback.paragraphSpacing),
+    sectionSpacing: clampNumber(style?.sectionSpacing, 12, 32, fallback.sectionSpacing),
+    sectionDivider: style?.sectionDivider === "line" ? "line" : "none",
   };
 }
 
@@ -5652,8 +5754,8 @@ function hasTextInputForGeneration(session) {
 }
 
 function buildLocalPolishedNotes(session) {
-  if (session.transcribeOnly) {
-    return buildTranscriptOnlyHtml(session);
+  if (isManualNotesOnlyMode(session)) {
+    return buildManualNotesTransferHtml(session);
   }
 
   const template = getTemplateDefinition(session.template);
@@ -5744,10 +5846,9 @@ function buildLocalPolishedNotes(session) {
   `;
 }
 
-function buildTranscriptOnlyHtml(session, transcriptText = "") {
+function buildManualNotesTransferHtml(session) {
   const template = getTemplateDefinition(session.template);
-  const outputLanguage = resolveOutputLanguage(session);
-  const sourceText = transcriptText.trim() || buildCombinedNotes(session).trim();
+  const sourceText = session.rawNotes?.trim() || "";
   const normalizedParagraphs = sourceText
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
@@ -5756,20 +5857,27 @@ function buildTranscriptOnlyHtml(session, transcriptText = "") {
   const meetingScheduleMeta = buildMeetingScheduleMeta(session);
   const bodyMarkup = normalizedParagraphs.length
     ? normalizedParagraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("")
-    : `<p>${escapeHtml(outputLanguage === OUTPUT_LANGUAGES.swedish ? "Ingen text att transkribera." : "No transcript available yet.")}</p>`;
+    : `<p>${escapeHtml("No manual notes available yet.")}</p>`;
+  const agenda = getAgendaText(session);
 
   return `
     <article class="output-doc">
       <header class="output-header">
-        <h3>${escapeHtml(session.title.trim() || (outputLanguage === OUTPUT_LANGUAGES.swedish ? "Transkribering" : "Transcript"))}</h3>
+        <h3>${escapeHtml(session.title.trim() || "Untitled session")}</h3>
         <p class="output-meta">
           ${escapeHtml(template.label)} - ${formatDate(session.updatedAt)}
           ${meetingScheduleMeta ? ` - ${escapeHtml(meetingScheduleMeta)}` : ""}
           ${template.fields?.participants !== false && participants.length ? ` - Participants: ${escapeHtml(participants.join(", "))}` : ""}
         </p>
       </header>
+      ${agenda ? `
       <section class="output-section">
-        <h4>${escapeHtml(outputLanguage === OUTPUT_LANGUAGES.swedish ? "Transkribering" : "Transcript")}</h4>
+        <h4>${escapeHtml(resolveOutputLanguage(session) === OUTPUT_LANGUAGES.swedish ? "Agenda" : "Agenda")}</h4>
+        <p>${escapeHtml(agenda).replace(/\n/g, "<br>")}</p>
+      </section>
+      ` : ""}
+      <section class="output-section">
+        <h4>${escapeHtml(resolveOutputLanguage(session) === OUTPUT_LANGUAGES.swedish ? "Anteckningar" : "Manual notes")}</h4>
         ${bodyMarkup}
       </section>
     </article>
@@ -5777,10 +5885,6 @@ function buildTranscriptOnlyHtml(session, transcriptText = "") {
 }
 
 async function polishWithOpenAI(session, activeSettings) {
-  if (session.transcribeOnly) {
-    return transcribeWithOpenAI(session, activeSettings);
-  }
-
   const template = getTemplateDefinition(session.template);
   const outputLanguage = resolveOutputLanguage(session);
   const prompt = buildAiPrompt(session, template, outputLanguage);
@@ -5892,60 +5996,6 @@ async function polishWithOpenAI(session, activeSettings) {
   }
 
   return buildAiOutputHtml(session, template, parsed, outputLanguage);
-}
-
-async function transcribeWithOpenAI(session, activeSettings) {
-  const outputLanguage = resolveOutputLanguage(session);
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${activeSettings.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: activeSettings.model || "gpt-5-mini",
-      input: [
-        {
-          role: "system",
-          content: [
-            {
-              type: "input_text",
-              text: "You clean up rough spoken or written notes into a faithful transcript. Do not summarize or polish into business-note sections. Preserve meaning, order, and language. Fix obvious transcription mistakes, punctuation, and paragraphing only.",
-            },
-          ],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: [
-                `Output language: ${outputLanguage === OUTPUT_LANGUAGES.swedish ? "Swedish" : "English"}`,
-                "Mode: Transcribe only. Do not summarize, categorize, or convert into meeting-note sections.",
-                "Live transcript:",
-                session.liveTranscript?.trim() || "No transcript provided.",
-                "",
-                "Uploaded transcript:",
-                session.uploadedTranscript?.trim() || "No uploaded transcript provided.",
-                "",
-                "Manual notes:",
-                session.rawNotes?.trim() || "No manual notes provided.",
-              ].join("\n"),
-            },
-          ],
-        },
-      ],
-    }),
-  });
-
-  const payload = await parseOpenAIResponse(response, "The OpenAI transcription request did not complete successfully.");
-
-  const responseText = extractResponseText(payload);
-  if (!responseText) {
-    throw new Error("The OpenAI transcription response did not include any readable text.");
-  }
-
-  return buildTranscriptOnlyHtml(session, responseText);
 }
 
 async function translateOutputWithOpenAI(session, activeSettings, targetLanguage) {
@@ -6239,10 +6289,6 @@ async function readTranscriptFile(file) {
 }
 
 async function revisePolishedNotesWithOpenAI(session, activeSettings, feedback) {
-  if (session.transcribeOnly) {
-    return buildRevisedLocalPolishedNotes(session, feedback);
-  }
-
   const template = getTemplateDefinition(session.template);
   const outputLanguage = resolveOutputLanguage(session);
   const prompt = buildAiRevisionPrompt(session, template, outputLanguage, feedback);
@@ -6976,7 +7022,7 @@ function getDefaultTitleForTemplate(template, timestamp = Date.now(), sessionDat
 }
 
 function getDefaultTranscribeOnlyForTemplate(template) {
-  return template.id === "personalNote";
+  return false;
 }
 
 function isAutoGeneratedTitle(title) {
@@ -7958,7 +8004,12 @@ function normalizeStoredSettings(parsed) {
     ? parsed.themeFamily
     : legacyThemeFamilyMap[parsed.themeFamily] || createDefaultSettings().themeFamily;
   const legacyExportPresetMap = {
-    "refined-garamond": "board-briefing",
+    "modern-aptos": "modern-minutes",
+    "enterprise-helvetica": "executive-brief",
+    "editorial-georgia": "narrative-memo",
+    "board-briefing": "formal-board",
+    "digital-inter": "decision-log",
+    "refined-garamond": "formal-board",
   };
   const normalizedExportStylePreset = legacyExportPresetMap[parsed.exportStylePreset] || parsed.exportStylePreset;
   const exportStylePreset = EXPORT_STYLE_PRESETS[normalizedExportStylePreset] ? normalizedExportStylePreset : DEFAULT_EXPORT_PRESET;
@@ -8768,8 +8819,8 @@ function buildPdfPreviewElement(session, exportStyle) {
   container.style.top = "0";
   container.style.width = "794px";
   container.style.background = "#ffffff";
-  container.style.color = "#1f1f1f";
-  container.style.padding = "56px 64px";
+  container.style.color = "#18222c";
+  container.style.padding = `${Math.round(exportStyle.pageMargin * 1.5)}px ${Math.round(exportStyle.pageMargin * 1.75)}px`;
   container.style.fontFamily = exportStyle.bodyFont;
   container.style.fontSize = `${exportStyle.bodySize}pt`;
   container.style.lineHeight = String(exportStyle.lineHeight);
@@ -8777,15 +8828,24 @@ function buildPdfPreviewElement(session, exportStyle) {
 
   container.innerHTML = `
     <style>
-      .pdf-export-doc { color: #1f1f1f; }
-      .pdf-export-doc .output-header { border-bottom: 1px solid #d8d1c6; padding-bottom: 12px; margin-bottom: 18px; }
-      .pdf-export-doc .output-header h3 { font-family: ${exportStyle.titleFont}; font-size: ${exportStyle.titleSize}pt; margin: 0 0 10px; line-height: 1.1; }
-      .pdf-export-doc .output-meta { font-family: ${exportStyle.metaFont}; font-size: ${exportStyle.metaSize}pt; color: #6d6258; margin: 0; }
-      .pdf-export-doc .output-section { margin-top: 18px; }
-      .pdf-export-doc .output-section h4 { font-family: ${exportStyle.headingFont}; font-size: ${exportStyle.headingSize}pt; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 10px; color: #405238; }
+      .pdf-export-doc { color: #18222c; }
+      .pdf-export-doc .output-header { ${exportStyle.sectionDivider === "line" ? "border-bottom: 1px solid #d8d1c6;" : ""} padding-bottom: 12px; margin-bottom: ${Math.max(exportStyle.sectionSpacing - 2, 16)}px; }
+      .pdf-export-doc .output-header h3 { font-family: ${exportStyle.titleFont}; font-size: ${exportStyle.titleSize}pt; margin: 0 0 10px; line-height: 1.15; text-align: ${exportStyle.titleAlign}; color: ${exportStyle.headingColor}; }
+      .pdf-export-doc .output-meta { font-family: ${exportStyle.metaFont}; font-size: ${exportStyle.metaSize}pt; color: ${exportStyle.metaColor}; margin: 0; text-align: ${exportStyle.metaAlign}; }
+      .pdf-export-doc .output-section { margin-top: ${exportStyle.sectionSpacing}px; }
+      .pdf-export-doc .output-section h1,
+      .pdf-export-doc .output-section h2,
+      .pdf-export-doc .output-section h3,
+      .pdf-export-doc .output-section h4 { font-family: ${exportStyle.headingFont}; color: ${exportStyle.headingColor}; text-transform: ${exportStyle.headingCase === "uppercase" ? "uppercase" : "none"}; }
+      .pdf-export-doc .output-section h1 { font-size: ${getExportHeadingSize(1, exportStyle)}pt; margin: 0 0 10px; ${exportStyle.sectionDivider === "line" ? "padding-top: 10px; border-top: 1px solid rgba(24,34,44,0.16);" : ""} }
+      .pdf-export-doc .output-section h2 { font-size: ${getExportHeadingSize(2, exportStyle)}pt; margin: 0 0 10px; }
+      .pdf-export-doc .output-section h3 { font-size: ${getExportHeadingSize(3, exportStyle)}pt; margin: 0 0 8px; }
+      .pdf-export-doc .output-section h4 { font-size: ${getExportHeadingSize(4, exportStyle)}pt; margin: 0 0 8px; }
       .pdf-export-doc .output-section p,
       .pdf-export-doc .output-section li { font-family: ${exportStyle.bodyFont}; font-size: ${exportStyle.bodySize}pt; line-height: ${exportStyle.lineHeight}; }
-      .pdf-export-doc .output-section ul { margin: 0; padding-left: 20px; }
+      .pdf-export-doc .output-section p { margin: 0 0 ${exportStyle.paragraphSpacing}px; }
+      .pdf-export-doc .output-section ul,
+      .pdf-export-doc .output-section ol { margin: 0 0 ${exportStyle.paragraphSpacing}px; padding-left: 20px; }
       .pdf-export-doc .output-section li { margin: 0 0 8px; }
     </style>
     <div class="pdf-export-doc">${displayedHtml}</div>
@@ -8829,21 +8889,46 @@ function getCurrentSessionExportData() {
   return { title, meta, sections };
 }
 
+function formatExportHeadingText(text, exportStyle) {
+  return exportStyle.headingCase === "uppercase" ? text.toUpperCase() : text;
+}
+
+function getExportHeadingSize(level, exportStyle) {
+  if (level === 1) {
+    return exportStyle.headingSize + 3;
+  }
+  if (level === 2) {
+    return exportStyle.headingSize;
+  }
+  if (level === 3) {
+    return Math.max(exportStyle.headingSize - 1.2, exportStyle.bodySize + 1);
+  }
+
+  return Math.max(exportStyle.headingSize - 2, exportStyle.bodySize + 0.5);
+}
+
 function buildWordDocumentHtml(title, bodyHtml, exportStyle) {
+  const sectionDividerCss = exportStyle.sectionDivider === "line"
+    ? "padding-top: 10px; border-top: 1px solid rgba(24,34,44,0.16);"
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>${escapeHtml(title)}</title>
   <style>
-    body { font-family: ${exportStyle.bodyFont}; font-size: ${exportStyle.bodySize}pt; color: #1f1f1f; margin: 40px; line-height: ${exportStyle.lineHeight}; }
-    h3 { font-family: ${exportStyle.titleFont}; font-size: ${exportStyle.titleSize}pt; margin: 0 0 10px; }
-    h4 { font-family: ${exportStyle.headingFont}; font-size: ${exportStyle.headingSize}pt; text-transform: uppercase; letter-spacing: 0.08em; margin: 24px 0 10px; color: #405238; }
-    p { margin: 0 0 10px; }
-    ul { margin: 0; padding-left: 20px; }
-    li { margin: 0 0 8px; font-family: ${exportStyle.bodyFont}; font-size: ${exportStyle.bodySize}pt; }
-    .output-header { border-bottom: 1px solid #d8d1c6; padding-bottom: 12px; margin-bottom: 18px; }
-    .output-meta { font-family: ${exportStyle.metaFont}; font-size: ${exportStyle.metaSize}pt; color: #6d6258; }
+    body { font-family: ${exportStyle.bodyFont}; font-size: ${exportStyle.bodySize}pt; color: #18222c; margin: ${exportStyle.pageMargin}pt; line-height: ${exportStyle.lineHeight}; }
+    h1, h2, h3, h4 { color: ${exportStyle.headingColor}; }
+    h3 { font-family: ${exportStyle.titleFont}; font-size: ${exportStyle.titleSize}pt; margin: 0 0 ${exportStyle.sectionSpacing}px; text-align: ${exportStyle.titleAlign}; line-height: 1.15; }
+    h1 { font-family: ${exportStyle.headingFont}; font-size: ${getExportHeadingSize(1, exportStyle)}pt; margin: ${exportStyle.sectionSpacing}px 0 8px; text-transform: ${exportStyle.headingCase === "uppercase" ? "uppercase" : "none"}; ${sectionDividerCss} }
+    h2 { font-family: ${exportStyle.headingFont}; font-size: ${getExportHeadingSize(2, exportStyle)}pt; margin: ${Math.max(exportStyle.sectionSpacing - 4, 14)}px 0 8px; text-transform: ${exportStyle.headingCase === "uppercase" ? "uppercase" : "none"}; }
+    h4 { font-family: ${exportStyle.headingFont}; font-size: ${getExportHeadingSize(3, exportStyle)}pt; margin: ${Math.max(exportStyle.sectionSpacing - 8, 12)}px 0 6px; text-transform: ${exportStyle.headingCase === "uppercase" ? "uppercase" : "none"}; }
+    p { margin: 0 0 ${exportStyle.paragraphSpacing}px; }
+    ul, ol { margin: 0 0 ${exportStyle.paragraphSpacing}px 22px; padding: 0; }
+    li { margin: 0 0 6px; font-family: ${exportStyle.bodyFont}; font-size: ${exportStyle.bodySize}pt; }
+    .output-header { ${exportStyle.sectionDivider === "line" ? "border-bottom: 1px solid #d8d1c6;" : ""} padding-bottom: 12px; margin-bottom: ${Math.max(exportStyle.sectionSpacing - 2, 16)}px; }
+    .output-meta { font-family: ${exportStyle.metaFont}; font-size: ${exportStyle.metaSize}pt; color: ${exportStyle.metaColor}; text-align: ${exportStyle.metaAlign}; }
     .output-doc { display: block; }
   </style>
 </head>
@@ -8851,21 +8936,40 @@ function buildWordDocumentHtml(title, bodyHtml, exportStyle) {
 </html>`;
 }
 
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
+async function triggerBrowserDownload(url, filename) {
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
   link.rel = "noopener";
+  link.style.position = "fixed";
+  link.style.left = "-9999px";
+  link.style.width = "1px";
+  link.style.height = "1px";
   document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+  try {
+    link.dispatchEvent(new MouseEvent("click", {
+      view: window,
+      bubbles: true,
+      cancelable: true,
+    }));
+    if (typeof link.click === "function") {
+      link.click();
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+  } finally {
+    link.remove();
+  }
 }
 
 async function saveBlobAsFile(blob, filename, mimeType) {
-  downloadBlob(blob, filename);
-  return "downloaded";
+  const url = URL.createObjectURL(blob);
+  try {
+    await triggerBrowserDownload(url, filename);
+    return "downloaded";
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
 }
 
 function toFileSafeName(value) {
@@ -8972,9 +9076,7 @@ function normalizeImportedSessions(importedSessions) {
       meetingEndTime: typeof session.meetingEndTime === "string" ? session.meetingEndTime : "",
       agenda: typeof session.agenda === "string" ? session.agenda : "",
       sections: normalizeSectionConfig(session.sections),
-      transcribeOnly: typeof session.transcribeOnly === "boolean"
-        ? session.transcribeOnly
-        : getDefaultTranscribeOnlyForTemplate(template),
+      transcribeOnly: false,
       outputLanguage: normalizeOutputLanguagePreference(session.outputLanguage),
       detailLevel: normalizeDetailLevel(session.detailLevel),
       additionalInstructions: typeof session.additionalInstructions === "string" ? session.additionalInstructions : "",

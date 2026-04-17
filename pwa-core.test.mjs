@@ -388,4 +388,13 @@ runTest("output panel places actions before the polished document and removes em
   assert.match(indexHtmlSource, /Add notes or transcript in the Capture section to the left, include highlights if useful, then click <strong>Generate<\/strong>\./);
 });
 
+runTest("generation mode uses explicit manual-vs-AI choices instead of transcript-only", () => {
+  assert.match(indexHtmlSource, /id="generation-mode-manual"/);
+  assert.match(indexHtmlSource, /Polish Manual notes without AI/);
+  assert.match(indexHtmlSource, /id="generation-mode-ai"/);
+  assert.match(indexHtmlSource, /Generate with AI/);
+  assert.doesNotMatch(indexHtmlSource, /Transcribe only/);
+  assert.match(appJsSource, /Manual notes were transferred to Output without AI generation\./);
+});
+
 console.log("PWA core tests passed.");

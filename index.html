@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.10.24">
+  <link rel="stylesheet" href="styles.css?v=0.10.25">
 </head>
 <body>
   <main class="page-shell">
@@ -24,7 +24,7 @@
           Capture rough notes and turn them into professional meeting notes without leaving the page.
         </p>
         <div class="hero-meta">
-        <div class="version-pill" id="app-version">v0.10.24</div>
+        <div class="version-pill" id="app-version">v0.10.25</div>
           <div class="version-pill model-pill" id="app-models">Output: GPT-5 mini · Audio: GPT-4o mini transcribe</div>
           <div class="update-notice is-hidden-field" id="app-update-notice">New version available</div>
         </div>
@@ -272,54 +272,54 @@
 
             <p class="support-text" id="dictation-status" aria-live="polite"></p>
             </aside>
+
+            <section class="form-section notes-transcript-section" aria-label="Notes and transcripts">
+              <div class="form-section-header">
+                <p class="section-label">Capture</p>
+              </div>
+
+              <details class="manual-notes-disclosure" id="manual-notes-disclosure" open>
+                <summary>Manual notes</summary>
+                <label class="field" id="manual-notes-field">
+                  <textarea
+                    id="raw-notes"
+                    rows="12"
+                    placeholder="Write your own notes here, which will be included in the Output"
+                  ></textarea>
+                </label>
+              </details>
+
+              <details class="manual-notes-disclosure is-hidden-field" id="live-transcript-disclosure" hidden>
+                <summary>
+                  <span>Live transcript</span>
+                  <span class="transcript-source-badge" id="live-transcript-badge">Ready for live notes</span>
+                </summary>
+                <label class="field transcript-field transcript-field-live" id="live-transcript-field" data-transcript-source="live-ready">
+                  <textarea
+                    id="live-transcript"
+                    rows="7"
+                    placeholder="Dictation appears here while recording..."
+                    readonly
+                  ></textarea>
+                </label>
+              </details>
+
+              <p class="support-text mobile-capture-status mobile-only" id="mobile-capture-status">
+                Start dictation for live transcript, or use More to record audio instead.
+              </p>
+
+              <details class="manual-notes-disclosure is-hidden-field" id="uploaded-transcript-disclosure" hidden>
+                <summary>Transcript</summary>
+                <label class="field transcript-field transcript-field-uploaded" id="uploaded-transcript-field" data-transcript-source="uploaded-ready">
+                  <textarea
+                    id="uploaded-transcript"
+                    rows="7"
+                    placeholder="Paste a transcript here, or upload one from a file."
+                  ></textarea>
+                </label>
+              </details>
+            </section>
           </div>
-
-          <section class="form-section notes-transcript-section" aria-label="Notes and transcripts">
-            <div class="form-section-header">
-              <p class="section-label">Capture</p>
-            </div>
-
-            <details class="manual-notes-disclosure" id="manual-notes-disclosure" open>
-              <summary>Manual notes</summary>
-              <label class="field" id="manual-notes-field">
-                <textarea
-                  id="raw-notes"
-                  rows="12"
-                  placeholder="Write your own notes here, which will be included in the Output"
-                ></textarea>
-              </label>
-            </details>
-
-            <details class="manual-notes-disclosure is-hidden-field" id="live-transcript-disclosure" hidden>
-              <summary>
-                <span>Live transcript</span>
-                <span class="transcript-source-badge" id="live-transcript-badge">Ready for live notes</span>
-              </summary>
-              <label class="field transcript-field transcript-field-live" id="live-transcript-field" data-transcript-source="live-ready">
-                <textarea
-                  id="live-transcript"
-                  rows="7"
-                  placeholder="Dictation appears here while recording..."
-                  readonly
-                ></textarea>
-              </label>
-            </details>
-
-            <p class="support-text mobile-capture-status mobile-only" id="mobile-capture-status">
-              Start dictation for live transcript, or use More to record audio instead.
-            </p>
-
-            <details class="manual-notes-disclosure is-hidden-field" id="uploaded-transcript-disclosure" hidden>
-              <summary>Transcript</summary>
-              <label class="field transcript-field transcript-field-uploaded" id="uploaded-transcript-field" data-transcript-source="uploaded-ready">
-                <textarea
-                  id="uploaded-transcript"
-                  rows="7"
-                  placeholder="Paste a transcript here, or upload one from a file."
-                ></textarea>
-              </label>
-            </details>
-          </section>
         </section>
 
       <div class="output-resize-handle desktop-only" id="output-resize-handle" aria-hidden="true"></div>
@@ -367,13 +367,23 @@
                     </select>
                   </label>
 
-                  <label class="config-option config-option-featured">
-                    <input id="transcribe-only" type="checkbox">
-                    <span class="config-option-copy">
-                      <span class="config-option-title">Transcribe only</span>
-                      <span class="config-option-hint">Use this when you want clean transcript text instead of polished notes.</span>
-                    </span>
-                  </label>
+                  <div class="generation-mode-group" role="radiogroup" aria-label="Generation mode">
+                    <label class="config-option config-option-featured">
+                      <input id="generation-mode-manual" name="generation-mode" type="radio" value="manual">
+                      <span class="config-option-copy">
+                        <span class="config-option-title">Polish Manual notes without AI</span>
+                        <span class="config-option-hint">Transfer Manual notes directly into Output without AI generation. Light rules-based cleanup is allowed.</span>
+                      </span>
+                    </label>
+
+                    <label class="config-option config-option-featured">
+                      <input id="generation-mode-ai" name="generation-mode" type="radio" value="ai" checked>
+                      <span class="config-option-copy">
+                        <span class="config-option-title">Generate with AI</span>
+                        <span class="config-option-hint">Default. Generate structured professional notes from Manual notes, transcript, and meeting context.</span>
+                      </span>
+                    </label>
+                  </div>
 
                   <p class="support-text">
                     Select the sections you want in the generated output. Checked sections are included, and unchecked sections are left out.
@@ -1136,17 +1146,18 @@
               <label class="field">
                 <span class="field-label">Export style preset</span>
                 <select id="export-style-preset">
-                  <option value="modern-aptos">Modern Aptos</option>
-                  <option value="enterprise-helvetica">Enterprise Sans</option>
-                  <option value="editorial-georgia">Editorial Serif</option>
-                  <option value="board-briefing">Board Briefing</option>
-                  <option value="digital-inter">Digital Inter</option>
+                  <option value="executive-brief">Executive brief</option>
+                  <option value="modern-minutes">Modern minutes</option>
+                  <option value="formal-board">Formal board</option>
+                  <option value="narrative-memo">Narrative memo</option>
+                  <option value="decision-log">Decision log</option>
+                  <option value="compact-action-pack">Compact action pack</option>
                   <option value="custom">Personal style</option>
                 </select>
               </label>
 
               <p class="support-text" id="export-style-description">
-                Balanced Microsoft 365-style business typography with a calm sans-serif hierarchy.
+                The new default: crisp sans-serif minutes with efficient page use, sentence-case headings, and balanced spacing.
               </p>
 
               <details class="advanced-options-disclosure">
@@ -1612,7 +1623,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.17/mammoth.browser.min.js"></script>
-  <script src="app.js?v=0.10.24"></script>
+  <script src="app.js?v=0.10.25"></script>
 </body>
 </html>
 

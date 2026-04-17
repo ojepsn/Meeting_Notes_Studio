@@ -699,6 +699,11 @@ button {
   align-items: start;
 }
 
+.notes-transcript-section {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
 .editor-main {
   min-width: 0;
   display: grid;
@@ -1897,6 +1902,11 @@ button {
 .template-builder-actions select {
   min-width: 220px;
   width: auto;
+}
+
+.generation-mode-group {
+  display: grid;
+  gap: 10px;
 }
 
 .custom-template-list,
