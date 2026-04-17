@@ -31,6 +31,14 @@ import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links
 import { buildStructureOptions, createEmptyStructureOptions } from "../lib/structure/options";
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
+const richTextToPlainText = (value) => {
+    if (!value)
+        return "";
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = value;
+    const text = typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "";
+    return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+};
 const splitStructuredOutput = (output) => output
     .replace(/\r\n/g, "\n")
     .split(/\n{2,}/)
@@ -690,7 +698,7 @@ export const App = () => {
         const activity = session.activity.trim();
         const tags = session.tagsText.trim();
         const highlights = session.quickHighlights.trim();
-        const manualNotes = session.manualNotes.trim();
+        const manualNotes = richTextToPlainText(session.manualNotes);
         const transcript = [session.liveTranscript.trim(), session.uploadedTranscript.trim()].filter(Boolean).join("\n\n");
         if (title) {
             segments.push(title);
@@ -721,7 +729,7 @@ export const App = () => {
         return segments.join("\n\n").trim();
     };
     const hasTranscriptText = Boolean(activeSession?.liveTranscript.trim() || activeSession?.uploadedTranscript.trim());
-    const hasWrittenCapture = Boolean(activeSession?.manualNotes.trim() || activeSession?.quickHighlights.trim());
+    const hasWrittenCapture = Boolean((activeSession ? richTextToPlainText(activeSession.manualNotes) : "") || activeSession?.quickHighlights.trim());
     const hasAnyTextCapture = hasTranscriptText || hasWrittenCapture;
     const hasAudioOnlyVoiceCapture = activeCaptureMode === "voice-note" &&
         !hasAnyTextCapture &&

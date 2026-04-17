@@ -10,6 +10,14 @@ const formatDeletedLabel = (value) => {
     }
     return `Deleted ${date.toLocaleDateString()}`;
 };
+const richTextToPlainText = (value) => {
+    if (!value)
+        return "";
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = value;
+    const text = typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "";
+    return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+};
 export const SessionsSidebar = ({ sessions, activeSessionId, onSelect, onCreate, onClose, onDelete, onRestore, onDeleteForever, compact = false, title = "All Sessions", }) => {
     const [filter, setFilter] = useState("");
     const [showPublic, setShowPublic] = useState(true);
@@ -45,7 +53,7 @@ export const SessionsSidebar = ({ sessions, activeSessionId, onSelect, onCreate,
                 session.project,
                 session.activity,
                 session.tagsText,
-                session.manualNotes,
+                richTextToPlainText(session.manualNotes),
                 session.liveTranscript,
             ]
                 .join(" ")
@@ -57,7 +65,7 @@ export const SessionsSidebar = ({ sessions, activeSessionId, onSelect, onCreate,
         return (_jsxs("aside", { className: "sidebar-card sessions-sidebar-pwa", id: "desktop-sessions-card", children: [_jsxs("div", { className: "panel-heading sessions-sidebar-pwa-heading", children: [_jsxs("div", { children: [_jsx("p", { className: "section-label", children: "Recent Sessions" }), _jsx("h3", { children: "Your note shelf" })] }), onClose ? (_jsx("button", { className: "ghost-button sessions-panel-toggle", type: "button", onClick: onClose, children: "Close" })) : null] }), _jsxs("div", { className: "field field-tight session-filter-field", children: [_jsx("label", { htmlFor: "session-filter-compact", children: "Filter sessions" }), _jsx("input", { id: "session-filter-compact", value: filter, onChange: (event) => setFilter(event.target.value), placeholder: "Type to filter sessions" })] }), _jsxs("div", { className: "session-list session-list-compact session-list-pwa-compact", children: [filteredSessions.filter((session) => !session.deletedAt).map((session) => {
                             const isActive = session.id === activeSessionId;
                             const subtitle = [session.captureMode === "meeting-note" ? "Meeting" : session.captureMode === "voice-note" ? "Voice note" : "Quick note", session.date, session.startTime].filter(Boolean).join(" · ");
-                            const preview = session.output.trim() || session.manualNotes.trim() || session.liveTranscript.trim() || "Open to continue capturing or polishing this session.";
+                            const preview = session.output.trim() || richTextToPlainText(session.manualNotes) || session.liveTranscript.trim() || "Open to continue capturing or polishing this session.";
                             return (_jsx("div", { className: `list-item compact-session-item session-card-pwa${isActive ? " session-card-pwa-active" : ""}`, children: _jsxs("div", { className: "compact-session-row compact-session-row-pwa", children: [_jsx("button", { className: "compact-session-link compact-session-link-pwa", type: "button", onClick: () => onSelect(session.id), children: _jsxs("div", { className: "compact-session-main compact-session-main-pwa", children: [_jsx("strong", { children: session.title || "Untitled session" }), _jsx("span", { className: "muted", children: subtitle || "No metadata yet" }), _jsx("p", { className: "compact-session-preview", children: preview })] }) }), _jsx("div", { className: "compact-session-actions", children: _jsx("button", { className: "compact-session-delete", type: "button", onClick: () => onDelete(session.id), children: "Delete" }) })] }) }, session.id));
                         }), !filteredSessions.filter((session) => !session.deletedAt).length ? (_jsx("div", { className: "empty-sessions", children: _jsx("p", { children: "No saved sessions yet. Start with a fresh note and it will appear here automatically." }) })) : null] })] }));
     }

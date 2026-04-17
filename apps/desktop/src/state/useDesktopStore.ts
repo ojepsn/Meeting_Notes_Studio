@@ -84,6 +84,14 @@ const computeTrackedMinutes = (timeLogs: TimeLog[], targetType: TimeLog["targetT
     .filter((entry) => entry.targetType === targetType && entry.targetId === targetId)
     .reduce((sum, entry) => sum + (Number.isFinite(entry.durationMinutes) ? entry.durationMinutes : 0), 0);
 
+const richTextToPlainText = (value: string) => {
+  if (!value) return "";
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = value;
+  const text = typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "";
+  return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+};
+
 const hasMeaningfulSnapshotData = (snapshot: Snapshot) =>
   snapshot.todos.length > 0 ||
   snapshot.activities.length > 0 ||
@@ -100,7 +108,7 @@ const hasMeaningfulSnapshotData = (snapshot: Snapshot) =>
       Boolean(session.activity.trim()) ||
       Boolean(session.tagsText.trim()) ||
       Boolean(session.quickHighlights.trim()) ||
-      Boolean(session.manualNotes.trim()) ||
+      Boolean(richTextToPlainText(session.manualNotes)) ||
       Boolean(session.liveTranscript.trim()) ||
       Boolean(session.uploadedTranscript.trim()) ||
       Boolean(session.output.trim()),

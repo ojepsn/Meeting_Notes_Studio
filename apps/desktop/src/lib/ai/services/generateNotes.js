@@ -47,8 +47,9 @@ const getCaptureModeInstruction = (session) => {
 export const generateNotes = async ({ session, settings, template, attachments = [], onEvent, }) => {
     const promptProfile = resolvePromptProfile(settings.promptProfile);
     const activeSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
+    const manualNotes = richTextToPlainText(session.manualNotes);
     const sourceText = [
-        session.manualNotes.trim() ? `Manual notes:\n${session.manualNotes.trim()}` : "",
+        manualNotes ? `Manual notes:\n${manualNotes}` : "",
         session.liveTranscript.trim() ? `Live transcript:\n${session.liveTranscript.trim()}` : "",
         session.uploadedTranscript.trim() ? `Uploaded transcript:\n${session.uploadedTranscript.trim()}` : "",
     ]

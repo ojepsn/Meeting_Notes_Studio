@@ -25,6 +25,14 @@ const formatDeletedLabel = (value: string | null | undefined) => {
   return `Deleted ${date.toLocaleDateString()}`;
 };
 
+const richTextToPlainText = (value: string) => {
+  if (!value) return "";
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = value;
+  const text = typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "";
+  return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+};
+
 export const SessionsSidebar = ({
   sessions,
   activeSessionId,
@@ -71,7 +79,7 @@ export const SessionsSidebar = ({
         session.project,
         session.activity,
         session.tagsText,
-        session.manualNotes,
+        richTextToPlainText(session.manualNotes),
         session.liveTranscript,
       ]
         .join(" ")
@@ -107,7 +115,7 @@ export const SessionsSidebar = ({
           {filteredSessions.filter((session) => !session.deletedAt).map((session) => {
             const isActive = session.id === activeSessionId;
             const subtitle = [session.captureMode === "meeting-note" ? "Meeting" : session.captureMode === "voice-note" ? "Voice note" : "Quick note", session.date, session.startTime].filter(Boolean).join(" · ");
-            const preview = session.output.trim() || session.manualNotes.trim() || session.liveTranscript.trim() || "Open to continue capturing or polishing this session.";
+            const preview = session.output.trim() || richTextToPlainText(session.manualNotes) || session.liveTranscript.trim() || "Open to continue capturing or polishing this session.";
 
             return (
               <div key={session.id} className={`list-item compact-session-item session-card-pwa${isActive ? " session-card-pwa-active" : ""}`}>

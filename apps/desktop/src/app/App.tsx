@@ -84,6 +84,14 @@ type OutputVersionRecord = {
   generatedAt: string;
 };
 
+const richTextToPlainText = (value: string) => {
+  if (!value) return "";
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = value;
+  const text = typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "";
+  return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+};
+
 const splitStructuredOutput = (output: string) =>
   output
     .replace(/\r\n/g, "\n")
@@ -920,7 +928,7 @@ export const App = () => {
     const activity = session.activity.trim();
     const tags = session.tagsText.trim();
     const highlights = session.quickHighlights.trim();
-    const manualNotes = session.manualNotes.trim();
+    const manualNotes = richTextToPlainText(session.manualNotes);
     const transcript = [session.liveTranscript.trim(), session.uploadedTranscript.trim()].filter(Boolean).join("\n\n");
 
     if (title) {
@@ -954,7 +962,7 @@ export const App = () => {
   };
 
   const hasTranscriptText = Boolean(activeSession?.liveTranscript.trim() || activeSession?.uploadedTranscript.trim());
-  const hasWrittenCapture = Boolean(activeSession?.manualNotes.trim() || activeSession?.quickHighlights.trim());
+  const hasWrittenCapture = Boolean((activeSession ? richTextToPlainText(activeSession.manualNotes) : "") || activeSession?.quickHighlights.trim());
   const hasAnyTextCapture = hasTranscriptText || hasWrittenCapture;
   const hasAudioOnlyVoiceCapture =
     activeCaptureMode === "voice-note" &&

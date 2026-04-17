@@ -1066,6 +1066,10 @@ select {
   gap: 0.9rem;
 }
 
+.session-editor-pwa .notes-transcript-section {
+  margin-top: 1rem;
+}
+
 .session-editor-pwa .editor-textarea-primary {
   min-height: 320px;
 }
@@ -2132,16 +2136,83 @@ select {
   line-height: 1.5;
 }
 
+.manual-notes-rich-text-surface {
+  min-height: 220px;
+  line-height: 1.6;
+}
+
 .agenda-rich-text-surface p,
 .agenda-rich-text-surface ul,
-.agenda-rich-text-surface ol {
+.agenda-rich-text-surface ol,
+.agenda-rich-text-surface h1,
+.agenda-rich-text-surface h2,
+.agenda-rich-text-surface h3,
+.agenda-rich-text-surface h4,
+.agenda-rich-text-surface h5,
+.agenda-rich-text-surface h6,
+.manual-notes-rich-text-surface p,
+.manual-notes-rich-text-surface ul,
+.manual-notes-rich-text-surface ol,
+.manual-notes-rich-text-surface h1,
+.manual-notes-rich-text-surface h2,
+.manual-notes-rich-text-surface h3,
+.manual-notes-rich-text-surface h4,
+.manual-notes-rich-text-surface h5,
+.manual-notes-rich-text-surface h6 {
   margin: 0 0 0.7rem;
 }
 
 .agenda-rich-text-surface p:last-child,
 .agenda-rich-text-surface ul:last-child,
-.agenda-rich-text-surface ol:last-child {
+.agenda-rich-text-surface ol:last-child,
+.agenda-rich-text-surface h1:last-child,
+.agenda-rich-text-surface h2:last-child,
+.agenda-rich-text-surface h3:last-child,
+.agenda-rich-text-surface h4:last-child,
+.agenda-rich-text-surface h5:last-child,
+.agenda-rich-text-surface h6:last-child,
+.manual-notes-rich-text-surface p:last-child,
+.manual-notes-rich-text-surface ul:last-child,
+.manual-notes-rich-text-surface ol:last-child,
+.manual-notes-rich-text-surface h1:last-child,
+.manual-notes-rich-text-surface h2:last-child,
+.manual-notes-rich-text-surface h3:last-child,
+.manual-notes-rich-text-surface h4:last-child,
+.manual-notes-rich-text-surface h5:last-child,
+.manual-notes-rich-text-surface h6:last-child {
   margin-bottom: 0;
+}
+
+.agenda-rich-text-surface h1,
+.manual-notes-rich-text-surface h1 {
+  font-size: 1.45rem;
+}
+
+.agenda-rich-text-surface h2,
+.manual-notes-rich-text-surface h2 {
+  font-size: 1.3rem;
+}
+
+.agenda-rich-text-surface h3,
+.manual-notes-rich-text-surface h3 {
+  font-size: 1.18rem;
+}
+
+.agenda-rich-text-surface h4,
+.manual-notes-rich-text-surface h4 {
+  font-size: 1.05rem;
+}
+
+.agenda-rich-text-surface h5,
+.manual-notes-rich-text-surface h5 {
+  font-size: 0.96rem;
+}
+
+.agenda-rich-text-surface h6,
+.manual-notes-rich-text-surface h6 {
+  font-size: 0.88rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .rich-text-toolbar {

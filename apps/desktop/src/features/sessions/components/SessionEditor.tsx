@@ -18,7 +18,7 @@ const richTextToPlainText = (value: string) => {
 const normalizeRichTextHtml = (value: string) => {
   const wrapper = document.createElement("div");
   wrapper.innerHTML = value || "";
-  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI"]);
+  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6"]);
   wrapper.querySelectorAll("*").forEach((element) => {
     if (!allowedTags.has(element.tagName)) {
       const fragment = document.createDocumentFragment();
@@ -32,11 +32,24 @@ const normalizeRichTextHtml = (value: string) => {
   });
   const normalized = wrapper.innerHTML.replace(/<div>/gi, "<p>").replace(/<\/div>/gi, "</p>").trim();
   if (!normalized) return "";
-  if (!/<(p|ul|ol|li|br)\b/i.test(normalized)) {
+  if (!/<(p|ul|ol|li|br|h[1-6])\b/i.test(normalized)) {
     return `<p>${normalized}</p>`;
   }
   return normalized;
 };
+
+const RICH_TEXT_COMMANDS = [
+  { id: "bold", label: "Bold", type: "command", command: "bold" },
+  { id: "italic", label: "Italic", type: "command", command: "italic" },
+  { id: "unordered", label: "Bullets", type: "command", command: "insertUnorderedList" },
+  { id: "ordered", label: "Numbered", type: "command", command: "insertOrderedList" },
+  { id: "h1", label: "H1", type: "block", value: "H1" },
+  { id: "h2", label: "H2", type: "block", value: "H2" },
+  { id: "h3", label: "H3", type: "block", value: "H3" },
+  { id: "h4", label: "H4", type: "block", value: "H4" },
+  { id: "h5", label: "H5", type: "block", value: "H5" },
+  { id: "h6", label: "H6", type: "block", value: "H6" },
+] as const;
 
 interface SessionEditorProps {
   session: SessionRecord;
@@ -111,6 +124,7 @@ export const SessionEditor = ({
 }: SessionEditorProps) => {
   const update = <K extends keyof SessionRecord>(key: K, value: SessionRecord[K]) => onChange({ ...session, [key]: value });
   const agendaEditorRef = useRef<HTMLDivElement | null>(null);
+  const manualNotesEditorRef = useRef<HTMLDivElement | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(session.captureMode === "meeting-note");
   const [peopleOpen, setPeopleOpen] = useState(Boolean(session.participantText.trim()));
   const [contextOpen, setContextOpen] = useState(false);
@@ -171,6 +185,15 @@ export const SessionEditor = ({
     agendaEditorRef.current.dataset.empty = richTextToPlainText(nextHtml) ? "false" : "true";
   }, [agendaField, session.customFieldValues, session.id]);
 
+  useEffect(() => {
+    if (!manualNotesEditorRef.current) return;
+    const nextHtml = normalizeRichTextHtml(session.manualNotes);
+    if (manualNotesEditorRef.current.innerHTML !== nextHtml) {
+      manualNotesEditorRef.current.innerHTML = nextHtml;
+    }
+    manualNotesEditorRef.current.dataset.empty = richTextToPlainText(nextHtml) ? "false" : "true";
+  }, [session.manualNotes, session.id]);
+
   const updateAgenda = (html: string) => {
     if (!agendaField) return;
     const normalized = normalizeRichTextHtml(html);
@@ -180,11 +203,35 @@ export const SessionEditor = ({
     }
   };
 
-  const applyAgendaCommand = (command: "bold" | "italic" | "insertUnorderedList") => {
-    if (!agendaEditorRef.current) return;
-    agendaEditorRef.current.focus();
-    document.execCommand(command);
-    updateAgenda(agendaEditorRef.current.innerHTML);
+  const updateManualNotes = (html: string) => {
+    const normalized = normalizeRichTextHtml(html);
+    update("manualNotes", normalized);
+    if (manualNotesEditorRef.current) {
+      manualNotesEditorRef.current.dataset.empty = richTextToPlainText(normalized) ? "false" : "true";
+    }
+  };
+
+  const applyRichTextCommand = (
+    editorRef: { current: HTMLDivElement | null },
+    updater: (html: string) => void,
+    action: (typeof RICH_TEXT_COMMANDS)[number],
+  ) => {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    if (action.type === "block") {
+      document.execCommand("formatBlock", false, action.value);
+    } else {
+      document.execCommand(action.command);
+    }
+    updater(editorRef.current.innerHTML);
+  };
+
+  const applyAgendaCommand = (action: (typeof RICH_TEXT_COMMANDS)[number]) => {
+    applyRichTextCommand(agendaEditorRef, updateAgenda, action);
+  };
+
+  const applyManualNotesCommand = (action: (typeof RICH_TEXT_COMMANDS)[number]) => {
+    applyRichTextCommand(manualNotesEditorRef, updateManualNotes, action);
   };
 
   const handleDomainChange = (domain: string) => {
@@ -305,9 +352,11 @@ export const SessionEditor = ({
                       <summary>{agendaField.label}</summary>
                       <div className="workspace-disclosure-body">
                         <div className="rich-text-toolbar">
-                          <button className="shell-button rich-text-command" type="button" onClick={() => applyAgendaCommand("bold")}>Bold</button>
-                          <button className="shell-button rich-text-command" type="button" onClick={() => applyAgendaCommand("italic")}>Italic</button>
-                          <button className="shell-button rich-text-command" type="button" onClick={() => applyAgendaCommand("insertUnorderedList")}>Bullets</button>
+                          {RICH_TEXT_COMMANDS.map((action) => (
+                            <button key={action.id} className="shell-button rich-text-command" type="button" onClick={() => applyAgendaCommand(action)}>
+                              {action.label}
+                            </button>
+                          ))}
                         </div>
                         <div
                           id="session-agenda"
@@ -376,54 +425,6 @@ export const SessionEditor = ({
               </section>
             ) : null}
 
-            <section className="form-section notes-transcript-section" aria-label="Notes and transcripts">
-              <details className="workspace-disclosure pwa-disclosure-card" open>
-                <summary>Manual notes</summary>
-                <div className="workspace-disclosure-body">
-                  <div className="field field-wide">
-                    <textarea
-                      className="editor-textarea editor-textarea-primary"
-                      id="manual-notes"
-                      value={session.manualNotes}
-                      onChange={(event) => update("manualNotes", event.target.value)}
-                      placeholder="Write your own notes here, which will be included in the Output"
-                    />
-                  </div>
-                </div>
-              </details>
-
-              {shouldShowLiveTranscript ? (
-                <details className="workspace-disclosure pwa-disclosure-card" open={transcriptOpen} onToggle={(event) => setTranscriptOpen(event.currentTarget.open)}>
-              <summary>{session.captureMode === "voice-note" ? "Live transcript" : "Transcript"}</summary>
-                  <div className="workspace-disclosure-body">
-                    <div className="field field-wide">
-                      <textarea
-                        className="editor-textarea editor-textarea-secondary"
-                        id="session-transcript"
-                        value={session.liveTranscript}
-                        onChange={(event) => update("liveTranscript", event.target.value)}
-                        placeholder={session.captureMode === "voice-note" ? "Dictation appears here while recording..." : "Transcript text will appear here."}
-                      />
-                    </div>
-                  </div>
-                </details>
-              ) : null}
-
-              <details className="workspace-disclosure pwa-disclosure-card" open={uploadedTranscriptOpen} onToggle={(event) => setUploadedTranscriptOpen(event.currentTarget.open)}>
-                <summary>Uploaded transcript</summary>
-                <div className="workspace-disclosure-body">
-                  <div className="field field-wide">
-                    <textarea
-                      className="editor-textarea editor-textarea-secondary"
-                      id="session-uploaded-transcript"
-                      value={session.uploadedTranscript}
-                      onChange={(event) => update("uploadedTranscript", event.target.value)}
-                      placeholder="Uploaded transcript text will appear here..."
-                    />
-                  </div>
-                </div>
-              </details>
-            </section>
           </div>
 
           <aside className="editor-sidebar">
@@ -504,6 +505,65 @@ export const SessionEditor = ({
             </details>
           </aside>
         </div>
+
+        <section className="form-section notes-transcript-section" aria-label="Notes and transcripts">
+          <details className="workspace-disclosure pwa-disclosure-card" open>
+            <summary>Manual notes</summary>
+            <div className="workspace-disclosure-body">
+              <div className="field field-wide">
+                <div className="rich-text-toolbar">
+                  {RICH_TEXT_COMMANDS.map((action) => (
+                    <button key={action.id} className="shell-button rich-text-command" type="button" onClick={() => applyManualNotesCommand(action)}>
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+                <div
+                  className="rich-text-surface manual-notes-rich-text-surface editor-textarea-primary"
+                  id="manual-notes"
+                  ref={manualNotesEditorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  data-placeholder="Write your own notes here, which will be included in the Output"
+                  data-empty="true"
+                  onInput={(event) => updateManualNotes((event.currentTarget as HTMLDivElement).innerHTML)}
+                />
+              </div>
+            </div>
+          </details>
+
+          {shouldShowLiveTranscript ? (
+            <details className="workspace-disclosure pwa-disclosure-card" open={transcriptOpen} onToggle={(event) => setTranscriptOpen(event.currentTarget.open)}>
+              <summary>{session.captureMode === "voice-note" ? "Live transcript" : "Transcript"}</summary>
+              <div className="workspace-disclosure-body">
+                <div className="field field-wide">
+                  <textarea
+                    className="editor-textarea editor-textarea-secondary"
+                    id="session-transcript"
+                    value={session.liveTranscript}
+                    onChange={(event) => update("liveTranscript", event.target.value)}
+                    placeholder={session.captureMode === "voice-note" ? "Dictation appears here while recording..." : "Transcript text will appear here."}
+                  />
+                </div>
+              </div>
+            </details>
+          ) : null}
+
+          <details className="workspace-disclosure pwa-disclosure-card" open={uploadedTranscriptOpen} onToggle={(event) => setUploadedTranscriptOpen(event.currentTarget.open)}>
+            <summary>Uploaded transcript</summary>
+            <div className="workspace-disclosure-body">
+              <div className="field field-wide">
+                <textarea
+                  className="editor-textarea editor-textarea-secondary"
+                  id="session-uploaded-transcript"
+                  value={session.uploadedTranscript}
+                  onChange={(event) => update("uploadedTranscript", event.target.value)}
+                  placeholder="Uploaded transcript text will appear here..."
+                />
+              </div>
+            </div>
+          </details>
+        </section>
       </div>
     );
   }
@@ -552,9 +612,11 @@ export const SessionEditor = ({
                 <summary>{agendaField.label}</summary>
                 <div className="workspace-disclosure-body">
                   <div className="rich-text-toolbar">
-                    <button className="small-button rich-text-command" type="button" onClick={() => applyAgendaCommand("bold")}>Bold</button>
-                    <button className="small-button rich-text-command" type="button" onClick={() => applyAgendaCommand("italic")}>Italic</button>
-                    <button className="small-button rich-text-command" type="button" onClick={() => applyAgendaCommand("insertUnorderedList")}>Bullets</button>
+                    {RICH_TEXT_COMMANDS.map((action) => (
+                      <button key={action.id} className="small-button rich-text-command" type="button" onClick={() => applyAgendaCommand(action)}>
+                        {action.label}
+                      </button>
+                    ))}
                   </div>
                   <div
                     id="session-agenda"
@@ -630,7 +692,23 @@ export const SessionEditor = ({
 
         <div className="field field-wide">
           <label htmlFor="manual-notes">{modeMeta.primaryFieldLabel}</label>
-          <textarea className={`editor-textarea${isMinimal ? " editor-textarea-primary" : ""}`} id="manual-notes" value={session.manualNotes} onChange={(event) => update("manualNotes", event.target.value)} placeholder={modeMeta.primaryFieldPlaceholder} />
+          <div className="rich-text-toolbar">
+            {RICH_TEXT_COMMANDS.map((action) => (
+              <button key={action.id} className="small-button rich-text-command" type="button" onClick={() => applyManualNotesCommand(action)}>
+                {action.label}
+              </button>
+            ))}
+          </div>
+          <div
+            className={`rich-text-surface manual-notes-rich-text-surface${isMinimal ? " editor-textarea-primary" : ""}`}
+            id="manual-notes"
+            ref={manualNotesEditorRef}
+            contentEditable
+            suppressContentEditableWarning
+            data-placeholder={modeMeta.primaryFieldPlaceholder}
+            data-empty="true"
+            onInput={(event) => updateManualNotes((event.currentTarget as HTMLDivElement).innerHTML)}
+          />
         </div>
 
         {showQuickHighlights || customFields.length ? (
