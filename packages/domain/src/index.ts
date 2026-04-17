@@ -182,6 +182,26 @@ export interface AttachmentRecord {
   createdAt: string;
 }
 
+export interface PreferredParticipantName {
+  id: string;
+  shortForm: string;
+  fullName: string;
+}
+
+export interface RuleSuggestionRecord {
+  id: string;
+  type: "abbreviation" | "preferred_name";
+  sourceValue: string;
+  suggestedValue: string;
+  evidenceCount: number;
+  confidence: number;
+  status: "pending" | "accepted" | "ignored";
+  ignoreForever: boolean;
+  observedSessionIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LocalAppSettings {
   theme: string;
   outputLanguage: "same" | "sv" | "en";
@@ -208,6 +228,8 @@ export interface LocalAppSettings {
   projectLinks: ProjectLinkRecord[];
   timeReportPresets: TimeReportPreset[];
   abbreviations: Array<{ id: string; shortForm: string; fullForm: string }>;
+  preferredParticipantNames: PreferredParticipantName[];
+  ruleSuggestions: RuleSuggestionRecord[];
   promptProfile: PromptProfile;
 }
 

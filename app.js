@@ -242,6 +242,8 @@ const abbreviationShortInput = document.querySelector("#abbreviation-short-input
 const abbreviationFullInput = document.querySelector("#abbreviation-full-input");
 const addAbbreviationButton = document.querySelector("#add-abbreviation");
 const abbreviationDirectoryList = document.querySelector("#abbreviation-directory-list");
+const abbreviationSuggestionList = document.querySelector("#abbreviation-suggestion-list");
+const ignoredAbbreviationSuggestionList = document.querySelector("#ignored-abbreviation-suggestion-list");
 const meetingDateInput = document.querySelector("#meeting-date");
 const meetingStartTimeInput = document.querySelector("#meeting-start-time");
 const meetingEndTimeInput = document.querySelector("#meeting-end-time");
@@ -293,6 +295,9 @@ const exportWordButton = document.querySelector("#export-word");
 const exportPdfButton = document.querySelector("#export-pdf");
 const translateOutputButton = document.querySelector("#translate-output");
 const polishedOutput = document.querySelector("#polished-output");
+const ruleSuggestionsPanel = document.querySelector("#rule-suggestions-panel");
+const ruleSuggestionsList = document.querySelector("#rule-suggestions-list");
+const ruleSuggestionsCopy = document.querySelector("#rule-suggestions-copy");
 const outputFeedbackInput = document.querySelector("#output-feedback");
 const improveOutputButton = document.querySelector("#improve-output");
 const revertOutputButton = document.querySelector("#revert-output");
@@ -320,6 +325,9 @@ const highlightChipTemplate = document.querySelector("#highlight-chip-template")
 const participantDirectoryItemTemplate = document.querySelector("#participant-directory-item-template");
 const pendingRecordingItemTemplate = document.querySelector("#pending-recording-item-template");
 const abbreviationDirectoryItemTemplate = document.querySelector("#abbreviation-directory-item-template");
+const preferredParticipantNameList = document.querySelector("#preferred-participant-name-list");
+const participantSuggestionList = document.querySelector("#participant-suggestion-list");
+const ignoredParticipantSuggestionList = document.querySelector("#ignored-participant-suggestion-list");
 const todoItemTemplate = document.querySelector("#todo-item-template");
 const promptBlockTemplate = document.querySelector("#prompt-block-template");
 const customHeaderTemplate = document.querySelector("#custom-header-template");
@@ -950,6 +958,8 @@ function createDefaultSettings() {
     themeMode: "light",
     recentSessionsExpanded: false,
     abbreviationDirectory: [],
+    preferredParticipantNames: [],
+    ruleSuggestions: [],
     todoItems: [],
     participantDirectory: [],
     participantDirectoryInitialized: false,
@@ -974,6 +984,7 @@ let sessions = [];
 let aiModelCatalog = filterRelevantAiModels(DEFAULT_AI_MODEL_CATALOG.map((model) => ({ ...model })));
 let activeSessionId = null;
 let selectedOutputVersionId = null;
+let dismissedRuleSuggestionIds = new Set();
 let recognition = null;
 let isRecording = false;
 let finalTranscript = "";
@@ -1304,6 +1315,43 @@ void initializeApp().catch((error) => {
     );
     persistSettings();
     renderAbbreviationDirectoryManager();
+  });
+
+  abbreviationSuggestionList?.addEventListener("click", (event) => {
+    const item = event.target.closest(".rule-suggestion-manager-item");
+    const action = event.target.closest("[data-action]")?.dataset.action;
+    const suggestionId = item?.dataset.suggestionId;
+    if (!suggestionId || !action) {
+      return;
+    }
+
+    if (action === "accept") {
+      acceptRuleSuggestion(suggestionId);
+      dismissedRuleSuggestionIds.delete(suggestionId);
+      dictationStatus.textContent = "Suggested abbreviation rule added.";
+    } else if (action === "ignore") {
+      ignoreRuleSuggestion(suggestionId, true);
+      dismissedRuleSuggestionIds.delete(suggestionId);
+      dictationStatus.textContent = "That abbreviation suggestion will not be shown again.";
+    }
+
+    renderAbbreviationDirectoryManager();
+    renderRuleSuggestionManagers();
+    renderOutputRuleSuggestions();
+  });
+
+  ignoredAbbreviationSuggestionList?.addEventListener("click", (event) => {
+    const item = event.target.closest(".rule-suggestion-manager-item");
+    const action = event.target.closest("[data-action]")?.dataset.action;
+    const suggestionId = item?.dataset.suggestionId;
+    if (!suggestionId || action !== "restore") {
+      return;
+    }
+
+    restoreIgnoredRuleSuggestion(suggestionId);
+    dictationStatus.textContent = "That abbreviation suggestion is pending again.";
+    renderRuleSuggestionManagers();
+    renderOutputRuleSuggestions();
   });
 
   todoList?.addEventListener("change", (event) => {
@@ -1647,6 +1695,79 @@ void initializeApp().catch((error) => {
     }
 
     updateParticipantSelectionControls();
+  });
+
+  preferredParticipantNameList?.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-preferred-name-id]");
+    const action = event.target.closest("[data-action]")?.dataset.action;
+    if (!item || action !== "remove") {
+      return;
+    }
+
+    settings.preferredParticipantNames = normalizePreferredParticipantNames(
+      (settings.preferredParticipantNames || []).filter((entry) => entry.id !== item.dataset.preferredNameId)
+    );
+    persistSettings();
+    renderRuleSuggestionManagers();
+    dictationStatus.textContent = "Preferred participant-name rule removed.";
+  });
+
+  participantSuggestionList?.addEventListener("click", (event) => {
+    const item = event.target.closest(".rule-suggestion-manager-item");
+    const action = event.target.closest("[data-action]")?.dataset.action;
+    const suggestionId = item?.dataset.suggestionId;
+    if (!suggestionId || !action) {
+      return;
+    }
+
+    if (action === "accept") {
+      acceptRuleSuggestion(suggestionId);
+      dismissedRuleSuggestionIds.delete(suggestionId);
+      dictationStatus.textContent = "Preferred participant-name rule added.";
+    } else if (action === "ignore") {
+      ignoreRuleSuggestion(suggestionId, true);
+      dismissedRuleSuggestionIds.delete(suggestionId);
+      dictationStatus.textContent = "That participant-name suggestion will not be shown again.";
+    }
+
+    renderRuleSuggestionManagers();
+    renderOutputRuleSuggestions();
+  });
+
+  ignoredParticipantSuggestionList?.addEventListener("click", (event) => {
+    const item = event.target.closest(".rule-suggestion-manager-item");
+    const action = event.target.closest("[data-action]")?.dataset.action;
+    const suggestionId = item?.dataset.suggestionId;
+    if (!suggestionId || action !== "restore") {
+      return;
+    }
+
+    restoreIgnoredRuleSuggestion(suggestionId);
+    dictationStatus.textContent = "That participant-name suggestion is pending again.";
+    renderRuleSuggestionManagers();
+    renderOutputRuleSuggestions();
+  });
+
+  ruleSuggestionsList?.addEventListener("click", (event) => {
+    const item = event.target.closest(".rule-suggestion-card");
+    const action = event.target.closest("[data-action]")?.dataset.action;
+    const suggestionId = item?.dataset.suggestionId;
+    if (!suggestionId || !action) {
+      return;
+    }
+
+    if (action === "accept") {
+      acceptRuleSuggestion(suggestionId);
+      dictationStatus.textContent = "Suggested rule added.";
+    } else if (action === "ignore") {
+      ignoreRuleSuggestion(suggestionId, true);
+      dictationStatus.textContent = "This suggestion will not be shown again.";
+    } else if (action === "dismiss") {
+      dismissedRuleSuggestionIds.add(suggestionId);
+    }
+
+    renderRuleSuggestionManagers();
+    renderOutputRuleSuggestions();
   });
 
   pendingRecordingsList?.addEventListener("click", async (event) => {
@@ -2522,6 +2643,7 @@ void initializeApp().catch((error) => {
       updateActiveSession(buildGeneratedOutputPatch(session, polishedHtml), false);
       syncTodoItemsFromSession(getActiveSession());
       renderOutput();
+      refreshRuleSuggestionsForSession(getActiveSession());
       const addedParticipants = await maybeOfferParticipantDirectoryUpdate(getActiveSession().participants);
       if (isMobileLayout()) {
         openMobileOutputSheet();
@@ -2549,6 +2671,7 @@ void initializeApp().catch((error) => {
         updateActiveSession(buildGeneratedOutputPatch(session, polishedHtml), false);
         syncTodoItemsFromSession(getActiveSession());
         renderOutput();
+        refreshRuleSuggestionsForSession(getActiveSession());
         const addedParticipants = await maybeOfferParticipantDirectoryUpdate(getActiveSession().participants);
         if (isMobileLayout()) {
           openMobileOutputSheet();
@@ -2793,6 +2916,7 @@ void initializeApp().catch((error) => {
         outputFeedback: "",
       }, false);
       renderOutput();
+      refreshRuleSuggestionsForSession(getActiveSession());
       if (isMobileLayout()) {
         openMobileOutputSheet();
       }
@@ -3079,6 +3203,8 @@ function render() {
   updateSessionStorageUi();
   updateExportButtons();
   syncSettingsForm();
+  renderRuleSuggestionManagers();
+  renderOutputRuleSuggestions();
   updateRecentSessionsPanelUi();
   syncMobileUi();
   window.requestAnimationFrame(updateNotesTranscriptLayout);
@@ -5153,6 +5279,184 @@ function renderAbbreviationDirectoryManager() {
   });
 }
 
+function createRuleSuggestionManagerItem(entry, actions = []) {
+  const item = document.createElement("div");
+  item.className = "list-item rule-suggestion-manager-item";
+  item.dataset.suggestionId = entry.id;
+  item.dataset.suggestionType = entry.type;
+
+  const details = document.createElement("div");
+  details.className = "rule-suggestion-copy";
+  details.innerHTML = `
+    <strong>${escapeHtml(entry.sourceValue)} -> ${escapeHtml(entry.suggestedValue)}</strong>
+    <span class="muted">Seen ${entry.evidenceCount} ${entry.evidenceCount === 1 ? "time" : "times"}.</span>
+  `;
+  item.appendChild(details);
+
+  if (actions.length) {
+    const actionRow = document.createElement("div");
+    actionRow.className = "list-item-actions";
+    actions.forEach((action) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = action.className;
+      button.dataset.action = action.action;
+      button.textContent = action.label;
+      actionRow.appendChild(button);
+    });
+    item.appendChild(actionRow);
+  }
+
+  return item;
+}
+
+function renderRuleSuggestionManagers() {
+  const pendingAbbreviations = (settings.ruleSuggestions || []).filter((entry) => entry.type === "abbreviation" && entry.status === "pending" && !entry.ignoreForever);
+  const ignoredAbbreviations = (settings.ruleSuggestions || []).filter((entry) => entry.type === "abbreviation" && entry.status === "ignored");
+  const pendingParticipants = (settings.ruleSuggestions || []).filter((entry) => entry.type === "preferred_name" && entry.status === "pending" && !entry.ignoreForever);
+  const ignoredParticipants = (settings.ruleSuggestions || []).filter((entry) => entry.type === "preferred_name" && entry.status === "ignored");
+
+  abbreviationSuggestionList.innerHTML = "";
+  ignoredAbbreviationSuggestionList.innerHTML = "";
+  participantSuggestionList.innerHTML = "";
+  ignoredParticipantSuggestionList.innerHTML = "";
+  preferredParticipantNameList.innerHTML = "";
+
+  if (!pendingAbbreviations.length) {
+    abbreviationSuggestionList.innerHTML = '<p class="support-text compact-support-text">No pending abbreviation suggestions yet.</p>';
+  } else {
+    pendingAbbreviations.forEach((entry) => {
+      abbreviationSuggestionList.appendChild(createRuleSuggestionManagerItem(entry, [
+        { action: "accept", label: "Add", className: "secondary-button" },
+        { action: "ignore", label: "Never suggest", className: "ghost-button" },
+      ]));
+    });
+  }
+
+  if (ignoredAbbreviations.length) {
+    const heading = document.createElement("p");
+    heading.className = "field-label";
+    heading.textContent = "Ignored abbreviation suggestions";
+    ignoredAbbreviationSuggestionList.appendChild(heading);
+    ignoredAbbreviations.forEach((entry) => {
+      ignoredAbbreviationSuggestionList.appendChild(createRuleSuggestionManagerItem(entry, [
+        { action: "restore", label: "Restore", className: "ghost-button" },
+      ]));
+    });
+  }
+
+  if (!settings.preferredParticipantNames?.length) {
+    preferredParticipantNameList.innerHTML = '<p class="support-text compact-support-text">No preferred participant-name rules saved yet.</p>';
+  } else {
+    settings.preferredParticipantNames.forEach((entry) => {
+      const item = document.createElement("div");
+      item.className = "list-item";
+      item.dataset.preferredNameId = entry.id;
+      item.innerHTML = `
+        <strong>${escapeHtml(entry.shortForm)} -> ${escapeHtml(entry.fullName)}</strong>
+        <div class="list-item-actions">
+          <button class="small-button danger-button" data-action="remove" type="button">Remove</button>
+        </div>
+      `;
+      preferredParticipantNameList.appendChild(item);
+    });
+  }
+
+  if (!pendingParticipants.length) {
+    participantSuggestionList.innerHTML = '<p class="support-text compact-support-text">No pending participant-name suggestions yet.</p>';
+  } else {
+    pendingParticipants.forEach((entry) => {
+      participantSuggestionList.appendChild(createRuleSuggestionManagerItem(entry, [
+        { action: "accept", label: "Add", className: "secondary-button" },
+        { action: "ignore", label: "Never suggest", className: "ghost-button" },
+      ]));
+    });
+  }
+
+  if (ignoredParticipants.length) {
+    const heading = document.createElement("p");
+    heading.className = "field-label";
+    heading.textContent = "Ignored participant-name suggestions";
+    ignoredParticipantSuggestionList.appendChild(heading);
+    ignoredParticipants.forEach((entry) => {
+      ignoredParticipantSuggestionList.appendChild(createRuleSuggestionManagerItem(entry, [
+        { action: "restore", label: "Restore", className: "ghost-button" },
+      ]));
+    });
+  }
+}
+
+function renderOutputRuleSuggestions() {
+  if (!ruleSuggestionsPanel || !ruleSuggestionsList) {
+    return;
+  }
+
+  const visibleSuggestions = getVisibleRuleSuggestions().filter((entry) => !dismissedRuleSuggestionIds.has(entry.id)).slice(0, 3);
+  setElementVisibility(ruleSuggestionsPanel, visibleSuggestions.length > 0);
+  ruleSuggestionsList.innerHTML = "";
+
+  if (!visibleSuggestions.length) {
+    return;
+  }
+
+  const abbreviationCount = visibleSuggestions.filter((entry) => entry.type === "abbreviation").length;
+  const participantCount = visibleSuggestions.filter((entry) => entry.type === "preferred_name").length;
+  if (ruleSuggestionsCopy) {
+    const parts = [];
+    if (abbreviationCount) {
+      parts.push(`${abbreviationCount} abbreviation ${abbreviationCount === 1 ? "rule" : "rules"}`);
+    }
+    if (participantCount) {
+      parts.push(`${participantCount} participant-name ${participantCount === 1 ? "rule" : "rules"}`);
+    }
+    ruleSuggestionsCopy.textContent = `The app noticed repeated patterns in recent sessions. Review the ${parts.join(" and ")} below.`;
+  }
+
+  visibleSuggestions.forEach((entry) => {
+    const card = document.createElement("article");
+    card.className = "rule-suggestion-card";
+    card.dataset.suggestionId = entry.id;
+    card.innerHTML = `
+      <div class="rule-suggestion-copy">
+        <p class="section-label">${entry.type === "abbreviation" ? "Suggested abbreviation" : "Preferred participant name"}</p>
+        <h4>${escapeHtml(entry.sourceValue)} -> ${escapeHtml(entry.suggestedValue)}</h4>
+        <p class="support-text">Seen ${entry.evidenceCount} ${entry.evidenceCount === 1 ? "time" : "times"} in recent sessions.</p>
+      </div>
+      <div class="capture-toolbar settings-inline-actions">
+        <button class="secondary-button" data-action="accept" type="button">Add</button>
+        <button class="ghost-button" data-action="dismiss" type="button">Not now</button>
+        <button class="ghost-button" data-action="ignore" type="button">Never suggest</button>
+      </div>
+    `;
+    ruleSuggestionsList.appendChild(card);
+  });
+}
+
+function buildRuleSuggestionSourceText(session) {
+  return [
+    richTextToPlainText(session?.manualNotes || ""),
+    session?.liveTranscript || "",
+    session?.uploadedTranscript || "",
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function refreshRuleSuggestionsForSession(session) {
+  if (!session) {
+    return;
+  }
+
+  const observations = collectRuleSuggestionObservations(session, buildRuleSuggestionSourceText(session));
+  const visibleSuggestions = mergeRuleSuggestionObservations(session.id, observations);
+  dismissedRuleSuggestionIds = new Set(
+    Array.from(dismissedRuleSuggestionIds).filter((id) => visibleSuggestions.some((entry) => entry.id === id))
+  );
+  renderRuleSuggestionManagers();
+  renderOutputRuleSuggestions();
+}
+
 function renderCustomHeaders() {
   const session = getActiveSession();
   customHeaderList.innerHTML = "";
@@ -6820,6 +7124,16 @@ function canonicalizeParticipantMentions(text, participantsValue, participantDir
   const canonicalParticipants = [...new Set([...sessionParticipants, ...normalizeParticipantDirectory(participantDirectory)])];
   let nextText = String(text || "");
 
+  (settings.preferredParticipantNames || []).forEach((entry) => {
+    const shortForm = String(entry.shortForm || "").trim();
+    const fullName = String(entry.fullName || "").trim();
+    if (!shortForm || !fullName) {
+      return;
+    }
+    const pattern = new RegExp(`\\b${escapeRegExp(shortForm)}\\b`, "gi");
+    nextText = nextText.replace(pattern, fullName);
+  });
+
   canonicalParticipants.forEach((participant) => {
     const fullNamePattern = new RegExp(`\\b${escapeRegExp(participant)}\\b`, "gi");
     nextText = nextText.replace(fullNamePattern, participant);
@@ -8322,6 +8636,8 @@ function normalizeStoredSettings(parsed) {
     transcriptionModel: resolveSelectedTranscriptionModel(parsed.transcriptionModel),
     recentSessionsExpanded: parsed.recentSessionsExpanded === true,
     abbreviationDirectory: normalizeAbbreviationDirectory(parsed.abbreviationDirectory),
+    preferredParticipantNames: normalizePreferredParticipantNames(parsed.preferredParticipantNames),
+    ruleSuggestions: normalizeRuleSuggestions(parsed.ruleSuggestions),
     todoItems: normalizeTodoItems(parsed.todoItems),
     participantDirectory: normalizeParticipantDirectory(parsed.participantDirectory),
       participantDirectoryInitialized: parsed.participantDirectoryInitialized === true
@@ -8487,6 +8803,265 @@ function normalizeParticipantDirectory(participants) {
     });
 
   return [...uniqueByKey.values()].sort((first, second) => first.localeCompare(second, undefined, { sensitivity: "base" }));
+}
+
+function normalizePreferredParticipantNames(entries) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+
+  const byKey = new Map();
+  entries.forEach((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return;
+    }
+    const shortForm = String(entry.shortForm || "").trim();
+    const fullName = String(entry.fullName || "").trim();
+    if (!shortForm || !fullName) {
+      return;
+    }
+    const key = `${shortForm.toLocaleLowerCase()}::${fullName.toLocaleLowerCase()}`;
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        id: typeof entry.id === "string" && entry.id.trim() ? entry.id : crypto.randomUUID(),
+        shortForm,
+        fullName,
+      });
+    }
+  });
+
+  return [...byKey.values()].sort((left, right) => left.shortForm.localeCompare(right.shortForm, undefined, { sensitivity: "base" }));
+}
+
+function normalizeRuleSuggestions(entries) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+
+  return entries
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => ({
+      id: typeof entry.id === "string" && entry.id.trim() ? entry.id : crypto.randomUUID(),
+      type: entry.type === "preferred_name" ? "preferred_name" : "abbreviation",
+      sourceValue: typeof entry.sourceValue === "string" ? entry.sourceValue.trim() : "",
+      suggestedValue: typeof entry.suggestedValue === "string" ? entry.suggestedValue.trim() : "",
+      evidenceCount: Number.isFinite(Number(entry.evidenceCount)) ? Math.max(1, Math.round(Number(entry.evidenceCount))) : 1,
+      confidence: Number.isFinite(Number(entry.confidence)) ? Math.max(0, Math.min(1, Number(entry.confidence))) : 0.5,
+      status: entry.status === "accepted" ? "accepted" : entry.status === "ignored" ? "ignored" : "pending",
+      ignoreForever: entry.ignoreForever === true,
+      observedSessionIds: Array.isArray(entry.observedSessionIds)
+        ? entry.observedSessionIds.filter((value) => typeof value === "string" && value.trim())
+        : [],
+      createdAt: typeof entry.createdAt === "string" && entry.createdAt ? entry.createdAt : new Date().toISOString(),
+      updatedAt: typeof entry.updatedAt === "string" && entry.updatedAt ? entry.updatedAt : new Date().toISOString(),
+    }))
+    .filter((entry) => entry.sourceValue && entry.suggestedValue);
+}
+
+const SAFE_ABBREVIATION_SUGGESTIONS = {
+  mtg: "meeting",
+  mins: "minutes",
+  wk: "week",
+  wks: "weeks",
+  dept: "department",
+  proj: "project",
+  req: "requirement",
+  approx: "approximately",
+};
+
+function hasMatchingRuleSuggestion(type, sourceValue, suggestedValue) {
+  return (settings.ruleSuggestions || []).some(
+    (entry) =>
+      entry.type === type
+      && entry.sourceValue.toLocaleLowerCase() === sourceValue.toLocaleLowerCase()
+      && entry.suggestedValue.toLocaleLowerCase() === suggestedValue.toLocaleLowerCase()
+      && (entry.status === "accepted" || entry.ignoreForever)
+  );
+}
+
+function collectRuleSuggestionObservations(session, sourceText) {
+  const observations = [];
+  const normalizedSourceText = String(sourceText || "");
+  if (!normalizedSourceText.trim()) {
+    return observations;
+  }
+
+  const knownAbbreviations = new Set((settings.abbreviationDirectory || []).map((entry) => String(entry.short || "").toLocaleLowerCase()));
+  Object.entries(SAFE_ABBREVIATION_SUGGESTIONS).forEach(([shortForm, fullForm]) => {
+    if (knownAbbreviations.has(shortForm) || hasMatchingRuleSuggestion("abbreviation", shortForm, fullForm)) {
+      return;
+    }
+    if (new RegExp(`\\b${escapeRegExp(shortForm)}\\b`, "i").test(normalizedSourceText)) {
+      observations.push({
+        type: "abbreviation",
+        sourceValue: shortForm,
+        suggestedValue: fullForm,
+        confidence: 0.86,
+      });
+    }
+  });
+
+  const existingPreferredNames = new Set(
+    (settings.preferredParticipantNames || []).map((entry) => `${entry.shortForm.toLocaleLowerCase()}::${entry.fullName.toLocaleLowerCase()}`)
+  );
+  const sessionPeople = parseParticipants(session?.participants);
+  const uniqueFirstNames = new Map();
+  const ambiguousFirstNames = new Set();
+
+  sessionPeople.forEach((fullName) => {
+    const firstName = fullName.split(/\s+/)[0]?.trim();
+    if (!firstName || firstName.toLocaleLowerCase() === fullName.toLocaleLowerCase()) {
+      return;
+    }
+    const key = firstName.toLocaleLowerCase();
+    if (uniqueFirstNames.has(key) && uniqueFirstNames.get(key) !== fullName) {
+      ambiguousFirstNames.add(key);
+      uniqueFirstNames.delete(key);
+      return;
+    }
+    if (!ambiguousFirstNames.has(key)) {
+      uniqueFirstNames.set(key, fullName);
+    }
+  });
+
+  uniqueFirstNames.forEach((fullName, firstNameKey) => {
+    const firstName = fullName.split(/\s+/)[0];
+    if (
+      existingPreferredNames.has(`${firstNameKey}::${fullName.toLocaleLowerCase()}`)
+      || hasMatchingRuleSuggestion("preferred_name", firstName, fullName)
+    ) {
+      return;
+    }
+    if (new RegExp(`\\b${escapeRegExp(firstName)}\\b`, "i").test(normalizedSourceText)) {
+      observations.push({
+        type: "preferred_name",
+        sourceValue: firstName,
+        suggestedValue: fullName,
+        confidence: 0.83,
+      });
+    }
+  });
+
+  return observations;
+}
+
+function getVisibleRuleSuggestions() {
+  return (settings.ruleSuggestions || []).filter((entry) => entry.status === "pending" && !entry.ignoreForever && entry.evidenceCount >= 2);
+}
+
+function mergeRuleSuggestionObservations(sessionId, observations) {
+  if (!Array.isArray(observations) || !observations.length) {
+    return getVisibleRuleSuggestions();
+  }
+
+  const nextSuggestions = [...(settings.ruleSuggestions || [])];
+  const now = new Date().toISOString();
+
+  observations.forEach((observation) => {
+    const existingIndex = nextSuggestions.findIndex(
+      (entry) =>
+        entry.type === observation.type
+        && entry.sourceValue.toLocaleLowerCase() === observation.sourceValue.toLocaleLowerCase()
+        && entry.suggestedValue.toLocaleLowerCase() === observation.suggestedValue.toLocaleLowerCase()
+    );
+
+    if (existingIndex >= 0) {
+      const existing = nextSuggestions[existingIndex];
+      if (existing.ignoreForever || existing.status === "accepted" || existing.observedSessionIds.includes(sessionId)) {
+        return;
+      }
+      nextSuggestions[existingIndex] = {
+        ...existing,
+        evidenceCount: existing.evidenceCount + 1,
+        confidence: Math.max(existing.confidence, observation.confidence),
+        observedSessionIds: [...existing.observedSessionIds, sessionId],
+        updatedAt: now,
+      };
+      return;
+    }
+
+    nextSuggestions.push({
+      id: crypto.randomUUID(),
+      type: observation.type,
+      sourceValue: observation.sourceValue,
+      suggestedValue: observation.suggestedValue,
+      evidenceCount: 1,
+      confidence: observation.confidence,
+      status: "pending",
+      ignoreForever: false,
+      observedSessionIds: [sessionId],
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+
+  settings.ruleSuggestions = normalizeRuleSuggestions(nextSuggestions);
+  persistSettings();
+  return getVisibleRuleSuggestions();
+}
+
+function acceptRuleSuggestion(suggestionId) {
+  const suggestion = (settings.ruleSuggestions || []).find((entry) => entry.id === suggestionId);
+  if (!suggestion) {
+    return;
+  }
+
+  if (suggestion.type === "abbreviation") {
+    const exists = (settings.abbreviationDirectory || []).some(
+      (entry) => String(entry.short || "").toLocaleLowerCase() === suggestion.sourceValue.toLocaleLowerCase()
+    );
+    if (!exists) {
+      settings.abbreviationDirectory = normalizeAbbreviationDirectory([
+        ...(settings.abbreviationDirectory || []),
+        { short: suggestion.sourceValue, full: suggestion.suggestedValue },
+      ]);
+    }
+  }
+
+  if (suggestion.type === "preferred_name") {
+    const exists = (settings.preferredParticipantNames || []).some(
+      (entry) =>
+        entry.shortForm.toLocaleLowerCase() === suggestion.sourceValue.toLocaleLowerCase()
+        && entry.fullName.toLocaleLowerCase() === suggestion.suggestedValue.toLocaleLowerCase()
+    );
+    if (!exists) {
+      settings.preferredParticipantNames = normalizePreferredParticipantNames([
+        ...(settings.preferredParticipantNames || []),
+        { shortForm: suggestion.sourceValue, fullName: suggestion.suggestedValue },
+      ]);
+    }
+  }
+
+  settings.ruleSuggestions = normalizeRuleSuggestions(
+    (settings.ruleSuggestions || []).map((entry) =>
+      entry.id === suggestionId
+        ? { ...entry, status: "accepted", ignoreForever: false, updatedAt: new Date().toISOString() }
+        : entry
+    )
+  );
+  persistSettings();
+}
+
+function ignoreRuleSuggestion(suggestionId, forever = true) {
+  settings.ruleSuggestions = normalizeRuleSuggestions(
+    (settings.ruleSuggestions || []).map((entry) =>
+      entry.id === suggestionId
+        ? { ...entry, status: "ignored", ignoreForever: forever, updatedAt: new Date().toISOString() }
+        : entry
+    )
+  );
+  persistSettings();
+}
+
+function restoreIgnoredRuleSuggestion(suggestionId) {
+  settings.ruleSuggestions = normalizeRuleSuggestions(
+    (settings.ruleSuggestions || []).map((entry) =>
+      entry.id === suggestionId
+        ? { ...entry, status: "pending", ignoreForever: false, updatedAt: new Date().toISOString() }
+        : entry
+    )
+  );
+  persistSettings();
 }
 
 function normalizeTodoItems(todoItems) {
@@ -8727,6 +9302,7 @@ function syncSettingsForm() {
   renderCustomTemplates();
   renderAbbreviationDirectoryManager();
   renderParticipantDirectoryManager();
+  renderRuleSuggestionManagers();
 }
 
 function syncPromptSettingsUi() {

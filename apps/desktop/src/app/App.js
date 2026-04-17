@@ -29,6 +29,7 @@ import { createLocalSnapshotBackup, exportSnapshotBackup, getDesktopBundleType, 
 import { buildMetadataReview, EMPTY_METADATA_REVIEW } from "../lib/metadata/review";
 import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links/entityLinks";
 import { polishNonAiNotesText } from "../lib/output/manualPolish";
+import { acceptRuleSuggestion, collectRuleSuggestionObservations, ignoreRuleSuggestion, mergeRuleSuggestionObservations } from "../lib/output/ruleSuggestions";
 import { buildStructureOptions, createEmptyStructureOptions } from "../lib/structure/options";
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
@@ -167,6 +168,8 @@ export const App = () => {
     const [isRefreshingModelPricing, setIsRefreshingModelPricing] = useState(false);
     const [metadataSuggestions, setMetadataSuggestions] = useState(EMPTY_METADATA_REVIEW);
     const [selectedMetadataSuggestions, setSelectedMetadataSuggestions] = useState(EMPTY_METADATA_REVIEW);
+    const [visibleRuleSuggestions, setVisibleRuleSuggestions] = useState([]);
+    const [dismissedRuleSuggestionIds, setDismissedRuleSuggestionIds] = useState([]);
     const notesLayoutRef = useRef(null);
     const notesSplitterDraggingRef = useRef(false);
     const mediaRecorderRef = useRef(null);
@@ -600,10 +603,29 @@ export const App = () => {
         },
         onCacheHit,
     });
-    const openMetadataReviewIfNeeded = (session) => {
+    const openMetadataReviewIfNeeded = async (session) => {
         const nextReview = buildMetadataReview(session, snapshot?.settings ?? null);
-        const hasSuggestions = Object.values(nextReview).some((values) => values.length);
-        if (!hasSuggestions) {
+        const sourceText = [
+            richTextToPlainText(session?.manualNotes || ""),
+            session?.liveTranscript || "",
+            session?.uploadedTranscript || "",
+        ]
+            .filter(Boolean)
+            .join("\n\n");
+        const ruleObservations = session && snapshot
+            ? collectRuleSuggestionObservations(session, snapshot.settings, sourceText)
+            : [];
+        const { nextSettings, visibleSuggestions: nextVisibleSuggestions } = snapshot
+            ? mergeRuleSuggestionObservations(snapshot.settings, session?.id || "", ruleObservations)
+            : { nextSettings: null, visibleSuggestions: [] };
+        const hasMetadataSuggestions = Object.values(nextReview).some((values) => values.length);
+        const hasRuleSuggestions = nextVisibleSuggestions.length > 0;
+        if (snapshot && nextSettings && JSON.stringify(nextSettings) !== JSON.stringify(snapshot.settings)) {
+            await saveSettings(nextSettings);
+        }
+        setVisibleRuleSuggestions(nextVisibleSuggestions);
+        setDismissedRuleSuggestionIds([]);
+        if (!hasMetadataSuggestions && !hasRuleSuggestions) {
             return;
         }
         setMetadataSuggestions(nextReview);
@@ -704,6 +726,7 @@ export const App = () => {
             abbreviations,
             sessionParticipants: session.participantText,
             savedParticipants,
+            preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
         };
         const highlights = polishNonAiNotesText(session.quickHighlights.trim(), manualPolishOptions);
         const manualNotes = polishNonAiNotesText(richTextToPlainText(session.manualNotes), manualPolishOptions);
@@ -1028,7 +1051,7 @@ export const App = () => {
             setStatusNote(usedCache
                 ? "Loaded structured output from a matching local AI cache entry."
                 : "Generated structured output with the desktop AI service.");
-            openMetadataReviewIfNeeded(sessionForGeneration);
+            await openMetadataReviewIfNeeded(sessionForGeneration);
             openNotesTarget({ sessionId: sessionForGeneration.id, view: "output" });
         }
         catch (error) {
@@ -1060,7 +1083,7 @@ export const App = () => {
                 setSelectedOutputVersionId(null);
                 await saveSession({ ...nextSession, ...buildOutputVersionPatch(nextSession, rawOutput) });
                 setStatusNote("Transcribed the voice note into Output without AI polishing.");
-                openMetadataReviewIfNeeded(nextSession);
+                await openMetadataReviewIfNeeded(nextSession);
                 openNotesTarget({ sessionId: nextSession.id, view: "output" });
             }
             catch (error) {
@@ -1081,7 +1104,7 @@ export const App = () => {
         setStatusNote(activeCaptureMode === "voice-note"
             ? "Created Output from the current voice note without AI polishing."
             : "Created Output from the current note without AI polishing.");
-        openMetadataReviewIfNeeded(activeSession);
+        await openMetadataReviewIfNeeded(activeSession);
         openNotesTarget({ sessionId: activeSession.id, view: "output" });
     };
     const handleTranslate = async () => {
@@ -1763,16 +1786,22 @@ export const App = () => {
                 const hasNonPeopleSuggestions = metadataSuggestions.domains.length > 0 ||
                     metadataSuggestions.projects.length > 0 ||
                     metadataSuggestions.activities.length > 0;
-                const reviewTitle = hasPeopleSuggestions
-                    ? hasNonPeopleSuggestions
-                        ? "Update saved participants and reusable values?"
-                        : "Update saved participants?"
-                    : "Save new reusable values?";
-                const reviewDescription = hasPeopleSuggestions
-                    ? hasNonPeopleSuggestions
-                        ? "These participant names and other values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future quick selection."
-                        : "These names appear in the meeting Participants field but are not yet saved in the app's saved Participants list. Save the ones you want available for future quick selection."
-                    : "These values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future search and quick selection.";
+                const activeRuleSuggestions = visibleRuleSuggestions.filter((entry) => !dismissedRuleSuggestionIds.includes(entry.id));
+                const hasRuleSuggestions = activeRuleSuggestions.length > 0;
+                const reviewTitle = hasRuleSuggestions && !hasPeopleSuggestions && !hasNonPeopleSuggestions
+                    ? "Suggested rules"
+                    : hasPeopleSuggestions
+                        ? hasNonPeopleSuggestions
+                            ? "Update saved participants and reusable values?"
+                            : "Update saved participants?"
+                        : "Save new reusable values?";
+                const reviewDescription = hasRuleSuggestions && !hasPeopleSuggestions && !hasNonPeopleSuggestions
+                    ? "We noticed repeated shorthand or preferred-name patterns in recent sessions. Add the ones you want the app to remember."
+                    : hasPeopleSuggestions
+                        ? hasNonPeopleSuggestions
+                            ? "These participant names and other values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future quick selection."
+                            : "These names appear in the meeting Participants field but are not yet saved in the app's saved Participants list. Save the ones you want available for future quick selection."
+                        : "These values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future search and quick selection.";
                 return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: reviewTitle }), _jsx("p", { children: reviewDescription })] }), [
                             { key: "people", label: "People", helper: "Save these names to reuse in future notes and participant pickers." },
                             { key: "domains", label: "Domains", helper: "Save these top-level business areas for future notes." },
@@ -1783,7 +1812,15 @@ export const App = () => {
                                                     [section.key]: event.target.checked
                                                         ? Array.from(new Set([...current[section.key], value]))
                                                         : current[section.key].filter((entry) => entry !== value),
-                                                })) }), _jsxs("span", { children: [_jsx("strong", { children: value }), _jsx("span", { className: "muted", children: section.helper })] })] }, `${section.key}-${value}`))) })] }, section.key)) : null), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: () => {
+                                                })) }), _jsxs("span", { children: [_jsx("strong", { children: value }), _jsx("span", { className: "muted", children: section.helper })] })] }, `${section.key}-${value}`))) })] }, section.key)) : null), activeRuleSuggestions.length ? (_jsxs("div", { className: "section-divider", children: [_jsx("strong", { children: "Suggested rules" }), _jsx("div", { className: "section-list", children: activeRuleSuggestions.map((suggestion) => (_jsxs("div", { className: "list-item", children: [_jsxs("span", { children: [_jsx("strong", { children: suggestion.type === "abbreviation" ? "Suggested abbreviation" : "Preferred participant name" }), _jsx("span", { className: "muted", children: `${suggestion.sourceValue} -> ${suggestion.suggestedValue} · Seen ${suggestion.evidenceCount} times` })] }), _jsxs("div", { className: "list-item-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => {
+                                                            const nextSettings = acceptRuleSuggestion(snapshot.settings, suggestion.id);
+                                                            void saveSettings(nextSettings);
+                                                            setVisibleRuleSuggestions((current) => current.filter((entry) => entry.id !== suggestion.id));
+                                                        }, children: "Add" }), _jsx("button", { className: "small-button", type: "button", onClick: () => setDismissedRuleSuggestionIds((current) => Array.from(new Set([...current, suggestion.id]))), children: "Not now" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => {
+                                                            const nextSettings = ignoreRuleSuggestion(snapshot.settings, suggestion.id, { forever: true });
+                                                            void saveSettings(nextSettings);
+                                                            setVisibleRuleSuggestions((current) => current.filter((entry) => entry.id !== suggestion.id));
+                                                        }, children: "Never suggest" })] })] }, suggestion.id))) })] })) : null, _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: () => {
                                         const nextSettings = { ...snapshot.settings };
                                         if (selectedMetadataSuggestions.people.length) {
                                             nextSettings.savedParticipants = Array.from(new Set([...nextSettings.savedParticipants, ...selectedMetadataSuggestions.people])).sort();

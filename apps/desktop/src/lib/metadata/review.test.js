@@ -25,6 +25,8 @@ const settings = {
     projectLinks: [],
     timeReportPresets: [],
     abbreviations: [],
+    preferredParticipantNames: [],
+    ruleSuggestions: [],
     promptProfile: {
         meetingMinutesSystem: "",
         meetingMinutesRules: "",

@@ -191,6 +191,47 @@ function loadPwaManualPolishHelpers() {
   return context.__exports;
 }
 
+function loadPwaRuleSuggestionHelpers() {
+  const snippets = [
+    extractFunction(appJsSource, "escapeRegExp"),
+    extractFunction(appJsSource, "parseParticipants"),
+    extractFunction(appJsSource, "normalizePreferredParticipantNames"),
+    extractFunction(appJsSource, "normalizeRuleSuggestions"),
+    extractConst(appJsSource, "SAFE_ABBREVIATION_SUGGESTIONS"),
+    extractFunction(appJsSource, "hasMatchingRuleSuggestion"),
+    extractFunction(appJsSource, "collectRuleSuggestionObservations"),
+    extractFunction(appJsSource, "getVisibleRuleSuggestions"),
+    extractFunction(appJsSource, "mergeRuleSuggestionObservations"),
+  ];
+
+  let uuidCounter = 0;
+  const context = {
+    settings: {
+      abbreviationDirectory: [],
+      preferredParticipantNames: [],
+      ruleSuggestions: [],
+    },
+    persistSettings: () => {},
+    crypto: {
+      randomUUID: () => `suggestion-${uuidCounter += 1}`,
+    },
+    Date,
+  };
+  vm.createContext(context);
+  const script = new vm.Script(`
+    ${snippets.join("\n;\n")}
+    ;globalThis.__exports = {
+      collectRuleSuggestionObservations,
+      mergeRuleSuggestionObservations
+    };
+  `);
+  script.runInContext(context);
+  return {
+    ...context.__exports,
+    context,
+  };
+}
+
 function runTest(name, fn) {
   try {
     fn();
@@ -454,6 +495,48 @@ runTest("non-AI polishing does not turn ordinary rough prose into an action item
   });
 
   assert.equal(polished, "Testing to write some notes when many mistakes meeting booked 3/4.");
+});
+
+runTest("suggested rules require repeated evidence and avoid ambiguous participant-name mappings", () => {
+  const { collectRuleSuggestionObservations, mergeRuleSuggestionObservations, context } = loadPwaRuleSuggestionHelpers();
+
+  const observations = normalizeVmObject(
+    collectRuleSuggestionObservations(
+      { id: "session-1", participants: "Ola Jeppsson, Anna Smith" },
+      "mtg with Ola moved to next week",
+    ),
+  );
+
+  assert.ok(observations.some((entry) => entry.type === "abbreviation" && entry.sourceValue === "mtg" && entry.suggestedValue === "meeting"));
+  assert.ok(observations.some((entry) => entry.type === "preferred_name" && entry.sourceValue === "Ola" && entry.suggestedValue === "Ola Jeppsson"));
+
+  const firstVisible = normalizeVmObject(mergeRuleSuggestionObservations("session-1", observations));
+  assert.equal(firstVisible.length, 0);
+
+  const secondVisible = normalizeVmObject(mergeRuleSuggestionObservations("session-2", observations));
+  assert.ok(secondVisible.some((entry) => entry.type === "abbreviation" && entry.evidenceCount >= 2));
+  assert.ok(secondVisible.some((entry) => entry.type === "preferred_name" && entry.evidenceCount >= 2));
+
+  context.settings.ruleSuggestions = [];
+  const ambiguous = normalizeVmObject(
+    collectRuleSuggestionObservations(
+      { id: "session-3", participants: "Ann Smith, Ann Jones" },
+      "Ann will follow up",
+    ),
+  );
+  assert.equal(ambiguous.some((entry) => entry.type === "preferred_name"), false);
+});
+
+runTest("suggested-rule surfaces are present in PWA output and settings", () => {
+  assert.match(indexHtmlSource, /id="rule-suggestions-panel"/);
+  assert.match(indexHtmlSource, /id="abbreviation-suggestion-list"/);
+  assert.match(indexHtmlSource, /id="preferred-participant-name-list"/);
+  assert.match(indexHtmlSource, /id="participant-suggestion-list"/);
+});
+
+runTest("pwa keeps suggested-rule refresh attached to generation and revision flows", () => {
+  assert.match(appJsSource, /renderOutput\(\);\s*refreshRuleSuggestionsForSession\(getActiveSession\(\)\);\s*const addedParticipants = await maybeOfferParticipantDirectoryUpdate/);
+  assert.match(appJsSource, /renderOutput\(\);\s*refreshRuleSuggestionsForSession\(getActiveSession\(\)\);\s*if \(isMobileLayout\(\)\) \{/);
 });
 
 console.log("PWA core tests passed.");

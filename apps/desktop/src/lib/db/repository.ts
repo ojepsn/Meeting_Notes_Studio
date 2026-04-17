@@ -198,6 +198,8 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   projectLinks: [],
   timeReportPresets: [],
   abbreviations: [],
+  preferredParticipantNames: [],
+  ruleSuggestions: [],
   promptProfile: resolvePromptProfile(undefined).profile,
 });
 
@@ -353,6 +355,34 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
           project: typeof entry?.project === "string" ? entry.project.trim() : "",
         }))
         .filter((entry) => entry.label && entry.fromDate && entry.toDate)
+    : [],
+  preferredParticipantNames: Array.isArray(settings.preferredParticipantNames)
+    ? settings.preferredParticipantNames
+        .map((entry) => ({
+          id: typeof entry?.id === "string" && entry.id.trim() ? entry.id : crypto.randomUUID(),
+          shortForm: typeof entry?.shortForm === "string" ? entry.shortForm.trim() : "",
+          fullName: typeof entry?.fullName === "string" ? entry.fullName.trim() : "",
+        }))
+        .filter((entry) => entry.shortForm && entry.fullName)
+    : [],
+  ruleSuggestions: Array.isArray(settings.ruleSuggestions)
+    ? settings.ruleSuggestions
+        .map((entry): LocalAppSettings["ruleSuggestions"][number] => ({
+          id: typeof entry?.id === "string" && entry.id.trim() ? entry.id : crypto.randomUUID(),
+          type: entry?.type === "preferred_name" ? "preferred_name" : "abbreviation",
+          sourceValue: typeof entry?.sourceValue === "string" ? entry.sourceValue.trim() : "",
+          suggestedValue: typeof entry?.suggestedValue === "string" ? entry.suggestedValue.trim() : "",
+          evidenceCount: Number.isFinite(Number(entry?.evidenceCount)) ? Math.max(1, Math.round(Number(entry.evidenceCount))) : 1,
+          confidence: Number.isFinite(Number(entry?.confidence)) ? Math.max(0, Math.min(1, Number(entry.confidence))) : 0.5,
+          status: entry?.status === "accepted" ? "accepted" : entry?.status === "ignored" ? "ignored" : "pending",
+          ignoreForever: Boolean(entry?.ignoreForever),
+          observedSessionIds: Array.isArray(entry?.observedSessionIds)
+            ? entry.observedSessionIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+            : [],
+          createdAt: typeof entry?.createdAt === "string" && entry.createdAt ? entry.createdAt : now(),
+          updatedAt: typeof entry?.updatedAt === "string" && entry.updatedAt ? entry.updatedAt : now(),
+        }))
+        .filter((entry) => Boolean(entry.sourceValue && entry.suggestedValue))
     : [],
   promptProfile: normalizePromptProfile(settings.promptProfile),
 });

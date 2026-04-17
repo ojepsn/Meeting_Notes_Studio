@@ -298,6 +298,12 @@ export const SettingsCard = ({
   const selectedTheme = parseThemeValue(settings.theme);
   const selectedThemeDefinition = DESKTOP_THEMES.find((theme) => theme.id === selectedTheme.familyId) ?? DESKTOP_THEMES[0];
   const meetingTemplateOptions = getTemplatesForCaptureMode(templates, "meeting-note");
+  const pendingRuleSuggestions = settings.ruleSuggestions.filter((entry) => entry.status === "pending" && !entry.ignoreForever);
+  const ignoredRuleSuggestions = settings.ruleSuggestions.filter((entry) => entry.status === "ignored");
+  const pendingAbbreviationSuggestions = pendingRuleSuggestions.filter((entry) => entry.type === "abbreviation");
+  const pendingPreferredNameSuggestions = pendingRuleSuggestions.filter((entry) => entry.type === "preferred_name");
+  const ignoredAbbreviationSuggestions = ignoredRuleSuggestions.filter((entry) => entry.type === "abbreviation");
+  const ignoredPreferredNameSuggestions = ignoredRuleSuggestions.filter((entry) => entry.type === "preferred_name");
 
   const updateThemeFamily = (familyId: string) => onChange({ ...settings, theme: buildThemeValue(familyId, selectedTheme.mode) });
   const updateThemeMode = (mode: ThemeMode) => onChange({ ...settings, theme: buildThemeValue(selectedTheme.familyId, mode) });
@@ -1048,6 +1054,141 @@ export const SettingsCard = ({
                   </div>
                 ))}
               </div>
+            </div>
+            <div className="section-divider">
+              <div className="settings-subsection-heading">
+                <strong>Preferred participant names</strong>
+                <span className="tiny-text">Expand short participant-name forms into the preferred full name when the mapping is clear.</span>
+              </div>
+              <div className="section-list">
+                {settings.preferredParticipantNames.length ? settings.preferredParticipantNames.map((entry) => (
+                  <div key={entry.id} className="list-item">
+                    <strong>{entry.shortForm}</strong>
+                    <span className="muted">{entry.fullName}</span>
+                    <div className="list-item-actions">
+                      <button
+                        className="small-button danger-button"
+                        type="button"
+                        onClick={() =>
+                          onChange({
+                            ...settings,
+                            preferredParticipantNames: settings.preferredParticipantNames.filter((item) => item.id !== entry.id),
+                          })
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                )) : <p className="tiny-text">No preferred participant-name rules saved yet.</p>}
+              </div>
+            </div>
+            <div className="section-divider">
+              <div className="settings-subsection-heading">
+                <strong>Suggested rules</strong>
+                <span className="tiny-text">Repeated shorthand and participant-name patterns can be reviewed here before they become reusable rules.</span>
+              </div>
+              <div className="section-list">
+                {pendingAbbreviationSuggestions.length || pendingPreferredNameSuggestions.length ? (
+                  [...pendingAbbreviationSuggestions, ...pendingPreferredNameSuggestions].map((entry) => (
+                    <div key={entry.id} className="list-item">
+                      <strong>{entry.type === "abbreviation" ? "Suggested abbreviation" : "Preferred participant name"}</strong>
+                      <span className="muted">{entry.sourceValue} -&gt; {entry.suggestedValue} · Seen {entry.evidenceCount} times</span>
+                      <div className="list-item-actions">
+                        <button
+                          className="small-button inline-action"
+                          type="button"
+                          onClick={() => {
+                            if (entry.type === "abbreviation") {
+                              const exists = settings.abbreviations.some((item) => item.shortForm.toLocaleLowerCase() === entry.sourceValue.toLocaleLowerCase());
+                              onChange({
+                                ...settings,
+                                abbreviations: exists
+                                  ? settings.abbreviations
+                                  : [
+                                      ...settings.abbreviations,
+                                      { id: crypto.randomUUID(), shortForm: entry.sourceValue, fullForm: entry.suggestedValue },
+                                    ],
+                                ruleSuggestions: settings.ruleSuggestions.map((item) =>
+                                  item.id === entry.id
+                                    ? { ...item, status: "accepted", ignoreForever: false, updatedAt: new Date().toISOString() }
+                                    : item),
+                              });
+                              return;
+                            }
+
+                            const exists = settings.preferredParticipantNames.some(
+                              (item) =>
+                                item.shortForm.toLocaleLowerCase() === entry.sourceValue.toLocaleLowerCase()
+                                && item.fullName.toLocaleLowerCase() === entry.suggestedValue.toLocaleLowerCase(),
+                            );
+                            onChange({
+                              ...settings,
+                              preferredParticipantNames: exists
+                                ? settings.preferredParticipantNames
+                                : [
+                                    ...settings.preferredParticipantNames,
+                                    { id: crypto.randomUUID(), shortForm: entry.sourceValue, fullName: entry.suggestedValue },
+                                  ],
+                              ruleSuggestions: settings.ruleSuggestions.map((item) =>
+                                item.id === entry.id
+                                  ? { ...item, status: "accepted", ignoreForever: false, updatedAt: new Date().toISOString() }
+                                  : item),
+                            });
+                          }}
+                        >
+                          Add
+                        </button>
+                        <button
+                          className="small-button"
+                          type="button"
+                          onClick={() =>
+                            onChange({
+                              ...settings,
+                              ruleSuggestions: settings.ruleSuggestions.map((item) =>
+                                item.id === entry.id
+                                  ? { ...item, status: "ignored", ignoreForever: true, updatedAt: new Date().toISOString() }
+                                  : item),
+                            })
+                          }
+                        >
+                          Never suggest
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="tiny-text">No pending suggestions yet. New suggestions appear here after the same pattern is seen across sessions.</p>
+                )}
+              </div>
+              {ignoredAbbreviationSuggestions.length || ignoredPreferredNameSuggestions.length ? (
+                <div className="section-list">
+                  <p className="tiny-text">Ignored suggestions</p>
+                  {[...ignoredAbbreviationSuggestions, ...ignoredPreferredNameSuggestions].map((entry) => (
+                    <div key={entry.id} className="list-item">
+                      <strong>{entry.sourceValue} -&gt; {entry.suggestedValue}</strong>
+                      <span className="muted">{entry.type === "abbreviation" ? "Abbreviation suggestion" : "Participant-name suggestion"}</span>
+                      <div className="list-item-actions">
+                        <button
+                          className="small-button"
+                          type="button"
+                          onClick={() =>
+                            onChange({
+                              ...settings,
+                              ruleSuggestions: settings.ruleSuggestions.map((item) =>
+                                item.id === entry.id
+                                  ? { ...item, status: "pending", ignoreForever: false, updatedAt: new Date().toISOString() }
+                                  : item),
+                            })
+                          }
+                        >
+                          Restore
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}

@@ -457,6 +457,17 @@
                 </div>
               </details>
             </section>
+
+            <section class="config-card workflow-card suggestion-workflow-card is-hidden-field" id="rule-suggestions-panel" aria-label="Suggested rules" hidden>
+              <div class="config-card-copy">
+                <p class="section-label">Suggested rules</p>
+                <h3>Save repeated patterns</h3>
+              </div>
+              <p class="support-text" id="rule-suggestions-copy">
+                The app noticed repeated shorthand or participant-name patterns in recent sessions. Add any you want to reuse.
+              </p>
+              <div class="rule-suggestion-list" id="rule-suggestions-list"></div>
+            </section>
           </aside>
 
           <div class="output-main">
@@ -1271,6 +1282,17 @@
                   <div class="abbreviation-directory-list" id="abbreviation-directory-list"></div>
                 </div>
               </details>
+
+              <details class="advanced-options-disclosure">
+                <summary>Suggested abbreviation rules</summary>
+                <div class="advanced-options-body settings-stack">
+                  <p class="support-text">
+                    The app can suggest new abbreviation rules after generation when it sees the same shorthand repeatedly.
+                  </p>
+                  <div class="rule-suggestion-manager-list" id="abbreviation-suggestion-list"></div>
+                  <div class="rule-suggestion-manager-list" id="ignored-abbreviation-suggestion-list"></div>
+                </div>
+              </details>
             </section>
 
             <section class="config-card settings-card is-hidden-field" data-settings-section="participants" aria-label="Participant directory settings">
@@ -1303,6 +1325,27 @@
                   </div>
 
                   <div class="participant-directory-list" id="participant-directory-list"></div>
+                </div>
+              </details>
+
+              <details class="advanced-options-disclosure">
+                <summary>Preferred participant names</summary>
+                <div class="advanced-options-body settings-stack">
+                  <p class="support-text">
+                    Store preferred full names here when you want short forms like first names to expand consistently during cleanup and generation.
+                  </p>
+                  <div class="rule-suggestion-manager-list" id="preferred-participant-name-list"></div>
+                </div>
+              </details>
+
+              <details class="advanced-options-disclosure">
+                <summary>Suggested participant name rules</summary>
+                <div class="advanced-options-body settings-stack">
+                  <p class="support-text">
+                    The app can suggest preferred participant names when the same short form is used repeatedly for the same person.
+                  </p>
+                  <div class="rule-suggestion-manager-list" id="participant-suggestion-list"></div>
+                  <div class="rule-suggestion-manager-list" id="ignored-participant-suggestion-list"></div>
                 </div>
               </details>
             </section>

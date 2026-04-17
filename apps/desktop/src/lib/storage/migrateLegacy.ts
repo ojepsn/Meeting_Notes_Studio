@@ -319,6 +319,8 @@ export const loadLegacyBrowserSnapshot = (): DesktopAppSnapshot | null => {
               }))
               .filter((entry) => entry.shortForm && entry.fullForm)
           : [],
+        preferredParticipantNames: [],
+        ruleSuggestions: [],
         promptProfile: normalizePromptProfile(parsedSettings),
       },
     };

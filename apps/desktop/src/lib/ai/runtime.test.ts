@@ -29,6 +29,8 @@ const settings: LocalAppSettings = {
   projectLinks: [],
   timeReportPresets: [],
   abbreviations: [],
+  preferredParticipantNames: [],
+  ruleSuggestions: [],
   promptProfile: {
     meetingMinutesSystem: "Meeting system",
     meetingMinutesRules: "Meeting rules",

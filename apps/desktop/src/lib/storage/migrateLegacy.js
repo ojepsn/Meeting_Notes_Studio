@@ -228,6 +228,8 @@ export const loadLegacyBrowserSnapshot = () => {
                     }))
                         .filter((entry) => entry.shortForm && entry.fullForm)
                     : [],
+                preferredParticipantNames: [],
+                ruleSuggestions: [],
                 promptProfile: normalizePromptProfile(parsedSettings),
             },
         };

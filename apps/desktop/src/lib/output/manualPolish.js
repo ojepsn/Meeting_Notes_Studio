@@ -38,6 +38,15 @@ const canonicalizeParticipantMentions = (text, options) => {
     const sessionParticipants = normalizeParticipants(options.sessionParticipants || "");
     const canonicalParticipants = [...new Set([...sessionParticipants, ...(options.savedParticipants || [])])];
     let nextText = text;
+    (options.preferredParticipantNames || []).forEach((entry) => {
+        const shortForm = String(entry?.shortForm || "").trim();
+        const fullName = String(entry?.fullName || "").trim();
+        if (!shortForm || !fullName) {
+            return;
+        }
+        const pattern = new RegExp(`\\b${escapeRegExp(shortForm)}\\b`, "gi");
+        nextText = nextText.replace(pattern, fullName);
+    });
     canonicalParticipants.forEach((participant) => {
         const fullNamePattern = new RegExp(`\\b${escapeRegExp(participant)}\\b`, "gi");
         nextText = nextText.replace(fullNamePattern, participant);

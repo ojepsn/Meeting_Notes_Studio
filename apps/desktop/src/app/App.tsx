@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type CaptureMode } from "@notesmith/domain";
+import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type CaptureMode, type RuleSuggestionRecord } from "@notesmith/domain";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
@@ -64,6 +64,7 @@ import {
 import { buildMetadataReview, EMPTY_METADATA_REVIEW, type MetadataReviewState } from "../lib/metadata/review";
 import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links/entityLinks";
 import { polishNonAiNotesText } from "../lib/output/manualPolish";
+import { acceptRuleSuggestion, collectRuleSuggestionObservations, ignoreRuleSuggestion, mergeRuleSuggestionObservations } from "../lib/output/ruleSuggestions";
 import { buildStructureOptions, createEmptyStructureOptions } from "../lib/structure/options";
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
@@ -278,6 +279,8 @@ export const App = () => {
   const [isRefreshingModelPricing, setIsRefreshingModelPricing] = useState(false);
   const [metadataSuggestions, setMetadataSuggestions] = useState<MetadataReviewState>(EMPTY_METADATA_REVIEW);
   const [selectedMetadataSuggestions, setSelectedMetadataSuggestions] = useState<MetadataReviewState>(EMPTY_METADATA_REVIEW);
+  const [visibleRuleSuggestions, setVisibleRuleSuggestions] = useState<RuleSuggestionRecord[]>([]);
+  const [dismissedRuleSuggestionIds, setDismissedRuleSuggestionIds] = useState<string[]>([]);
   const notesLayoutRef = useRef<HTMLDivElement | null>(null);
   const notesSplitterDraggingRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -812,10 +815,32 @@ export const App = () => {
       onCacheHit,
     });
 
-  const openMetadataReviewIfNeeded = (session: typeof activeSession) => {
+  const openMetadataReviewIfNeeded = async (session: typeof activeSession) => {
     const nextReview = buildMetadataReview(session, snapshot?.settings ?? null);
-    const hasSuggestions = Object.values(nextReview).some((values) => values.length);
-    if (!hasSuggestions) {
+    const sourceText = [
+      richTextToPlainText(session?.manualNotes || ""),
+      session?.liveTranscript || "",
+      session?.uploadedTranscript || "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    const ruleObservations = session && snapshot
+      ? collectRuleSuggestionObservations(session, snapshot.settings, sourceText)
+      : [];
+    const { nextSettings, visibleSuggestions: nextVisibleSuggestions } = snapshot
+      ? mergeRuleSuggestionObservations(snapshot.settings, session?.id || "", ruleObservations)
+      : { nextSettings: null, visibleSuggestions: [] as RuleSuggestionRecord[] };
+    const hasMetadataSuggestions = Object.values(nextReview).some((values) => values.length);
+    const hasRuleSuggestions = nextVisibleSuggestions.length > 0;
+
+    if (snapshot && nextSettings && JSON.stringify(nextSettings) !== JSON.stringify(snapshot.settings)) {
+      await saveSettings(nextSettings);
+    }
+
+    setVisibleRuleSuggestions(nextVisibleSuggestions);
+    setDismissedRuleSuggestionIds([]);
+
+    if (!hasMetadataSuggestions && !hasRuleSuggestions) {
       return;
     }
     setMetadataSuggestions(nextReview);
@@ -934,6 +959,7 @@ export const App = () => {
       abbreviations,
       sessionParticipants: session.participantText,
       savedParticipants,
+      preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
     };
     const highlights = polishNonAiNotesText(session.quickHighlights.trim(), manualPolishOptions);
     const manualNotes = polishNonAiNotesText(richTextToPlainText(session.manualNotes), manualPolishOptions);
@@ -1326,7 +1352,7 @@ export const App = () => {
           ? "Loaded structured output from a matching local AI cache entry."
           : "Generated structured output with the desktop AI service.",
       );
-      openMetadataReviewIfNeeded(sessionForGeneration);
+      await openMetadataReviewIfNeeded(sessionForGeneration);
       openNotesTarget({ sessionId: sessionForGeneration.id, view: "output" });
     } catch (error) {
       setStatusNote(formatAIErrorMessage(error, "Generation failed."));
@@ -1358,7 +1384,7 @@ export const App = () => {
         setSelectedOutputVersionId(null);
         await saveSession({ ...nextSession, ...buildOutputVersionPatch(nextSession, rawOutput) });
         setStatusNote("Transcribed the voice note into Output without AI polishing.");
-        openMetadataReviewIfNeeded(nextSession);
+        await openMetadataReviewIfNeeded(nextSession);
         openNotesTarget({ sessionId: nextSession.id, view: "output" });
       } catch (error) {
         setStatusNote(formatAIErrorMessage(error, "Audio transcription failed."));
@@ -1381,7 +1407,7 @@ export const App = () => {
         ? "Created Output from the current voice note without AI polishing."
         : "Created Output from the current note without AI polishing.",
     );
-    openMetadataReviewIfNeeded(activeSession);
+    await openMetadataReviewIfNeeded(activeSession);
     openNotesTarget({ sessionId: activeSession.id, view: "output" });
   };
 
@@ -2337,12 +2363,18 @@ export const App = () => {
           metadataSuggestions.domains.length > 0 ||
           metadataSuggestions.projects.length > 0 ||
           metadataSuggestions.activities.length > 0;
-        const reviewTitle = hasPeopleSuggestions
+        const activeRuleSuggestions = visibleRuleSuggestions.filter((entry) => !dismissedRuleSuggestionIds.includes(entry.id));
+        const hasRuleSuggestions = activeRuleSuggestions.length > 0;
+        const reviewTitle = hasRuleSuggestions && !hasPeopleSuggestions && !hasNonPeopleSuggestions
+          ? "Suggested rules"
+          : hasPeopleSuggestions
           ? hasNonPeopleSuggestions
             ? "Update saved participants and reusable values?"
             : "Update saved participants?"
           : "Save new reusable values?";
-        const reviewDescription = hasPeopleSuggestions
+        const reviewDescription = hasRuleSuggestions && !hasPeopleSuggestions && !hasNonPeopleSuggestions
+          ? "We noticed repeated shorthand or preferred-name patterns in recent sessions. Add the ones you want the app to remember."
+          : hasPeopleSuggestions
           ? hasNonPeopleSuggestions
             ? "These participant names and other values were used in this note but are not yet saved in the app's reusable lists. Save the ones you want available for future quick selection."
             : "These names appear in the meeting Participants field but are not yet saved in the app's saved Participants list. Save the ones you want available for future quick selection."
@@ -2387,6 +2419,54 @@ export const App = () => {
                 </div>
               ) : null,
             )}
+            {activeRuleSuggestions.length ? (
+              <div className="section-divider">
+                <strong>Suggested rules</strong>
+                <div className="section-list">
+                  {activeRuleSuggestions.map((suggestion) => (
+                    <div key={suggestion.id} className="list-item">
+                      <span>
+                        <strong>{suggestion.type === "abbreviation" ? "Suggested abbreviation" : "Preferred participant name"}</strong>
+                        <span className="muted">{`${suggestion.sourceValue} -> ${suggestion.suggestedValue} · Seen ${suggestion.evidenceCount} times`}</span>
+                      </span>
+                      <div className="list-item-actions">
+                        <button
+                          className="small-button"
+                          type="button"
+                          onClick={() => {
+                            const nextSettings = acceptRuleSuggestion(snapshot.settings, suggestion.id);
+                            void saveSettings(nextSettings);
+                            setVisibleRuleSuggestions((current) => current.filter((entry) => entry.id !== suggestion.id));
+                          }}
+                        >
+                          Add
+                        </button>
+                        <button
+                          className="small-button"
+                          type="button"
+                          onClick={() =>
+                            setDismissedRuleSuggestionIds((current) => Array.from(new Set([...current, suggestion.id])))
+                          }
+                        >
+                          Not now
+                        </button>
+                        <button
+                          className="small-button danger-button"
+                          type="button"
+                          onClick={() => {
+                            const nextSettings = ignoreRuleSuggestion(snapshot.settings, suggestion.id, { forever: true });
+                            void saveSettings(nextSettings);
+                            setVisibleRuleSuggestions((current) => current.filter((entry) => entry.id !== suggestion.id));
+                          }}
+                        >
+                          Never suggest
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="sidebar-actions">
               <button
                 className="primary-button"
