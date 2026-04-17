@@ -1,7 +1,8 @@
 import { type StructureOptions } from "../../../lib/structure/options";
-import type { ActivityRecord, AttachmentRecord, CaptureWorkspaceDensity, SessionRecord } from "@notesmith/domain";
+import type { ActivityRecord, AttachmentRecord, CaptureWorkspaceDensity, LocalAppSettings, SessionRecord, TemplateDefinition } from "@notesmith/domain";
 interface OutputWorkspaceProps {
     session: SessionRecord;
+    template?: TemplateDefinition | null;
     displayedOutput?: string;
     outputVersions?: SessionRecord["outputVersions"];
     selectedOutputVersionId?: string | null;
@@ -34,6 +35,7 @@ interface OutputWorkspaceProps {
     onExportHtml: () => void;
     onExportDocx: () => void;
     onExportPdf: () => void;
+    outputLanguage: LocalAppSettings["outputLanguage"];
     primaryActionLabel?: string;
     secondaryActionLabel?: string | null;
     emptyStatePrimaryLabel?: string;
@@ -51,5 +53,5 @@ interface OutputWorkspaceProps {
         comments?: string;
     }) => void;
 }
-export declare const OutputWorkspace: ({ session, displayedOutput, outputVersions, selectedOutputVersionId, attachments, presentation, showPresentationActions, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onOpenOutputVersion, onOpenLatestOutputVersion, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, linkedActivity, onOpenLinkedActivity, onAddFollowUpTodo, onAddFollowUpMeeting, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const OutputWorkspace: ({ session, template, displayedOutput, outputVersions, selectedOutputVersionId, attachments, presentation, showPresentationActions, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onOpenOutputVersion, onOpenLatestOutputVersion, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, outputLanguage, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, linkedActivity, onOpenLinkedActivity, onAddFollowUpTodo, onAddFollowUpMeeting, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

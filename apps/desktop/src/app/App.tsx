@@ -2169,6 +2169,7 @@ export const App = () => {
         return (
           <OutputWorkspace
             session={activeSession}
+            template={activeTemplate}
             displayedOutput={displayedOutput}
             outputVersions={activeOutputVersions}
             selectedOutputVersionId={selectedOutputVersionId}
@@ -2201,6 +2202,7 @@ export const App = () => {
             onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
             onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
             onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+            outputLanguage={snapshot.settings.outputLanguage}
             primaryActionLabel={outputActionConfig.primaryLabel}
             secondaryActionLabel={outputActionConfig.secondaryLabel}
             emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
@@ -2589,12 +2591,7 @@ export const App = () => {
         <header className={`topbar app-header${activeWorkspace === "notes" ? " app-header-notes-pwa" : ""}${activeWorkspace === "calendar" ? " app-header-compact app-header-calendar-home" : ""}${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " app-header-compact" : ""}`}>
           <div className="topbar-copy">
             {activeWorkspace === "notes" ? (
-              <div className="topbar-status-strip">
-                <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
-                <span className="status-chip">{desktopVersion ? `v${desktopVersion}` : "Desktop"}</span>
-                <span className="status-chip">{selectedTextModelOption?.label || snapshot.settings.textModel}</span>
-                <span className="status-chip">{selectedTranscriptionModelOption?.label || snapshot.settings.transcriptionModel}</span>
-              </div>
+              <div className="topbar-status-strip topbar-status-strip-notes" />
             ) : (
               <>
                 <div className="topbar-eyebrow">Focused workspace</div>
@@ -2624,6 +2621,14 @@ export const App = () => {
               ) : null}
               {activeWorkspace === "notes" ? (
                 <>
+                  <button
+                    className="shell-button"
+                    type="button"
+                    aria-pressed={isNotesSessionsOpen}
+                    onClick={() => setIsNotesSessionsOpen((current) => !current)}
+                  >
+                    Sessions
+                  </button>
                   <button className="shell-button" type="button" onClick={() => openOverlay("backup")}>
                     Back-up
                   </button>
@@ -2633,17 +2638,7 @@ export const App = () => {
                   <button className="shell-button" type="button" onClick={() => openSettingsSection("ai")}>
                     Settings
                   </button>
-                  <button
-                    className="shell-button"
-                    type="button"
-                    aria-pressed={isNotesSessionsOpen}
-                    onClick={() => setIsNotesSessionsOpen((current) => !current)}
-                  >
-                    Sessions
-                  </button>
-                  <button className="primary-button" type="button" onClick={() => openOverlay("new-note")}>
-                    New
-                  </button>
+                  <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
                 </>
               ) : null}
               {activeWorkspace !== "notes" ? (
@@ -3013,6 +3008,7 @@ export const App = () => {
                   <div className="notes-pwa-output">
                     <OutputWorkspace
                       session={activeSession}
+                      template={activeTemplate}
                       displayedOutput={displayedOutput}
                       outputVersions={activeOutputVersions}
                       selectedOutputVersionId={selectedOutputVersionId}
@@ -3045,6 +3041,7 @@ export const App = () => {
                       onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
                       onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
                       onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                      outputLanguage={snapshot.settings.outputLanguage}
                       primaryActionLabel={outputActionConfig.primaryLabel}
                       secondaryActionLabel={outputActionConfig.secondaryLabel}
                       emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}

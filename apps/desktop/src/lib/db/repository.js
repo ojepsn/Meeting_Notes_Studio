@@ -1,5 +1,5 @@
 import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getPrimaryCaptureMode, } from "@notesmith/domain";
-import { DEFAULT_MEETING_MINUTES_RULES, DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT, DEFAULT_PERSONAL_NOTES_RULES, DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT, DEFAULT_REVISION_RULES, DEFAULT_TRANSLATION_RULES, } from "@notesmith/prompts";
+import { resolvePromptProfile } from "../ai/prompts";
 import { normalizeAIModelPricingSnapshot, normalizeTextModelId, normalizeTranscriptionModelId, } from "../ai/modelPricing";
 import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, normalizeOutputLayoutPresetId } from "../export/outputLayouts";
 import { isTauriRuntime } from "../storage/environment";
@@ -20,45 +20,6 @@ const STORAGE_KEYS = {
     aiModelPricing: "notesmith-desktop-ai-model-pricing",
 };
 const now = () => new Date().toISOString();
-const LEGACY_MEETING_MINUTES_SYSTEM_PROMPTS = new Set([
-    "You are an executive note assistant. Convert rough notes and transcripts into structured professional notes. Synthesize spoken content instead of reproducing it line by line.",
-]);
-const LEGACY_MEETING_MINUTES_RULES = new Set([
-    "Prefer concise business language, preserve important decisions and action items, remove filler and repeated phrasing, and organize the output under clear sections.",
-    "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.",
-]);
-const LEGACY_REVISION_RULES = new Set([
-    "Apply only the requested improvements, keep the existing structure, and avoid unnecessary rewrites.",
-]);
-const LEGACY_TRANSLATION_RULES = new Set([
-    "Translate the current output faithfully while preserving the same structure, tone, and action items.",
-]);
-const normalizePromptText = (value, fallback, legacyDefaults = new Set()) => {
-    const trimmedValue = value?.trim();
-    if (!trimmedValue)
-        return fallback;
-    if (legacyDefaults.has(trimmedValue))
-        return fallback;
-    return trimmedValue;
-};
-const migrateMeetingMinutesRules = (rules) => {
-    const legacyMeetingMinutesBulletRule = "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
-    const previousProseRules = [
-        "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
-        "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
-    ];
-    const currentProseRules = [
-        "- For each discussion point heading, use flowing text that captures the substance of the discussion.",
-        "- Use bullets only for agenda, decisions or action items.",
-    ];
-    return rules.includes(legacyMeetingMinutesBulletRule)
-        ? rules.replace(legacyMeetingMinutesBulletRule, currentProseRules.join("\n"))
-        : rules.includes(previousProseRules[0])
-            ? rules
-                .replace(previousProseRules[0], currentProseRules[0])
-                .replace(previousProseRules[1], currentProseRules[1])
-            : rules;
-};
 const normalizeDetailLevel = (value) => {
     const parsed = Number(value);
     if (!Number.isFinite(parsed))
@@ -198,30 +159,10 @@ export const createDefaultSettings = () => ({
     projectLinks: [],
     timeReportPresets: [],
     abbreviations: [],
-    promptProfile: {
-        meetingMinutesSystem: DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
-        meetingMinutesRules: DEFAULT_MEETING_MINUTES_RULES,
-        personalNotesSystem: DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
-        personalNotesRules: DEFAULT_PERSONAL_NOTES_RULES,
-        revisionRules: DEFAULT_REVISION_RULES,
-        translationRules: DEFAULT_TRANSLATION_RULES,
-        extraBlocks: [],
-    },
+    promptProfile: resolvePromptProfile(undefined).profile,
 });
 const normalizePromptProfile = (promptProfile) => {
-    const defaults = createDefaultSettings().promptProfile;
-    const legacyPromptProfile = promptProfile;
-    return {
-        ...defaults,
-        ...(promptProfile || {}),
-        meetingMinutesSystem: normalizePromptText(promptProfile?.meetingMinutesSystem || legacyPromptProfile?.generationSystem, defaults.meetingMinutesSystem, LEGACY_MEETING_MINUTES_SYSTEM_PROMPTS),
-        meetingMinutesRules: migrateMeetingMinutesRules(normalizePromptText(promptProfile?.meetingMinutesRules || legacyPromptProfile?.generationRules, defaults.meetingMinutesRules, LEGACY_MEETING_MINUTES_RULES)),
-        personalNotesSystem: normalizePromptText(promptProfile?.personalNotesSystem, defaults.personalNotesSystem),
-        personalNotesRules: normalizePromptText(promptProfile?.personalNotesRules, defaults.personalNotesRules),
-        revisionRules: normalizePromptText(promptProfile?.revisionRules, defaults.revisionRules, LEGACY_REVISION_RULES),
-        translationRules: normalizePromptText(promptProfile?.translationRules, defaults.translationRules, LEGACY_TRANSLATION_RULES),
-        extraBlocks: Array.isArray(promptProfile?.extraBlocks) ? promptProfile.extraBlocks : [],
-    };
+    return resolvePromptProfile(promptProfile).profile;
 };
 export const createDefaultSnapshot = () => ({
     sessions: [

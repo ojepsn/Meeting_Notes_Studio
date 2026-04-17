@@ -3,6 +3,7 @@ import { AttachmentImagePreview } from "../../../components/AttachmentImagePrevi
 import { DateInput } from "../../../components/DateInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
+import { parseTokenList } from "../../../components/peoplePickerUtils";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import type { RecordingMode } from "../../../lib/files/recording";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type AttachmentRecord, type CaptureWorkspaceDensity, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
@@ -125,6 +126,7 @@ export const SessionEditor = ({
   const update = <K extends keyof SessionRecord>(key: K, value: SessionRecord[K]) => onChange({ ...session, [key]: value });
   const agendaEditorRef = useRef<HTMLDivElement | null>(null);
   const manualNotesEditorRef = useRef<HTMLDivElement | null>(null);
+  const [highlightDraft, setHighlightDraft] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(session.captureMode === "meeting-note");
   const [peopleOpen, setPeopleOpen] = useState(Boolean(session.participantText.trim()));
   const [contextOpen, setContextOpen] = useState(false);
@@ -175,6 +177,7 @@ export const SessionEditor = ({
   const hasEndTimeField = Boolean(activeTemplate?.fields.find((field) => field.key === "endTime" && field.enabled));
   const shouldShowLiveTranscript = session.captureMode === "voice-note" || Boolean(session.liveTranscript.trim());
   const titleLabel = titleField?.label || "Title";
+  const highlightTokens = useMemo(() => parseTokenList(session.quickHighlights), [session.quickHighlights]);
 
   useEffect(() => {
     if (!agendaEditorRef.current || !agendaField) return;
@@ -259,6 +262,23 @@ export const SessionEditor = ({
     onChange({ ...session, captureMode: nextCaptureMode, templateId, customFieldValues: nextFieldValues, excludedSectionIds: [] });
   };
 
+  const addHighlight = (rawValue: string) => {
+    const nextEntry = rawValue.trim();
+    if (!nextEntry) {
+      return;
+    }
+    const nextHighlights = Array.from(new Map([...highlightTokens, nextEntry].map((entry) => [entry.toLocaleLowerCase(), entry] as const)).values());
+    update("quickHighlights", nextHighlights.join(", "));
+    setHighlightDraft("");
+  };
+
+  const removeHighlight = (target: string) => {
+    update(
+      "quickHighlights",
+      highlightTokens.filter((entry) => entry.toLocaleLowerCase() !== target.toLocaleLowerCase()).join(", "),
+    );
+  };
+
   if (isMinimal) {
     return (
       <div className="card session-editor session-editor-minimal session-editor-pwa">
@@ -292,11 +312,6 @@ export const SessionEditor = ({
               </button>
             ))}
           </div>
-        </div>
-
-        <div className="session-capture-copy session-capture-copy-pwa">
-          <strong>{modeMeta.label}</strong>
-          <span className="muted">{modeMeta.subtitle}</span>
         </div>
 
         <div className="editor-layout session-editor-pwa-layout">
@@ -425,6 +440,51 @@ export const SessionEditor = ({
               </section>
             ) : null}
 
+            {showQuickHighlights ? (
+              <section className="form-section" aria-label="Highlights">
+                <details className="workspace-disclosure pwa-disclosure-card" open>
+                  <summary>
+                    <div className="form-section-header">
+                      <p className="section-label">Highlights</p>
+                    </div>
+                  </summary>
+                  <div className="workspace-disclosure-body form-grid">
+                    <div className="field field-wide">
+                      <label htmlFor="quick-highlights">Quick highlights</label>
+                      <input
+                        id="quick-highlights"
+                        value={highlightDraft}
+                        onChange={(event) => setHighlightDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === "," || event.key === ";") {
+                            event.preventDefault();
+                            addHighlight(highlightDraft);
+                          }
+                        }}
+                        placeholder="Type a highlight and press Enter"
+                      />
+                      {highlightTokens.length ? (
+                        <div className="session-highlight-chip-row">
+                          {highlightTokens.map((highlight) => (
+                            <button
+                              key={highlight}
+                              className="people-suggestion-chip session-highlight-chip"
+                              type="button"
+                              onClick={() => removeHighlight(highlight)}
+                              aria-label={`Remove highlight ${highlight}`}
+                            >
+                              <span>{highlight}</span>
+                              <span aria-hidden="true">×</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </details>
+              </section>
+            ) : null}
+
           </div>
 
           <aside className="editor-sidebar">
@@ -475,12 +535,6 @@ export const SessionEditor = ({
             <details className="workspace-disclosure pwa-disclosure-card">
               <summary>Advanced capture tools</summary>
               <div className="workspace-disclosure-body form-grid">
-                {showQuickHighlights ? (
-                  <div className="field field-wide">
-                    <label htmlFor="quick-highlights">Highlights</label>
-                    <textarea id="quick-highlights" value={session.quickHighlights} onChange={(event) => update("quickHighlights", event.target.value)} placeholder="Short key points, names, or topics to emphasize in the final output." />
-                  </div>
-                ) : null}
                 <div className="field field-wide metadata-triplet">
                   <div className="metadata-triplet-grid">
                     <div className="field metadata-subfield">
@@ -550,7 +604,7 @@ export const SessionEditor = ({
           ) : null}
 
           <details className="workspace-disclosure pwa-disclosure-card" open={uploadedTranscriptOpen} onToggle={(event) => setUploadedTranscriptOpen(event.currentTarget.open)}>
-            <summary>Uploaded transcript</summary>
+            <summary>Transcript</summary>
             <div className="workspace-disclosure-body">
               <div className="field field-wide">
                 <textarea
@@ -558,7 +612,7 @@ export const SessionEditor = ({
                   id="session-uploaded-transcript"
                   value={session.uploadedTranscript}
                   onChange={(event) => update("uploadedTranscript", event.target.value)}
-                  placeholder="Uploaded transcript text will appear here..."
+                  placeholder="Paste a transcript here, or upload one from a file."
                 />
               </div>
             </div>

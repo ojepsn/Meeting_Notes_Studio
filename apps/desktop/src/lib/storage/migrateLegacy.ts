@@ -9,14 +9,7 @@ import type {
   TodoRecord,
 } from "@notesmith/domain";
 import { BUILTIN_TEMPLATES } from "@notesmith/domain";
-import {
-  DEFAULT_MEETING_MINUTES_RULES,
-  DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
-  DEFAULT_PERSONAL_NOTES_RULES,
-  DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
-  DEFAULT_REVISION_RULES,
-  DEFAULT_TRANSLATION_RULES,
-} from "@notesmith/prompts";
+import { resolvePromptProfile } from "../ai/prompts";
 import { normalizeOutputLayoutPresetId } from "../export/outputLayouts";
 
 const LEGACY_SESSIONS_KEY = "notesmith-sessions";
@@ -103,76 +96,14 @@ const normalizePromptBlocks = (blocks: LegacyPromptBlock[] | undefined): PromptB
         .filter((block) => block.label || block.body)
     : [];
 
-const LEGACY_MEETING_MINUTES_SYSTEM_PROMPTS = new Set([
-  "You are an executive note assistant. Convert rough notes and transcripts into structured professional notes. Synthesize spoken content instead of reproducing it line by line.",
-]);
-
-const LEGACY_MEETING_MINUTES_RULES = new Set([
-  "Prefer concise business language, preserve important decisions and action items, remove filler and repeated phrasing, and organize the output under clear sections.",
-  "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.",
-]);
-
-const LEGACY_REVISION_RULES = new Set([
-  "Apply only the requested improvements, keep the existing structure, and avoid unnecessary rewrites.",
-]);
-
-const LEGACY_TRANSLATION_RULES = new Set([
-  "Translate the current output faithfully while preserving the same structure, tone, and action items.",
-]);
-
-const normalizePromptText = (value: string | undefined, fallback: string, legacyDefaults: Set<string> = new Set()) => {
-  const trimmedValue = value?.trim();
-  if (!trimmedValue) return fallback;
-  if (legacyDefaults.has(trimmedValue)) return fallback;
-  return trimmedValue;
-};
-
 const normalizePromptProfile = (settings: LegacySettings | null): PromptProfile => {
-  const migrateMeetingMinutesRules = (rules: string) =>
-    rules.includes("- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.")
-      ? rules.replace(
-          "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.",
-          [
-            "- For each discussion point heading, use flowing text that captures the substance of the discussion.",
-            "- Use bullets only for agenda, decisions or action items.",
-          ].join("\n"),
-        )
-      : rules.includes("- For each discussion point heading, prefer flowing text that captures the substance of the discussion.")
-        ? rules
-            .replace(
-              "- For each discussion point heading, prefer flowing text that captures the substance of the discussion.",
-              "- For each discussion point heading, use flowing text that captures the substance of the discussion.",
-            )
-            .replace(
-              "- Use bullets only when they materially improve scanability, such as for decisions or action items.",
-              "- Use bullets only for agenda, decisions or action items.",
-            )
-      : rules;
-
-  return {
-    meetingMinutesSystem: normalizePromptText(
-      settings?.promptSettings?.generationSystem,
-      DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
-      LEGACY_MEETING_MINUTES_SYSTEM_PROMPTS,
-    ),
-    meetingMinutesRules:
-      migrateMeetingMinutesRules(
-        normalizePromptText(
-          settings?.promptSettings?.generationRules,
-          DEFAULT_MEETING_MINUTES_RULES,
-          LEGACY_MEETING_MINUTES_RULES,
-        ),
-      ),
-    personalNotesSystem: DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT,
-    personalNotesRules: DEFAULT_PERSONAL_NOTES_RULES,
-    revisionRules: normalizePromptText(settings?.promptSettings?.revisionRules, DEFAULT_REVISION_RULES, LEGACY_REVISION_RULES),
-    translationRules: normalizePromptText(
-      settings?.promptSettings?.translationRules,
-      DEFAULT_TRANSLATION_RULES,
-      LEGACY_TRANSLATION_RULES,
-    ),
+  return resolvePromptProfile({
+    generationSystem: settings?.promptSettings?.generationSystem,
+    generationRules: settings?.promptSettings?.generationRules,
+    revisionRules: settings?.promptSettings?.revisionRules,
+    translationRules: settings?.promptSettings?.translationRules,
     extraBlocks: normalizePromptBlocks(settings?.promptSettings?.additionalPrompts),
-  };
+  }).profile;
 };
 
 const mapLegacyTemplateId = (legacyId?: string) => {

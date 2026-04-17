@@ -3,7 +3,14 @@ import { TokenPicker } from "../../../components/TokenPicker";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
 import { DateInput } from "../../../components/DateInput";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
-import type { ActivityRecord, AttachmentRecord, CaptureWorkspaceDensity, SessionRecord } from "@notesmith/domain";
+import type {
+  ActivityRecord,
+  AttachmentRecord,
+  CaptureWorkspaceDensity,
+  LocalAppSettings,
+  SessionRecord,
+  TemplateDefinition,
+} from "@notesmith/domain";
 import { useState } from "react";
 
 type FollowUpKind = "todo" | "meeting";
@@ -47,6 +54,7 @@ const parseFollowUpCandidate = (value: string) => {
 
 interface OutputWorkspaceProps {
   session: SessionRecord;
+  template?: TemplateDefinition | null;
   displayedOutput?: string;
   outputVersions?: SessionRecord["outputVersions"];
   selectedOutputVersionId?: string | null;
@@ -79,6 +87,7 @@ interface OutputWorkspaceProps {
   onExportHtml: () => void;
   onExportDocx: () => void;
   onExportPdf: () => void;
+  outputLanguage: LocalAppSettings["outputLanguage"];
   primaryActionLabel?: string;
   secondaryActionLabel?: string | null;
   emptyStatePrimaryLabel?: string;
@@ -91,6 +100,7 @@ interface OutputWorkspaceProps {
 
 export const OutputWorkspace = ({
   session,
+  template,
   displayedOutput = session.output,
   outputVersions = [],
   selectedOutputVersionId = null,
@@ -123,6 +133,7 @@ export const OutputWorkspace = ({
   onExportHtml,
   onExportDocx,
   onExportPdf,
+  outputLanguage,
   primaryActionLabel = "Generate",
   secondaryActionLabel = null,
   emptyStatePrimaryLabel = "Generate polished notes",
@@ -147,6 +158,7 @@ export const OutputWorkspace = ({
   const isViewingHistoricalVersion = Boolean(selectedOutputVersionId);
   const isMeetingNote = session.captureMode === "meeting-note";
   const isMinimal = presentation === "minimal";
+  const orderedSections = [...(template?.sections ?? [])].sort((left, right) => left.position - right.position);
   const filteredProjects = getProjectsForDomain(structureOptions, session.domain);
   const filteredActivities = getActivitiesForSelection(structureOptions, session.domain, session.project);
   const projectPickerOptions = filteredProjects.length ? filteredProjects : savedProjects;
@@ -165,6 +177,8 @@ export const OutputWorkspace = ({
   const excerptPreview =
     selectedExcerpt.length > 180 ? `${selectedExcerpt.slice(0, 177).trimEnd()}...` : selectedExcerpt;
   const selectedOutputVersion = outputVersions.find((version) => version.id === selectedOutputVersionId) ?? null;
+  const outputLanguageLabel =
+    outputLanguage === "sv" ? "Swedish" : outputLanguage === "en" ? "English" : "Same as source notes";
 
   const formatOutputVersionLabel = (generatedAt: string) => {
     const parsed = new Date(generatedAt);
@@ -187,7 +201,7 @@ export const OutputWorkspace = ({
         <summary>Version history</summary>
         <div className="workspace-disclosure-body stack">
           <p className="muted">
-            Open any earlier generated version to review it without losing the latest output.
+            Each generated output version is saved here with the time it was created.
           </p>
           <div className="section-list">
             {outputVersions.map((version, index) => (
@@ -221,6 +235,13 @@ export const OutputWorkspace = ({
         </div>
       </details>
     ) : null;
+
+  const handleSectionToggle = (sectionId: string, checked: boolean) => {
+    const nextExcludedSectionIds = checked
+      ? session.excludedSectionIds.filter((id) => id !== sectionId)
+      : [...new Set([...session.excludedSectionIds, sectionId])];
+    onChange({ ...session, excludedSectionIds: nextExcludedSectionIds });
+  };
 
   const applyReviewSeed = (value: string, kind: FollowUpKind = "todo") => {
     const parsed = parseFollowUpCandidate(value);
@@ -295,52 +316,142 @@ export const OutputWorkspace = ({
                     {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
                   </button>
                 ) : null}
-                <button className="shell-button" type="button" onClick={onTranslate} disabled={isViewingHistoricalVersion}>
-                  Translate
-                </button>
-                <button className="shell-button" type="button" onClick={onExportDocx}>
-                  Export Word
-                </button>
-                <button className="shell-button" type="button" onClick={onExportPdf}>
-                  Export PDF
-                </button>
               </div>
+
+              <details className="workspace-disclosure pwa-disclosure-card output-generation-disclosure" open>
+                <summary>Language and generation options</summary>
+                <div className="workspace-disclosure-body stack">
+                  <div className="output-setting-row">
+                    <strong>Output language</strong>
+                    <span className="muted">{outputLanguageLabel}</span>
+                  </div>
+                  <p className="muted">
+                    Desktop Notes currently follows the app-wide output language from Settings.
+                  </p>
+                  <p className="muted">
+                    Select the sections you want in the generated output. Checked sections are included, and unchecked sections are left out.
+                  </p>
+                  <div className="output-section-grid">
+                    {orderedSections.map((section) => {
+                      const checked = !session.excludedSectionIds.includes(section.id);
+                      return (
+                        <label key={section.id} className="output-section-option">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) => handleSectionToggle(section.id, event.target.checked)}
+                          />
+                          <span>{section.title}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <label className="field config-field output-detail-field">
+                    <span className="field-label">Detail level</span>
+                    <input
+                      id="output-detail-level"
+                      type="range"
+                      min="1"
+                      max="5"
+                      step="1"
+                      value={String(session.detailLevel)}
+                      onChange={(event) => onChange({ ...session, detailLevel: Number(event.target.value) })}
+                    />
+                    <span className="range-caption">
+                      {session.detailLevel <= 1
+                        ? "Minimal detail"
+                        : session.detailLevel === 2
+                          ? "Concise detail"
+                          : session.detailLevel === 3
+                            ? "Balanced detail"
+                            : session.detailLevel === 4
+                              ? "Detailed"
+                              : "Comprehensive"}
+                    </span>
+                  </label>
+                </div>
+              </details>
             </section>
           </aside>
 
           <div className="output-main">
-            {!hasOutput ? (
-              <div className="empty-state-card compact-empty-state output-empty-state-minimal">
-                <h3>Ready to generate</h3>
-                <ol className="empty-state-steps">
-                  <li>Add notes or transcript in the Capture section to the left, include highlights if useful, then click Generate.</li>
-                  <li>Click {emptyStatePrimaryLabel} to create the first Output draft for this session.</li>
-                  {emptyStateSecondaryLabel ? <li>Or click {emptyStateSecondaryLabel} if you want the alternate output path instead.</li> : null}
-                  <li>Use Translate, Revise, and Export after the first polished draft appears here.</li>
-                </ol>
-              </div>
-            ) : null}
-
-            <div className="field field-wide output-field-pwa">
-              <label htmlFor="session-output">Output</label>
-              {selectedOutputVersion ? (
-                <p className="muted">Viewing the version generated {formatOutputVersionLabel(selectedOutputVersion.generatedAt)}. Open the latest version to keep editing.</p>
-              ) : null}
-              <textarea
-                className="editor-textarea editor-textarea-primary output-textarea-minimal"
-                id="session-output"
-                value={displayedOutput}
-                onChange={(event) => onChange({ ...session, output: event.target.value })}
-                onSelect={(event) => {
-                  const nextExcerpt = event.currentTarget.value
-                    .slice(event.currentTarget.selectionStart ?? 0, event.currentTarget.selectionEnd ?? 0)
-                    .trim();
-                  setSelectedExcerpt(nextExcerpt);
-                }}
-                readOnly={isViewingHistoricalVersion}
-                placeholder="Generated notes will appear here."
-              />
+            <div className="output-card output-card-pwa">
+              {!hasOutput ? (
+                <div className="output-empty output-empty-pwa">
+                  <h3>Your finished notes will appear here.</h3>
+                  <p>
+                    Add notes or transcript in the Capture section to the left, include highlights if useful, then click <strong>{primaryActionLabel}</strong>.
+                  </p>
+                  {secondaryActionLabel ? (
+                    <p className="muted">
+                      You can also use <strong>{secondaryActionLabel}</strong> when that output path fits the session better.
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  {selectedOutputVersion ? (
+                    <p className="muted output-version-note">
+                      Viewing the version generated {formatOutputVersionLabel(selectedOutputVersion.generatedAt)}. Open the latest version to keep editing.
+                    </p>
+                  ) : null}
+                  <textarea
+                    className="editor-textarea editor-textarea-primary output-textarea-minimal output-textarea-pwa"
+                    id="session-output"
+                    value={displayedOutput}
+                    onChange={(event) => onChange({ ...session, output: event.target.value })}
+                    onSelect={(event) => {
+                      const nextExcerpt = event.currentTarget.value
+                        .slice(event.currentTarget.selectionStart ?? 0, event.currentTarget.selectionEnd ?? 0)
+                        .trim();
+                      setSelectedExcerpt(nextExcerpt);
+                    }}
+                    readOnly={isViewingHistoricalVersion}
+                    placeholder="Generated notes will appear here."
+                  />
+                </>
+              )}
             </div>
+
+            <details className="workspace-disclosure pwa-disclosure-card">
+              <summary>Refine and export</summary>
+              <div className="workspace-disclosure-body stack">
+                <div className="field field-wide">
+                  <label htmlFor="revision-instructions">Revision instructions</label>
+                  <textarea
+                    id="revision-instructions"
+                    value={revisionInstructions}
+                    onChange={(event) => setRevisionInstructions(event.target.value)}
+                    placeholder="Example: Make the summary more concise, keep action owners explicit, and translate jargon into clearer client language."
+                  />
+                </div>
+                <div className="page-actions">
+                  <button
+                    className="shell-button"
+                    type="button"
+                    onClick={() => {
+                      if (isViewingHistoricalVersion) return;
+                      onRevise(revisionInstructions);
+                      if (revisionInstructions.trim()) {
+                        setRevisionInstructions("");
+                      }
+                    }}
+                    disabled={isViewingHistoricalVersion}
+                  >
+                    {isRevising ? "Revising..." : "Revise with instructions"}
+                  </button>
+                  <button className="shell-button" type="button" onClick={onExportText}>
+                    Export text
+                  </button>
+                  <button className="shell-button" type="button" onClick={onExportMarkdown}>
+                    Export markdown
+                  </button>
+                  <button className="shell-button" type="button" onClick={onExportHtml}>
+                    Export HTML
+                  </button>
+                </div>
+              </div>
+            </details>
 
             {renderVersionHistory()}
 
@@ -413,46 +524,6 @@ export const OutputWorkspace = ({
                       />
                     </div>
                   </div>
-                </div>
-              </div>
-            </details>
-
-            <details className="workspace-disclosure pwa-disclosure-card">
-              <summary>Refine and export</summary>
-              <div className="workspace-disclosure-body stack">
-                <div className="field field-wide">
-                  <label htmlFor="revision-instructions">Revision instructions</label>
-                  <textarea
-                    id="revision-instructions"
-                    value={revisionInstructions}
-                    onChange={(event) => setRevisionInstructions(event.target.value)}
-                    placeholder="Example: Make the summary more concise, keep action owners explicit, and translate jargon into clearer client language."
-                  />
-                </div>
-                <div className="page-actions">
-                  <button
-                    className="shell-button"
-                    type="button"
-                    onClick={() => {
-                      if (isViewingHistoricalVersion) return;
-                      onRevise(revisionInstructions);
-                      if (revisionInstructions.trim()) {
-                        setRevisionInstructions("");
-                      }
-                    }}
-                    disabled={isViewingHistoricalVersion}
-                  >
-                    {isRevising ? "Revising..." : "Revise with instructions"}
-                  </button>
-                  <button className="shell-button" type="button" onClick={onExportText}>
-                    Export text
-                  </button>
-                  <button className="shell-button" type="button" onClick={onExportMarkdown}>
-                    Export markdown
-                  </button>
-                  <button className="shell-button" type="button" onClick={onExportHtml}>
-                    Export HTML
-                  </button>
                 </div>
               </div>
             </details>
