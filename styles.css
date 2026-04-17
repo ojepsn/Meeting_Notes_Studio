@@ -2,7 +2,7 @@
   color-scheme: light;
   --bg: #eef2e7;
   --bg-strong: #dce5d1;
-  --panel: rgba(248, 251, 244, 0.84);
+  --panel: rgba(248, 251, 244, 0.97);
   --panel-strong: #fcfdf9;
   --line: rgba(62, 81, 48, 0.12);
   --text: #182116;
@@ -23,7 +23,7 @@
 :root[data-theme="fluent-slate-light"] {
   --bg: #eef3f9;
   --bg-strong: #d9e4f2;
-  --panel: rgba(248, 251, 255, 0.84);
+  --panel: rgba(248, 251, 255, 0.97);
   --panel-strong: #fcfdff;
   --line: rgba(51, 84, 133, 0.12);
   --text: #162133;
@@ -41,7 +41,7 @@
 :root[data-theme="atlas-blue-light"] {
   --bg: #eef3f9;
   --bg-strong: #dfe8f6;
-  --panel: rgba(248, 251, 255, 0.86);
+  --panel: rgba(248, 251, 255, 0.97);
   --panel-strong: #fcfdff;
   --line: rgba(45, 98, 201, 0.12);
   --text: #162133;
@@ -59,7 +59,7 @@
 :root[data-theme="nordic-teal-light"] {
   --bg: #eaf5f3;
   --bg-strong: #d4e8e4;
-  --panel: rgba(247, 252, 251, 0.84);
+  --panel: rgba(247, 252, 251, 0.97);
   --panel-strong: #fcfffe;
   --line: rgba(42, 96, 91, 0.12);
   --text: #152424;
@@ -77,7 +77,7 @@
 :root[data-theme="graphite-forest-light"] {
   --bg: #eff3ef;
   --bg-strong: #d9e0d9;
-  --panel: rgba(249, 251, 249, 0.84);
+  --panel: rgba(249, 251, 249, 0.97);
   --panel-strong: #fdfefd;
   --line: rgba(54, 69, 59, 0.12);
   --text: #171d19;
@@ -95,7 +95,7 @@
 :root[data-theme="stone-olive-light"] {
   --bg: #f4efe5;
   --bg-strong: #e7ddcf;
-  --panel: rgba(252, 248, 242, 0.86);
+  --panel: rgba(252, 248, 242, 0.97);
   --panel-strong: #fffdf9;
   --line: rgba(106, 116, 64, 0.12);
   --text: #231f19;
@@ -113,7 +113,7 @@
 :root[data-theme="copper-ink-light"] {
   --bg: #f6efe7;
   --bg-strong: #e8ddd1;
-  --panel: rgba(252, 248, 244, 0.86);
+  --panel: rgba(252, 248, 244, 0.97);
   --panel-strong: #fffdfa;
   --line: rgba(154, 101, 70, 0.12);
   --text: #221b18;
@@ -132,7 +132,7 @@
   color-scheme: dark;
   --bg: #111722;
   --bg-strong: #1b2432;
-  --panel: rgba(20, 28, 38, 0.84);
+  --panel: rgba(20, 28, 38, 0.97);
   --panel-strong: #1b2432;
   --line: rgba(207, 219, 231, 0.14);
   --text: #edf2f7;
@@ -151,7 +151,7 @@
   color-scheme: dark;
   --bg: #0f1725;
   --bg-strong: #162033;
-  --panel: rgba(18, 28, 44, 0.84);
+  --panel: rgba(18, 28, 44, 0.97);
   --panel-strong: #172235;
   --line: rgba(199, 213, 232, 0.14);
   --text: #ecf3fb;
@@ -170,7 +170,7 @@
   color-scheme: dark;
   --bg: #0f1b1d;
   --bg-strong: #13272b;
-  --panel: rgba(18, 37, 40, 0.84);
+  --panel: rgba(18, 37, 40, 0.97);
   --panel-strong: #173136;
   --line: rgba(199, 230, 227, 0.14);
   --text: #eaf6f5;
@@ -189,7 +189,7 @@
   color-scheme: dark;
   --bg: #121715;
   --bg-strong: #1a2220;
-  --panel: rgba(23, 31, 28, 0.84);
+  --panel: rgba(23, 31, 28, 0.97);
   --panel-strong: #1d2824;
   --line: rgba(210, 223, 214, 0.14);
   --text: #edf4ee;
@@ -208,7 +208,7 @@
   color-scheme: dark;
   --bg: #151410;
   --bg-strong: #211f18;
-  --panel: rgba(29, 28, 22, 0.84);
+  --panel: rgba(29, 28, 22, 0.97);
   --panel-strong: #25241d;
   --line: rgba(215, 222, 190, 0.12);
   --text: #f0eee7;
@@ -227,7 +227,7 @@
   color-scheme: dark;
   --bg: #13100d;
   --bg-strong: #211a15;
-  --panel: rgba(28, 22, 18, 0.84);
+  --panel: rgba(28, 22, 18, 0.97);
   --panel-strong: #261e19;
   --line: rgba(223, 198, 171, 0.14);
   --text: #f2ece6;
@@ -393,7 +393,8 @@ button {
 .output-panel {
   border: 1px solid rgba(255, 255, 255, 0.48);
   background: var(--panel);
-  backdrop-filter: blur(18px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   box-shadow: var(--shadow-lg);
 }
 
