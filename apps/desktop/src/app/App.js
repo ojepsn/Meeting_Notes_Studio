@@ -28,6 +28,7 @@ import { buildRecordingFilename, getSupportedRecordingMimeType, getSystemAudioDi
 import { createLocalSnapshotBackup, exportSnapshotBackup, getDesktopBundleType, getDesktopAppVersion, getDesktopStorageInfo, importSnapshotBackup, openDesktopPath, } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW } from "../lib/metadata/review";
 import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links/entityLinks";
+import { polishNonAiNotesText } from "../lib/output/manualPolish";
 import { buildStructureOptions, createEmptyStructureOptions } from "../lib/structure/options";
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
@@ -697,9 +698,16 @@ export const App = () => {
         const domain = session.domain.trim();
         const activity = session.activity.trim();
         const tags = session.tagsText.trim();
-        const highlights = session.quickHighlights.trim();
-        const manualNotes = richTextToPlainText(session.manualNotes);
-        const transcript = [session.liveTranscript.trim(), session.uploadedTranscript.trim()].filter(Boolean).join("\n\n");
+        const abbreviations = snapshot?.settings.abbreviations ?? [];
+        const savedParticipants = snapshot?.settings.savedParticipants ?? [];
+        const manualPolishOptions = {
+            abbreviations,
+            sessionParticipants: session.participantText,
+            savedParticipants,
+        };
+        const highlights = polishNonAiNotesText(session.quickHighlights.trim(), manualPolishOptions);
+        const manualNotes = polishNonAiNotesText(richTextToPlainText(session.manualNotes), manualPolishOptions);
+        const transcript = polishNonAiNotesText([session.liveTranscript.trim(), session.uploadedTranscript.trim()].filter(Boolean).join("\n\n"), manualPolishOptions);
         if (title) {
             segments.push(title);
         }

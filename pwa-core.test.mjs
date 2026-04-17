@@ -155,6 +155,41 @@ function loadPwaOutputVersionHelpers() {
   return context.__exports;
 }
 
+function loadPwaManualPolishHelpers() {
+  const snippets = [
+    extractFunction(appJsSource, "escapeRegExp"),
+    extractFunction(appJsSource, "parseParticipants"),
+    extractFunction(appJsSource, "normalizeParticipantDirectory"),
+    extractFunction(appJsSource, "normalizeAbbreviationDirectory"),
+    extractFunction(appJsSource, "expandKnownAbbreviations"),
+    extractFunction(appJsSource, "canonicalizeParticipantMentions"),
+    extractFunction(appJsSource, "standardizeRuleBasedDateAndTime"),
+    extractFunction(appJsSource, "normalizeRuleBasedLabel"),
+    extractFunction(appJsSource, "standardizeRuleBasedActionPattern"),
+    extractFunction(appJsSource, "normalizeRuleBasedLinePunctuation"),
+    extractFunction(appJsSource, "capitalizeSentenceStarts"),
+    extractFunction(appJsSource, "ensureSentenceEnding"),
+    extractFunction(appJsSource, "normalizeRuleBasedTextLine"),
+    extractFunction(appJsSource, "polishNonAiNotesText"),
+  ];
+
+  const context = {
+    settings: {
+      abbreviationDirectory: [],
+      participantDirectory: [],
+    },
+  };
+  vm.createContext(context);
+  const script = new vm.Script(`
+    ${snippets.join("\n;\n")}
+    ;globalThis.__exports = {
+      polishNonAiNotesText
+    };
+  `);
+  script.runInContext(context);
+  return context.__exports;
+}
+
 function runTest(name, fn) {
   try {
     fn();
@@ -395,6 +430,19 @@ runTest("generation mode uses explicit manual-vs-AI choices instead of transcrip
   assert.match(indexHtmlSource, /Generate with AI/);
   assert.doesNotMatch(indexHtmlSource, /Transcribe only/);
   assert.match(appJsSource, /Manual notes were transferred to Output without AI generation\./);
+});
+
+runTest("non-AI polishing expands abbreviations, canonicalizes participants, and cleans prose", () => {
+  const { polishNonAiNotesText } = loadPwaManualPolishHelpers();
+  const polished = polishNonAiNotesText(
+    ["teh mtg with ola moved to 9.30", "and the adress was updated"].join("\n"),
+    {
+      participantsValue: "Ola Jeppsson, Anna Smith",
+      abbreviationDirectory: [{ short: "mtg", full: "meeting" }],
+    }
+  );
+
+  assert.equal(polished, "The meeting with Ola Jeppsson moved to 09:30 and the address was updated.");
 });
 
 console.log("PWA core tests passed.");

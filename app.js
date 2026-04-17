@@ -5793,7 +5793,10 @@ function buildLocalPolishedNotes(session) {
   const decisions = deriveDecisions(normalizedLines);
   const summary = buildSummary(session, template, normalizedLines, highlights, actions, outputLanguage);
   const customSectionsMarkup = buildLocalCustomSectionsMarkup(session, copy, template);
-  const agenda = getAgendaText(session);
+  const agenda = polishNonAiNotesText(getAgendaText(session), {
+    participantsValue: session.participants,
+    abbreviationDirectory: settings.abbreviationDirectory,
+  });
   const participants = session.participants
     .split(",")
     .map((name) => name.trim())
@@ -5872,16 +5875,13 @@ function buildLocalPolishedNotes(session) {
 
 function buildManualNotesTransferHtml(session) {
   const template = getTemplateDefinition(session.template);
-  const sourceText = session.rawNotes?.trim() || "";
-  const normalizedParagraphs = sourceText
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
+  const polishedNotes = polishNonAiNotesText(session.rawNotes?.trim() || "", {
+    participantsValue: session.participants,
+    abbreviationDirectory: settings.abbreviationDirectory,
+  });
   const participants = parseParticipants(session.participants);
   const meetingScheduleMeta = buildMeetingScheduleMeta(session);
-  const bodyMarkup = normalizedParagraphs.length
-    ? normalizedParagraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("")
-    : `<p>${escapeHtml("No manual notes available yet.")}</p>`;
+  const bodyMarkup = renderPlainTextBlocksAsHtml(polishedNotes);
   const agenda = getAgendaText(session);
 
   return `
@@ -6657,10 +6657,18 @@ function normalizeOutputLanguagePreference(value) {
 function buildCombinedNotes(session) {
   const scheduleLine = buildMeetingScheduleText(session);
   const agendaText = getAgendaText(session);
-  const agendaLine = agendaText ? `Agenda: ${agendaText}` : "";
+  const agendaLine = agendaText
+    ? polishNonAiNotesText(`Agenda: ${agendaText}`, {
+        participantsValue: session.participants,
+        abbreviationDirectory: settings.abbreviationDirectory,
+      })
+    : "";
   return [scheduleLine, agendaLine, session.liveTranscript?.trim(), session.uploadedTranscript?.trim(), session.rawNotes?.trim()]
     .filter(Boolean)
-    .map((part) => expandKnownAbbreviations(part, settings.abbreviationDirectory))
+    .map((part) => polishNonAiNotesText(part, {
+      participantsValue: session.participants,
+      abbreviationDirectory: settings.abbreviationDirectory,
+    }))
     .join("\n\n");
 }
 
@@ -6805,6 +6813,233 @@ function formatAbbreviationsForPrompt(abbreviationDirectory) {
   return abbreviations
     .map((entry, index) => `${index + 1}. ${entry.short} = ${entry.full}`)
     .join("\n");
+}
+
+function canonicalizeParticipantMentions(text, participantsValue, participantDirectory = settings.participantDirectory) {
+  const sessionParticipants = parseParticipants(participantsValue);
+  const canonicalParticipants = [...new Set([...sessionParticipants, ...normalizeParticipantDirectory(participantDirectory)])];
+  let nextText = String(text || "");
+
+  canonicalParticipants.forEach((participant) => {
+    const fullNamePattern = new RegExp(`\\b${escapeRegExp(participant)}\\b`, "gi");
+    nextText = nextText.replace(fullNamePattern, participant);
+  });
+
+  const uniqueFirstNames = new Map();
+  const duplicateFirstNames = new Set();
+  sessionParticipants.forEach((participant) => {
+    const firstName = participant.split(/\s+/)[0]?.trim();
+    if (!firstName) {
+      return;
+    }
+    const key = firstName.toLocaleLowerCase();
+    if (uniqueFirstNames.has(key) && uniqueFirstNames.get(key) !== participant) {
+      duplicateFirstNames.add(key);
+      uniqueFirstNames.delete(key);
+      return;
+    }
+    if (!duplicateFirstNames.has(key)) {
+      uniqueFirstNames.set(key, participant);
+    }
+  });
+
+  uniqueFirstNames.forEach((fullName, firstName) => {
+    if (fullName.toLocaleLowerCase() === firstName) {
+      return;
+    }
+    const pattern = new RegExp(`\\b${escapeRegExp(firstName)}\\b`, "gi");
+    nextText = nextText.replace(pattern, fullName);
+  });
+
+  return nextText;
+}
+
+function standardizeRuleBasedDateAndTime(text) {
+  return String(text || "")
+    .replace(/\b(\d{4})\/(\d{2})\/(\d{2})\b/g, "$1-$2-$3")
+    .replace(/\b(\d{1,2})[.,](\d{2})\b/g, (_, hours, minutes) => `${String(hours).padStart(2, "0")}:${minutes}`);
+}
+
+function normalizeRuleBasedLabel(text) {
+  return String(text || "")
+    .replace(/^dec(?:ision)?\s*[:\-]?\s*/i, "Decision: ")
+    .replace(/^act(?:ion)?\s*[:\-]?\s*/i, "Action: ")
+    .replace(/^next\s*steps?\s*[:\-]?\s*/i, "Next step: ")
+    .replace(/^risk\s*[:\-]?\s*/i, "Risk: ")
+    .replace(/^summary\s*[:\-]?\s*/i, "Summary: ")
+    .replace(/^agenda\s*[:\-]?\s*/i, "Agenda: ");
+}
+
+function standardizeRuleBasedActionPattern(text) {
+  if (/^(Action|Decision|Risk|Next step|Agenda|Summary):/i.test(text)) {
+    return text;
+  }
+
+  if (/^[A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+)?\s+to\s+.+/.test(text)) {
+    return `Action: ${text}`;
+  }
+
+  return text;
+}
+
+function normalizeRuleBasedLinePunctuation(text) {
+  return String(text || "")
+    .replace(/\s+([,.;!?])/g, "$1")
+    .replace(/([,.;!?])(?=[^\s)\]])/g, "$1 ")
+    .replace(/([,.;!?])\1+/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function capitalizeSentenceStarts(text) {
+  return String(text || "").replace(/(^|[.!?]\s+)([a-zåäö])/g, (_, prefix, char) => `${prefix}${char.toUpperCase()}`);
+}
+
+function ensureSentenceEnding(text) {
+  if (!text || /[:)\]]$/.test(text) || /[.!?]$/.test(text)) {
+    return text;
+  }
+  return `${text}.`;
+}
+
+function normalizeRuleBasedTextLine(line, participantsValue, abbreviationDirectory = settings.abbreviationDirectory) {
+  let nextLine = String(line || "").replace(/\s+/g, " ").trim();
+  if (!nextLine) {
+    return "";
+  }
+
+  nextLine = expandKnownAbbreviations(nextLine, abbreviationDirectory);
+  nextLine = canonicalizeParticipantMentions(nextLine, participantsValue);
+  [
+    [/\bteh\b/gi, "the"],
+    [/\bdont\b/gi, "don't"],
+    [/\bcant\b/gi, "can't"],
+    [/\bwont\b/gi, "won't"],
+    [/\brecieve\b/gi, "receive"],
+    [/\bseperate\b/gi, "separate"],
+    [/\boccured\b/gi, "occurred"],
+    [/\bdefinately\b/gi, "definitely"],
+    [/\bbecuase\b/gi, "because"],
+    [/\badress\b/gi, "address"],
+    [/\bmangement\b/gi, "management"],
+    [/\bw\/o\b/gi, "without"],
+    [/\bw\/\b/gi, "with "],
+  ].forEach(([pattern, replacement]) => {
+    nextLine = nextLine.replace(pattern, replacement);
+  });
+  nextLine = standardizeRuleBasedDateAndTime(nextLine);
+  nextLine = normalizeRuleBasedLabel(nextLine);
+  nextLine = standardizeRuleBasedActionPattern(nextLine);
+  nextLine = normalizeRuleBasedLinePunctuation(nextLine);
+
+  const bulletMatch = nextLine.match(/^([-*•]|\d+[.)])\s+(.+)$/);
+  if (bulletMatch) {
+    const marker = /^\d/.test(bulletMatch[1]) ? bulletMatch[1].replace(/\)+$/, ".") : "-";
+    const body = ensureSentenceEnding(capitalizeSentenceStarts(bulletMatch[2].trim()));
+    return `${marker} ${body}`;
+  }
+
+  const labelMatch = nextLine.match(/^(Decision|Action|Risk|Next step|Agenda|Summary):\s*(.+)$/i);
+  if (labelMatch) {
+    const label = normalizeRuleBasedLabel(labelMatch[1]).replace(/:\s*$/, "");
+    const body = ensureSentenceEnding(capitalizeSentenceStarts(labelMatch[2].trim()));
+    return `${label}: ${body}`;
+  }
+
+  return ensureSentenceEnding(capitalizeSentenceStarts(nextLine));
+}
+
+function polishNonAiNotesText(text, { participantsValue = "", abbreviationDirectory = settings.abbreviationDirectory } = {}) {
+  const normalizedLines = [];
+  String(text || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (normalizedLines.at(-1) !== "") {
+          normalizedLines.push("");
+        }
+        return;
+      }
+      if (/^(uh+|um+|okay|ok|so|right)\.?$/i.test(trimmed)) {
+        return;
+      }
+      const previousComparable = normalizedLines
+        .slice()
+        .reverse()
+        .find((value) => value.trim());
+      if (previousComparable && previousComparable.replace(/\s+/g, " ").toLocaleLowerCase() === trimmed.replace(/\s+/g, " ").toLocaleLowerCase()) {
+        return;
+      }
+      normalizedLines.push(trimmed);
+    });
+
+  const blocks = [];
+  let paragraphBuffer = [];
+  let listBuffer = [];
+
+  const flushParagraph = () => {
+    if (!paragraphBuffer.length) return;
+    blocks.push(normalizeRuleBasedTextLine(paragraphBuffer.join(" "), participantsValue, abbreviationDirectory));
+    paragraphBuffer = [];
+  };
+
+  const flushList = () => {
+    if (!listBuffer.length) return;
+    blocks.push(listBuffer.map((line) => normalizeRuleBasedTextLine(line, participantsValue, abbreviationDirectory)).join("\n"));
+    listBuffer = [];
+  };
+
+  normalizedLines.forEach((line) => {
+    if (!line) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+
+    if (/^([-*•]|\d+[.)])\s+/.test(line)) {
+      flushParagraph();
+      listBuffer.push(line);
+      return;
+    }
+
+    if (/^(dec(?:ision)?|act(?:ion)?|next\s*steps?|risk|summary|agenda)\b\s*[:\-]?/i.test(line) || (/^[A-Za-z][^.!?]{0,80}:$/.test(line) && line.split(/\s+/).length <= 8)) {
+      flushParagraph();
+      flushList();
+      blocks.push(normalizeRuleBasedTextLine(line, participantsValue, abbreviationDirectory));
+      return;
+    }
+
+    if (listBuffer.length) {
+      flushList();
+    }
+    paragraphBuffer.push(line);
+  });
+
+  flushParagraph();
+  flushList();
+
+  return blocks.filter(Boolean).join("\n\n").trim();
+}
+
+function renderPlainTextBlocksAsHtml(text) {
+  const blocks = String(text || "").split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+  if (!blocks.length) {
+    return `<p>${escapeHtml("No manual notes available yet.")}</p>`;
+  }
+
+  return blocks.map((block) => {
+    const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+    if (lines.length && lines.every((line) => /^-\s+/.test(line))) {
+      return `<ul>${lines.map((line) => `<li>${escapeHtml(line.replace(/^-\s+/, ""))}</li>`).join("")}</ul>`;
+    }
+    if (lines.length && lines.every((line) => /^\d+\.\s+/.test(line))) {
+      return `<ol>${lines.map((line) => `<li>${escapeHtml(line.replace(/^\d+\.\s+/, ""))}</li>`).join("")}</ol>`;
+    }
+    return `<p>${escapeHtml(block).replace(/\n/g, "<br>")}</p>`;
+  }).join("");
 }
 
 function splitIntoSections(lines, headings) {
