@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.27";
+const APP_VERSION = "v0.10.28";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
