@@ -700,8 +700,12 @@ button {
 }
 
 .notes-transcript-section {
-  grid-column: 1 / -1;
+  grid-column: 1;
   min-width: 0;
+}
+
+.editor-layout:has(#context-card-disclosure[open]) .notes-transcript-section {
+  grid-column: 1 / -1;
 }
 
 .editor-main {

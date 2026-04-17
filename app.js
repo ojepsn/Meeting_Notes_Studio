@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.25";
+const APP_VERSION = "v0.10.26";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -607,23 +607,24 @@ const EXPORT_STYLE_PRESETS = {
     label: "Executive brief",
     description: "A polished leadership-ready layout with centered title treatment, disciplined spacing, and calm contrast.",
     style: {
+      presetId: "executive-brief",
       titleFont: "\"Aptos Display\", Aptos, Calibri, Arial, sans-serif",
       headingFont: "Aptos, Calibri, Arial, sans-serif",
       bodyFont: "Aptos, Calibri, Arial, sans-serif",
       metaFont: "Aptos, Calibri, Arial, sans-serif",
-      titleSize: 24,
-      headingSize: 13,
+      titleSize: 26,
+      headingSize: 13.5,
       bodySize: 11,
       metaSize: 9.5,
-      lineHeight: 1.55,
-      pageMargin: 34,
+      lineHeight: 1.5,
+      pageMargin: 24,
       titleAlign: "center",
       metaAlign: "center",
       headingCase: "sentence",
       headingColor: "#274c77",
       metaColor: "#5f6f85",
-      paragraphSpacing: 12,
-      sectionSpacing: 24,
+      paragraphSpacing: 11,
+      sectionSpacing: 26,
       sectionDivider: "line",
     },
   },
@@ -631,6 +632,7 @@ const EXPORT_STYLE_PRESETS = {
     label: "Modern minutes",
     description: "The new default: crisp sans-serif minutes with efficient page use, sentence-case headings, and balanced spacing.",
     style: {
+      presetId: "modern-minutes",
       titleFont: "\"Aptos Display\", Aptos, Calibri, Arial, sans-serif",
       headingFont: "Aptos, Calibri, Arial, sans-serif",
       bodyFont: "Aptos, Calibri, Arial, sans-serif",
@@ -639,15 +641,15 @@ const EXPORT_STYLE_PRESETS = {
       headingSize: 12.5,
       bodySize: 11,
       metaSize: 9.5,
-      lineHeight: 1.52,
-      pageMargin: 30,
+      lineHeight: 1.48,
+      pageMargin: 22,
       titleAlign: "left",
       metaAlign: "left",
       headingCase: "sentence",
       headingColor: "#2f5d43",
       metaColor: "#667565",
-      paragraphSpacing: 11,
-      sectionSpacing: 20,
+      paragraphSpacing: 10,
+      sectionSpacing: 18,
       sectionDivider: "none",
     },
   },
@@ -655,23 +657,24 @@ const EXPORT_STYLE_PRESETS = {
     label: "Formal board",
     description: "A more traditional document voice with serif hierarchy, steadier rhythm, and formal section separation.",
     style: {
+      presetId: "formal-board",
       titleFont: "Georgia, Cambria, \"Times New Roman\", serif",
       headingFont: "Georgia, Cambria, \"Times New Roman\", serif",
       bodyFont: "\"Helvetica Neue\", Arial, sans-serif",
       metaFont: "\"Helvetica Neue\", Arial, sans-serif",
-      titleSize: 24,
-      headingSize: 13.5,
+      titleSize: 25,
+      headingSize: 14,
       bodySize: 11,
       metaSize: 9.5,
-      lineHeight: 1.62,
-      pageMargin: 44,
+      lineHeight: 1.58,
+      pageMargin: 32,
       titleAlign: "left",
       metaAlign: "left",
       headingCase: "sentence",
       headingColor: "#1d3557",
       metaColor: "#6d6a64",
-      paragraphSpacing: 12,
-      sectionSpacing: 24,
+      paragraphSpacing: 11,
+      sectionSpacing: 26,
       sectionDivider: "line",
     },
   },
@@ -679,16 +682,17 @@ const EXPORT_STYLE_PRESETS = {
     label: "Narrative memo",
     description: "A paragraph-first memo style built for flowing prose, deeper discussion summaries, and less bullet-heavy minutes.",
     style: {
+      presetId: "narrative-memo",
       titleFont: "Georgia, Cambria, \"Times New Roman\", serif",
       headingFont: "Georgia, Cambria, \"Times New Roman\", serif",
       bodyFont: "Georgia, Cambria, \"Times New Roman\", serif",
       metaFont: "\"Helvetica Neue\", Arial, sans-serif",
-      titleSize: 23,
-      headingSize: 12.5,
-      bodySize: 11.5,
+      titleSize: 24,
+      headingSize: 12,
+      bodySize: 11.25,
       metaSize: 9,
-      lineHeight: 1.68,
-      pageMargin: 36,
+      lineHeight: 1.72,
+      pageMargin: 26,
       titleAlign: "left",
       metaAlign: "left",
       headingCase: "sentence",
@@ -703,16 +707,17 @@ const EXPORT_STYLE_PRESETS = {
     label: "Decision log",
     description: "An operations-first layout with stronger section contrast and sharper separation of decisions and follow-ups.",
     style: {
+      presetId: "decision-log",
       titleFont: "Inter, Segoe UI, Arial, sans-serif",
       headingFont: "Inter, Segoe UI, Arial, sans-serif",
       bodyFont: "\"Source Sans 3\", Inter, Arial, sans-serif",
       metaFont: "\"Source Sans 3\", Inter, Arial, sans-serif",
-      titleSize: 21.5,
-      headingSize: 12.5,
+      titleSize: 22,
+      headingSize: 12,
       bodySize: 10.5,
       metaSize: 9,
-      lineHeight: 1.46,
-      pageMargin: 28,
+      lineHeight: 1.4,
+      pageMargin: 20,
       titleAlign: "left",
       metaAlign: "left",
       headingCase: "sentence",
@@ -727,6 +732,7 @@ const EXPORT_STYLE_PRESETS = {
     label: "Compact action pack",
     description: "A denser, space-efficient layout with tighter margins and tighter rhythm for high-volume internal documentation.",
     style: {
+      presetId: "compact-action-pack",
       titleFont: "Inter, Segoe UI, Arial, sans-serif",
       headingFont: "Inter, Segoe UI, Arial, sans-serif",
       bodyFont: "\"Source Sans 3\", Inter, Arial, sans-serif",
@@ -735,8 +741,8 @@ const EXPORT_STYLE_PRESETS = {
       headingSize: 11.5,
       bodySize: 10.25,
       metaSize: 8.5,
-      lineHeight: 1.38,
-      pageMargin: 24,
+      lineHeight: 1.32,
+      pageMargin: 18,
       titleAlign: "left",
       metaAlign: "left",
       headingCase: "sentence",
@@ -4978,6 +4984,7 @@ function formatUsd(value) {
 function normalizeExportStyle(style) {
   const fallback = EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style;
   return {
+    presetId: typeof style?.presetId === "string" && style.presetId.trim() ? style.presetId.trim() : DEFAULT_EXPORT_PRESET,
     titleFont: typeof style?.titleFont === "string" && style.titleFont.trim() ? style.titleFont.trim() : fallback.titleFont,
     headingFont: typeof style?.headingFont === "string" && style.headingFont.trim() ? style.headingFont.trim() : fallback.headingFont,
     bodyFont: typeof style?.bodyFont === "string" && style.bodyFont.trim() ? style.bodyFont.trim() : fallback.bodyFont,
@@ -8551,6 +8558,7 @@ function getCurrentExportStyle() {
   const presetId = settings.exportStylePreset;
   const presetStyle = EXPORT_STYLE_PRESETS[presetId]?.style || EXPORT_STYLE_PRESETS[DEFAULT_EXPORT_PRESET].style;
   return normalizeExportStyle({
+    presetId,
     ...presetStyle,
     ...(settings.exportStyle || {}),
   });
@@ -8578,6 +8586,7 @@ function writeExportStyleInputs(style) {
 
 function readExportStyleInputs() {
   return normalizeExportStyle({
+    presetId: settings.exportStylePreset,
     titleFont: exportTitleFontInput.value,
     headingFont: exportHeadingFontInput.value,
     bodyFont: exportBodyFontInput.value,
@@ -8728,9 +8737,9 @@ function exportCurrentSessionAsBasicPdf(session) {
 
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 48;
+  const margin = Math.round(Math.max(28, exportStyle.pageMargin * 1.2));
   const contentWidth = pageWidth - margin * 2;
-  let cursorY = 56;
+  let cursorY = margin + 8;
 
   const ensurePageSpace = (heightNeeded = 22) => {
     if (cursorY + heightNeeded <= pageHeight - margin) {
@@ -8813,6 +8822,8 @@ function exportCurrentSessionAsBasicPdf(session) {
 
 function buildPdfPreviewElement(session, exportStyle) {
   const displayedHtml = getDisplayedOutputHtml(session);
+  const layoutClass = getExportLayoutClassName(exportStyle);
+  const layoutCss = getExportLayoutCss(exportStyle);
   const container = document.createElement("div");
   container.style.position = "fixed";
   container.style.left = "-99999px";
@@ -8820,7 +8831,7 @@ function buildPdfPreviewElement(session, exportStyle) {
   container.style.width = "794px";
   container.style.background = "#ffffff";
   container.style.color = "#18222c";
-  container.style.padding = `${Math.round(exportStyle.pageMargin * 1.5)}px ${Math.round(exportStyle.pageMargin * 1.75)}px`;
+  container.style.padding = `${Math.round(exportStyle.pageMargin * 1.1)}px ${Math.round(exportStyle.pageMargin * 1.15)}px`;
   container.style.fontFamily = exportStyle.bodyFont;
   container.style.fontSize = `${exportStyle.bodySize}pt`;
   container.style.lineHeight = String(exportStyle.lineHeight);
@@ -8847,8 +8858,9 @@ function buildPdfPreviewElement(session, exportStyle) {
       .pdf-export-doc .output-section ul,
       .pdf-export-doc .output-section ol { margin: 0 0 ${exportStyle.paragraphSpacing}px; padding-left: 20px; }
       .pdf-export-doc .output-section li { margin: 0 0 8px; }
+      ${layoutCss.replaceAll(layoutClass, ".pdf-export-doc")}
     </style>
-    <div class="pdf-export-doc">${displayedHtml}</div>
+    <div class="pdf-export-doc ${layoutClass}">${displayedHtml}</div>
   `;
 
   document.body.appendChild(container);
@@ -8893,6 +8905,74 @@ function formatExportHeadingText(text, exportStyle) {
   return exportStyle.headingCase === "uppercase" ? text.toUpperCase() : text;
 }
 
+function getExportLayoutClassName(exportStyle) {
+  const presetId = String(exportStyle?.presetId || DEFAULT_EXPORT_PRESET).toLowerCase().replace(/[^a-z0-9-]/g, "");
+  return `layout-${presetId || DEFAULT_EXPORT_PRESET}`;
+}
+
+function getExportLayoutCss(exportStyle) {
+  const layoutClass = `.${getExportLayoutClassName(exportStyle)}`;
+  const sharedMetaBox = "padding: 10px 12px; border-radius: 14px;";
+
+  switch (exportStyle.presetId) {
+    case "executive-brief":
+      return `
+    ${layoutClass}.output-doc { max-width: 100%; }
+    ${layoutClass} .output-header { background: linear-gradient(180deg, rgba(39,76,119,0.08), rgba(39,76,119,0.02)); border-top: 4px solid ${exportStyle.headingColor}; border-bottom: 0; padding: 18px 20px 16px; border-radius: 20px; margin-bottom: ${exportStyle.sectionSpacing}px; }
+    ${layoutClass} .output-meta { ${sharedMetaBox} display: inline-block; background: rgba(39,76,119,0.07); max-width: 92%; margin: 0 auto; }
+    ${layoutClass} .output-section { margin-top: ${exportStyle.sectionSpacing + 2}px; }
+    ${layoutClass} .output-section h1 { border-top: 0; padding-top: 0; border-bottom: 1px solid rgba(39,76,119,0.2); padding-bottom: 6px; }
+    ${layoutClass} .output-section ul, ${layoutClass} .output-section ol { padding-left: 24px; }
+      `;
+    case "formal-board":
+      return `
+    ${layoutClass}.output-doc { max-width: 100%; }
+    ${layoutClass} .output-header { border-top: 2px solid #c8bca9; border-bottom: 1px solid #d8d1c6; padding: 18px 0 14px; margin-bottom: ${exportStyle.sectionSpacing}px; }
+    ${layoutClass} .output-header h3 { letter-spacing: 0.01em; }
+    ${layoutClass} .output-meta { padding-top: 8px; }
+    ${layoutClass} .output-section h1 { border-top: 0; padding-top: 0; border-bottom: 1px solid #d8d1c6; padding-bottom: 4px; margin-top: ${exportStyle.sectionSpacing + 2}px; }
+    ${layoutClass} .output-section h2 { font-style: italic; }
+      `;
+    case "narrative-memo":
+      return `
+    ${layoutClass}.output-doc { max-width: 88%; margin: 0 auto; }
+    ${layoutClass} .output-header { border-bottom: 0; margin-bottom: ${exportStyle.sectionSpacing - 2}px; padding-bottom: 0; }
+    ${layoutClass} .output-header h3 { max-width: 80%; }
+    ${layoutClass} .output-meta { border-left: 3px solid rgba(92,67,50,0.25); padding-left: 12px; }
+    ${layoutClass} .output-section { margin-top: ${exportStyle.sectionSpacing + 2}px; }
+    ${layoutClass} .output-section h1 { border-top: 0; padding-top: 0; margin-bottom: 10px; }
+    ${layoutClass} .output-section p { text-indent: 1.2em; }
+    ${layoutClass} .output-section p:first-of-type { text-indent: 0; }
+      `;
+    case "decision-log":
+      return `
+    ${layoutClass}.output-doc { max-width: 100%; }
+    ${layoutClass} .output-header { background: linear-gradient(180deg, rgba(139,61,47,0.1), rgba(139,61,47,0.03)); border-left: 8px solid ${exportStyle.headingColor}; border-bottom: 0; padding: 16px 18px; border-radius: 18px; margin-bottom: ${exportStyle.sectionSpacing}px; }
+    ${layoutClass} .output-meta { ${sharedMetaBox} background: rgba(139,61,47,0.06); }
+    ${layoutClass} .output-section { background: rgba(139,61,47,0.035); border: 1px solid rgba(139,61,47,0.08); border-radius: 16px; padding: 14px 16px 8px; margin-top: ${Math.max(exportStyle.sectionSpacing - 4, 14)}px; }
+    ${layoutClass} .output-section h1 { display: inline-block; background: rgba(139,61,47,0.12); padding: 4px 10px; border-radius: 999px; border-top: 0; margin-top: 0; }
+      `;
+    case "compact-action-pack":
+      return `
+    ${layoutClass}.output-doc { max-width: 100%; }
+    ${layoutClass} .output-header { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr); gap: 16px; align-items: end; border-bottom: 2px solid rgba(49,75,107,0.14); padding-bottom: 10px; margin-bottom: ${Math.max(exportStyle.sectionSpacing - 2, 12)}px; }
+    ${layoutClass} .output-header h3 { margin-bottom: 0; }
+    ${layoutClass} .output-meta { ${sharedMetaBox} background: rgba(49,75,107,0.06); text-align: left; }
+    ${layoutClass} .output-section { margin-top: ${Math.max(exportStyle.sectionSpacing - 2, 12)}px; }
+    ${layoutClass} .output-section h1 { border-top: 0; padding-top: 0; border-left: 4px solid ${exportStyle.headingColor}; padding-left: 10px; margin-bottom: 8px; }
+    ${layoutClass} .output-section ul, ${layoutClass} .output-section ol { margin-left: 16px; }
+      `;
+    case "modern-minutes":
+      return `
+    ${layoutClass}.output-doc { max-width: 100%; }
+    ${layoutClass} .output-header { border-bottom: 0; margin-bottom: ${exportStyle.sectionSpacing}px; padding-bottom: 0; }
+    ${layoutClass} .output-section h1 { border-top: 0; padding-top: 0; border-left: 5px solid rgba(47,93,67,0.24); padding-left: 12px; }
+      `;
+    default:
+      return "";
+  }
+}
+
 function getExportHeadingSize(level, exportStyle) {
   if (level === 1) {
     return exportStyle.headingSize + 3;
@@ -8911,6 +8991,8 @@ function buildWordDocumentHtml(title, bodyHtml, exportStyle) {
   const sectionDividerCss = exportStyle.sectionDivider === "line"
     ? "padding-top: 10px; border-top: 1px solid rgba(24,34,44,0.16);"
     : "";
+  const layoutClass = getExportLayoutClassName(exportStyle);
+  const layoutCss = getExportLayoutCss(exportStyle);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -8930,9 +9012,10 @@ function buildWordDocumentHtml(title, bodyHtml, exportStyle) {
     .output-header { ${exportStyle.sectionDivider === "line" ? "border-bottom: 1px solid #d8d1c6;" : ""} padding-bottom: 12px; margin-bottom: ${Math.max(exportStyle.sectionSpacing - 2, 16)}px; }
     .output-meta { font-family: ${exportStyle.metaFont}; font-size: ${exportStyle.metaSize}pt; color: ${exportStyle.metaColor}; text-align: ${exportStyle.metaAlign}; }
     .output-doc { display: block; }
+    ${layoutCss}
   </style>
 </head>
-<body>${bodyHtml}</body>
+<body><div class="output-doc ${layoutClass}">${bodyHtml}</div></body>
 </html>`;
 }
 
