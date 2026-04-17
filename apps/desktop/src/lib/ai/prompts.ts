@@ -43,7 +43,11 @@ const migrateMeetingMinutesRules = (value: string) => {
     "- For each discussion point heading, use flowing text that captures the substance of the discussion.",
     "- Use bullets only for agenda, decisions or action items.",
   ];
-  return value.includes(legacyBulletRule)
+  const additionalProseRules = [
+    "- Do not turn ordinary discussion summaries, status updates, protocol discussions, or narrative meeting content into bullet lists.",
+    "- When in doubt, prefer paragraphs over bullets.",
+  ];
+  let nextValue = value.includes(legacyBulletRule)
     ? value.replace(
         legacyBulletRule,
         currentProseRules.join("\n"),
@@ -52,7 +56,16 @@ const migrateMeetingMinutesRules = (value: string) => {
       ? value
           .replace(previousProseRules[0], currentProseRules[0])
           .replace(previousProseRules[1], currentProseRules[1])
-    : value;
+      : value;
+
+  if (nextValue.includes(currentProseRules[1]) && !nextValue.includes(additionalProseRules[0])) {
+    nextValue = nextValue.replace(
+      currentProseRules[1],
+      `${currentProseRules[1]}\n${additionalProseRules.join("\n")}`,
+    );
+  }
+
+  return nextValue;
 };
 
 const resolvePromptText = (value: string | undefined, fallback: string, legacyDefaults: Set<string> = new Set()) => {

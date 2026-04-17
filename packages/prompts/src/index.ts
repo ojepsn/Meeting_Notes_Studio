@@ -53,6 +53,8 @@ export const DEFAULT_MEETING_MINUTES_RULES = `# Core instructions
 - Avoid transcript phrasing, conversational clutter, and unnecessary scene-setting.
 - For each discussion point heading, use flowing text that captures the substance of the discussion.
 - Use bullets only for agenda, decisions or action items.
+- Do not turn ordinary discussion summaries, status updates, protocol discussions, or narrative meeting content into bullet lists.
+- When in doubt, prefer paragraphs over bullets.
 - Make the result easy for a busy colleague to scan in under a minute.
 
 # Output priorities

@@ -197,6 +197,12 @@ const getHeadingSize = (level: 1 | 2 | 3 | 4, layout: ReturnType<typeof getOutpu
   return Math.max(layout.style.headingSize - 2, layout.style.bodySize + 0.5);
 };
 
+const getNarrativeColumnOffset = (layout: ReturnType<typeof getOutputLayoutPreset>, contentWidth: number) =>
+  layout.variant === "narrative-memo" ? Math.max(0, (contentWidth - 390) / 2) : 0;
+
+const getNarrativeColumnWidth = (layout: ReturnType<typeof getOutputLayoutPreset>, contentWidth: number) =>
+  layout.variant === "narrative-memo" ? Math.min(contentWidth, 390) : contentWidth;
+
 const loadImageAttachments = async (attachments: AttachmentRecord[] = []) => {
   const imageAttachments = getIncludedImageAttachments(attachments);
 
@@ -258,10 +264,31 @@ export const exportOutputAsHtml = ({ title, output, attachments = [], layoutPres
 
   downloadTextFile({
     content: `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title || "Meeting Notes")}</title><style>
-      body { font-family: ${layout.style.bodyFont}; font-size: ${layout.style.bodySize}pt; line-height: ${layout.style.lineHeight}; margin: ${layout.style.pageMargin}pt; color: #18222c; }
-      h1 { font-family: ${layout.style.titleFont}; font-size: ${layout.style.titleSize}pt; line-height: 1.15; margin: 0 0 ${layout.style.sectionSpacing}px; text-align: ${layout.style.titleAlign}; }
+      body { font-family: ${layout.style.bodyFont}; font-size: ${layout.style.bodySize}pt; line-height: ${layout.style.lineHeight}; margin: ${layout.style.pageMargin}pt; color: #18222c; background: #fff; }
+      .document { max-width: ${layout.variant === "narrative-memo" ? "580px" : layout.variant === "executive-brief" ? "760px" : "none"}; ${layout.variant === "narrative-memo" || layout.variant === "executive-brief" ? "margin: 0 auto;" : ""} }
+      .title-block { margin: 0 0 ${layout.style.sectionSpacing + (layout.variant === "executive-brief" ? 10 : 0)}px; text-align: ${layout.style.titleAlign}; }
+      .title-block h1 { font-family: ${layout.style.titleFont}; font-size: ${layout.style.titleSize}pt; line-height: 1.15; margin: 0; color: ${layout.style.headingColor}; }
+      ${
+        layout.variant === "executive-brief"
+          ? `.title-block { padding: 18px 0 14px; border-top: 3px solid ${layout.style.headingColor}; border-bottom: 1px solid rgba(39,76,119,0.24); }
+             h2 { border-top: 1px solid rgba(39,76,119,0.18); padding-top: 12px; }`
+          : layout.variant === "modern-minutes"
+            ? `h2 { border-left: 4px solid ${layout.style.headingColor}; padding-left: 10px; }`
+            : layout.variant === "formal-board"
+              ? `.title-block { padding-bottom: 10px; border-bottom: 2px solid rgba(29,53,87,0.28); }
+                 h2 { border-top: 1px solid rgba(29,53,87,0.2); padding-top: 10px; }`
+              : layout.variant === "narrative-memo"
+                ? `.title-block { max-width: 520px; }
+                   h2 { margin-top: 24px; }
+                   p, ul, ol { max-width: 520px; }`
+                : layout.variant === "decision-log"
+                  ? `h2 { background: rgba(139,61,47,0.1); border: 1px solid rgba(139,61,47,0.16); border-radius: 10px; padding: 8px 12px; }`
+                  : `.title-block { display: flex; align-items: end; justify-content: space-between; gap: 14px; }
+                     .title-block h1 { max-width: 78%; }
+                     h2 { border-bottom: 1px solid rgba(49,75,107,0.26); padding-bottom: 6px; }`
+      }
       h2, h3, h4 { font-family: ${layout.style.headingFont}; color: ${layout.style.headingColor}; text-transform: ${layout.style.headingCase === "uppercase" ? "uppercase" : "none"}; }
-      h2 { font-size: ${getHeadingSize(1, layout)}pt; line-height: 1.25; margin: ${layout.style.sectionSpacing}px 0 8px; ${layout.style.sectionDivider === "line" ? "padding-top: 10px; border-top: 1px solid rgba(24,34,44,0.16);" : ""} }
+      h2 { font-size: ${getHeadingSize(1, layout)}pt; line-height: 1.25; margin: ${layout.style.sectionSpacing}px 0 8px; }
       h3 { font-size: ${getHeadingSize(2, layout)}pt; line-height: 1.28; margin: ${Math.max(layout.style.sectionSpacing - 4, 14)}px 0 8px; }
       h4 { font-size: ${getHeadingSize(3, layout)}pt; line-height: 1.3; margin: ${Math.max(layout.style.sectionSpacing - 8, 12)}px 0 6px; }
       p { margin: 0 0 ${layout.style.paragraphSpacing}px; }
@@ -269,7 +296,7 @@ export const exportOutputAsHtml = ({ title, output, attachments = [], layoutPres
       li { margin: 0 0 6px; }
       figcaption { font-family: ${layout.style.metaFont}; font-size: ${layout.style.metaSize}pt; color: ${layout.style.metaColor}; margin-top: 6px; text-align: ${layout.style.metaAlign}; }
       figure { margin: ${layout.style.sectionSpacing}px 0; }
-    </style></head><body><h1>${escapeHtml(title || "Meeting Notes")}</h1>${contentMarkup}${imageMarkup}</body></html>`,
+    </style></head><body><div class="document"><div class="title-block"><h1>${escapeHtml(title || "Meeting Notes")}</h1></div>${contentMarkup}${imageMarkup}</div></body></html>`,
     filename: `${toFileSafeName(title)}.html`,
     mimeType: "text/html;charset=utf-8",
   });
@@ -283,6 +310,7 @@ export const exportOutputAsDocx = async ({ title, output, attachments = [], layo
   const bodyFontFamily = getPrimaryFontFamily(layout.style.bodyFont);
   const metaFontFamily = getPrimaryFontFamily(layout.style.metaFont);
   const imageAttachments = await loadImageAttachments(attachments);
+  const narrativeIndent = layout.variant === "narrative-memo" ? 360 : 0;
   const paragraphs = structuredOutput.map((entry) =>
     new Paragraph({
       heading:
@@ -323,8 +351,86 @@ export const exportOutputAsDocx = async ({ title, output, attachments = [], layo
           ? layout.style.titleAlign === "center"
             ? AlignmentType.CENTER
             : AlignmentType.LEFT
+          : layout.variant === "executive-brief" && entry.kind === "heading" && entry.level === 2
+            ? AlignmentType.CENTER
+            : undefined,
+      thematicBreak:
+        entry.kind === "heading" &&
+        entry.level <= 2 &&
+        (layout.style.sectionDivider === "line" || layout.variant === "formal-board"),
+      border:
+        entry.kind === "heading"
+          ? layout.variant === "executive-brief" && entry.level <= 2
+            ? {
+                bottom: {
+                  color: "C9D2DB",
+                  style: BorderStyle.SINGLE,
+                  size: 6,
+                  space: 6,
+                },
+              }
+            : layout.variant === "modern-minutes" && entry.level <= 2
+              ? {
+                  left: {
+                    color: layout.style.headingColor.replace("#", ""),
+                    style: BorderStyle.SINGLE,
+                    size: 14,
+                    space: 10,
+                  },
+                }
+              : layout.variant === "formal-board" && entry.level <= 2
+                ? {
+                    top: {
+                      color: "C9D2DB",
+                      style: BorderStyle.SINGLE,
+                      size: 6,
+                      space: 6,
+                    },
+                    bottom: {
+                      color: "C9D2DB",
+                      style: BorderStyle.SINGLE,
+                      size: 6,
+                      space: 6,
+                    },
+                  }
+                : layout.variant === "decision-log" && entry.level <= 2
+                  ? {
+                      left: {
+                        color: layout.style.headingColor.replace("#", ""),
+                        style: BorderStyle.SINGLE,
+                        size: 18,
+                        space: 10,
+                      },
+                      bottom: {
+                        color: layout.style.headingColor.replace("#", ""),
+                        style: BorderStyle.SINGLE,
+                        size: 6,
+                        space: 4,
+                      },
+                    }
+                  : layout.variant === "compact-action-pack" && entry.level <= 2
+                    ? {
+                        bottom: {
+                          color: layout.style.headingColor.replace("#", ""),
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          space: 4,
+                        },
+                      }
+                    : undefined
           : undefined,
-      thematicBreak: entry.kind === "heading" && entry.level <= 2 && layout.style.sectionDivider === "line",
+      indent:
+        entry.kind === "heading"
+          ? layout.variant === "narrative-memo"
+            ? { left: narrativeIndent, right: narrativeIndent }
+            : layout.variant === "modern-minutes" && entry.level <= 2
+              ? { left: 160 }
+              : layout.variant === "decision-log" && entry.level <= 2
+                ? { left: 180 }
+                : undefined
+          : narrativeIndent
+            ? { left: narrativeIndent, right: narrativeIndent }
+            : undefined,
       spacing:
         entry.kind === "heading"
           ? { before: Math.round(layout.style.sectionSpacing * 12), after: 90 }
@@ -399,9 +505,24 @@ export const exportOutputAsDocx = async ({ title, output, attachments = [], layo
               }),
             ],
             alignment: layout.style.titleAlign === "center" ? AlignmentType.CENTER : AlignmentType.LEFT,
-            spacing: { after: 240 },
+            spacing: { after: layout.variant === "compact-action-pack" ? 180 : 240, before: layout.variant === "executive-brief" ? 120 : 0 },
             border:
-              layout.style.sectionDivider === "line"
+              layout.variant === "executive-brief"
+                ? {
+                    top: {
+                      color: layout.style.headingColor.replace("#", ""),
+                      style: BorderStyle.SINGLE,
+                      size: 12,
+                      space: 10,
+                    },
+                    bottom: {
+                      color: "C9D2DB",
+                      style: BorderStyle.SINGLE,
+                      size: 6,
+                      space: 8,
+                    },
+                  }
+                : layout.style.sectionDivider === "line"
                 ? {
                     bottom: {
                       color: "C9D2DB",
@@ -446,21 +567,36 @@ export const exportOutputAsPdf = async ({ title, output, attachments = [], layou
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
   const margin = layout.style.pageMargin * 1.333;
-  const contentWidth = pageWidth - margin * 2;
+  const baseContentWidth = pageWidth - margin * 2;
+  const narrativeOffset = getNarrativeColumnOffset(layout, baseContentWidth);
+  const contentWidth = getNarrativeColumnWidth(layout, baseContentWidth);
+  const contentLeft = margin + narrativeOffset;
   let y = margin;
 
   pdf.setFont(layout.pdfFonts.title, "bold");
   pdf.setFontSize(layout.style.titleSize);
   pdf.setTextColor(layout.style.headingColor);
-  if (layout.style.titleAlign === "center") {
+  if (layout.variant === "decision-log") {
+    pdf.setFillColor(245, 234, 228);
+    pdf.roundedRect(contentLeft, y - layout.style.titleSize, contentWidth, layout.style.titleSize + 18, 10, 10, "F");
+    pdf.text(title || "Meeting Notes", contentLeft + 14, y + 4);
+  } else if (layout.style.titleAlign === "center") {
     pdf.text(title || "Meeting Notes", pageWidth / 2, y, { align: "center" });
   } else {
-    pdf.text(title || "Meeting Notes", margin, y);
+    pdf.text(title || "Meeting Notes", contentLeft, y);
   }
-  y += layout.style.titleSize + 10;
-  if (layout.style.sectionDivider === "line") {
+  y += layout.style.titleSize + (layout.variant === "compact-action-pack" ? 6 : 10);
+  if (layout.variant === "executive-brief") {
+    pdf.setDrawColor(39, 76, 119);
+    pdf.setLineWidth(2.2);
+    pdf.line(contentLeft, margin - 2, contentLeft + contentWidth, margin - 2);
+    pdf.setLineWidth(0.7);
     pdf.setDrawColor(201, 210, 219);
-    pdf.line(margin, y, pageWidth - margin, y);
+    pdf.line(contentLeft, y, contentLeft + contentWidth, y);
+    y += 14;
+  } else if (layout.style.sectionDivider === "line") {
+    pdf.setDrawColor(201, 210, 219);
+    pdf.line(contentLeft, y, contentLeft + contentWidth, y);
     y += 14;
   }
 
@@ -479,7 +615,11 @@ export const exportOutputAsPdf = async ({ title, output, attachments = [], layou
     const text = entry.kind === "heading"
       ? headingTextTransform(entry.text, layout.style.headingCase)
       : entry.text;
-    const lines = pdf.splitTextToSize(`${entry.kind === "bullet" ? "• " : entry.kind === "numbered" ? `${entry.order ?? 1}. ` : ""}${text}`, contentWidth - indent);
+    const prefix = entry.kind === "bullet" ? "* " : entry.kind === "numbered" ? `${entry.order ?? 1}. ` : "";
+    const lines = pdf.splitTextToSize(
+      `${prefix}${text}`,
+      contentWidth - indent - (layout.variant === "modern-minutes" && isHeading ? 18 : 0),
+    );
     if (y + lines.length * lineHeight > pageHeight - margin) {
       pdf.addPage();
       y = margin;
@@ -487,7 +627,25 @@ export const exportOutputAsPdf = async ({ title, output, attachments = [], layou
     pdf.setFont(fontFamily, isHeading ? "bold" : "normal");
     pdf.setFontSize(fontSize);
     pdf.setTextColor(isHeading ? layout.style.headingColor : "#18222c");
-    pdf.text(lines, margin + indent, y);
+    if (isHeading && layout.variant === "decision-log" && entry.level <= 2) {
+      const headingHeight = lines.length * lineHeight + 10;
+      pdf.setFillColor(245, 234, 228);
+      pdf.roundedRect(contentLeft, y - fontSize + 2, contentWidth, headingHeight, 8, 8, "F");
+    } else if (isHeading && layout.variant === "modern-minutes" && entry.level <= 2) {
+      pdf.setDrawColor(47, 93, 67);
+      pdf.setLineWidth(2.4);
+      pdf.line(contentLeft, y - fontSize + 1, contentLeft, y + lines.length * lineHeight - 4);
+    } else if (isHeading && layout.variant === "formal-board" && entry.level <= 2) {
+      pdf.setDrawColor(201, 210, 219);
+      pdf.setLineWidth(0.7);
+      pdf.line(contentLeft, y - fontSize, contentLeft + contentWidth, y - fontSize);
+    } else if (isHeading && layout.variant === "compact-action-pack" && entry.level <= 2) {
+      pdf.setDrawColor(49, 75, 107);
+      pdf.setLineWidth(0.7);
+      pdf.line(contentLeft, y + 4, contentLeft + contentWidth, y + 4);
+    }
+    const textX = contentLeft + indent + (layout.variant === "modern-minutes" && isHeading ? 12 : 0);
+    pdf.text(lines, textX, y);
     y += lines.length * lineHeight + gapAfter;
   });
 
@@ -508,12 +666,12 @@ export const exportOutputAsPdf = async ({ title, output, attachments = [], layou
       y = margin;
     }
 
-    pdf.addImage(dataUrl, imageFormat, margin, y, contentWidth, 220);
+    pdf.addImage(dataUrl, imageFormat, contentLeft, y, contentWidth, 220);
     y += 234;
     pdf.setFont(layout.pdfFonts.meta, "normal");
     pdf.setFontSize(layout.style.metaSize);
     pdf.setTextColor(layout.style.metaColor);
-    pdf.text(attachment.caption || attachment.filename, margin, y);
+    pdf.text(attachment.caption || attachment.filename, contentLeft, y);
     pdf.setFont(layout.pdfFonts.body, "normal");
     pdf.setFontSize(layout.style.bodySize);
     pdf.setTextColor("#18222c");

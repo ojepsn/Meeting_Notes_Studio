@@ -62,6 +62,19 @@ const getCaptureModeInstruction = (session: SessionRecord) => {
   }
 };
 
+const getDiscussionFormatInstruction = (session: SessionRecord) => {
+  if (session.captureMode !== "meeting-note") {
+    return "Use paragraphs by default and only use bullets when they genuinely improve readability for the note type.";
+  }
+
+  return [
+    "For meeting minutes, write substantive discussion sections as flowing paragraphs, not lists.",
+    "Use bullets only for agenda, decisions, or action items.",
+    "Do not convert ordinary discussion summaries, status updates, or narrative meeting content into bullets.",
+    "When uncertain, choose prose.",
+  ].join(" ");
+};
+
 export const generateNotes = async ({
   session,
   settings,
@@ -119,6 +132,7 @@ export const generateNotes = async ({
     systemTexts: [
       ...generationPromptTexts,
       getCaptureModeInstruction(session),
+      getDiscussionFormatInstruction(session),
       outputLanguageInstruction,
       getDetailLevelInstruction(session.detailLevel),
     ],

@@ -21,6 +21,7 @@ export interface OutputLayoutStyle {
 
 export interface OutputLayoutPreset {
   id: string;
+  variant: "executive-brief" | "modern-minutes" | "formal-board" | "narrative-memo" | "decision-log" | "compact-action-pack";
   label: string;
   description: string;
   bestFor: string;
@@ -47,6 +48,7 @@ const LEGACY_OUTPUT_LAYOUT_PRESET_MAP: Record<string, string> = {
 export const OUTPUT_LAYOUT_PRESETS: OutputLayoutPreset[] = [
   {
     id: "executive-brief",
+    variant: "executive-brief",
     label: "Executive brief",
     description: "A polished leadership-ready layout with centered title treatment, disciplined spacing, and calm contrast.",
     bestFor: "Leadership updates, client-ready summaries, and polished executive readouts.",
@@ -79,6 +81,7 @@ export const OUTPUT_LAYOUT_PRESETS: OutputLayoutPreset[] = [
   },
   {
     id: "modern-minutes",
+    variant: "modern-minutes",
     label: "Modern minutes",
     description: "The new default: crisp sans-serif minutes with efficient page use, sentence-case headings, and balanced spacing.",
     bestFor: "Most business meetings, recurring team notes, and everyday professional documentation.",
@@ -111,6 +114,7 @@ export const OUTPUT_LAYOUT_PRESETS: OutputLayoutPreset[] = [
   },
   {
     id: "formal-board",
+    variant: "formal-board",
     label: "Formal board",
     description: "A more traditional document voice with serif hierarchy, steadier rhythm, and formal section separation.",
     bestFor: "Board, committee, governance, and official record-style minutes.",
@@ -143,6 +147,7 @@ export const OUTPUT_LAYOUT_PRESETS: OutputLayoutPreset[] = [
   },
   {
     id: "narrative-memo",
+    variant: "narrative-memo",
     label: "Narrative memo",
     description: "A paragraph-first memo style built for flowing prose, deeper discussion summaries, and less bullet-heavy minutes.",
     bestFor: "Workshops, strategy sessions, 1:1s, and nuanced discussion writeups.",
@@ -175,6 +180,7 @@ export const OUTPUT_LAYOUT_PRESETS: OutputLayoutPreset[] = [
   },
   {
     id: "decision-log",
+    variant: "decision-log",
     label: "Decision log",
     description: "An operations-first layout with stronger section contrast and sharper separation of decisions and follow-ups.",
     bestFor: "Steering groups, delivery meetings, risk reviews, and action-heavy notes.",
@@ -207,6 +213,7 @@ export const OUTPUT_LAYOUT_PRESETS: OutputLayoutPreset[] = [
   },
   {
     id: "compact-action-pack",
+    variant: "compact-action-pack",
     label: "Compact action pack",
     description: "A denser, space-efficient layout with tighter margins and tighter rhythm for high-volume internal documentation.",
     bestFor: "Internal working packs, frequent recurring meetings, and maximum information per page.",

@@ -55,8 +55,22 @@ describe("resolvePromptProfile", () => {
 
     expect(resolved.profile.meetingMinutesSystem).toContain("expert business meeting-minutes writer");
     expect(resolved.profile.meetingMinutesRules).toContain("flowing text that captures the substance of the discussion");
+    expect(resolved.profile.meetingMinutesRules).toContain("Do not turn ordinary discussion summaries");
     expect(resolved.profile.revisionRules).toContain("Make the smallest set of changes needed");
     expect(resolved.profile.translationRules).toContain("Preserve the same structure, headings, emphasis, and practical meaning");
+  });
+
+  it("upgrades previously saved prose-first meeting rules with the stronger anti-bullet guidance", () => {
+    const resolved = resolvePromptProfile({
+      meetingMinutesRules: [
+        "# Writing style",
+        "- For each discussion point heading, use flowing text that captures the substance of the discussion.",
+        "- Use bullets only for agenda, decisions or action items.",
+      ].join("\n"),
+    });
+
+    expect(resolved.profile.meetingMinutesRules).toContain("Do not turn ordinary discussion summaries");
+    expect(resolved.profile.meetingMinutesRules).toContain("When in doubt, prefer paragraphs over bullets.");
   });
 });
 
