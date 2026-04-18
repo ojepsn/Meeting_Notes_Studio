@@ -1520,7 +1520,7 @@ export const SettingsCard = ({
                 Import current browser app data
               </button>
               <button className="small-button" type="button" onClick={() => void onImportBackup()}>
-                Import backup file
+                Import backup / PWA file
               </button>
               <button className="small-button" type="button" onClick={() => void onExportBackup()}>
                 Export backup file

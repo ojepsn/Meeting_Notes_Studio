@@ -490,15 +490,10 @@ export const SessionEditor = ({
           <aside className="editor-sidebar">
             <section className="config-card workflow-card" aria-label="Capture methods">
               <div className="config-card-copy">
-                <p className="section-label">Capture</p>
                 <h3>Choose how to bring notes in</h3>
               </div>
 
               <section className="audio-capture-card session-editor-audio-pwa" data-recording={isRecordingAudio}>
-                <div className="audio-capture-copy">
-                  <p className="section-label">Recording & transcription</p>
-                  <h3>Choose your capture mode</h3>
-                </div>
                 <div className="capture-toolbar audio-capture-actions session-editor-audio-actions-pwa">
                   <button className="secondary-button capture-mode-button" type="button" onClick={() => onChangeRecordingMode("microphone")}>
                     <span className="capture-mode-title">Start room / hybrid meeting</span>
@@ -625,7 +620,7 @@ export const SessionEditor = ({
   return (
     <div className={`card session-editor${isMinimal ? " session-editor-minimal" : ""}`}>
       <div className={`card-header${isMinimal ? " session-editor-header-minimal" : ""}`}>
-        <div><h2>Capture</h2></div>
+        <div />
         <div className="capture-header-actions">
           {onOpenInstructions ? <button className="small-button" type="button" onClick={onOpenInstructions}>Instructions</button> : null}
           {isMinimal && showPresentationActions ? <div className="capture-minimal-actions"><span className="tiny-text">Minimal mode</span><button className="small-button" type="button" onClick={onOpenDetails}>Open details</button></div> : null}

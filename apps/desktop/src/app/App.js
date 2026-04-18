@@ -12,8 +12,9 @@ import { TodosWorkspace } from "../features/todos/components/TodosWorkspace";
 import { TimeWorkspace } from "../features/time/components/TimeWorkspace";
 import { StructureWorkspace } from "../features/structure/components/StructureWorkspace";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
+import { hydrateAITextCache, snapshotAITextCache } from "../lib/ai/cache";
 import { generateNotes } from "../lib/ai/services/generateNotes";
-import { getAIRequestHistory, recordAIRequestHistory } from "../lib/ai/history";
+import { getAIRequestHistory, hydrateAIRequestHistory, recordAIRequestHistory } from "../lib/ai/history";
 import { formatAIErrorMessage } from "../lib/ai/messages";
 import { getAIDiagnosticsItems, getAIMetricsSnapshot } from "../lib/ai/metrics";
 import { buildModelPricingStatus, buildTextModelOption, buildTranscriptionModelOption, createDefaultModelPricingSnapshot, fetchLatestModelPricingSnapshot, isPricingRefreshDue, msUntilNextPricingCheck, } from "../lib/ai/modelPricing";
@@ -25,7 +26,7 @@ import { checkForDesktopUpdates } from "../lib/ai/updater";
 import { exportOutputAsDocx, exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsPdf, exportOutputAsText } from "../lib/export/exportService";
 import { fileToAttachmentRecord, loadPersistedAttachmentFile, pickAudioFile, pickImageFile, pickTranscriptFile, persistGeneratedAttachment, persistSelectedAttachment, readTranscriptFile, removePersistedAttachment, } from "../lib/files/attachmentStore";
 import { buildRecordingFilename, getSupportedRecordingMimeType, getSystemAudioDisplayOptions, RECORDING_MODE_LABELS, } from "../lib/files/recording";
-import { createLocalSnapshotBackup, exportSnapshotBackup, getDesktopBundleType, getDesktopAppVersion, getDesktopStorageInfo, importSnapshotBackup, openDesktopPath, } from "../lib/storage/desktopStorage";
+import { createLocalSnapshotBackup, exportSnapshotBackup, getDesktopBundleType, getDesktopAppVersion, getDesktopStorageInfo, importSnapshotBackup, mergeImportedPwaSnapshot, openDesktopPath, } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW } from "../lib/metadata/review";
 import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links/entityLinks";
 import { polishNonAiNotesText } from "../lib/output/manualPolish";
@@ -178,6 +179,20 @@ export const App = () => {
     const audioContextRef = useRef(null);
     const recordingChunksRef = useRef([]);
     const recordingSessionIdRef = useRef(null);
+    const buildDesktopBackupBundle = () => {
+        if (!snapshot) {
+            return null;
+        }
+        return {
+            kind: "notesmith-desktop-backup",
+            version: 2,
+            exportedAt: new Date().toISOString(),
+            snapshot,
+            aiTextCache: snapshotAITextCache(),
+            aiRequestHistory: getAIRequestHistory(),
+            aiModelPricing: modelPricingSnapshot,
+        };
+    };
     useEffect(() => {
         void load();
     }, [load]);
@@ -705,59 +720,125 @@ export const App = () => {
         }
         return;
     };
-    const buildRawOutput = (session = activeSession) => {
+    const resolveSessionOutputLanguage = (session = activeSession) => session?.outputLanguage === "sv" || session?.outputLanguage === "en"
+        ? session.outputLanguage
+        : snapshot?.settings.outputLanguage ?? "same";
+    const getAgendaText = (session = activeSession, template = activeTemplate) => {
+        if (!session || !template) {
+            return "";
+        }
+        const agendaField = template.fields.find((field) => field.enabled && field.key === "agenda");
+        if (!agendaField) {
+            return "";
+        }
+        return polishNonAiNotesText(richTextToPlainText(session.customFieldValues[agendaField.id] ?? ""), {
+            abbreviations: snapshot?.settings.abbreviations ?? [],
+            sessionParticipants: session.participantText,
+            savedParticipants: snapshot?.settings.savedParticipants ?? [],
+            preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
+        });
+    };
+    const buildOutputMetaBlock = (session = activeSession) => {
         if (!session) {
             return "";
         }
-        const segments = [];
-        const title = session.title.trim();
-        const date = session.date.trim();
         const time = session.captureMode === "meeting-note"
             ? [session.startTime.trim(), session.endTime.trim()].filter(Boolean).join(" - ")
             : session.startTime.trim();
-        const people = session.participantText.trim();
-        const project = session.project.trim();
-        const domain = session.domain.trim();
-        const activity = session.activity.trim();
-        const tags = session.tagsText.trim();
-        const abbreviations = snapshot?.settings.abbreviations ?? [];
-        const savedParticipants = snapshot?.settings.savedParticipants ?? [];
+        return [
+            session.date.trim(),
+            time,
+            session.participantText.trim() ? `People: ${session.participantText.trim()}` : "",
+            session.domain.trim() ? `Domain: ${session.domain.trim()}` : "",
+            session.project.trim() ? `Project: ${session.project.trim()}` : "",
+            session.activity.trim() ? `Activity: ${session.activity.trim()}` : "",
+            session.tagsText.trim() ? `Tags: ${session.tagsText.trim()}` : "",
+        ]
+            .filter(Boolean)
+            .join("\n");
+    };
+    const buildLocalPolishedOutput = (session = activeSession, template = activeTemplate) => {
+        if (!session || !template) {
+            return "";
+        }
         const manualPolishOptions = {
-            abbreviations,
+            abbreviations: snapshot?.settings.abbreviations ?? [],
             sessionParticipants: session.participantText,
-            savedParticipants,
+            savedParticipants: snapshot?.settings.savedParticipants ?? [],
             preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
         };
-        const highlights = polishNonAiNotesText(session.quickHighlights.trim(), manualPolishOptions);
+        const title = session.title.trim();
+        const metaBlock = buildOutputMetaBlock(session);
+        const agenda = getAgendaText(session, template);
         const manualNotes = polishNonAiNotesText(richTextToPlainText(session.manualNotes), manualPolishOptions);
         const transcript = polishNonAiNotesText([session.liveTranscript.trim(), session.uploadedTranscript.trim()].filter(Boolean).join("\n\n"), manualPolishOptions);
-        if (title) {
-            segments.push(title);
-        }
-        if (date || time || people || domain || project || activity || tags) {
-            const metaLines = [
-                date,
-                time,
-                people ? `People: ${people}` : "",
-                domain ? `Domain: ${domain}` : "",
-                project ? `Project: ${project}` : "",
-                activity ? `Activity: ${activity}` : "",
-                tags ? `Tags: ${tags}` : "",
-            ].filter(Boolean);
-            if (metaLines.length) {
-                segments.push(metaLines.join("\n"));
+        const highlights = polishNonAiNotesText(session.quickHighlights.trim(), manualPolishOptions);
+        const combinedDiscussion = [manualNotes, transcript].filter(Boolean).join("\n\n").trim();
+        const decisionLines = combinedDiscussion
+            .split(/\r?\n/)
+            .filter((line) => /^Decision:/i.test(line.trim()));
+        const actionLines = combinedDiscussion
+            .split(/\r?\n/)
+            .filter((line) => /^(Action|Next step):/i.test(line.trim()));
+        const firstDiscussionParagraph = combinedDiscussion
+            .split(/\n{2,}/)
+            .map((block) => block.trim())
+            .find(Boolean) ?? "";
+        const summary = firstDiscussionParagraph
+            ? firstDiscussionParagraph
+                .split(/(?<=[.!?])\s+/)
+                .slice(0, 2)
+                .join(" ")
+            : "";
+        const enabledSections = [...template.sections]
+            .sort((left, right) => left.position - right.position)
+            .filter((section) => !session.excludedSectionIds.includes(section.id));
+        const sectionBlocks = enabledSections
+            .map((section) => {
+            const lowerTitle = section.title.toLowerCase();
+            if (section.id === "agenda" || lowerTitle.includes("agenda")) {
+                return agenda ? `${section.title}\n${agenda}` : "";
             }
+            if (section.id === "summary" || lowerTitle.includes("summary")) {
+                return summary ? `${section.title}\n${summary}` : "";
+            }
+            if (section.id === "decisions" || lowerTitle.includes("decision")) {
+                return decisionLines.length ? `${section.title}\n${decisionLines.join("\n")}` : "";
+            }
+            if (section.id === "actions" || lowerTitle.includes("action") || lowerTitle.includes("follow-up")) {
+                return actionLines.length ? `${section.title}\n${actionLines.join("\n")}` : "";
+            }
+            if (lowerTitle.includes("highlight")) {
+                return highlights ? `${section.title}\n${highlights}` : "";
+            }
+            return combinedDiscussion ? `${section.title}\n${combinedDiscussion}` : "";
+        })
+            .filter(Boolean);
+        return [title, metaBlock, ...sectionBlocks].filter(Boolean).join("\n\n").trim();
+    };
+    const buildManualNotesOnlyOutput = (session = activeSession, template = activeTemplate) => {
+        if (!session || !template) {
+            return "";
         }
-        if (highlights) {
-            segments.push(`Highlights\n${highlights}`);
-        }
-        if (manualNotes) {
-            segments.push(session.captureMode === "quick-note" ? manualNotes : `Notes\n${manualNotes}`);
-        }
-        if (transcript) {
-            segments.push(session.captureMode === "voice-note" ? transcript : `Transcript\n${transcript}`);
-        }
-        return segments.join("\n\n").trim();
+        const manualPolishOptions = {
+            abbreviations: snapshot?.settings.abbreviations ?? [],
+            sessionParticipants: session.participantText,
+            savedParticipants: snapshot?.settings.savedParticipants ?? [],
+            preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
+        };
+        const title = session.title.trim();
+        const metaBlock = buildOutputMetaBlock(session);
+        const agenda = getAgendaText(session, template);
+        const manualNotes = polishNonAiNotesText(richTextToPlainText(session.manualNotes), manualPolishOptions);
+        return [
+            title,
+            metaBlock,
+            agenda ? `Agenda\n${agenda}` : "",
+            manualNotes ? `Manual notes\n${manualNotes}` : "",
+        ]
+            .filter(Boolean)
+            .join("\n\n")
+            .trim();
     };
     const hasTranscriptText = Boolean(activeSession?.liveTranscript.trim() || activeSession?.uploadedTranscript.trim());
     const hasWrittenCapture = Boolean((activeSession ? richTextToPlainText(activeSession.manualNotes) : "") || activeSession?.quickHighlights.trim());
@@ -819,39 +900,15 @@ export const App = () => {
             .map((filePath) => removePersistedAttachment(filePath)));
     };
     const outputActionConfig = (() => {
-        if (activeCaptureMode === "meeting-note") {
-            return {
-                primaryLabel: "Generate meeting notes",
-                secondaryLabel: null,
-                onPrimary: () => void handleGenerate(),
-                onSecondary: undefined,
-                isPrimaryRunning: isGenerating,
-                isSecondaryRunning: false,
-                emptyStatePrimaryLabel: "Generate meeting notes",
-                emptyStateSecondaryLabel: null,
-            };
-        }
-        if (activeCaptureMode === "voice-note" && hasAudioOnlyVoiceCapture) {
-            return {
-                primaryLabel: "Transcribe to output",
-                secondaryLabel: "Transcribe and polish",
-                onPrimary: () => void handleCreateOutput(),
-                onSecondary: () => void handleGenerate(),
-                isPrimaryRunning: isTranscribingAudio,
-                isSecondaryRunning: isGenerating || isTranscribingAudio,
-                emptyStatePrimaryLabel: "Transcribe to output",
-                emptyStateSecondaryLabel: "Transcribe and polish",
-            };
-        }
         return {
-            primaryLabel: "Create output",
-            secondaryLabel: "Polish with AI",
-            onPrimary: () => void handleCreateOutput(),
-            onSecondary: () => void handleGenerate(),
-            isPrimaryRunning: false,
-            isSecondaryRunning: isGenerating,
-            emptyStatePrimaryLabel: "Create output",
-            emptyStateSecondaryLabel: "Polish with AI",
+            primaryLabel: "Generate",
+            secondaryLabel: null,
+            onPrimary: () => void handleGenerate(),
+            onSecondary: undefined,
+            isPrimaryRunning: isGenerating || (activeSession?.transcribeOnly ? false : isTranscribingAudio && hasAudioOnlyVoiceCapture),
+            isSecondaryRunning: false,
+            emptyStatePrimaryLabel: "Generate",
+            emptyStateSecondaryLabel: null,
         };
     })();
     if (!isLoaded || !snapshot || !activeSession) {
@@ -865,7 +922,12 @@ export const App = () => {
     };
     const handleExportSnapshot = async () => {
         try {
-            const result = await exportSnapshotBackup(snapshot);
+            const backupBundle = buildDesktopBackupBundle();
+            if (!backupBundle) {
+                setStatusNote("Nothing is loaded yet to export.");
+                return;
+            }
+            const result = await exportSnapshotBackup(backupBundle);
             if (!result) {
                 setStatusNote("Backup export was cancelled.");
                 return;
@@ -878,7 +940,12 @@ export const App = () => {
     };
     const handleCreateLocalBackup = async () => {
         try {
-            const backupPath = await createLocalSnapshotBackup(snapshot);
+            const backupBundle = buildDesktopBackupBundle();
+            if (!backupBundle) {
+                setStatusNote("Nothing is loaded yet to back up.");
+                return;
+            }
+            const backupPath = await createLocalSnapshotBackup(backupBundle);
             if (!backupPath) {
                 setStatusNote("Local backup creation is only available in the installed desktop app.");
                 return;
@@ -896,12 +963,33 @@ export const App = () => {
                 setStatusNote("Backup import was cancelled.");
                 return;
             }
-            await restoreBackupSnapshot(imported);
-            setStatusNote("Imported the selected desktop backup file.");
+            if (imported.kind === "pwa-export") {
+                const mergedSnapshot = snapshot ? mergeImportedPwaSnapshot(snapshot, imported.snapshot) : imported.snapshot;
+                await restoreBackupSnapshot(mergedSnapshot);
+                setStatusNote("Imported PWA sessions into the desktop database.");
+            }
+            else {
+                await restoreBackupSnapshot(imported.snapshot);
+                if (imported.aiTextCache) {
+                    hydrateAITextCache({ records: imported.aiTextCache });
+                    await repository.saveAITextCache(imported.aiTextCache);
+                }
+                if (imported.aiRequestHistory) {
+                    hydrateAIRequestHistory(imported.aiRequestHistory);
+                    setAIRequestHistory(getAIRequestHistory());
+                    await repository.saveAIRequestHistory(imported.aiRequestHistory);
+                }
+                if (imported.aiModelPricing) {
+                    setModelPricingSnapshot(imported.aiModelPricing);
+                    setModelPricingStatus(buildModelPricingStatus(imported.aiModelPricing));
+                    await repository.saveAIModelPricing(imported.aiModelPricing);
+                }
+                setStatusNote("Imported the selected desktop backup file.");
+            }
             setOpenPanel(null);
         }
         catch (error) {
-            setStatusNote(error instanceof Error ? error.message : "Could not import the desktop backup file.");
+            setStatusNote(error instanceof Error ? error.message : "Could not import the selected desktop backup or PWA session file.");
         }
     };
     const handleOpenDataFolder = async () => {
@@ -967,7 +1055,8 @@ export const App = () => {
         setUpdateStatusNote(`Downloading and installing version ${availableUpdateVersion}...`);
         setStatusNote(`Installing update ${availableUpdateVersion}...`);
         try {
-            const backupPath = await createLocalSnapshotBackup(snapshot);
+            const backupBundle = buildDesktopBackupBundle();
+            const backupPath = backupBundle ? await createLocalSnapshotBackup(backupBundle) : null;
             if (backupPath) {
                 setStatusNote(`Created a local safety backup at ${backupPath} before installing ${availableUpdateVersion}.`);
             }
@@ -1012,7 +1101,12 @@ export const App = () => {
         let usedCache = false;
         try {
             let sessionForGeneration = activeSession;
-            if (activeCaptureMode === "voice-note" && !hasTranscriptText && (activeAudioAttachment || pendingAudioBySession[activeSession.id])) {
+            const shouldUseManualMode = sessionForGeneration.transcribeOnly === true;
+            if (shouldUseManualMode && !richTextToPlainText(sessionForGeneration.manualNotes).trim()) {
+                setStatusNote("Add text to Manual notes first. This mode transfers Manual notes directly into Output without AI generation.");
+                return;
+            }
+            if (!shouldUseManualMode && activeCaptureMode === "voice-note" && !hasTranscriptText && (activeAudioAttachment || pendingAudioBySession[activeSession.id])) {
                 const audioFile = await getAudioFileForActiveSession();
                 if (!audioFile) {
                     setStatusNote("No audio file was available to transcribe for this voice note.");
@@ -1035,84 +1129,50 @@ export const App = () => {
                     setIsTranscribingAudio(false);
                 }
             }
-            const output = await generateNotes({
-                session: sessionForGeneration,
-                settings: snapshot.settings,
-                template,
-                attachments: activeAttachments,
-                onEvent: createAIRuntimeHandler({
-                    onCacheHit: () => {
-                        usedCache = true;
-                    },
-                }),
-            });
+            const output = shouldUseManualMode
+                ? buildManualNotesOnlyOutput(sessionForGeneration, template)
+                : snapshot.settings.apiKey
+                    ? await generateNotes({
+                        session: sessionForGeneration,
+                        settings: snapshot.settings,
+                        template,
+                        attachments: activeAttachments,
+                        onEvent: createAIRuntimeHandler({
+                            onCacheHit: () => {
+                                usedCache = true;
+                            },
+                        }),
+                    })
+                    : buildLocalPolishedOutput(sessionForGeneration, template);
             setSelectedOutputVersionId(null);
             await saveSession({ ...sessionForGeneration, ...buildOutputVersionPatch(sessionForGeneration, output) });
-            setStatusNote(usedCache
-                ? "Loaded structured output from a matching local AI cache entry."
-                : "Generated structured output with the desktop AI service.");
+            setStatusNote(shouldUseManualMode
+                ? "Manual notes were transferred to Output without AI generation."
+                : usedCache
+                    ? "Loaded structured output from a matching local AI cache entry."
+                    : snapshot.settings.apiKey
+                        ? "Generated structured output with the desktop AI service."
+                        : sessionForGeneration.outputLanguage !== "same"
+                            ? "No API key was available, so a local polish pass was used. Language translation still requires AI generation."
+                            : "No API key was available, so a local polish pass was used instead.");
             await openMetadataReviewIfNeeded(sessionForGeneration);
             openNotesTarget({ sessionId: sessionForGeneration.id, view: "output" });
         }
         catch (error) {
-            setStatusNote(formatAIErrorMessage(error, "Generation failed."));
+            setStatusNote(activeSession.transcribeOnly
+                ? `Manual-notes transfer failed: ${error instanceof Error ? error.message : "Unknown error."}`
+                : formatAIErrorMessage(error, "Generation failed."));
         }
         finally {
             setIsGenerating(false);
         }
     };
-    const handleCreateOutput = async () => {
-        if (hasAudioOnlyVoiceCapture) {
-            const audioFile = await getAudioFileForActiveSession();
-            if (!audioFile) {
-                setStatusNote("No audio file was available to transcribe for this voice note.");
-                return;
-            }
-            setIsTranscribingAudio(true);
-            try {
-                const transcriptText = await transcribeAudio({
-                    file: audioFile,
-                    settings: snapshot.settings,
-                    onEvent: createAIRuntimeHandler(),
-                });
-                const nextSession = {
-                    ...activeSession,
-                    liveTranscript: [activeSession.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n"),
-                };
-                const rawOutput = buildRawOutput(nextSession);
-                setSelectedOutputVersionId(null);
-                await saveSession({ ...nextSession, ...buildOutputVersionPatch(nextSession, rawOutput) });
-                setStatusNote("Transcribed the voice note into Output without AI polishing.");
-                await openMetadataReviewIfNeeded(nextSession);
-                openNotesTarget({ sessionId: nextSession.id, view: "output" });
-            }
-            catch (error) {
-                setStatusNote(formatAIErrorMessage(error, "Audio transcription failed."));
-            }
-            finally {
-                setIsTranscribingAudio(false);
-            }
-            return;
-        }
-        const rawOutput = buildRawOutput(activeSession);
-        if (!rawOutput) {
-            setStatusNote("There is no captured note content to create Output from yet.");
-            return;
-        }
-        setSelectedOutputVersionId(null);
-        await saveSession({ ...activeSession, ...buildOutputVersionPatch(activeSession, rawOutput) });
-        setStatusNote(activeCaptureMode === "voice-note"
-            ? "Created Output from the current voice note without AI polishing."
-            : "Created Output from the current note without AI polishing.");
-        await openMetadataReviewIfNeeded(activeSession);
-        openNotesTarget({ sessionId: activeSession.id, view: "output" });
-    };
     const handleTranslate = async () => {
         let usedCache = false;
         try {
-            const targetLanguage = snapshot.settings.outputLanguage === "sv"
+            const targetLanguage = resolveSessionOutputLanguage(activeSession) === "sv"
                 ? "Swedish"
-                : snapshot.settings.outputLanguage === "en"
+                : resolveSessionOutputLanguage(activeSession) === "en"
                     ? "English"
                     : activeSession.output.match(/[\u00E5\u00E4\u00F6\u00C5\u00C4\u00D6]/u)
                         ? "English"
@@ -1145,6 +1205,8 @@ export const App = () => {
                 currentOutput: activeSession.output,
                 instructions,
                 detailLevel: activeSession.detailLevel,
+                outputLanguage: resolveSessionOutputLanguage(activeSession),
+                additionalInstructions: activeSession.additionalInstructions,
                 settings: snapshot.settings,
                 onEvent: createAIRuntimeHandler({
                     onCacheHit: () => {
@@ -1200,6 +1262,46 @@ export const App = () => {
     };
     const handleOpenLatestOutputVersion = () => {
         setSelectedOutputVersionId(null);
+    };
+    const handleRevertOutputVersion = () => {
+        if (selectedOutputVersionId) {
+            setSelectedOutputVersionId(null);
+            setStatusNote("Back on the latest generated version.");
+            return;
+        }
+        const previousVersion = activeOutputVersions[1];
+        if (!previousVersion) {
+            setStatusNote("There is no previous generated version to open yet.");
+            return;
+        }
+        setSelectedOutputVersionId(previousVersion.id);
+        setStatusNote("Opened the previous generated version. Open the latest version to continue editing.");
+    };
+    const handleCopyOutput = async () => {
+        if (!displayedOutput.trim()) {
+            setStatusNote("Generate output first, then copy it from here.");
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(displayedOutput);
+            setStatusNote("Output copied to your clipboard.");
+        }
+        catch (error) {
+            setStatusNote(error instanceof Error ? error.message : "Clipboard access was blocked. You can still copy the output manually.");
+        }
+    };
+    const handleAcceptVisibleRuleSuggestion = async (suggestionId) => {
+        const nextSettings = acceptRuleSuggestion(snapshot.settings, suggestionId);
+        await saveSettings(nextSettings);
+        setVisibleRuleSuggestions((current) => current.filter((entry) => entry.id !== suggestionId));
+    };
+    const handleDismissVisibleRuleSuggestion = (suggestionId) => {
+        setDismissedRuleSuggestionIds((current) => Array.from(new Set([...current, suggestionId])));
+    };
+    const handleIgnoreVisibleRuleSuggestion = async (suggestionId) => {
+        const nextSettings = ignoreRuleSuggestion(snapshot.settings, suggestionId, { forever: true });
+        await saveSettings(nextSettings);
+        setVisibleRuleSuggestions((current) => current.filter((entry) => entry.id !== suggestionId));
     };
     const handleOutputWorkspaceChange = async (nextSession) => {
         if (!nextSession) {
@@ -1762,7 +1864,7 @@ export const App = () => {
             case "capture-details":
                 return (_jsx(SessionEditor, { session: activeSession, templates: snapshot.templates, attachments: activeAttachments, presentation: "full", showPresentationActions: false, savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, structureOptions: structureOptions, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isTranscribingAudio: isTranscribingAudio, recordingMode: recordingMode, isRecordingAudio: isRecordingAudio, recordingStatusNote: recordingStatusNote, onChange: (session) => void saveSession(session), onImportImage: () => void handleImportImage(), onImportAudio: () => void handleImportAudio(), onTranscribeAudio: () => void handleTranscribeAudio(), onChangeRecordingMode: setRecordingMode, onStartRecording: () => void handleStartRecording(), onStopRecording: () => void handleStopRecording(), onImportTranscript: () => void handleImportTranscript(), onRemoveAttachment: (attachmentId) => void handleRemoveAttachment(attachmentId), onUpdateAttachment: (attachment) => void handleUpdateAttachment(attachment) }));
             case "output-details":
-                return (_jsx(OutputWorkspace, { session: activeSession, template: activeTemplate, displayedOutput: displayedOutput, outputVersions: activeOutputVersions, selectedOutputVersionId: selectedOutputVersionId, attachments: activeAttachments, presentation: "full", showPresentationActions: false, onChange: (session) => void handleOutputWorkspaceChange(session), savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, structureOptions: structureOptions, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isPrimaryActionRunning: outputActionConfig.isPrimaryRunning, isSecondaryActionRunning: outputActionConfig.isSecondaryRunning, isRevising: isRevising, onPrimaryAction: outputActionConfig.onPrimary, onSecondaryAction: outputActionConfig.onSecondary, onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onOpenOutputVersion: handleOpenOutputVersion, onOpenLatestOutputVersion: handleOpenLatestOutputVersion, onExportText: () => exportOutputAsText({ title: activeSession.title, output: displayedOutput }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: displayedOutput }), onExportHtml: () => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId }), onExportDocx: () => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId }), onExportPdf: () => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId }), outputLanguage: snapshot.settings.outputLanguage, primaryActionLabel: outputActionConfig.primaryLabel, secondaryActionLabel: outputActionConfig.secondaryLabel, emptyStatePrimaryLabel: outputActionConfig.emptyStatePrimaryLabel, emptyStateSecondaryLabel: outputActionConfig.emptyStateSecondaryLabel, linkedActivity: activeLinkedActivity, onOpenLinkedActivity: (activityId) => openActivityFromLink(activityId, "notes"), onAddFollowUpTodo: (description, options) => void addTodo(description, {
+                return (_jsx(OutputWorkspace, { session: activeSession, template: activeTemplate, displayedOutput: displayedOutput, outputVersions: activeOutputVersions, selectedOutputVersionId: selectedOutputVersionId, attachments: activeAttachments, presentation: "full", showPresentationActions: false, onChange: (session) => void handleOutputWorkspaceChange(session), savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, structureOptions: structureOptions, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isPrimaryActionRunning: outputActionConfig.isPrimaryRunning, isSecondaryActionRunning: outputActionConfig.isSecondaryRunning, isRevising: isRevising, onPrimaryAction: outputActionConfig.onPrimary, onSecondaryAction: outputActionConfig.onSecondary, onCopyOutput: () => void handleCopyOutput(), onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onRevertOutputVersion: handleRevertOutputVersion, onOpenOutputVersion: handleOpenOutputVersion, onOpenLatestOutputVersion: handleOpenLatestOutputVersion, onExportText: () => exportOutputAsText({ title: activeSession.title, output: displayedOutput }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: displayedOutput }), onExportHtml: () => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId }), onExportDocx: () => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId }), onExportPdf: () => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId }), ruleSuggestions: visibleRuleSuggestions.filter((entry) => !dismissedRuleSuggestionIds.includes(entry.id)), onAcceptRuleSuggestion: (suggestionId) => void handleAcceptVisibleRuleSuggestion(suggestionId), onDismissRuleSuggestion: handleDismissVisibleRuleSuggestion, onIgnoreRuleSuggestion: (suggestionId) => void handleIgnoreVisibleRuleSuggestion(suggestionId), primaryActionLabel: outputActionConfig.primaryLabel, secondaryActionLabel: outputActionConfig.secondaryLabel, emptyStatePrimaryLabel: outputActionConfig.emptyStatePrimaryLabel, emptyStateSecondaryLabel: outputActionConfig.emptyStateSecondaryLabel, linkedActivity: activeLinkedActivity, onOpenLinkedActivity: (activityId) => openActivityFromLink(activityId, "notes"), onAddFollowUpTodo: (description, options) => void addTodo(description, {
                         ...getMeetingTodoDefaults(),
                         ...options,
                     }), onAddFollowUpMeeting: (description, options) => void addActivity(description, "meeting", options) }));
@@ -1943,7 +2045,7 @@ export const App = () => {
                                         }), onOpenActivityDetail: (activityId) => openActivityFromLink(activityId, "structure"), onOpenTodoDetail: (todoId) => openTodoDetailFromLink(todoId, "structure") })) : activeWorkspace !== "notes" ? (_jsxs("div", { className: "card empty-state-card", children: [_jsx("h2", { children: "Coming next" }), _jsx("p", { children: WORKSPACE_ITEMS.find((item) => item.id === activeWorkspace)?.description || "This workspace is planned for a later phase." }), _jsxs("ol", { className: "empty-state-steps", children: [_jsx("li", { children: "Return to Notes from the left rail whenever you want to work now." }), _jsx("li", { children: "Use Ctrl/Cmd+K to reach settings, sessions, and future actions quickly." }), _jsx("li", { children: "This workspace will use the same center-canvas plus right-inspector pattern when it ships." })] })] })) : (_jsxs("div", { className: "notes-pwa-workbench", children: [linkedDetailReturnWorkspace ? (_jsxs("div", { className: "notes-pwa-toolbar", children: [_jsxs("button", { className: "shell-button", type: "button", onClick: returnFromLinkedDetail, children: ["Back to ", linkedDetailReturnWorkspace === "calendar" ? "Calendar" : linkedDetailReturnWorkspace === "activities" ? "Activities" : linkedDetailReturnWorkspace === "time" ? "Time" : linkedDetailReturnWorkspace === "structure" ? "Structure" : "previous workspace"] }), activeLinkedActivity ? (_jsxs("button", { className: "shell-button", type: "button", onClick: () => openActivityFromLink(activeLinkedActivity.id, "notes"), children: ["Linked activity: ", activeLinkedActivity.description] })) : null] })) : activeLinkedActivity ? (_jsx("div", { className: "notes-pwa-toolbar", children: _jsxs("button", { className: "shell-button", type: "button", onClick: () => openActivityFromLink(activeLinkedActivity.id, "notes"), children: ["Linked activity: ", activeLinkedActivity.description] }) })) : null, _jsxs("div", { ref: notesLayoutRef, className: "notes-pwa-grid notes-pwa-grid-resizable", style: { gridTemplateColumns: `${notesCapturePaneWidth}px 12px minmax(${NOTES_PANEL_MIN_WIDTH}px, 1fr)` }, children: [_jsx("div", { className: "notes-pwa-capture", children: _jsx(SessionEditor, { session: activeSession, templates: snapshot.templates, attachments: activeAttachments, presentation: "minimal", showPresentationActions: false, savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, structureOptions: structureOptions, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isTranscribingAudio: isTranscribingAudio, recordingMode: recordingMode, isRecordingAudio: isRecordingAudio, recordingStatusNote: recordingStatusNote, onChange: (session) => void saveSession(session), onImportImage: () => void handleImportImage(), onImportAudio: () => void handleImportAudio(), onTranscribeAudio: () => void handleTranscribeAudio(), onChangeRecordingMode: setRecordingMode, onStartRecording: () => void handleStartRecording(), onStopRecording: () => void handleStopRecording(), onImportTranscript: () => void handleImportTranscript(), onRemoveAttachment: (attachmentId) => void handleRemoveAttachment(attachmentId), onUpdateAttachment: (attachment) => void handleUpdateAttachment(attachment), onOpenDetails: () => openOverlay("capture-details"), onCreateSessionFromTemplate: (templateId) => void handleCreateSessionFromTemplate(templateId), onOpenInstructions: () => openOverlay("instructions") }) }), _jsx("div", { className: "notes-pwa-splitter", role: "separator", "aria-orientation": "vertical", "aria-label": "Resize capture and output panels", onMouseDown: () => {
                                                             notesSplitterDraggingRef.current = true;
                                                             document.body.style.cursor = "col-resize";
-                                                        } }), _jsx("div", { className: "notes-pwa-output", children: _jsx(OutputWorkspace, { session: activeSession, template: activeTemplate, displayedOutput: displayedOutput, outputVersions: activeOutputVersions, selectedOutputVersionId: selectedOutputVersionId, attachments: activeAttachments, presentation: "minimal", showPresentationActions: false, onChange: (session) => void handleOutputWorkspaceChange(session), savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, structureOptions: structureOptions, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isPrimaryActionRunning: outputActionConfig.isPrimaryRunning, isSecondaryActionRunning: outputActionConfig.isSecondaryRunning, isRevising: isRevising, onPrimaryAction: outputActionConfig.onPrimary, onSecondaryAction: outputActionConfig.onSecondary, onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onOpenOutputVersion: handleOpenOutputVersion, onOpenLatestOutputVersion: handleOpenLatestOutputVersion, onExportText: () => exportOutputAsText({ title: activeSession.title, output: displayedOutput }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: displayedOutput }), onExportHtml: () => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId }), onExportDocx: () => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId }), onExportPdf: () => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId }), outputLanguage: snapshot.settings.outputLanguage, primaryActionLabel: outputActionConfig.primaryLabel, secondaryActionLabel: outputActionConfig.secondaryLabel, emptyStatePrimaryLabel: outputActionConfig.emptyStatePrimaryLabel, emptyStateSecondaryLabel: outputActionConfig.emptyStateSecondaryLabel, linkedActivity: activeLinkedActivity, onOpenLinkedActivity: (activityId) => openActivityFromLink(activityId, "notes"), onAddFollowUpTodo: (description, options) => void addTodo(description, {
+                                                        } }), _jsx("div", { className: "notes-pwa-output", children: _jsx(OutputWorkspace, { session: activeSession, template: activeTemplate, displayedOutput: displayedOutput, outputVersions: activeOutputVersions, selectedOutputVersionId: selectedOutputVersionId, attachments: activeAttachments, presentation: "minimal", showPresentationActions: false, onChange: (session) => void handleOutputWorkspaceChange(session), savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, structureOptions: structureOptions, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isPrimaryActionRunning: outputActionConfig.isPrimaryRunning, isSecondaryActionRunning: outputActionConfig.isSecondaryRunning, isRevising: isRevising, onPrimaryAction: outputActionConfig.onPrimary, onSecondaryAction: outputActionConfig.onSecondary, onCopyOutput: () => void handleCopyOutput(), onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onRevertOutputVersion: handleRevertOutputVersion, onOpenOutputVersion: handleOpenOutputVersion, onOpenLatestOutputVersion: handleOpenLatestOutputVersion, onExportText: () => exportOutputAsText({ title: activeSession.title, output: displayedOutput }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: displayedOutput }), onExportHtml: () => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId }), onExportDocx: () => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId }), onExportPdf: () => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId }), ruleSuggestions: visibleRuleSuggestions.filter((entry) => !dismissedRuleSuggestionIds.includes(entry.id)), onAcceptRuleSuggestion: (suggestionId) => void handleAcceptVisibleRuleSuggestion(suggestionId), onDismissRuleSuggestion: handleDismissVisibleRuleSuggestion, onIgnoreRuleSuggestion: (suggestionId) => void handleIgnoreVisibleRuleSuggestion(suggestionId), primaryActionLabel: outputActionConfig.primaryLabel, secondaryActionLabel: outputActionConfig.secondaryLabel, emptyStatePrimaryLabel: outputActionConfig.emptyStatePrimaryLabel, emptyStateSecondaryLabel: outputActionConfig.emptyStateSecondaryLabel, linkedActivity: activeLinkedActivity, onOpenLinkedActivity: (activityId) => openActivityFromLink(activityId, "notes"), onAddFollowUpTodo: (description, options) => void addTodo(description, {
                                                                 ...getMeetingTodoDefaults(),
                                                                 ...options,
                                                             }), onAddFollowUpMeeting: (description, options) => void addActivity(description, "meeting", options) }) })] })] }))] }), !(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && activeWorkspace !== "notes" ? (_jsxs("aside", { className: "workspace-inspector stack", children: [_jsxs("div", { className: "sidebar-card", children: [_jsx("div", { children: _jsx("h3", { children: "Notes status" }) }), activeWorkspace === "todos" || activeWorkspace === "activities" || activeWorkspace === "calendar" ? (_jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: () => setActiveWorkspace("notes"), children: "Back to Notes" }), _jsx("button", { className: "small-button", type: "button", onClick: openCommandPalette, children: "Command palette" })] })) : (_jsx("p", { className: "tiny-text", children: "This inspector area will hold the primary tools for this workspace once it is implemented." }))] }), _jsxs("div", { className: "sidebar-card", children: [_jsx("div", { children: _jsx("h3", { children: "Status" }) }), _jsx("span", { className: `status-chip status-chip-${saveState}`, children: saveStatusLabel }), activeWorkspace === "todos" ? (_jsxs(_Fragment, { children: [_jsxs("span", { className: "status-chip", children: [snapshot.todos.filter((todo) => !todo.isDone).length, " open todos"] }), _jsxs("span", { className: "status-chip", children: [snapshot.todos.filter((todo) => todo.isDone).length, " completed"] })] })) : activeWorkspace === "activities" ? (_jsxs(_Fragment, { children: [_jsxs("span", { className: "status-chip", children: [snapshot.activities.filter((activity) => !activity.isDone).length, " open activities"] }), _jsxs("span", { className: "status-chip", children: [snapshot.activities.filter((activity) => activity.isDone).length, " completed"] })] })) : null, updateStatusNote ? _jsx("span", { className: "tiny-text topbar-status-note", children: updateStatusNote }) : null] })] })) : null, activeWorkspace === "notes" && isNotesSessionsOpen ? (_jsx("aside", { className: "notes-sessions-shelf stack", children: _jsx(SessionsSidebar, { sessions: snapshot.sessions, activeSessionId: activeSession.id, onSelect: (id) => setActiveSessionId(id), onCreate: () => openOverlay("new-note"), onClose: () => setIsNotesSessionsOpen(false), onDelete: (id) => void deleteSession(id), onRestore: (id) => void restoreSession(id), onDeleteForever: (id) => void permanentlyDeleteSession(id), compact: true, title: "Sessions" }) })) : null] })] }), isCommandPaletteOpen ? (_jsx("div", { className: "overlay-backdrop", role: "presentation", onClick: closeCommandPalette, children: _jsxs("div", { className: "overlay-surface command-palette-surface", role: "dialog", "aria-modal": "true", onClick: (event) => event.stopPropagation(), children: [_jsxs("div", { className: "overlay-header", children: [_jsxs("div", { children: [_jsx("strong", { children: "Command palette" }), _jsx("p", { className: "tiny-text", children: "Search sessions, settings, tools, and future workspaces. Keyboard first by design." })] }), _jsx("button", { className: "small-button", type: "button", onClick: closeCommandPalette, children: "Close" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "command-query", children: "Search actions" }), _jsx("input", { id: "command-query", autoFocus: true, value: commandQuery, onChange: (event) => setCommandQuery(event.target.value), placeholder: "Try: sessions, AI settings, translate, themes, upload image" })] }), _jsxs("div", { className: "command-palette-list", children: [filteredCommandActions.slice(0, 14).map((command) => (_jsxs("button", { type: "button", className: "command-palette-item", onClick: () => {

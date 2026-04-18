@@ -1,5 +1,5 @@
 import { type StructureOptions } from "../../../lib/structure/options";
-import type { ActivityRecord, AttachmentRecord, CaptureWorkspaceDensity, LocalAppSettings, SessionRecord, TemplateDefinition } from "@notesmith/domain";
+import type { ActivityRecord, AttachmentRecord, CaptureWorkspaceDensity, RuleSuggestionRecord, SessionRecord, TemplateDefinition } from "@notesmith/domain";
 interface OutputWorkspaceProps {
     session: SessionRecord;
     template?: TemplateDefinition | null;
@@ -26,8 +26,10 @@ interface OutputWorkspaceProps {
     isRevising: boolean;
     onPrimaryAction: () => void;
     onSecondaryAction?: () => void;
+    onCopyOutput: () => void;
     onTranslate: () => void;
     onRevise: (instructions: string) => void;
+    onRevertOutputVersion: () => void;
     onOpenOutputVersion?: (versionId: string) => void;
     onOpenLatestOutputVersion?: () => void;
     onExportText: () => void;
@@ -35,7 +37,10 @@ interface OutputWorkspaceProps {
     onExportHtml: () => void;
     onExportDocx: () => void;
     onExportPdf: () => void;
-    outputLanguage: LocalAppSettings["outputLanguage"];
+    ruleSuggestions?: RuleSuggestionRecord[];
+    onAcceptRuleSuggestion?: (suggestionId: string) => void;
+    onDismissRuleSuggestion?: (suggestionId: string) => void;
+    onIgnoreRuleSuggestion?: (suggestionId: string) => void;
     primaryActionLabel?: string;
     secondaryActionLabel?: string | null;
     emptyStatePrimaryLabel?: string;
@@ -53,5 +58,5 @@ interface OutputWorkspaceProps {
         comments?: string;
     }) => void;
 }
-export declare const OutputWorkspace: ({ session, template, displayedOutput, outputVersions, selectedOutputVersionId, attachments, presentation, showPresentationActions, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onTranslate, onRevise, onOpenOutputVersion, onOpenLatestOutputVersion, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, outputLanguage, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, linkedActivity, onOpenLinkedActivity, onAddFollowUpTodo, onAddFollowUpMeeting, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const OutputWorkspace: ({ session, template, displayedOutput, outputVersions, selectedOutputVersionId, attachments, presentation, showPresentationActions, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onCopyOutput, onTranslate, onRevise, onRevertOutputVersion, onOpenOutputVersion, onOpenLatestOutputVersion, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, ruleSuggestions, onAcceptRuleSuggestion, onDismissRuleSuggestion, onIgnoreRuleSuggestion, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, linkedActivity, onOpenLinkedActivity, onAddFollowUpTodo, onAddFollowUpMeeting, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

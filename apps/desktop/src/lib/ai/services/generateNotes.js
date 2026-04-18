@@ -44,6 +44,17 @@ const getCaptureModeInstruction = (session) => {
             return "This is a meeting note workflow. Produce clearly structured professional meeting notes rather than a transcript-style recap.";
     }
 };
+const getDiscussionFormatInstruction = (session) => {
+    if (session.captureMode !== "meeting-note") {
+        return "Use paragraphs by default and only use bullets when they genuinely improve readability for the note type.";
+    }
+    return [
+        "For meeting minutes, write substantive discussion sections as flowing paragraphs, not lists.",
+        "Use bullets only for agenda, decisions, or action items.",
+        "Do not convert ordinary discussion summaries, status updates, or narrative meeting content into bullets.",
+        "When uncertain, choose prose.",
+    ].join(" ");
+};
 export const generateNotes = async ({ session, settings, template, attachments = [], onEvent, }) => {
     const promptProfile = resolvePromptProfile(settings.promptProfile);
     const activeSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
@@ -62,9 +73,12 @@ export const generateNotes = async ({ session, settings, template, attachments =
         throw new Error("Enable at least one output section for this session before generating output.");
     }
     const extraPromptBlocks = formatEnabledPromptBlocks(promptProfile.profile.extraBlocks);
-    const outputLanguageInstruction = settings.outputLanguage === "same"
+    const requestedOutputLanguage = session.outputLanguage === "sv" || session.outputLanguage === "en"
+        ? session.outputLanguage
+        : settings.outputLanguage;
+    const outputLanguageInstruction = requestedOutputLanguage === "same"
         ? "Keep the output in the same language as the source notes."
-        : `Return the final notes in ${settings.outputLanguage === "sv" ? "Swedish" : "English"}.`;
+        : `Return the final notes in ${requestedOutputLanguage === "sv" ? "Swedish" : "English"}.`;
     const includedImagesPrompt = attachments
         .filter((attachment) => attachment.kind === "image" && attachment.includeInOutput)
         .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt))
@@ -80,8 +94,12 @@ export const generateNotes = async ({ session, settings, template, attachments =
         systemTexts: [
             ...generationPromptTexts,
             getCaptureModeInstruction(session),
+            getDiscussionFormatInstruction(session),
             outputLanguageInstruction,
             getDetailLevelInstruction(session.detailLevel),
+            session.additionalInstructions.trim()
+                ? `Additional generation instructions from the user:\n${session.additionalInstructions.trim()}`
+                : "",
         ],
         userText: `Template: ${template.name}\nSections:\n${buildTemplateSectionPrompt({ ...template, sections: activeSections })}${template.promptInstructions?.trim() ? `\nTemplate-specific instructions:\n${template.promptInstructions.trim()}` : ""}\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${session.participantText}\nDomain: ${session.domain}\nProject: ${session.project}\nActivity: ${session.activity}\nTags: ${session.tagsText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}${includedImagesPrompt
             ? `\nIncluded images for polished output:\n${includedImagesPrompt}\nReference these images where appropriate and preserve their captions.`

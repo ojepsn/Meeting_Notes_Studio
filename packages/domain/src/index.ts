@@ -47,7 +47,10 @@ export interface SessionRecord {
   startTime: string;
   endTime: string;
   quickHighlights: string;
+  transcribeOnly: boolean;
+  outputLanguage: "same" | "sv" | "en";
   detailLevel: number;
+  additionalInstructions: string;
   manualNotes: string;
   liveTranscript: string;
   uploadedTranscript: string;
@@ -293,7 +296,8 @@ export const BUILTIN_TEMPLATES: TemplateDefinition[] = [
     captureModes: ["quick-note"],
     fields: [
       { id: "note-title", key: "title", label: "Note title", type: "text", enabled: true, required: false, position: 1 },
-      { id: "note-date", key: "date", label: "Date", type: "date", enabled: true, required: false, position: 2 }
+      { id: "note-participants", key: "participants", label: "Participants", type: "text", enabled: true, required: false, position: 2 },
+      { id: "note-date", key: "date", label: "Date", type: "date", enabled: true, required: false, position: 3 }
     ],
     sections: [
       { id: "note-summary", title: "Summary", instructions: "Turn rough notes into a concise, polished personal note.", enabledByDefault: true, position: 1 }

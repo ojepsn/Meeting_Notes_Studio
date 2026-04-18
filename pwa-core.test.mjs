@@ -255,7 +255,7 @@ runTest("built-in session templates preserve intended defaults", () => {
 
   assert.equal(BUILT_IN_TEMPLATES.meeting.fields.participants, true);
   assert.equal(BUILT_IN_TEMPLATES.meeting.fields.agenda, true);
-  assert.equal(BUILT_IN_TEMPLATES.personalNote.fields.participants, false);
+  assert.equal(BUILT_IN_TEMPLATES.personalNote.fields.participants, true);
   assert.equal(BUILT_IN_TEMPLATES.personalNote.fields.meetingDate, true);
   assert.equal(BUILT_IN_TEMPLATES.personalNote.fields.meetingStartTime, true);
   assert.equal(BUILT_IN_TEMPLATES.personalNote.fields.meetingEndTime, false);
@@ -537,6 +537,15 @@ runTest("suggested-rule surfaces are present in PWA output and settings", () => 
 runTest("pwa keeps suggested-rule refresh attached to generation and revision flows", () => {
   assert.match(appJsSource, /renderOutput\(\);\s*refreshRuleSuggestionsForSession\(getActiveSession\(\)\);\s*const addedParticipants = await maybeOfferParticipantDirectoryUpdate/);
   assert.match(appJsSource, /renderOutput\(\);\s*refreshRuleSuggestionsForSession\(getActiveSession\(\)\);\s*if \(isMobileLayout\(\)\) \{/);
+});
+
+runTest("pwa backup export is a full backup and import restores settings plus sessions", () => {
+  assert.match(appJsSource, /function buildSharedDataPayload\(\) \{[\s\S]*?sessions,[\s\S]*?settings:\s*\{[\s\S]*?\.\.\.settings,/);
+  assert.match(appJsSource, /storageMode: STORAGE_MODES\.browser/);
+  assert.match(appJsSource, /function exportSessions\(\) \{[\s\S]*?buildSharedDataPayload\(\)/);
+  assert.match(appJsSource, /meeting-notes-backup-/);
+  assert.match(appJsSource, /function importSessionsFromFile\(event\) \{[\s\S]*?applySharedDataPayload/);
+  assert.match(appJsSource, /persistSettings\(\);/);
 });
 
 console.log("PWA core tests passed.");

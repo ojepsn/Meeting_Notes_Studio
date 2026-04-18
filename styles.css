@@ -2401,6 +2401,27 @@ textarea:focus {
   margin-bottom: 0;
 }
 
+.output-language-button-group {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.output-language-option {
+  justify-content: center;
+  text-align: center;
+}
+
+.output-language-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.output-language-option:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--card) 86%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent 65%);
+}
+
 .primary-button,
 .secondary-button,
 .ghost-button {

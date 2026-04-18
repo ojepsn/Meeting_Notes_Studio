@@ -1250,6 +1250,55 @@ select {
   gap: 0.7rem;
 }
 
+.support-text {
+  margin: 0;
+  color: var(--app-muted);
+  line-height: 1.5;
+}
+
+.generation-mode-group {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.config-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--app-border) 76%, white 24%);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--app-surface-soft) 92%, white 8%);
+  padding: 0.85rem 0.95rem;
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--app-shadow) 18%, transparent 82%);
+}
+
+.config-option input {
+  margin-top: 0.2rem;
+}
+
+.config-option-copy {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.config-option-title {
+  font-weight: 700;
+}
+
+.config-option-hint {
+  color: var(--app-muted);
+  line-height: 1.45;
+}
+
+.config-option-featured {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-surface-soft) 90%, white 10%) 0%, color-mix(in srgb, var(--app-surface) 96%, white 4%) 100%);
+}
+
+.field.is-disabled,
+.workspace-disclosure-body .field.is-disabled {
+  opacity: 0.6;
+}
+
 .output-section-option {
   display: flex;
   align-items: center;
@@ -1268,6 +1317,35 @@ select {
 
 .output-detail-field {
   margin: 0;
+}
+
+.rule-suggestion-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.rule-suggestion-card {
+  display: grid;
+  gap: 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--app-border) 76%, white 24%);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--app-surface-soft) 92%, white 8%);
+  padding: 0.9rem 1rem;
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--app-shadow) 18%, transparent 82%);
+}
+
+.rule-suggestion-copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.rule-suggestion-copy h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.suggestion-workflow-card {
+  margin-top: 0.9rem;
 }
 
 .output-workspace-pwa .output-textarea-minimal {

@@ -7,7 +7,7 @@ import type {
   ActivityRecord,
   AttachmentRecord,
   CaptureWorkspaceDensity,
-  LocalAppSettings,
+  RuleSuggestionRecord,
   SessionRecord,
   TemplateDefinition,
 } from "@notesmith/domain";
@@ -78,8 +78,10 @@ interface OutputWorkspaceProps {
   isRevising: boolean;
   onPrimaryAction: () => void;
   onSecondaryAction?: () => void;
+  onCopyOutput: () => void;
   onTranslate: () => void;
   onRevise: (instructions: string) => void;
+  onRevertOutputVersion: () => void;
   onOpenOutputVersion?: (versionId: string) => void;
   onOpenLatestOutputVersion?: () => void;
   onExportText: () => void;
@@ -87,7 +89,10 @@ interface OutputWorkspaceProps {
   onExportHtml: () => void;
   onExportDocx: () => void;
   onExportPdf: () => void;
-  outputLanguage: LocalAppSettings["outputLanguage"];
+  ruleSuggestions?: RuleSuggestionRecord[];
+  onAcceptRuleSuggestion?: (suggestionId: string) => void;
+  onDismissRuleSuggestion?: (suggestionId: string) => void;
+  onIgnoreRuleSuggestion?: (suggestionId: string) => void;
   primaryActionLabel?: string;
   secondaryActionLabel?: string | null;
   emptyStatePrimaryLabel?: string;
@@ -124,8 +129,10 @@ export const OutputWorkspace = ({
   isRevising,
   onPrimaryAction,
   onSecondaryAction,
+  onCopyOutput,
   onTranslate,
   onRevise,
+  onRevertOutputVersion,
   onOpenOutputVersion,
   onOpenLatestOutputVersion,
   onExportText,
@@ -133,7 +140,10 @@ export const OutputWorkspace = ({
   onExportHtml,
   onExportDocx,
   onExportPdf,
-  outputLanguage,
+  ruleSuggestions = [],
+  onAcceptRuleSuggestion,
+  onDismissRuleSuggestion,
+  onIgnoreRuleSuggestion,
   primaryActionLabel = "Generate",
   secondaryActionLabel = null,
   emptyStatePrimaryLabel = "Generate polished notes",
@@ -177,9 +187,6 @@ export const OutputWorkspace = ({
   const excerptPreview =
     selectedExcerpt.length > 180 ? `${selectedExcerpt.slice(0, 177).trimEnd()}...` : selectedExcerpt;
   const selectedOutputVersion = outputVersions.find((version) => version.id === selectedOutputVersionId) ?? null;
-  const outputLanguageLabel =
-    outputLanguage === "sv" ? "Swedish" : outputLanguage === "en" ? "English" : "Same as source notes";
-
   const formatOutputVersionLabel = (generatedAt: string) => {
     const parsed = new Date(generatedAt);
     if (Number.isNaN(parsed.getTime())) {
@@ -234,6 +241,43 @@ export const OutputWorkspace = ({
           </div>
         </div>
       </details>
+    ) : null;
+
+  const renderRuleSuggestions = () =>
+    ruleSuggestions.length ? (
+      <section className="config-card workflow-card suggestion-workflow-card" aria-label="Suggested rules">
+        <div className="config-card-copy">
+          <p className="section-label">Suggested rules</p>
+          <h3>Save repeated patterns</h3>
+        </div>
+        <p className="support-text">
+          The app noticed repeated shorthand or participant-name patterns in recent sessions. Add any you want to reuse.
+        </p>
+        <div className="rule-suggestion-list">
+          {ruleSuggestions.map((suggestion) => (
+            <div key={suggestion.id} className="rule-suggestion-card">
+              <div className="rule-suggestion-copy">
+                <p className="section-label">
+                  {suggestion.type === "abbreviation" ? "Suggested abbreviation" : "Preferred participant name"}
+                </p>
+                <h4>{`${suggestion.sourceValue} -> ${suggestion.suggestedValue}`}</h4>
+                <p className="muted">Seen {suggestion.evidenceCount} times in recent sessions.</p>
+              </div>
+              <div className="list-item-actions">
+                <button className="small-button" type="button" onClick={() => onAcceptRuleSuggestion?.(suggestion.id)}>
+                  Add
+                </button>
+                <button className="small-button" type="button" onClick={() => onDismissRuleSuggestion?.(suggestion.id)}>
+                  Not now
+                </button>
+                <button className="small-button danger-button" type="button" onClick={() => onIgnoreRuleSuggestion?.(suggestion.id)}>
+                  Never suggest
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
     ) : null;
 
   const handleSectionToggle = (sectionId: string, checked: boolean) => {
@@ -311,23 +355,61 @@ export const OutputWorkspace = ({
                 <button className="primary-button" type="button" onClick={onPrimaryAction}>
                   {isPrimaryActionRunning ? `${primaryActionLabel}...` : primaryActionLabel}
                 </button>
-                {secondaryActionLabel && onSecondaryAction ? (
-                  <button className="secondary-button" type="button" onClick={onSecondaryAction}>
-                    {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
-                  </button>
-                ) : null}
+                <button className="secondary-button" type="button" onClick={onCopyOutput}>
+                  Copy Output
+                </button>
               </div>
 
               <details className="workspace-disclosure pwa-disclosure-card output-generation-disclosure" open>
                 <summary>Language and generation options</summary>
                 <div className="workspace-disclosure-body stack">
-                  <div className="output-setting-row">
-                    <strong>Output language</strong>
-                    <span className="muted">{outputLanguageLabel}</span>
+                  <label className={`field config-field${session.transcribeOnly ? " is-disabled" : ""}`}>
+                    <span className="field-label">Output language</span>
+                    <select
+                      value={session.outputLanguage}
+                      onChange={(event) => onChange({ ...session, outputLanguage: event.target.value as SessionRecord["outputLanguage"] })}
+                      disabled={session.transcribeOnly}
+                    >
+                      <option value="same">Same as notes</option>
+                      <option value="sv">Swedish</option>
+                      <option value="en">English</option>
+                    </select>
+                  </label>
+
+                  <div className="generation-mode-group" role="radiogroup" aria-label="Generation mode">
+                    <label className="config-option config-option-featured">
+                      <input
+                        checked={session.transcribeOnly === true}
+                        name="desktop-generation-mode"
+                        type="radio"
+                        value="manual"
+                        onChange={() => onChange({ ...session, transcribeOnly: true })}
+                      />
+                      <span className="config-option-copy">
+                        <span className="config-option-title">Polish Manual notes without AI</span>
+                        <span className="config-option-hint">
+                          Transfer Manual notes directly into Output without AI generation. Light rules-based cleanup is allowed.
+                        </span>
+                      </span>
+                    </label>
+
+                    <label className="config-option config-option-featured">
+                      <input
+                        checked={session.transcribeOnly !== true}
+                        name="desktop-generation-mode"
+                        type="radio"
+                        value="ai"
+                        onChange={() => onChange({ ...session, transcribeOnly: false })}
+                      />
+                      <span className="config-option-copy">
+                        <span className="config-option-title">Generate with AI</span>
+                        <span className="config-option-hint">
+                          Default. Generate structured professional notes from Manual notes, transcript, and meeting context.
+                        </span>
+                      </span>
+                    </label>
                   </div>
-                  <p className="muted">
-                    Desktop Notes currently follows the app-wide output language from Settings.
-                  </p>
+
                   <p className="muted">
                     Select the sections you want in the generated output. Checked sections are included, and unchecked sections are left out.
                   </p>
@@ -355,6 +437,7 @@ export const OutputWorkspace = ({
                       max="5"
                       step="1"
                       value={String(session.detailLevel)}
+                      disabled={session.transcribeOnly}
                       onChange={(event) => onChange({ ...session, detailLevel: Number(event.target.value) })}
                     />
                     <span className="range-caption">
@@ -366,12 +449,25 @@ export const OutputWorkspace = ({
                             ? "Balanced detail"
                             : session.detailLevel === 4
                               ? "Detailed"
-                              : "Comprehensive"}
+                            : "Comprehensive"}
                     </span>
+                  </label>
+
+                  <label className={`field config-field${session.transcribeOnly ? " is-disabled" : ""}`}>
+                    <span className="field-label">Additional LLM instructions</span>
+                    <textarea
+                      rows={4}
+                      value={session.additionalInstructions}
+                      disabled={session.transcribeOnly}
+                      onChange={(event) => onChange({ ...session, additionalInstructions: event.target.value })}
+                      placeholder="Example: Focus more on risks and decisions, and exclude implementation details."
+                    />
                   </label>
                 </div>
               </details>
             </section>
+
+            {renderRuleSuggestions()}
           </aside>
 
           <div className="output-main">
@@ -380,13 +476,8 @@ export const OutputWorkspace = ({
                 <div className="output-empty output-empty-pwa">
                   <h3>Your finished notes will appear here.</h3>
                   <p>
-                    Add notes or transcript in the Capture section to the left, include highlights if useful, then click <strong>{primaryActionLabel}</strong>.
+                    Add notes or transcript in the Capture section to the left, include highlights if useful, then click <strong>Generate</strong>.
                   </p>
-                  {secondaryActionLabel ? (
-                    <p className="muted">
-                      You can also use <strong>{secondaryActionLabel}</strong> when that output path fits the session better.
-                    </p>
-                  ) : null}
                 </div>
               ) : (
                 <>
@@ -414,20 +505,20 @@ export const OutputWorkspace = ({
             </div>
 
             <details className="workspace-disclosure pwa-disclosure-card">
-              <summary>Refine and export</summary>
+              <summary>Refine output</summary>
               <div className="workspace-disclosure-body stack">
                 <div className="field field-wide">
-                  <label htmlFor="revision-instructions">Revision instructions</label>
+                  <label htmlFor="revision-instructions">Comments to improve the output</label>
                   <textarea
                     id="revision-instructions"
                     value={revisionInstructions}
                     onChange={(event) => setRevisionInstructions(event.target.value)}
-                    placeholder="Example: Make the summary more concise, keep action owners explicit, and translate jargon into clearer client language."
+                    placeholder="Example: Make the summary shorter, emphasize risks more, and make the action items more specific."
                   />
                 </div>
-                <div className="page-actions">
+                <div className="capture-toolbar output-feedback-actions">
                   <button
-                    className="shell-button"
+                    className="secondary-button"
                     type="button"
                     onClick={() => {
                       if (isViewingHistoricalVersion) return;
@@ -438,18 +529,15 @@ export const OutputWorkspace = ({
                     }}
                     disabled={isViewingHistoricalVersion}
                   >
-                    {isRevising ? "Revising..." : "Revise with instructions"}
+                    {isRevising ? "Updating..." : "Update Output"}
                   </button>
-                  <button className="shell-button" type="button" onClick={onExportText}>
-                    Export text
-                  </button>
-                  <button className="shell-button" type="button" onClick={onExportMarkdown}>
-                    Export markdown
-                  </button>
-                  <button className="shell-button" type="button" onClick={onExportHtml}>
-                    Export HTML
+                  <button className="ghost-button" type="button" onClick={onRevertOutputVersion}>
+                    {selectedOutputVersionId ? "Open latest version" : "Revert to Previous Version"}
                   </button>
                 </div>
+                <p className="muted">
+                  Add comments here when you want the polished output adjusted. Every generated version is saved in Version history.
+                </p>
               </div>
             </details>
 

@@ -12,8 +12,9 @@ import { TimeWorkspace } from "../features/time/components/TimeWorkspace";
 import { StructureWorkspace } from "../features/structure/components/StructureWorkspace";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
 import type { SettingsSection } from "../features/settings/components/SettingsCard";
+import { hydrateAITextCache, snapshotAITextCache } from "../lib/ai/cache";
 import { generateNotes } from "../lib/ai/services/generateNotes";
-import { getAIRequestHistory, recordAIRequestHistory } from "../lib/ai/history";
+import { getAIRequestHistory, hydrateAIRequestHistory, recordAIRequestHistory } from "../lib/ai/history";
 import { formatAIErrorMessage } from "../lib/ai/messages";
 import { getAIDiagnosticsItems, getAIMetricsSnapshot } from "../lib/ai/metrics";
 import {
@@ -52,12 +53,14 @@ import {
   type RecordingMode,
 } from "../lib/files/recording";
 import {
+  type DesktopBackupBundle,
   createLocalSnapshotBackup,
   exportSnapshotBackup,
   getDesktopBundleType,
   getDesktopAppVersion,
   getDesktopStorageInfo,
   importSnapshotBackup,
+  mergeImportedPwaSnapshot,
   openDesktopPath,
   type DesktopStorageInfo,
 } from "../lib/storage/desktopStorage";
@@ -289,6 +292,22 @@ export const App = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const recordingSessionIdRef = useRef<string | null>(null);
+
+  const buildDesktopBackupBundle = (): DesktopBackupBundle | null => {
+    if (!snapshot) {
+      return null;
+    }
+
+    return {
+      kind: "notesmith-desktop-backup",
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      snapshot,
+      aiTextCache: snapshotAITextCache(),
+      aiRequestHistory: getAIRequestHistory(),
+      aiModelPricing: modelPricingSnapshot,
+    };
+  };
 
   useEffect(() => {
     void load();
@@ -936,66 +955,138 @@ export const App = () => {
 
   };
 
-  const buildRawOutput = (session = activeSession) => {
+  const resolveSessionOutputLanguage = (session = activeSession) =>
+    session?.outputLanguage === "sv" || session?.outputLanguage === "en"
+      ? session.outputLanguage
+      : snapshot?.settings.outputLanguage ?? "same";
+
+  const getAgendaText = (session = activeSession, template = activeTemplate) => {
+    if (!session || !template) {
+      return "";
+    }
+    const agendaField = template.fields.find((field) => field.enabled && field.key === "agenda");
+    if (!agendaField) {
+      return "";
+    }
+    return polishNonAiNotesText(richTextToPlainText(session.customFieldValues[agendaField.id] ?? ""), {
+      abbreviations: snapshot?.settings.abbreviations ?? [],
+      sessionParticipants: session.participantText,
+      savedParticipants: snapshot?.settings.savedParticipants ?? [],
+      preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
+    });
+  };
+
+  const buildOutputMetaBlock = (session = activeSession) => {
     if (!session) {
       return "";
     }
-
-    const segments: string[] = [];
-    const title = session.title.trim();
-    const date = session.date.trim();
     const time =
       session.captureMode === "meeting-note"
         ? [session.startTime.trim(), session.endTime.trim()].filter(Boolean).join(" - ")
         : session.startTime.trim();
-    const people = session.participantText.trim();
-    const project = session.project.trim();
-    const domain = session.domain.trim();
-    const activity = session.activity.trim();
-    const tags = session.tagsText.trim();
-    const abbreviations = snapshot?.settings.abbreviations ?? [];
-    const savedParticipants = snapshot?.settings.savedParticipants ?? [];
+    return [
+      session.date.trim(),
+      time,
+      session.participantText.trim() ? `People: ${session.participantText.trim()}` : "",
+      session.domain.trim() ? `Domain: ${session.domain.trim()}` : "",
+      session.project.trim() ? `Project: ${session.project.trim()}` : "",
+      session.activity.trim() ? `Activity: ${session.activity.trim()}` : "",
+      session.tagsText.trim() ? `Tags: ${session.tagsText.trim()}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
+
+  const buildLocalPolishedOutput = (session = activeSession, template = activeTemplate) => {
+    if (!session || !template) {
+      return "";
+    }
+
     const manualPolishOptions = {
-      abbreviations,
+      abbreviations: snapshot?.settings.abbreviations ?? [],
       sessionParticipants: session.participantText,
-      savedParticipants,
+      savedParticipants: snapshot?.settings.savedParticipants ?? [],
       preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
     };
-    const highlights = polishNonAiNotesText(session.quickHighlights.trim(), manualPolishOptions);
+    const title = session.title.trim();
+    const metaBlock = buildOutputMetaBlock(session);
+    const agenda = getAgendaText(session, template);
     const manualNotes = polishNonAiNotesText(richTextToPlainText(session.manualNotes), manualPolishOptions);
     const transcript = polishNonAiNotesText(
       [session.liveTranscript.trim(), session.uploadedTranscript.trim()].filter(Boolean).join("\n\n"),
       manualPolishOptions,
     );
+    const highlights = polishNonAiNotesText(session.quickHighlights.trim(), manualPolishOptions);
+    const combinedDiscussion = [manualNotes, transcript].filter(Boolean).join("\n\n").trim();
+    const decisionLines = combinedDiscussion
+      .split(/\r?\n/)
+      .filter((line) => /^Decision:/i.test(line.trim()));
+    const actionLines = combinedDiscussion
+      .split(/\r?\n/)
+      .filter((line) => /^(Action|Next step):/i.test(line.trim()));
+    const firstDiscussionParagraph = combinedDiscussion
+      .split(/\n{2,}/)
+      .map((block) => block.trim())
+      .find(Boolean) ?? "";
+    const summary = firstDiscussionParagraph
+      ? firstDiscussionParagraph
+          .split(/(?<=[.!?])\s+/)
+          .slice(0, 2)
+          .join(" ")
+      : "";
+    const enabledSections = [...template.sections]
+      .sort((left, right) => left.position - right.position)
+      .filter((section) => !session.excludedSectionIds.includes(section.id));
+    const sectionBlocks = enabledSections
+      .map((section) => {
+        const lowerTitle = section.title.toLowerCase();
+        if (section.id === "agenda" || lowerTitle.includes("agenda")) {
+          return agenda ? `${section.title}\n${agenda}` : "";
+        }
+        if (section.id === "summary" || lowerTitle.includes("summary")) {
+          return summary ? `${section.title}\n${summary}` : "";
+        }
+        if (section.id === "decisions" || lowerTitle.includes("decision")) {
+          return decisionLines.length ? `${section.title}\n${decisionLines.join("\n")}` : "";
+        }
+        if (section.id === "actions" || lowerTitle.includes("action") || lowerTitle.includes("follow-up")) {
+          return actionLines.length ? `${section.title}\n${actionLines.join("\n")}` : "";
+        }
+        if (lowerTitle.includes("highlight")) {
+          return highlights ? `${section.title}\n${highlights}` : "";
+        }
+        return combinedDiscussion ? `${section.title}\n${combinedDiscussion}` : "";
+      })
+      .filter(Boolean);
 
-    if (title) {
-      segments.push(title);
-    }
-    if (date || time || people || domain || project || activity || tags) {
-      const metaLines = [
-        date,
-        time,
-        people ? `People: ${people}` : "",
-        domain ? `Domain: ${domain}` : "",
-        project ? `Project: ${project}` : "",
-        activity ? `Activity: ${activity}` : "",
-        tags ? `Tags: ${tags}` : "",
-      ].filter(Boolean);
-      if (metaLines.length) {
-        segments.push(metaLines.join("\n"));
-      }
-    }
-    if (highlights) {
-      segments.push(`Highlights\n${highlights}`);
-    }
-    if (manualNotes) {
-      segments.push(session.captureMode === "quick-note" ? manualNotes : `Notes\n${manualNotes}`);
-    }
-    if (transcript) {
-      segments.push(session.captureMode === "voice-note" ? transcript : `Transcript\n${transcript}`);
+    return [title, metaBlock, ...sectionBlocks].filter(Boolean).join("\n\n").trim();
+  };
+
+  const buildManualNotesOnlyOutput = (session = activeSession, template = activeTemplate) => {
+    if (!session || !template) {
+      return "";
     }
 
-    return segments.join("\n\n").trim();
+    const manualPolishOptions = {
+      abbreviations: snapshot?.settings.abbreviations ?? [],
+      sessionParticipants: session.participantText,
+      savedParticipants: snapshot?.settings.savedParticipants ?? [],
+      preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
+    };
+    const title = session.title.trim();
+    const metaBlock = buildOutputMetaBlock(session);
+    const agenda = getAgendaText(session, template);
+    const manualNotes = polishNonAiNotesText(richTextToPlainText(session.manualNotes), manualPolishOptions);
+
+    return [
+      title,
+      metaBlock,
+      agenda ? `Agenda\n${agenda}` : "",
+      manualNotes ? `Manual notes\n${manualNotes}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n")
+      .trim();
   };
 
   const hasTranscriptText = Boolean(activeSession?.liveTranscript.trim() || activeSession?.uploadedTranscript.trim());
@@ -1082,41 +1173,15 @@ export const App = () => {
   };
 
   const outputActionConfig = (() => {
-    if (activeCaptureMode === "meeting-note") {
-      return {
-        primaryLabel: "Generate meeting notes",
-        secondaryLabel: null as string | null,
-        onPrimary: () => void handleGenerate(),
-        onSecondary: undefined as (() => void) | undefined,
-        isPrimaryRunning: isGenerating,
-        isSecondaryRunning: false,
-        emptyStatePrimaryLabel: "Generate meeting notes",
-        emptyStateSecondaryLabel: null as string | null,
-      };
-    }
-
-    if (activeCaptureMode === "voice-note" && hasAudioOnlyVoiceCapture) {
-      return {
-        primaryLabel: "Transcribe to output",
-        secondaryLabel: "Transcribe and polish",
-        onPrimary: () => void handleCreateOutput(),
-        onSecondary: () => void handleGenerate(),
-        isPrimaryRunning: isTranscribingAudio,
-        isSecondaryRunning: isGenerating || isTranscribingAudio,
-        emptyStatePrimaryLabel: "Transcribe to output",
-        emptyStateSecondaryLabel: "Transcribe and polish",
-      };
-    }
-
     return {
-      primaryLabel: "Create output",
-      secondaryLabel: "Polish with AI",
-      onPrimary: () => void handleCreateOutput(),
-      onSecondary: () => void handleGenerate(),
-      isPrimaryRunning: false,
-      isSecondaryRunning: isGenerating,
-      emptyStatePrimaryLabel: "Create output",
-      emptyStateSecondaryLabel: "Polish with AI",
+      primaryLabel: "Generate",
+      secondaryLabel: null as string | null,
+      onPrimary: () => void handleGenerate(),
+      onSecondary: undefined as (() => void) | undefined,
+      isPrimaryRunning: isGenerating || (activeSession?.transcribeOnly ? false : isTranscribingAudio && hasAudioOnlyVoiceCapture),
+      isSecondaryRunning: false,
+      emptyStatePrimaryLabel: "Generate",
+      emptyStateSecondaryLabel: null as string | null,
     };
   })();
 
@@ -1162,7 +1227,12 @@ export const App = () => {
 
   const handleExportSnapshot = async () => {
     try {
-      const result = await exportSnapshotBackup(snapshot);
+      const backupBundle = buildDesktopBackupBundle();
+      if (!backupBundle) {
+        setStatusNote("Nothing is loaded yet to export.");
+        return;
+      }
+      const result = await exportSnapshotBackup(backupBundle);
       if (!result) {
         setStatusNote("Backup export was cancelled.");
         return;
@@ -1175,7 +1245,12 @@ export const App = () => {
 
   const handleCreateLocalBackup = async () => {
     try {
-      const backupPath = await createLocalSnapshotBackup(snapshot);
+      const backupBundle = buildDesktopBackupBundle();
+      if (!backupBundle) {
+        setStatusNote("Nothing is loaded yet to back up.");
+        return;
+      }
+      const backupPath = await createLocalSnapshotBackup(backupBundle);
       if (!backupPath) {
         setStatusNote("Local backup creation is only available in the installed desktop app.");
         return;
@@ -1193,11 +1268,31 @@ export const App = () => {
         setStatusNote("Backup import was cancelled.");
         return;
       }
-      await restoreBackupSnapshot(imported);
-      setStatusNote("Imported the selected desktop backup file.");
+      if (imported.kind === "pwa-export") {
+        const mergedSnapshot = snapshot ? mergeImportedPwaSnapshot(snapshot, imported.snapshot) : imported.snapshot;
+        await restoreBackupSnapshot(mergedSnapshot);
+        setStatusNote("Imported PWA sessions into the desktop database.");
+      } else {
+        await restoreBackupSnapshot(imported.snapshot);
+        if (imported.aiTextCache) {
+          hydrateAITextCache({ records: imported.aiTextCache });
+          await repository.saveAITextCache(imported.aiTextCache);
+        }
+        if (imported.aiRequestHistory) {
+          hydrateAIRequestHistory(imported.aiRequestHistory);
+          setAIRequestHistory(getAIRequestHistory());
+          await repository.saveAIRequestHistory(imported.aiRequestHistory);
+        }
+        if (imported.aiModelPricing) {
+          setModelPricingSnapshot(imported.aiModelPricing);
+          setModelPricingStatus(buildModelPricingStatus(imported.aiModelPricing));
+          await repository.saveAIModelPricing(imported.aiModelPricing);
+        }
+        setStatusNote("Imported the selected desktop backup file.");
+      }
       setOpenPanel(null);
     } catch (error) {
-      setStatusNote(error instanceof Error ? error.message : "Could not import the desktop backup file.");
+      setStatusNote(error instanceof Error ? error.message : "Could not import the selected desktop backup or PWA session file.");
     }
   };
 
@@ -1263,7 +1358,8 @@ export const App = () => {
     setUpdateStatusNote(`Downloading and installing version ${availableUpdateVersion}...`);
     setStatusNote(`Installing update ${availableUpdateVersion}...`);
     try {
-      const backupPath = await createLocalSnapshotBackup(snapshot);
+      const backupBundle = buildDesktopBackupBundle();
+      const backupPath = backupBundle ? await createLocalSnapshotBackup(backupBundle) : null;
       if (backupPath) {
         setStatusNote(`Created a local safety backup at ${backupPath} before installing ${availableUpdateVersion}.`);
       }
@@ -1309,8 +1405,14 @@ export const App = () => {
     let usedCache = false;
     try {
       let sessionForGeneration = activeSession;
+      const shouldUseManualMode = sessionForGeneration.transcribeOnly === true;
 
-      if (activeCaptureMode === "voice-note" && !hasTranscriptText && (activeAudioAttachment || pendingAudioBySession[activeSession.id])) {
+      if (shouldUseManualMode && !richTextToPlainText(sessionForGeneration.manualNotes).trim()) {
+        setStatusNote("Add text to Manual notes first. This mode transfers Manual notes directly into Output without AI generation.");
+        return;
+      }
+
+      if (!shouldUseManualMode && activeCaptureMode === "voice-note" && !hasTranscriptText && (activeAudioAttachment || pendingAudioBySession[activeSession.id])) {
         const audioFile = await getAudioFileForActiveSession();
         if (!audioFile) {
           setStatusNote("No audio file was available to transcribe for this voice note.");
@@ -1334,90 +1436,54 @@ export const App = () => {
         }
       }
 
-      const output = await generateNotes({
-        session: sessionForGeneration,
-        settings: snapshot.settings,
-        template,
-        attachments: activeAttachments,
-        onEvent: createAIRuntimeHandler({
-          onCacheHit: () => {
-            usedCache = true;
-          },
-        }),
-      });
+      const output = shouldUseManualMode
+        ? buildManualNotesOnlyOutput(sessionForGeneration, template)
+        : snapshot.settings.apiKey
+          ? await generateNotes({
+              session: sessionForGeneration,
+              settings: snapshot.settings,
+              template,
+              attachments: activeAttachments,
+              onEvent: createAIRuntimeHandler({
+                onCacheHit: () => {
+                  usedCache = true;
+                },
+              }),
+            })
+          : buildLocalPolishedOutput(sessionForGeneration, template);
       setSelectedOutputVersionId(null);
       await saveSession({ ...sessionForGeneration, ...buildOutputVersionPatch(sessionForGeneration, output) });
       setStatusNote(
-        usedCache
-          ? "Loaded structured output from a matching local AI cache entry."
-          : "Generated structured output with the desktop AI service.",
+        shouldUseManualMode
+          ? "Manual notes were transferred to Output without AI generation."
+          : usedCache
+            ? "Loaded structured output from a matching local AI cache entry."
+            : snapshot.settings.apiKey
+              ? "Generated structured output with the desktop AI service."
+              : sessionForGeneration.outputLanguage !== "same"
+                ? "No API key was available, so a local polish pass was used. Language translation still requires AI generation."
+                : "No API key was available, so a local polish pass was used instead.",
       );
       await openMetadataReviewIfNeeded(sessionForGeneration);
       openNotesTarget({ sessionId: sessionForGeneration.id, view: "output" });
     } catch (error) {
-      setStatusNote(formatAIErrorMessage(error, "Generation failed."));
+      setStatusNote(
+        activeSession.transcribeOnly
+          ? `Manual-notes transfer failed: ${error instanceof Error ? error.message : "Unknown error."}`
+          : formatAIErrorMessage(error, "Generation failed."),
+      );
     } finally {
       setIsGenerating(false);
     }
-  };
-
-  const handleCreateOutput = async () => {
-    if (hasAudioOnlyVoiceCapture) {
-      const audioFile = await getAudioFileForActiveSession();
-      if (!audioFile) {
-        setStatusNote("No audio file was available to transcribe for this voice note.");
-        return;
-      }
-
-      setIsTranscribingAudio(true);
-      try {
-        const transcriptText = await transcribeAudio({
-          file: audioFile,
-          settings: snapshot.settings,
-          onEvent: createAIRuntimeHandler(),
-        });
-        const nextSession = {
-          ...activeSession,
-          liveTranscript: [activeSession.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n"),
-        };
-        const rawOutput = buildRawOutput(nextSession);
-        setSelectedOutputVersionId(null);
-        await saveSession({ ...nextSession, ...buildOutputVersionPatch(nextSession, rawOutput) });
-        setStatusNote("Transcribed the voice note into Output without AI polishing.");
-        await openMetadataReviewIfNeeded(nextSession);
-        openNotesTarget({ sessionId: nextSession.id, view: "output" });
-      } catch (error) {
-        setStatusNote(formatAIErrorMessage(error, "Audio transcription failed."));
-      } finally {
-        setIsTranscribingAudio(false);
-      }
-      return;
-    }
-
-    const rawOutput = buildRawOutput(activeSession);
-    if (!rawOutput) {
-      setStatusNote("There is no captured note content to create Output from yet.");
-      return;
-    }
-
-    setSelectedOutputVersionId(null);
-    await saveSession({ ...activeSession, ...buildOutputVersionPatch(activeSession, rawOutput) });
-    setStatusNote(
-      activeCaptureMode === "voice-note"
-        ? "Created Output from the current voice note without AI polishing."
-        : "Created Output from the current note without AI polishing.",
-    );
-    await openMetadataReviewIfNeeded(activeSession);
-    openNotesTarget({ sessionId: activeSession.id, view: "output" });
   };
 
   const handleTranslate = async () => {
     let usedCache = false;
     try {
       const targetLanguage =
-        snapshot.settings.outputLanguage === "sv"
+        resolveSessionOutputLanguage(activeSession) === "sv"
           ? "Swedish"
-          : snapshot.settings.outputLanguage === "en"
+          : resolveSessionOutputLanguage(activeSession) === "en"
             ? "English"
             : activeSession.output.match(/[\u00E5\u00E4\u00F6\u00C5\u00C4\u00D6]/u)
               ? "English"
@@ -1452,6 +1518,8 @@ export const App = () => {
         currentOutput: activeSession.output,
         instructions,
         detailLevel: activeSession.detailLevel,
+        outputLanguage: resolveSessionOutputLanguage(activeSession),
+        additionalInstructions: activeSession.additionalInstructions,
         settings: snapshot.settings,
         onEvent: createAIRuntimeHandler({
           onCacheHit: () => {
@@ -1508,6 +1576,53 @@ export const App = () => {
 
   const handleOpenLatestOutputVersion = () => {
     setSelectedOutputVersionId(null);
+  };
+
+  const handleRevertOutputVersion = () => {
+    if (selectedOutputVersionId) {
+      setSelectedOutputVersionId(null);
+      setStatusNote("Back on the latest generated version.");
+      return;
+    }
+
+    const previousVersion = activeOutputVersions[1];
+    if (!previousVersion) {
+      setStatusNote("There is no previous generated version to open yet.");
+      return;
+    }
+
+    setSelectedOutputVersionId(previousVersion.id);
+    setStatusNote("Opened the previous generated version. Open the latest version to continue editing.");
+  };
+
+  const handleCopyOutput = async () => {
+    if (!displayedOutput.trim()) {
+      setStatusNote("Generate output first, then copy it from here.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(displayedOutput);
+      setStatusNote("Output copied to your clipboard.");
+    } catch (error) {
+      setStatusNote(error instanceof Error ? error.message : "Clipboard access was blocked. You can still copy the output manually.");
+    }
+  };
+
+  const handleAcceptVisibleRuleSuggestion = async (suggestionId: string) => {
+    const nextSettings = acceptRuleSuggestion(snapshot.settings, suggestionId);
+    await saveSettings(nextSettings);
+    setVisibleRuleSuggestions((current) => current.filter((entry) => entry.id !== suggestionId));
+  };
+
+  const handleDismissVisibleRuleSuggestion = (suggestionId: string) => {
+    setDismissedRuleSuggestionIds((current) => Array.from(new Set([...current, suggestionId])));
+  };
+
+  const handleIgnoreVisibleRuleSuggestion = async (suggestionId: string) => {
+    const nextSettings = ignoreRuleSuggestion(snapshot.settings, suggestionId, { forever: true });
+    await saveSettings(nextSettings);
+    setVisibleRuleSuggestions((current) => current.filter((entry) => entry.id !== suggestionId));
   };
 
   const handleOutputWorkspaceChange = async (nextSession: typeof activeSession) => {
@@ -2230,8 +2345,10 @@ export const App = () => {
             isRevising={isRevising}
             onPrimaryAction={outputActionConfig.onPrimary}
             onSecondaryAction={outputActionConfig.onSecondary}
+            onCopyOutput={() => void handleCopyOutput()}
             onTranslate={() => void handleTranslate()}
             onRevise={(instructions) => void handleRevise(instructions)}
+            onRevertOutputVersion={handleRevertOutputVersion}
             onOpenOutputVersion={handleOpenOutputVersion}
             onOpenLatestOutputVersion={handleOpenLatestOutputVersion}
             onExportText={() => exportOutputAsText({ title: activeSession.title, output: displayedOutput })}
@@ -2239,7 +2356,10 @@ export const App = () => {
             onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
             onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
             onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
-            outputLanguage={snapshot.settings.outputLanguage}
+            ruleSuggestions={visibleRuleSuggestions.filter((entry) => !dismissedRuleSuggestionIds.includes(entry.id))}
+            onAcceptRuleSuggestion={(suggestionId) => void handleAcceptVisibleRuleSuggestion(suggestionId)}
+            onDismissRuleSuggestion={handleDismissVisibleRuleSuggestion}
+            onIgnoreRuleSuggestion={(suggestionId) => void handleIgnoreVisibleRuleSuggestion(suggestionId)}
             primaryActionLabel={outputActionConfig.primaryLabel}
             secondaryActionLabel={outputActionConfig.secondaryLabel}
             emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
@@ -3123,8 +3243,10 @@ export const App = () => {
                       isRevising={isRevising}
                       onPrimaryAction={outputActionConfig.onPrimary}
                       onSecondaryAction={outputActionConfig.onSecondary}
+                      onCopyOutput={() => void handleCopyOutput()}
                       onTranslate={() => void handleTranslate()}
                       onRevise={(instructions) => void handleRevise(instructions)}
+                      onRevertOutputVersion={handleRevertOutputVersion}
                       onOpenOutputVersion={handleOpenOutputVersion}
                       onOpenLatestOutputVersion={handleOpenLatestOutputVersion}
                       onExportText={() => exportOutputAsText({ title: activeSession.title, output: displayedOutput })}
@@ -3132,7 +3254,10 @@ export const App = () => {
                       onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
                       onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
                       onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
-                      outputLanguage={snapshot.settings.outputLanguage}
+                      ruleSuggestions={visibleRuleSuggestions.filter((entry) => !dismissedRuleSuggestionIds.includes(entry.id))}
+                      onAcceptRuleSuggestion={(suggestionId) => void handleAcceptVisibleRuleSuggestion(suggestionId)}
+                      onDismissRuleSuggestion={handleDismissVisibleRuleSuggestion}
+                      onIgnoreRuleSuggestion={(suggestionId) => void handleIgnoreVisibleRuleSuggestion(suggestionId)}
                       primaryActionLabel={outputActionConfig.primaryLabel}
                       secondaryActionLabel={outputActionConfig.secondaryLabel}
                       emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}

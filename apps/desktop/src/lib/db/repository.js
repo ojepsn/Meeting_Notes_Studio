@@ -35,7 +35,10 @@ const normalizeSessionRecord = (session) => ({
     domain: typeof session.domain === "string" ? session.domain : "",
     activity: typeof session.activity === "string" ? session.activity : "",
     tagsText: typeof session.tagsText === "string" ? session.tagsText : "",
+    transcribeOnly: Boolean(session.transcribeOnly),
+    outputLanguage: session.outputLanguage === "sv" || session.outputLanguage === "en" ? session.outputLanguage : "same",
     detailLevel: normalizeDetailLevel(session.detailLevel),
+    additionalInstructions: typeof session.additionalInstructions === "string" ? session.additionalInstructions : "",
     customFieldValues: session.customFieldValues && typeof session.customFieldValues === "object" ? session.customFieldValues : {},
     excludedSectionIds: Array.isArray(session.excludedSectionIds) ? session.excludedSectionIds : [],
     outputVersions: Array.isArray(session.outputVersions)
@@ -184,7 +187,10 @@ export const createDefaultSnapshot = () => ({
             startTime: "09:00",
             endTime: "10:00",
             quickHighlights: "Release planning, blockers, client timeline",
+            transcribeOnly: false,
+            outputLanguage: "same",
             detailLevel: 3,
+            additionalInstructions: "",
             manualNotes: "Talked through current blockers and the April release cut.",
             liveTranscript: "",
             uploadedTranscript: "",
@@ -443,6 +449,9 @@ class TauriSqliteRepository {
                 await db.execute("ALTER TABLE sessions ADD COLUMN domain TEXT NOT NULL DEFAULT ''").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN activity TEXT NOT NULL DEFAULT ''").catch(() => { });
                 await db.execute("ALTER TABLE sessions ADD COLUMN tags_text TEXT NOT NULL DEFAULT ''").catch(() => { });
+                await db.execute("ALTER TABLE sessions ADD COLUMN transcribe_only INTEGER NOT NULL DEFAULT 0").catch(() => { });
+                await db.execute("ALTER TABLE sessions ADD COLUMN output_language TEXT NOT NULL DEFAULT 'same'").catch(() => { });
+                await db.execute("ALTER TABLE sessions ADD COLUMN additional_instructions TEXT NOT NULL DEFAULT ''").catch(() => { });
                 await db.execute("ALTER TABLE attachments ADD COLUMN caption TEXT NOT NULL DEFAULT ''").catch(() => { });
                 await db.execute("ALTER TABLE attachments ADD COLUMN include_in_output INTEGER NOT NULL DEFAULT 0").catch(() => { });
                 await db.execute("ALTER TABLE attachments ADD COLUMN output_position INTEGER NOT NULL DEFAULT 0").catch(() => { });
@@ -468,11 +477,14 @@ class TauriSqliteRepository {
             domain: row.domain,
             activity: row.activity,
             tagsText: row.tags_text,
+            transcribeOnly: Boolean(row.transcribe_only),
+            outputLanguage: row.output_language === "sv" || row.output_language === "en" ? row.output_language : "same",
             date: row.session_date,
             startTime: row.start_time,
             endTime: row.end_time,
             quickHighlights: row.quick_highlights,
             detailLevel: row.detail_level,
+            additionalInstructions: row.additional_instructions,
             manualNotes: row.manual_notes,
             liveTranscript: row.live_transcript,
             uploadedTranscript: row.uploaded_transcript,
@@ -490,10 +502,10 @@ class TauriSqliteRepository {
         const db = await this.getDb();
         await db.execute("DELETE FROM sessions");
         await Promise.all(records.map((record) => db.execute(`INSERT INTO sessions (
-            id, template_id, title, deleted_at, is_private, participant_text, project, domain, activity, tags_text, session_date, start_time, end_time,
-            quick_highlights, detail_level, capture_mode, manual_notes, live_transcript, uploaded_transcript, custom_field_values, excluded_section_ids, output_text,
+            id, template_id, title, deleted_at, is_private, participant_text, project, domain, activity, tags_text, transcribe_only, output_language, session_date, start_time, end_time,
+            quick_highlights, detail_level, additional_instructions, capture_mode, manual_notes, live_transcript, uploaded_transcript, custom_field_values, excluded_section_ids, output_text,
             output_versions, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
             record.id,
             record.templateId,
             record.title,
@@ -504,11 +516,14 @@ class TauriSqliteRepository {
             record.domain,
             record.activity,
             record.tagsText,
+            record.transcribeOnly ? 1 : 0,
+            record.outputLanguage,
             record.date,
             record.startTime,
             record.endTime,
             record.quickHighlights,
             normalizeDetailLevel(record.detailLevel),
+            record.additionalInstructions,
             record.captureMode,
             record.manualNotes,
             record.liveTranscript,
@@ -737,7 +752,10 @@ export const createSessionRecord = (templateId, captureMode = "meeting-note") =>
         startTime: isoTime,
         endTime: isoTime,
         quickHighlights: "",
+        transcribeOnly: false,
+        outputLanguage: "same",
         detailLevel: 3,
+        additionalInstructions: "",
         manualNotes: "",
         liveTranscript: "",
         uploadedTranscript: "",

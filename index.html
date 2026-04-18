@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.10.30">
+  <link rel="stylesheet" href="styles.css?v=0.10.31">
 </head>
 <body>
   <main class="page-shell">
@@ -24,7 +24,7 @@
           Capture rough notes and turn them into professional meeting notes without leaving the page.
         </p>
         <div class="hero-meta">
-        <div class="version-pill" id="app-version">v0.10.30</div>
+        <div class="version-pill" id="app-version">v0.10.31</div>
           <div class="version-pill model-pill" id="app-models">Output: GPT-5 mini · Audio: GPT-4o mini transcribe</div>
           <div class="update-notice is-hidden-field" id="app-update-notice">New version available</div>
         </div>
@@ -355,17 +355,26 @@
                 <button class="ghost-button" id="copy-output" type="button">Copy Output</button>
               </div>
 
-              <details class="advanced-options-disclosure">
+              <details class="advanced-options-disclosure" open>
                 <summary>Language and generation options</summary>
                 <div class="advanced-options-body">
-                  <label class="field field-compact field-polish-language">
+                  <div class="field field-compact field-polish-language" id="output-language-group">
                     <span class="field-label">Output language</span>
-                    <select id="output-language">
-                      <option value="auto">Same as notes</option>
-                      <option value="sv">Swedish</option>
-                      <option value="en">English</option>
-                    </select>
-                  </label>
+                    <div class="config-grid config-grid-inline output-language-button-group" role="radiogroup" aria-label="Output language">
+                      <label class="config-option config-option-featured output-language-option">
+                        <input id="output-language-auto" name="output-language" type="radio" value="auto" checked>
+                        <span>Same as notes</span>
+                      </label>
+                      <label class="config-option config-option-featured output-language-option">
+                        <input id="output-language-sv" name="output-language" type="radio" value="sv">
+                        <span>Swedish</span>
+                      </label>
+                      <label class="config-option config-option-featured output-language-option">
+                        <input id="output-language-en" name="output-language" type="radio" value="en">
+                        <span>English</span>
+                      </label>
+                    </div>
+                  </div>
 
                   <div class="generation-mode-group" role="radiogroup" aria-label="Generation mode">
                     <label class="config-option config-option-featured">
@@ -450,7 +459,7 @@
                     <span class="field-label">Additional LLM instructions</span>
                     <textarea
                       id="additional-instructions"
-                      rows="4"
+                      rows="2"
                       placeholder="Example: Focus more on risks and decisions, and exclude implementation details."
                     ></textarea>
                   </label>
@@ -1666,7 +1675,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.17/mammoth.browser.min.js"></script>
-  <script src="app.js?v=0.10.30"></script>
+  <script src="app.js?v=0.10.31"></script>
 </body>
 </html>
 

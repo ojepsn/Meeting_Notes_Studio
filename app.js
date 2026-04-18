@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.30";
+const APP_VERSION = "v0.10.31";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -56,7 +56,7 @@ const BUILT_IN_TEMPLATES = {
     templateInstructions: "Structure the output like a professional quick working note. Keep the focus on useful observations, decisions, and follow-up actions.",
     fields: {
       title: true,
-      participants: false,
+      participants: true,
       agenda: false,
       highlights: false,
       manualNotes: true,
@@ -256,7 +256,8 @@ const includeActionsInput = document.querySelector("#include-actions");
 const generationModeManualInput = document.querySelector("#generation-mode-manual");
 const generationModeAiInput = document.querySelector("#generation-mode-ai");
 const templateSectionList = document.querySelector("#template-section-list");
-const outputLanguageSelect = document.querySelector("#output-language");
+const outputLanguageInputs = [...document.querySelectorAll("input[name=\"output-language\"]")];
+const outputLanguageGroup = document.querySelector("#output-language-group");
 const detailLevelInput = document.querySelector("#detail-level");
 const detailLevelLabel = document.querySelector("#detail-level-label");
 const additionalInstructionsInput = document.querySelector("#additional-instructions");
@@ -2468,8 +2469,13 @@ void initializeApp().catch((error) => {
     }, true);
   });
 
-  outputLanguageSelect.addEventListener("change", () => {
-    updateActiveSession({ outputLanguage: outputLanguageSelect.value }, true);
+  outputLanguageInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!input.checked) {
+        return;
+      }
+      updateActiveSession({ outputLanguage: input.value }, true);
+    });
   });
 
   detailLevelInput.addEventListener("input", () => {
@@ -3812,8 +3818,10 @@ function updateTranscribeOnlyUi(session = getActiveSession()) {
       control.disabled = isTranscriptOnly;
     });
 
-  outputLanguageSelect.disabled = isTranscriptOnly;
-  outputLanguageSelect.closest(".field")?.classList.toggle("is-disabled", isTranscriptOnly);
+  outputLanguageInputs.forEach((input) => {
+    input.disabled = isTranscriptOnly;
+  });
+  outputLanguageGroup?.classList.toggle("is-disabled", isTranscriptOnly);
   detailLevelInput.disabled = isTranscriptOnly;
   detailLevelInput.closest(".field")?.classList.toggle("is-disabled", isTranscriptOnly);
   additionalInstructionsInput.disabled = isTranscriptOnly;
@@ -4228,7 +4236,9 @@ function syncFieldsFromSession() {
   includeHighlightsInput.checked = session.sections.includeHighlights;
   includeDecisionsInput.checked = session.sections.includeDecisions;
   includeActionsInput.checked = session.sections.includeActions;
-  outputLanguageSelect.value = session.outputLanguage ?? "auto";
+  outputLanguageInputs.forEach((input) => {
+    input.checked = input.value === (session.outputLanguage ?? "auto");
+  });
   detailLevelInput.value = String(session.detailLevel ?? 3);
   additionalInstructionsInput.value = session.additionalInstructions ?? "";
   updateDetailLevelLabel();
@@ -8296,6 +8306,13 @@ function buildSharedDataPayload() {
     version: 1,
     updatedAt: new Date().toISOString(),
     sessions,
+    settings: {
+      ...settings,
+      storageMode: STORAGE_MODES.browser,
+      storageFileName: "",
+      storageFileConnected: false,
+      storageLastSyncAt: 0,
+    },
     settingsSubset: {
       participantDirectory: settings.participantDirectory || [],
       abbreviationDirectory: settings.abbreviationDirectory || [],
@@ -8317,12 +8334,28 @@ function applySharedDataPayload(payload) {
   const settingsSubset = payload.settingsSubset && typeof payload.settingsSubset === "object"
     ? payload.settingsSubset
     : {};
+  const importedSettings = payload.settings && typeof payload.settings === "object"
+    ? normalizeStoredSettings({
+      ...payload.settings,
+      storageMode: STORAGE_MODES.browser,
+      storageFileName: "",
+      storageFileConnected: false,
+      storageLastSyncAt: 0,
+    })
+    : null;
 
   isApplyingStoragePayload = true;
   try {
-    settings.participantDirectory = normalizeParticipantDirectory(settingsSubset.participantDirectory);
-    settings.abbreviationDirectory = normalizeAbbreviationDirectory(settingsSubset.abbreviationDirectory);
-    settings.customTemplates = normalizeCustomTemplates(settingsSubset.customTemplates);
+    if (importedSettings) {
+      settings = importedSettings;
+    } else {
+      settings = normalizeStoredSettings({
+        ...settings,
+        participantDirectory: settingsSubset.participantDirectory,
+        abbreviationDirectory: settingsSubset.abbreviationDirectory,
+        customTemplates: settingsSubset.customTemplates,
+      });
+    }
     sessions = normalizeImportedSessions(importedSessions);
     if (!sessions.length) {
       const freshSession = createSession();
@@ -9930,18 +9963,18 @@ function toFileSafeName(value) {
 }
 
 function exportSessions() {
-  const payload = buildSessionsExportPayload();
+  const payload = buildSharedDataPayload();
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `meeting-notes-sessions-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `meeting-notes-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
   markBackupCompleted();
-  sessionStorageStatus.textContent = "Sessions exported to a JSON file.";
+  sessionStorageStatus.textContent = "Backup exported to a JSON file.";
 }
 
 async function importSessionsFromFile(event) {
@@ -9954,18 +9987,15 @@ async function importSessionsFromFile(event) {
   try {
     const text = await file.text();
     const payload = JSON.parse(text);
-    const importedSessions = Array.isArray(payload) ? payload : payload.sessions;
-
-    if (!Array.isArray(importedSessions) || !importedSessions.length) {
-      throw new Error("No valid sessions were found in that file.");
+    if (Array.isArray(payload) || (payload && typeof payload === "object" && Array.isArray(payload.sessions))) {
+      applySharedDataPayload(Array.isArray(payload) ? { version: 1, sessions: payload } : payload);
+    } else {
+      throw new Error("No valid backup data was found in that file.");
     }
-
-    sessions = normalizeImportedSessions(importedSessions);
-    activeSessionId = sessions[0].id;
-    selectedOutputVersionId = null;
     persistSessions();
+    persistSettings();
     render();
-    sessionStorageStatus.textContent = `Imported ${sessions.length} session${sessions.length === 1 ? "" : "s"} from file.`;
+    sessionStorageStatus.textContent = `Imported ${sessions.length} session${sessions.length === 1 ? "" : "s"} from backup.`;
   } catch (error) {
     sessionStorageStatus.textContent = `Import failed: ${error.message}`;
   } finally {
@@ -9981,7 +10011,7 @@ async function saveSessionsToLocalFile() {
 
   try {
     const handle = await window.showSaveFilePicker({
-      suggestedName: `meeting-notes-sessions-${new Date().toISOString().slice(0, 10)}.json`,
+      suggestedName: `meeting-notes-backup-${new Date().toISOString().slice(0, 10)}.json`,
       types: [
         {
           description: "JSON files",
@@ -9993,10 +10023,10 @@ async function saveSessionsToLocalFile() {
     });
 
     const writable = await handle.createWritable();
-    await writable.write(JSON.stringify(buildSessionsExportPayload(), null, 2));
+    await writable.write(JSON.stringify(buildSharedDataPayload(), null, 2));
     await writable.close();
     markBackupCompleted();
-    sessionStorageStatus.textContent = "Sessions were saved to your chosen local file.";
+    sessionStorageStatus.textContent = "Backup was saved to your chosen local file.";
     return true;
   } catch (error) {
     if (error?.name === "AbortError") {

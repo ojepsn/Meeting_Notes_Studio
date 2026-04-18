@@ -21,13 +21,43 @@ const normalizePromptBlocks = (blocks) => Array.isArray(blocks)
     : [];
 const normalizePromptProfile = (settings) => {
     return resolvePromptProfile({
-        generationSystem: settings?.promptSettings?.generationSystem,
-        generationRules: settings?.promptSettings?.generationRules,
+        generationSystem: settings?.promptSettings?.meetingMinutesSystem ?? settings?.promptSettings?.generationSystem,
+        generationRules: settings?.promptSettings?.meetingMinutesRules ?? settings?.promptSettings?.generationRules,
+        personalNotesSystem: settings?.promptSettings?.personalNotesSystem,
+        personalNotesRules: settings?.promptSettings?.personalNotesRules,
         revisionRules: settings?.promptSettings?.revisionRules,
         translationRules: settings?.promptSettings?.translationRules,
         extraBlocks: normalizePromptBlocks(settings?.promptSettings?.additionalPrompts),
     }).profile;
 };
+const normalizeLegacyPreferredParticipantNames = (entries) => Array.isArray(entries)
+    ? entries
+        .map((entry) => ({
+        id: typeof entry?.id === "string" && entry.id.trim() ? entry.id : crypto.randomUUID(),
+        shortForm: typeof entry?.shortForm === "string" ? entry.shortForm.trim() : "",
+        fullName: typeof entry?.fullName === "string" ? entry.fullName.trim() : "",
+    }))
+        .filter((entry) => entry.shortForm && entry.fullName)
+    : [];
+const normalizeLegacyRuleSuggestions = (entries) => Array.isArray(entries)
+    ? entries
+        .map((entry) => ({
+        id: typeof entry?.id === "string" && entry.id.trim() ? entry.id : crypto.randomUUID(),
+        type: (entry?.type === "preferred_name" ? "preferred_name" : "abbreviation"),
+        sourceValue: typeof entry?.sourceValue === "string" ? entry.sourceValue.trim() : "",
+        suggestedValue: typeof entry?.suggestedValue === "string" ? entry.suggestedValue.trim() : "",
+        evidenceCount: Number.isFinite(Number(entry?.evidenceCount)) ? Math.max(1, Math.round(Number(entry?.evidenceCount))) : 1,
+        confidence: Number.isFinite(Number(entry?.confidence)) ? Math.max(0, Math.min(1, Number(entry?.confidence))) : 0.5,
+        status: entry?.status === "accepted" || entry?.status === "ignored" ? entry.status : "pending",
+        ignoreForever: entry?.ignoreForever === true,
+        observedSessionIds: Array.isArray(entry?.observedSessionIds)
+            ? entry.observedSessionIds.filter((value) => typeof value === "string" && Boolean(value.trim()))
+            : [],
+        createdAt: typeof entry?.createdAt === "string" && entry.createdAt.trim() ? entry.createdAt : new Date().toISOString(),
+        updatedAt: typeof entry?.updatedAt === "string" && entry.updatedAt.trim() ? entry.updatedAt : new Date().toISOString(),
+    }))
+        .filter((entry) => entry.sourceValue && entry.suggestedValue)
+    : [];
 const mapLegacyTemplateId = (legacyId) => {
     if (legacyId === "personalNote")
         return "personal-note";
@@ -85,7 +115,10 @@ const mapLegacySessions = (sessions) => Array.isArray(sessions)
         startTime: typeof session.meetingStartTime === "string" ? session.meetingStartTime : "",
         endTime: typeof session.meetingEndTime === "string" ? session.meetingEndTime : "",
         quickHighlights: Array.isArray(session.highlights) ? session.highlights.join(", ") : "",
+        transcribeOnly: false,
+        outputLanguage: "same",
         detailLevel: typeof session.detailLevel === "number" ? Math.min(5, Math.max(1, Math.round(session.detailLevel))) : 3,
+        additionalInstructions: "",
         manualNotes: typeof session.rawNotes === "string" ? session.rawNotes : "",
         liveTranscript: typeof session.liveTranscript === "string" ? session.liveTranscript : "",
         uploadedTranscript: typeof session.uploadedTranscript === "string" ? session.uploadedTranscript : "",
@@ -170,6 +203,98 @@ const mapLegacyTemplates = (customTemplates) => {
         : [];
     return [...BUILTIN_TEMPLATES, ...mapped];
 };
+const buildLegacySnapshot = (parsedSessions, parsedSettings) => {
+    const templateUsageCounts = parsedSettings?.templateUsageCounts ?? {};
+    const legacyExportPresetId = parsedSettings?.exportStylePreset;
+    const preferredDesktopTemplateId = Object.entries(templateUsageCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+    return {
+        sessions: mapLegacySessions(parsedSessions),
+        templates: mapLegacyTemplates(parsedSettings?.customTemplates),
+        todos: mapLegacyTodos(parsedSettings?.todoItems),
+        activities: [],
+        timelogs: [],
+        calendarItems: [],
+        entityLinks: [],
+        attachments: [],
+        settings: {
+            theme: `${mapLegacyThemeFamily(parsedSettings?.themeFamily).replace(/-(light|dark)$/, "")}-${parsedSettings?.themeMode === "dark" ? "dark" : "light"}`,
+            outputLanguage: parsedSettings?.outputLanguage || "same",
+            preferredDesktopTemplateId: mapLegacyTemplateId(preferredDesktopTemplateId),
+            outputLayoutPresetId: normalizeOutputLayoutPresetId(legacyExportPresetId),
+            notesCapturePaneWidth: 640,
+            captureWorkspaceDensity: "minimal",
+            outputWorkspaceDensity: "minimal",
+            calendarDaysInView: 5,
+            calendarSlotHeight: 16,
+            calendarIsFullScreen: true,
+            calendarFullScreenPreferenceInitialized: false,
+            calendarDetailsPaneWidth: 320,
+            calendarScrollTop: 0,
+            calendarScrollLeft: 0,
+            apiKey: "",
+            textModel: "gpt-5.4-mini",
+            transcriptionModel: "gpt-4o-mini-transcribe",
+            savedParticipants: Array.isArray(parsedSettings?.participantDirectory)
+                ? parsedSettings.participantDirectory.filter((value) => typeof value === "string" && Boolean(value.trim()))
+                : [],
+            savedProjects: [],
+            savedDomains: [],
+            savedActivities: [],
+            savedTags: [],
+            projectLinks: [],
+            timeReportPresets: [],
+            abbreviations: Array.isArray(parsedSettings?.abbreviationDirectory)
+                ? parsedSettings.abbreviationDirectory
+                    .map((entry) => ({
+                    id: typeof entry.id === "string" && entry.id.trim() ? entry.id : crypto.randomUUID(),
+                    shortForm: typeof entry.shortForm === "string"
+                        ? entry.shortForm.trim()
+                        : typeof entry.short === "string"
+                            ? entry.short.trim()
+                            : "",
+                    fullForm: typeof entry.fullForm === "string"
+                        ? entry.fullForm.trim()
+                        : typeof entry.full === "string"
+                            ? entry.full.trim()
+                            : "",
+                }))
+                    .filter((entry) => entry.shortForm && entry.fullForm)
+                : [],
+            preferredParticipantNames: normalizeLegacyPreferredParticipantNames(parsedSettings?.preferredParticipantNames),
+            ruleSuggestions: normalizeLegacyRuleSuggestions(parsedSettings?.ruleSuggestions),
+            promptProfile: normalizePromptProfile(parsedSettings),
+        },
+    };
+};
+export const parseLegacyImportSnapshot = (payload) => {
+    if (Array.isArray(payload)) {
+        return buildLegacySnapshot(payload, null);
+    }
+    if (!payload || typeof payload !== "object") {
+        return null;
+    }
+    const candidate = payload;
+    if (Array.isArray(candidate.templates) && candidate.settings && typeof candidate.settings === "object") {
+        return null;
+    }
+    const parsedPayload = payload;
+    const hasSessions = Array.isArray(parsedPayload.sessions);
+    const hasSettings = Boolean(parsedPayload.settings && typeof parsedPayload.settings === "object");
+    const hasSettingsSubset = Boolean(parsedPayload.settingsSubset && typeof parsedPayload.settingsSubset === "object");
+    if (!hasSessions && !hasSettings && !hasSettingsSubset) {
+        return null;
+    }
+    const parsedSettings = hasSettings
+        ? parsedPayload.settings
+        : hasSettingsSubset
+            ? {
+                participantDirectory: parsedPayload.settingsSubset?.participantDirectory,
+                abbreviationDirectory: parsedPayload.settingsSubset?.abbreviationDirectory,
+                customTemplates: parsedPayload.settingsSubset?.customTemplates,
+            }
+            : null;
+    return buildLegacySnapshot(hasSessions ? parsedPayload.sessions ?? [] : [], parsedSettings);
+};
 export const loadLegacyBrowserSnapshot = () => {
     if (typeof window === "undefined") {
         return null;
@@ -182,57 +307,7 @@ export const loadLegacyBrowserSnapshot = () => {
         }
         const parsedSessions = rawSessions ? JSON.parse(rawSessions) : [];
         const parsedSettings = rawSettings ? JSON.parse(rawSettings) : null;
-        const templateUsageCounts = parsedSettings?.templateUsageCounts ?? {};
-        const legacyExportPresetId = parsedSettings?.exportStylePreset;
-        const preferredDesktopTemplateId = Object.entries(templateUsageCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
-        return {
-            sessions: mapLegacySessions(parsedSessions),
-            templates: mapLegacyTemplates(parsedSettings?.customTemplates),
-            todos: mapLegacyTodos(parsedSettings?.todoItems),
-            activities: [],
-            timelogs: [],
-            calendarItems: [],
-            entityLinks: [],
-            attachments: [],
-            settings: {
-                theme: mapLegacyThemeFamily(parsedSettings?.themeFamily),
-                outputLanguage: parsedSettings?.outputLanguage || "same",
-                preferredDesktopTemplateId: mapLegacyTemplateId(preferredDesktopTemplateId),
-                outputLayoutPresetId: normalizeOutputLayoutPresetId(legacyExportPresetId),
-                notesCapturePaneWidth: 640,
-                captureWorkspaceDensity: "minimal",
-                outputWorkspaceDensity: "minimal",
-                calendarDaysInView: 5,
-                calendarSlotHeight: 16,
-                calendarIsFullScreen: true,
-                calendarFullScreenPreferenceInitialized: false,
-                calendarDetailsPaneWidth: 320,
-                calendarScrollTop: 0,
-                calendarScrollLeft: 0,
-                apiKey: "",
-                textModel: "gpt-5.4-mini",
-                transcriptionModel: "gpt-4o-mini-transcribe",
-                savedParticipants: Array.isArray(parsedSettings?.participantDirectory) ? parsedSettings.participantDirectory.filter(Boolean) : [],
-                savedProjects: [],
-                savedDomains: [],
-                savedActivities: [],
-                savedTags: [],
-                projectLinks: [],
-                timeReportPresets: [],
-                abbreviations: Array.isArray(parsedSettings?.abbreviationDirectory)
-                    ? parsedSettings.abbreviationDirectory
-                        .map((entry) => ({
-                        id: typeof entry.id === "string" && entry.id.trim() ? entry.id : crypto.randomUUID(),
-                        shortForm: typeof entry.shortForm === "string" ? entry.shortForm.trim() : "",
-                        fullForm: typeof entry.fullForm === "string" ? entry.fullForm.trim() : "",
-                    }))
-                        .filter((entry) => entry.shortForm && entry.fullForm)
-                    : [],
-                preferredParticipantNames: [],
-                ruleSuggestions: [],
-                promptProfile: normalizePromptProfile(parsedSettings),
-            },
-        };
+        return buildLegacySnapshot(parsedSessions, parsedSettings);
     }
     catch {
         return null;

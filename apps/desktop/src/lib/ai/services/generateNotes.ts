@@ -107,10 +107,13 @@ export const generateNotes = async ({
   }
 
   const extraPromptBlocks = formatEnabledPromptBlocks(promptProfile.profile.extraBlocks);
+  const requestedOutputLanguage = session.outputLanguage === "sv" || session.outputLanguage === "en"
+    ? session.outputLanguage
+    : settings.outputLanguage;
   const outputLanguageInstruction =
-    settings.outputLanguage === "same"
+    requestedOutputLanguage === "same"
       ? "Keep the output in the same language as the source notes."
-      : `Return the final notes in ${settings.outputLanguage === "sv" ? "Swedish" : "English"}.`;
+      : `Return the final notes in ${requestedOutputLanguage === "sv" ? "Swedish" : "English"}.`;
   const includedImagesPrompt = attachments
     .filter((attachment) => attachment.kind === "image" && attachment.includeInOutput)
     .sort((left, right) => left.outputPosition - right.outputPosition || left.createdAt.localeCompare(right.createdAt))
@@ -135,6 +138,9 @@ export const generateNotes = async ({
       getDiscussionFormatInstruction(session),
       outputLanguageInstruction,
       getDetailLevelInstruction(session.detailLevel),
+      session.additionalInstructions.trim()
+        ? `Additional generation instructions from the user:\n${session.additionalInstructions.trim()}`
+        : "",
     ],
     userText: `Template: ${template.name}\nSections:\n${buildTemplateSectionPrompt({ ...template, sections: activeSections })}${
       template.promptInstructions?.trim() ? `\nTemplate-specific instructions:\n${template.promptInstructions.trim()}` : ""
