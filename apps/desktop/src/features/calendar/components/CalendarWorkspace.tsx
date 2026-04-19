@@ -18,6 +18,12 @@ export const addDays = (date: string, days: number) => {
   next.setDate(next.getDate() + days);
   return `${next.getFullYear()}-${`${next.getMonth() + 1}`.padStart(2, "0")}-${`${next.getDate()}`.padStart(2, "0")}`;
 };
+export const daysBetween = (fromDate: string, toDate: string) => {
+  const from = new Date(`${fromDate}T00:00:00`);
+  const to = new Date(`${toDate}T00:00:00`);
+  const diff = Math.round((to.getTime() - from.getTime()) / 86400000);
+  return Number.isFinite(diff) ? diff : 0;
+};
 export const clampSlot = (slot: number) => Math.max(0, Math.min(TOTAL_SLOTS - 1, slot));
 export const clampPane = (width: number) => Math.min(MAX_PANE, Math.max(MIN_PANE, Math.round(width)));
 export const durationFromTimes = (startTime: string, endTime: string) => Math.max(1, timeToSlot(endTime) - timeToSlot(startTime));
@@ -129,6 +135,7 @@ interface CalendarWorkspaceProps {
   onOpenActivityWorkspace: (activityId: string) => void;
   onOpenActivityDetail: (activityId: string) => void;
   onOpenSession: (sessionId: string) => void;
+  highlightedItemId?: string | null;
   onCreateLinkedMeetingSession: (activityId: string) => void;
   onPreviewSessionOutput: (sessionId: string) => void;
   onFullScreenChange?: (isFullScreen: boolean) => void;
@@ -158,6 +165,7 @@ export const CalendarWorkspace = ({
   onOpenActivityWorkspace,
   onOpenActivityDetail,
   onOpenSession,
+  highlightedItemId,
   onCreateLinkedMeetingSession,
   onPreviewSessionOutput,
   onFullScreenChange,
@@ -172,6 +180,7 @@ export const CalendarWorkspace = ({
   const [scrollTop, setScrollTop] = useState(settings.calendarScrollTop ?? 0);
   const [scrollLeft, setScrollLeft] = useState(settings.calendarScrollLeft ?? 0);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [editorDraft, setEditorDraft] = useState<EditorDraft | null>(null);
   const [jumpDate, setJumpDate] = useState(today);
   const [draftCell, setDraftCell] = useState<{ date: string; slot: number } | null>(null);
@@ -189,7 +198,7 @@ export const CalendarWorkspace = ({
   const didApplyInitialViewportRef = useRef(false);
   const scrollPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cellClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const draggedItemIdRef = useRef<string | null>(null);
+  const draggedGroupRef = useRef<null | { anchorId: string; itemIds: string[] }>(null);
   const pointerDragCandidateRef = useRef<null | { itemId: string; startX: number; startY: number }>(null);
   const pointerDraggingItemRef = useRef<string | null>(null);
   const suppressClickItemIdRef = useRef<string | null>(null);
@@ -452,11 +461,76 @@ export const CalendarWorkspace = ({
   }, [activities, calendarItems, selectedItemId, todos]);
 
   useEffect(() => {
+    setSelectedItemIds((current) => current.filter((id) => items.some((item) => item.id === id)));
+  }, [items]);
+
+  useEffect(() => {
+    if (!highlightedItemId) return;
+    const calendarItem = calendarItems.find((item) => item.id === highlightedItemId);
+    if (!calendarItem) return;
+    setAnchorDate(calendarItem.date);
+    setJumpDate(calendarItem.date);
+    setSelectedItemId(highlightedItemId);
+    window.requestAnimationFrame(() => {
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+      scroller.scrollTop = Math.max(0, (calendarItem.startSlot - 12) * slotHeight);
+      scroller.scrollLeft = 0;
+    });
+  }, [calendarItems, highlightedItemId, slotHeight]);
+
+  useEffect(() => {
     if (!pendingDelete) return;
-    if (!selectedItemId || pendingDelete.itemId !== selectedItemId) {
+      if (!selectedItemId || pendingDelete.itemId !== selectedItemId) {
       setPendingDelete(null);
     }
   }, [pendingDelete, selectedItemId]);
+
+  const selectCalendarItem = (itemId: string, additive: boolean) => {
+    setDraftCell(null);
+    setSelectedItemId(itemId);
+    if (!additive) {
+      setSelectedItemIds([itemId]);
+      return;
+    }
+    setSelectedItemIds((current) => {
+      if (current.includes(itemId)) {
+        const next = current.filter((id) => id !== itemId);
+        return next.length ? next : [itemId];
+      }
+      return [...current, itemId];
+    });
+  };
+
+  const itemIdsForDrag = (itemId: string) => (selectedItemIds.includes(itemId) ? selectedItemIds : [itemId]);
+
+  const moveCalendarItemGroup = (anchorId: string, itemIds: string[], targetDate: string, targetSlot: number) => {
+    const anchorItem = items.find((item) => item.id === anchorId);
+    if (!anchorItem) return;
+    const dateDelta = daysBetween(anchorItem.date, targetDate);
+    const slotDelta = targetSlot - anchorItem.startSlot;
+    itemIds.forEach((itemId) => {
+      const item = items.find((entry) => entry.id === itemId);
+      if (!item) return;
+      onMoveItem(item.id, addDays(item.date, dateDelta), clampSlot(item.startSlot + slotDelta));
+    });
+    setSelectedItemIds(itemIds);
+    setSelectedItemId(anchorId);
+  };
+
+  const getCalendarDropTarget = (clientX: number, clientY: number) => {
+    const columns = Array.from(scrollRef.current?.querySelectorAll<HTMLElement>(".calendar-day-column") ?? []);
+    for (const column of columns) {
+      const rect = column.getBoundingClientRect();
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        continue;
+      }
+      const date = column.dataset.date;
+      if (!date) return null;
+      return { date, slot: clampSlot(Math.floor((clientY - rect.top) / slotHeight)) };
+    }
+    return null;
+  };
 
   useEffect(() => {
     if (!resizeState) return;
@@ -517,16 +591,15 @@ export const CalendarWorkspace = ({
     const handleMouseUp = (event: MouseEvent) => {
       const draggingItemId = pointerDraggingItemRef.current;
       const candidate = pointerDragCandidateRef.current;
+      const draggingGroup = draggedGroupRef.current;
       pointerDragCandidateRef.current = null;
       pointerDraggingItemRef.current = null;
+      draggedGroupRef.current = null;
       document.body.classList.remove("calendar-pointer-dragging");
       if (!candidate || !draggingItemId) return;
-      const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
-      const column = target?.closest(".calendar-day-column") as HTMLElement | null;
-      const date = column?.dataset.date;
-      if (!column || !date) return;
-      const rect = column.getBoundingClientRect();
-      onMoveItem(draggingItemId, date, clampSlot(Math.floor((event.clientY - rect.top) / slotHeight)));
+      const dropTarget = getCalendarDropTarget(event.clientX, event.clientY);
+      if (!dropTarget) return;
+      moveCalendarItemGroup(draggingItemId, draggingGroup?.itemIds ?? [draggingItemId], dropTarget.date, dropTarget.slot);
       suppressClickItemIdRef.current = draggingItemId;
       window.setTimeout(() => {
         if (suppressClickItemIdRef.current === draggingItemId) suppressClickItemIdRef.current = null;
@@ -540,7 +613,7 @@ export const CalendarWorkspace = ({
       window.removeEventListener("mouseup", handleMouseUp);
       document.body.classList.remove("calendar-pointer-dragging");
     };
-  }, [onMoveItem, slotHeight]);
+  }, [items, onMoveItem, selectedItemIds, slotHeight]);
 
   const moveDraftCell = (deltaDays: number, deltaSlots: number) => {
     if (!draftCell) return;
@@ -748,16 +821,6 @@ export const CalendarWorkspace = ({
                   cancelPendingTodoDraft();
                   const rect = event.currentTarget.getBoundingClientRect();
                   void createMeetingFromGrid(date, Math.floor((event.clientY - rect.top) / slotHeight));
-                }} onDragOver={(event) => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "move";
-                }} onDrop={(event) => {
-                  event.preventDefault();
-                  const draggedId = event.dataTransfer.getData("text/plain") || draggedItemIdRef.current;
-                  if (!draggedId) return;
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  onMoveItem(draggedId, date, clampSlot(Math.floor((event.clientY - rect.top) / slotHeight)));
-                  draggedItemIdRef.current = null;
                 }}>
                   <div className="calendar-day-interaction-layer" />
                   {active ? <div className="calendar-active-cell" style={{ top: `calc(var(--calendar-slot-height) * ${active.slot})`, height: "var(--calendar-slot-height)" }}><input className="calendar-cell-input" autoFocus value={draftText} onChange={(event) => setDraftText(event.target.value)} onBlur={commitDraftCell} onKeyDown={(event) => {
@@ -777,11 +840,14 @@ export const CalendarWorkspace = ({
                     const linkedSessionState =
                       item.isMeeting && item.targetType === "activity" ? linkedSessionStateByActivity[item.targetId] : undefined;
                     const runningLabel = runningLog ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now)) : "";
-                    return <button key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${selectedItemId === item.id ? " calendar-item-block-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`} type="button" draggable style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
+                    const isSelected = selectedItemIds.includes(item.id) || selectedItemId === item.id;
+                    return <button key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`} type="button" style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
                       const target = event.target as HTMLElement;
                       if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle")) return;
+                      event.preventDefault();
                       pointerDragCandidateRef.current = { itemId: item.id, startX: event.clientX, startY: event.clientY };
-                    }} onDragStart={(event) => { draggedItemIdRef.current = item.id; event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { draggedItemIdRef.current = null; }} onClick={() => { if (suppressClickItemIdRef.current === item.id) return; setDraftCell(null); setSelectedItemId(item.id); }} onDoubleClick={() => { if (item.targetType === "todo") { onOpenTodoDetail(item.targetId); return; } onOpenActivityDetail(item.targetId); }}>
+                      draggedGroupRef.current = { anchorId: item.id, itemIds: itemIdsForDrag(item.id) };
+                    }} onClick={(event) => { if (suppressClickItemIdRef.current === item.id) return; selectCalendarItem(item.id, event.metaKey || event.ctrlKey || event.shiftKey); }} onDoubleClick={() => { if (item.targetType === "todo") { onOpenTodoDetail(item.targetId); return; } onOpenActivityDetail(item.targetId); }}>
                       {item.isMeeting ? <span className="calendar-resize-handle calendar-resize-handle-start" onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "start", date: item.date, startSlot, durationSlots }); }} /> : null}
                       <span className="calendar-item-kicker">
                         {item.isMeeting ? "Meeting" : item.targetType === "todo" ? "Todo" : "Activity"}

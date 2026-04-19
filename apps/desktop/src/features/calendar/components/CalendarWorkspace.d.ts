@@ -2,6 +2,7 @@ import type { ActivityRecord, CalendarItemRecord, LocalAppSettings, TodoRecord }
 import { type StructureOptions } from "../../../lib/structure/options";
 declare const DAYS: readonly [3, 5, 7, 14];
 export declare const addDays: (date: string, days: number) => string;
+export declare const daysBetween: (fromDate: string, toDate: string) => number;
 export declare const clampSlot: (slot: number) => number;
 export declare const clampPane: (width: number) => number;
 export declare const durationFromTimes: (startTime: string, endTime: string) => number;
@@ -53,9 +54,10 @@ interface CalendarWorkspaceProps {
     onOpenActivityWorkspace: (activityId: string) => void;
     onOpenActivityDetail: (activityId: string) => void;
     onOpenSession: (sessionId: string) => void;
+    highlightedItemId?: string | null;
     onCreateLinkedMeetingSession: (activityId: string) => void;
     onPreviewSessionOutput: (sessionId: string) => void;
     onFullScreenChange?: (isFullScreen: boolean) => void;
 }
-export declare const CalendarWorkspace: ({ todos, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, onCreateLinkedMeetingSession, onPreviewSessionOutput, onFullScreenChange, }: CalendarWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const CalendarWorkspace: ({ todos, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onPreviewSessionOutput, onFullScreenChange, }: CalendarWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

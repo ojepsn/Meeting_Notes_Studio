@@ -16,6 +16,12 @@ export const addDays = (date, days) => {
     next.setDate(next.getDate() + days);
     return `${next.getFullYear()}-${`${next.getMonth() + 1}`.padStart(2, "0")}-${`${next.getDate()}`.padStart(2, "0")}`;
 };
+export const daysBetween = (fromDate, toDate) => {
+    const from = new Date(`${fromDate}T00:00:00`);
+    const to = new Date(`${toDate}T00:00:00`);
+    const diff = Math.round((to.getTime() - from.getTime()) / 86400000);
+    return Number.isFinite(diff) ? diff : 0;
+};
 export const clampSlot = (slot) => Math.max(0, Math.min(TOTAL_SLOTS - 1, slot));
 export const clampPane = (width) => Math.min(MAX_PANE, Math.max(MIN_PANE, Math.round(width)));
 export const durationFromTimes = (startTime, endTime) => Math.max(1, timeToSlot(endTime) - timeToSlot(startTime));
@@ -57,7 +63,7 @@ export const dayColumnWidthForView = (daysInView) => {
             return 280;
     }
 };
-export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, onCreateLinkedMeetingSession, onPreviewSessionOutput, onFullScreenChange, }) => {
+export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onPreviewSessionOutput, onFullScreenChange, }) => {
     const today = getLocalDateString();
     const initialIsFullScreen = true;
     const [anchorDate, setAnchorDate] = useState(today);
@@ -68,6 +74,7 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
     const [scrollTop, setScrollTop] = useState(settings.calendarScrollTop ?? 0);
     const [scrollLeft, setScrollLeft] = useState(settings.calendarScrollLeft ?? 0);
     const [selectedItemId, setSelectedItemId] = useState(null);
+    const [selectedItemIds, setSelectedItemIds] = useState([]);
     const [editorDraft, setEditorDraft] = useState(null);
     const [jumpDate, setJumpDate] = useState(today);
     const [draftCell, setDraftCell] = useState(null);
@@ -85,7 +92,7 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
     const didApplyInitialViewportRef = useRef(false);
     const scrollPersistTimerRef = useRef(null);
     const cellClickTimerRef = useRef(null);
-    const draggedItemIdRef = useRef(null);
+    const draggedGroupRef = useRef(null);
     const pointerDragCandidateRef = useRef(null);
     const pointerDraggingItemRef = useRef(null);
     const suppressClickItemIdRef = useRef(null);
@@ -332,12 +339,77 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
         setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isMeeting: activity.type === "meeting" });
     }, [activities, calendarItems, selectedItemId, todos]);
     useEffect(() => {
+        setSelectedItemIds((current) => current.filter((id) => items.some((item) => item.id === id)));
+    }, [items]);
+    useEffect(() => {
+        if (!highlightedItemId)
+            return;
+        const calendarItem = calendarItems.find((item) => item.id === highlightedItemId);
+        if (!calendarItem)
+            return;
+        setAnchorDate(calendarItem.date);
+        setJumpDate(calendarItem.date);
+        setSelectedItemId(highlightedItemId);
+        window.requestAnimationFrame(() => {
+            const scroller = scrollRef.current;
+            if (!scroller)
+                return;
+            scroller.scrollTop = Math.max(0, (calendarItem.startSlot - 12) * slotHeight);
+            scroller.scrollLeft = 0;
+        });
+    }, [calendarItems, highlightedItemId, slotHeight]);
+    useEffect(() => {
         if (!pendingDelete)
             return;
         if (!selectedItemId || pendingDelete.itemId !== selectedItemId) {
             setPendingDelete(null);
         }
     }, [pendingDelete, selectedItemId]);
+    const selectCalendarItem = (itemId, additive) => {
+        setDraftCell(null);
+        setSelectedItemId(itemId);
+        if (!additive) {
+            setSelectedItemIds([itemId]);
+            return;
+        }
+        setSelectedItemIds((current) => {
+            if (current.includes(itemId)) {
+                const next = current.filter((id) => id !== itemId);
+                return next.length ? next : [itemId];
+            }
+            return [...current, itemId];
+        });
+    };
+    const itemIdsForDrag = (itemId) => (selectedItemIds.includes(itemId) ? selectedItemIds : [itemId]);
+    const moveCalendarItemGroup = (anchorId, itemIds, targetDate, targetSlot) => {
+        const anchorItem = items.find((item) => item.id === anchorId);
+        if (!anchorItem)
+            return;
+        const dateDelta = daysBetween(anchorItem.date, targetDate);
+        const slotDelta = targetSlot - anchorItem.startSlot;
+        itemIds.forEach((itemId) => {
+            const item = items.find((entry) => entry.id === itemId);
+            if (!item)
+                return;
+            onMoveItem(item.id, addDays(item.date, dateDelta), clampSlot(item.startSlot + slotDelta));
+        });
+        setSelectedItemIds(itemIds);
+        setSelectedItemId(anchorId);
+    };
+    const getCalendarDropTarget = (clientX, clientY) => {
+        const columns = Array.from(scrollRef.current?.querySelectorAll(".calendar-day-column") ?? []);
+        for (const column of columns) {
+            const rect = column.getBoundingClientRect();
+            if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+                continue;
+            }
+            const date = column.dataset.date;
+            if (!date)
+                return null;
+            return { date, slot: clampSlot(Math.floor((clientY - rect.top) / slotHeight)) };
+        }
+        return null;
+    };
     useEffect(() => {
         if (!resizeState)
             return;
@@ -402,18 +474,17 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
         const handleMouseUp = (event) => {
             const draggingItemId = pointerDraggingItemRef.current;
             const candidate = pointerDragCandidateRef.current;
+            const draggingGroup = draggedGroupRef.current;
             pointerDragCandidateRef.current = null;
             pointerDraggingItemRef.current = null;
+            draggedGroupRef.current = null;
             document.body.classList.remove("calendar-pointer-dragging");
             if (!candidate || !draggingItemId)
                 return;
-            const target = document.elementFromPoint(event.clientX, event.clientY);
-            const column = target?.closest(".calendar-day-column");
-            const date = column?.dataset.date;
-            if (!column || !date)
+            const dropTarget = getCalendarDropTarget(event.clientX, event.clientY);
+            if (!dropTarget)
                 return;
-            const rect = column.getBoundingClientRect();
-            onMoveItem(draggingItemId, date, clampSlot(Math.floor((event.clientY - rect.top) / slotHeight)));
+            moveCalendarItemGroup(draggingItemId, draggingGroup?.itemIds ?? [draggingItemId], dropTarget.date, dropTarget.slot);
             suppressClickItemIdRef.current = draggingItemId;
             window.setTimeout(() => {
                 if (suppressClickItemIdRef.current === draggingItemId)
@@ -427,7 +498,7 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
             window.removeEventListener("mouseup", handleMouseUp);
             document.body.classList.remove("calendar-pointer-dragging");
         };
-    }, [onMoveItem, slotHeight]);
+    }, [items, onMoveItem, selectedItemIds, slotHeight]);
     const moveDraftCell = (deltaDays, deltaSlots) => {
         if (!draftCell)
             return;
@@ -584,17 +655,6 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
                                                 cancelPendingTodoDraft();
                                                 const rect = event.currentTarget.getBoundingClientRect();
                                                 void createMeetingFromGrid(date, Math.floor((event.clientY - rect.top) / slotHeight));
-                                            }, onDragOver: (event) => {
-                                                event.preventDefault();
-                                                event.dataTransfer.dropEffect = "move";
-                                            }, onDrop: (event) => {
-                                                event.preventDefault();
-                                                const draggedId = event.dataTransfer.getData("text/plain") || draggedItemIdRef.current;
-                                                if (!draggedId)
-                                                    return;
-                                                const rect = event.currentTarget.getBoundingClientRect();
-                                                onMoveItem(draggedId, date, clampSlot(Math.floor((event.clientY - rect.top) / slotHeight)));
-                                                draggedItemIdRef.current = null;
                                             }, children: [_jsx("div", { className: "calendar-day-interaction-layer" }), active ? _jsx("div", { className: "calendar-active-cell", style: { top: `calc(var(--calendar-slot-height) * ${active.slot})`, height: "var(--calendar-slot-height)" }, children: _jsx("input", { className: "calendar-cell-input", autoFocus: true, value: draftText, onChange: (event) => setDraftText(event.target.value), onBlur: commitDraftCell, onKeyDown: (event) => {
                                                             if (event.key === "Enter") {
                                                                 event.preventDefault();
@@ -627,13 +687,16 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
                                                     const runningLog = getRunningTimeLog(timeLogsByTarget.get(`${item.targetType}:${item.targetId}`) || []);
                                                     const linkedSessionState = item.isMeeting && item.targetType === "activity" ? linkedSessionStateByActivity[item.targetId] : undefined;
                                                     const runningLabel = runningLog ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now)) : "";
-                                                    return _jsxs("button", { className: `calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${selectedItemId === item.id ? " calendar-item-block-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`, type: "button", draggable: true, style: { top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }, onMouseDown: (event) => {
+                                                    const isSelected = selectedItemIds.includes(item.id) || selectedItemId === item.id;
+                                                    return _jsxs("button", { className: `calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`, type: "button", style: { top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }, onMouseDown: (event) => {
                                                             const target = event.target;
                                                             if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle"))
                                                                 return;
+                                                            event.preventDefault();
                                                             pointerDragCandidateRef.current = { itemId: item.id, startX: event.clientX, startY: event.clientY };
-                                                        }, onDragStart: (event) => { draggedItemIdRef.current = item.id; event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; }, onDragEnd: () => { draggedItemIdRef.current = null; }, onClick: () => { if (suppressClickItemIdRef.current === item.id)
-                                                            return; setDraftCell(null); setSelectedItemId(item.id); }, onDoubleClick: () => { if (item.targetType === "todo") {
+                                                            draggedGroupRef.current = { anchorId: item.id, itemIds: itemIdsForDrag(item.id) };
+                                                        }, onClick: (event) => { if (suppressClickItemIdRef.current === item.id)
+                                                            return; selectCalendarItem(item.id, event.metaKey || event.ctrlKey || event.shiftKey); }, onDoubleClick: () => { if (item.targetType === "todo") {
                                                             onOpenTodoDetail(item.targetId);
                                                             return;
                                                         } onOpenActivityDetail(item.targetId); }, children: [item.isMeeting ? _jsx("span", { className: "calendar-resize-handle calendar-resize-handle-start", onMouseDown: (event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "start", date: item.date, startSlot, durationSlots }); } }) : null, _jsxs("span", { className: "calendar-item-kicker", children: [item.isMeeting ? "Meeting" : item.targetType === "todo" ? "Todo" : "Activity", item.isPrivate ? " • Private" : ""] }), _jsxs("strong", { children: [slotToTime(startSlot), " ", item.title] }), _jsxs("span", { children: [item.isMeeting ? durationLabel(durationSlots) : item.label, runningLog ? ` • Running ${runningLabel}` : ""] }), linkedSessionState?.sessionId ? (_jsx("span", { className: `calendar-item-link-state${linkedSessionState.hasOutput ? " calendar-item-link-state-output" : ""}`, children: linkedSessionState.hasOutput ? "Output ready" : "Session linked" })) : item.isMeeting ? (_jsx("span", { className: "calendar-item-link-state calendar-item-link-state-empty", children: "No session" })) : null, item.isMeeting ? (_jsx("div", { className: "calendar-item-launcher-row", children: linkedSessionState?.sessionId ? (_jsxs(_Fragment, { children: [_jsx("span", { className: "calendar-item-inline-action calendar-item-inline-action-secondary", role: "button", tabIndex: -1, onMouseDown: (event) => {

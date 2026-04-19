@@ -5,7 +5,9 @@ import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog, isTimeLogRunning } from "../../../lib/time/tracking";
 
-type TodoSortKey = "dueDate" | "doOn" | "createdAt" | "description" | "domain" | "project" | "activity";
+type TodoSortKey = "description" | "domain" | "project" | "activity" | "dueDate" | "details";
+type TodoSortDirection = "asc" | "desc";
+type TodoColumnFilters = Record<TodoSortKey, string>;
 
 interface TodosWorkspaceProps {
   todos: TodoRecord[];
@@ -65,6 +67,27 @@ const createBlankTimeLogDraft = (targetId: string): TimeLogRecord => {
 
 const normalizeValue = (value: string) => value.trim().toLowerCase();
 
+const emptyColumnFilters: TodoColumnFilters = {
+  description: "",
+  domain: "",
+  project: "",
+  activity: "",
+  dueDate: "",
+  details: "",
+};
+
+const stripHtmlToText = (html: string) =>
+  html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+
 const calculateDurationMinutes = (date: string, startTime: string, endTime: string) => {
   const start = new Date(`${date}T${startTime || "00:00"}:00`);
   const end = new Date(`${date}T${endTime || startTime || "00:00"}:00`);
@@ -94,11 +117,11 @@ export const TodosWorkspace = ({
 }: TodosWorkspaceProps) => {
   const [draft, setDraft] = useState("");
   const [selectedActivityId, setSelectedActivityId] = useState("");
-  const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<TodoSortKey>("dueDate");
-  const [domainFilter, setDomainFilter] = useState("all");
-  const [projectFilter, setProjectFilter] = useState("all");
+  const [sortDirection, setSortDirection] = useState<TodoSortDirection>("asc");
+  const [columnFilters, setColumnFilters] = useState<TodoColumnFilters>(emptyColumnFilters);
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [editingDraft, setEditingDraft] = useState<TodoRecord>(createBlankTodoDraft());
   const [editingTimeLogId, setEditingTimeLogId] = useState<string | null>(null);
   const [timeLogDraft, setTimeLogDraft] = useState<TimeLogRecord | null>(null);
@@ -114,12 +137,6 @@ export const TodosWorkspace = ({
     () => Object.fromEntries(activities.map((activity) => [activity.id, activity])) as Record<string, ActivityRecord>,
     [activities],
   );
-  const domainOptions = useMemo(() => structureOptions.domains, [structureOptions.domains]);
-  const projectOptions = useMemo(
-    () => getProjectsForDomain(structureOptions, domainFilter === "all" ? "" : domainFilter),
-    [domainFilter, structureOptions],
-  );
-
   const openTodos = useMemo(() => todos.filter((todo) => !todo.isDone), [todos]);
   const completedTodos = useMemo(() => todos.filter((todo) => todo.isDone).slice(0, 8), [todos]);
 
@@ -145,30 +162,32 @@ export const TodosWorkspace = ({
     return () => window.clearInterval(intervalId);
   }, [runningTodos.length]);
 
+  const getTodoColumnValue = (todo: TodoRecord, key: TodoSortKey) => {
+    switch (key) {
+      case "description":
+        return todo.description;
+      case "domain":
+        return todo.domain;
+      case "project":
+        return todo.project;
+      case "activity":
+        return activityLookup[todo.activityId]?.description || todo.activity;
+      case "dueDate":
+        return todo.dueDate || todo.doOn;
+      case "details":
+      default:
+        return stripHtmlToText(todo.detailsHtml || todo.comments || "");
+    }
+  };
+
   const filteredTodos = useMemo(() => {
-    const normalized = normalizeValue(query);
-    const structureFiltered = openTodos.filter((todo) => {
-      if (domainFilter !== "all" && todo.domain !== domainFilter) return false;
-      if (projectFilter !== "all" && todo.project !== projectFilter) return false;
-      return true;
-    });
-    const filtered = !normalized
-      ? structureFiltered
-      : structureFiltered.filter((todo) =>
-          [
-            todo.description,
-            todo.domain,
-            todo.project,
-            todo.activity,
-            todo.doOn,
-            todo.dueDate,
-            todo.createdAt,
-            activityLookup[todo.activityId]?.description || "",
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(normalized),
-        );
+    const filtered = todos.filter((todo) =>
+      (Object.entries(columnFilters) as [TodoSortKey, string][]).every(([key, filterValue]) => {
+        const normalizedFilter = normalizeValue(filterValue);
+        if (!normalizedFilter) return true;
+        return normalizeValue(getTodoColumnValue(todo, key)).includes(normalizedFilter);
+      }),
+    );
 
     const valueForSort = (todo: TodoRecord) => {
       switch (sortKey) {
@@ -180,41 +199,36 @@ export const TodosWorkspace = ({
           return normalizeValue(todo.project);
         case "activity":
           return normalizeValue(activityLookup[todo.activityId]?.description || todo.activity);
-        case "doOn":
-          return todo.doOn || "9999-99-99";
         case "dueDate":
-          return todo.dueDate || "9999-99-99";
-        case "createdAt":
+          return todo.dueDate || todo.doOn || "9999-99-99";
+        case "details":
         default:
-          return todo.createdAt;
+          return normalizeValue(stripHtmlToText(todo.detailsHtml || todo.comments || ""));
       }
     };
 
-    return [...filtered].sort((left, right) => valueForSort(left).localeCompare(valueForSort(right)));
-  }, [activityLookup, domainFilter, openTodos, projectFilter, query, sortKey]);
+    return [...filtered].sort((left, right) => {
+      const comparison = valueForSort(left).localeCompare(valueForSort(right));
+      return sortDirection === "asc" ? comparison : comparison * -1;
+    });
+  }, [activityLookup, columnFilters, sortDirection, sortKey, todos]);
 
   useEffect(() => {
     if (requestedDomain !== undefined && requestedDomain !== null) {
-      setDomainFilter(requestedDomain || "all");
+      setColumnFilters((current) => ({ ...current, domain: requestedDomain || "" }));
     }
   }, [requestedDomain]);
 
   useEffect(() => {
     if (requestedProject !== undefined && requestedProject !== null) {
-      setProjectFilter(requestedProject || "all");
+      setColumnFilters((current) => ({ ...current, project: requestedProject || "" }));
     }
   }, [requestedProject]);
 
   useEffect(() => {
-    if (domainFilter === "all") return;
-    if (projectFilter === "all") return;
-    if (projectOptions.includes(projectFilter)) return;
-    setProjectFilter("all");
-  }, [domainFilter, projectFilter, projectOptions]);
-
-  useEffect(() => {
     if (requestedTodoId) {
       setSelectedTodoId(requestedTodoId);
+      setIsDetailOpen(true);
     }
   }, [requestedTodoId]);
 
@@ -226,8 +240,9 @@ export const TodosWorkspace = ({
       setSelectedTodoId(requestedTodoId);
       return;
     }
-    setSelectedTodoId(filteredTodos[0]?.id ?? openTodos[0]?.id ?? null);
-  }, [filteredTodos, openTodos, requestedTodoId, selectedTodoId, todos]);
+    setSelectedTodoId(null);
+    setIsDetailOpen(false);
+  }, [requestedTodoId, selectedTodoId, todos]);
 
   useEffect(() => {
     if (!selectedTodoId) {
@@ -301,10 +316,38 @@ export const TodosWorkspace = ({
 
   const clearSelection = () => {
     setSelectedTodoId(null);
+    setIsDetailOpen(false);
     setEditingTimeLogId(null);
     setTimeLogDraft(null);
     onEditorClose?.();
   };
+
+  const updateColumnFilter = (key: TodoSortKey, value: string) => {
+    setColumnFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  const toggleSort = (key: TodoSortKey) => {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
+  };
+
+  const openTodoDetail = (todoId: string) => {
+    setSelectedTodoId(todoId);
+    setIsDetailOpen(true);
+  };
+
+  const todoColumns: { key: TodoSortKey; label: string; placeholder: string }[] = [
+    { key: "description", label: "Todo", placeholder: "Filter todo" },
+    { key: "domain", label: "Domain", placeholder: "Filter domain" },
+    { key: "project", label: "Project", placeholder: "Filter project" },
+    { key: "activity", label: "Activity", placeholder: "Filter activity" },
+    { key: "dueDate", label: "Due date", placeholder: "Filter date" },
+    { key: "details", label: "Details", placeholder: "Filter details" },
+  ];
 
   return (
     <div className="card todos-workspace todos-workspace-minimal todos-hub-card">
@@ -348,46 +391,12 @@ export const TodosWorkspace = ({
       </div>
 
       <div className="todos-hub-shell">
-        <section className="todos-hub-list-panel">
-          <div className="todos-workspace-toolbar">
-            <div className="field field-wide">
-              <label htmlFor="todos-workspace-filter">Search</label>
-              <input id="todos-workspace-filter" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter todos" />
-            </div>
-            <div className="field">
-              <label htmlFor="todos-workspace-domain">Domain</label>
-              <select id="todos-workspace-domain" value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}>
-                <option value="all">All</option>
-                {domainOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-                <div className="field">
-                  <label htmlFor="todos-workspace-project">Project</label>
-                  <select id="todos-workspace-project" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
-                    <option value="all">All</option>
-                {projectOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="todos-workspace-sort">Sort by</label>
-              <select id="todos-workspace-sort" value={sortKey} onChange={(event) => setSortKey(event.target.value as TodoSortKey)}>
-                <option value="dueDate">Due date</option>
-                <option value="doOn">Do on</option>
-                <option value="createdAt">Created</option>
-                <option value="description">Title</option>
-                <option value="domain">Domain</option>
-                <option value="project">Project</option>
-                <option value="activity">Activity</option>
-              </select>
-            </div>
+        <section className="todos-hub-list-panel todos-table-panel">
+          <div className="todos-table-summary">
+            <span className="status-chip">{filteredTodos.length} shown</span>
+            <span className="status-chip">{openTodos.length} open</span>
+            <span className="status-chip">{todos.length - openTodos.length} completed</span>
+            <span className="muted">Click a row to select. Double-click to open the full todo card.</span>
           </div>
 
           {runningTodos.length ? (
@@ -417,6 +426,116 @@ export const TodosWorkspace = ({
               </div>
             </div>
           ) : null}
+
+          <div className="todos-dense-table-shell">
+            <table className="todos-dense-table">
+              <thead>
+                <tr>
+                  {todoColumns.map((column) => (
+                    <th key={column.key} scope="col">
+                      <button className="todos-sort-button" type="button" onClick={() => toggleSort(column.key)}>
+                        <span>{column.label}</span>
+                        <span aria-hidden="true">{sortKey === column.key ? (sortDirection === "asc" ? "↑" : "↓") : "↕"}</span>
+                      </button>
+                    </th>
+                  ))}
+                </tr>
+                <tr className="todos-filter-row">
+                  {todoColumns.map((column) => (
+                    <th key={column.key} scope="col">
+                      <input
+                        aria-label={`Filter ${column.label}`}
+                        value={columnFilters[column.key]}
+                        onChange={(event) => updateColumnFilter(column.key, event.target.value)}
+                        placeholder={column.placeholder}
+                      />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTodos.length ? (
+                  filteredTodos.map((todo) => {
+                    const logs = timeLogsByTodoId.get(todo.id) || [];
+                    const totalMinutes = logs.reduce((sum, entry) => sum + entry.durationMinutes, 0);
+                    const runningLog = getRunningTimeLog(logs);
+                    const running = Boolean(runningLog);
+                    const elapsedLabel = runningLog
+                      ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now))
+                      : "";
+                    const activityLabel = activityLookup[todo.activityId]?.description || todo.activity || "";
+                    const detailsText = stripHtmlToText(todo.detailsHtml || todo.comments || "");
+                    const dueDateLabel = todo.dueDate || todo.doOn || "";
+                    return (
+                      <tr
+                        key={todo.id}
+                        className={`${selectedTodoId === todo.id ? "todos-dense-row-selected" : ""}${todo.isDone ? " todos-dense-row-done" : ""}`}
+                        onClick={() => setSelectedTodoId(todo.id)}
+                        onDoubleClick={() => openTodoDetail(todo.id)}
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            openTodoDetail(todo.id);
+                          }
+                        }}
+                      >
+                        <td>
+                          <div className="todos-dense-title-cell">
+                            <input
+                              type="checkbox"
+                              aria-label={`Mark ${todo.description} ${todo.isDone ? "open" : "done"}`}
+                              checked={todo.isDone}
+                              onChange={(event) => {
+                                event.stopPropagation();
+                                onToggle({ ...todo, isDone: !todo.isDone });
+                              }}
+                            />
+                            <div className="todos-dense-title-copy">
+                              <strong>{todo.description || "Untitled todo"}</strong>
+                              <span>{running ? `Running • ${elapsedLabel}` : totalMinutes ? formatTrackedMinutes(totalMinutes) : "No time logged"}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td><span className="todos-dense-two-line">{todo.domain || "—"}</span></td>
+                        <td><span className="todos-dense-two-line">{todo.project || "—"}</span></td>
+                        <td><span className="todos-dense-two-line">{activityLabel || "Unassigned"}</span></td>
+                        <td><span className="todos-dense-two-line">{dueDateLabel || "—"}</span></td>
+                        <td>
+                          <div className="todos-dense-details-cell">
+                            <span className="todos-dense-two-line">{detailsText || "No details"}</span>
+                            <button
+                              className={`small-button${running ? " primary-button" : ""}`}
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (running) {
+                                  onStopTracking("todo", todo.id);
+                                  return;
+                                }
+                                onStartTracking("todo", todo.id);
+                              }}
+                            >
+                              {running ? "Stop" : "Start"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={todoColumns.length}>
+                      <div className="empty-state-card compact-empty-state">
+                        <h3>No todos match the current filters</h3>
+                        <p>Clear one or more column filters, or add a new focused next action above.</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
 
           <div className="todos-compact-list">
             {filteredTodos.length ? (
@@ -498,7 +617,8 @@ export const TodosWorkspace = ({
             </details>
           ) : null}
         </section>
-        <section className="todos-hub-detail-panel">
+        {isDetailOpen ? (
+        <section className="todos-hub-detail-panel todos-detail-modal">
           {selectedTodoId ? (
             <div className="stack">
               <div className="card-header activities-detail-header">
@@ -737,13 +857,9 @@ export const TodosWorkspace = ({
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="empty-state-card compact-empty-state activities-empty-panel">
-              <h3>Select a todo</h3>
-              <p>Use the list on the left to keep execution, timer control, and retrospective time edits in one place.</p>
-            </div>
-          )}
+          ) : null}
         </section>
+        ) : null}
       </div>
     </div>
   );

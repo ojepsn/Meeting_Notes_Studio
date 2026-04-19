@@ -254,6 +254,7 @@ export const App = () => {
   const [requestedTimeDomain, setRequestedTimeDomain] = useState<string | null>(null);
   const [requestedTimeProject, setRequestedTimeProject] = useState<string | null>(null);
   const [linkedDetailReturnWorkspace, setLinkedDetailReturnWorkspace] = useState<AppWorkspace | null>(null);
+  const [linkedCalendarReturnItemId, setLinkedCalendarReturnItemId] = useState<string | null>(null);
   const [isCalendarWorkspaceFullScreen, setIsCalendarWorkspaceFullScreen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
@@ -2021,15 +2022,18 @@ export const App = () => {
     sessionId,
     view = "capture",
     returnWorkspace = null,
+    calendarItemId = null,
     status,
   }: {
     sessionId: string;
     view?: "capture" | "output";
     returnWorkspace?: AppWorkspace | null;
+    calendarItemId?: string | null;
     status?: string;
   }) => {
     clearRequestedFilters();
     setLinkedDetailReturnWorkspace(returnWorkspace);
+    setLinkedCalendarReturnItemId(returnWorkspace === "calendar" ? calendarItemId : null);
     setActiveSessionId(sessionId);
     setActiveWorkspace("notes");
     setActiveView(view);
@@ -2037,11 +2041,12 @@ export const App = () => {
       setStatusNote(status);
     }
   };
-  const openSessionFromLink = (sessionId: string, returnWorkspace: AppWorkspace | null = null) =>
+  const openSessionFromLink = (sessionId: string, returnWorkspace: AppWorkspace | null = null, calendarItemId: string | null = null) =>
     openNotesTarget({
       sessionId,
       view: "capture",
       returnWorkspace,
+      calendarItemId,
       status: returnWorkspace === "calendar" ? "Opened linked session from Calendar. Return to Calendar when you are done." : "Opened linked session.",
     });
   const openActivityFromLink = (activityId: string, returnWorkspace: AppWorkspace | null = null) =>
@@ -2072,6 +2077,9 @@ export const App = () => {
     setRequestedTimeDomain(null);
     setRequestedTimeProject(null);
     setLinkedDetailReturnWorkspace(null);
+    if (nextWorkspace !== "calendar") {
+      setLinkedCalendarReturnItemId(null);
+    }
     setActiveWorkspace(nextWorkspace);
     setStatusNote(`Returned to ${nextWorkspace === "time" ? "Time" : nextWorkspace === "calendar" ? "Calendar" : "the previous workspace"}.`);
   };
@@ -2827,7 +2835,7 @@ export const App = () => {
             <div className="topbar-secondary-cluster">
               {activeWorkspace === "notes" && linkedDetailReturnWorkspace === "calendar" ? (
                 <button className="primary-button" type="button" onClick={returnFromLinkedDetail}>
-                  Return to Calendar
+                  Back to Calendar
                 </button>
               ) : null}
               {activeWorkspace === "notes" ? (
@@ -2997,7 +3005,16 @@ export const App = () => {
                 onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "calendar")}
                 onOpenActivityWorkspace={(activityId) => openActivityFromLink(activityId, "calendar")}
                 onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "calendar")}
-                onOpenSession={(sessionId) => openSessionFromLink(sessionId, "calendar")}
+                onOpenSession={(sessionId) => {
+                  const calendarItemId =
+                    snapshot.calendarItems.find((item) => {
+                      if (item.targetType !== "activity") return false;
+                      const activitySessionId = linkedSessionStateByActivity[item.targetId]?.sessionId;
+                      return activitySessionId === sessionId;
+                    })?.id ?? null;
+                  openSessionFromLink(sessionId, "calendar", calendarItemId);
+                }}
+                highlightedItemId={linkedCalendarReturnItemId}
                 onCreateLinkedMeetingSession={(activityId) =>
                   void ensureSessionForActivity(activityId).then((sessionId) => {
                     if (sessionId) {
