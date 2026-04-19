@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ActivityRecord, CalendarItemRecord, LocalAppSettings, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { TokenPicker } from "../../../components/TokenPicker";
@@ -188,6 +188,7 @@ export const CalendarWorkspace = ({
   const splitterDraggingRef = useRef(false);
   const didApplyInitialViewportRef = useRef(false);
   const scrollPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cellClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggedItemIdRef = useRef<string | null>(null);
   const pointerDragCandidateRef = useRef<null | { itemId: string; startX: number; startY: number }>(null);
   const pointerDraggingItemRef = useRef<string | null>(null);
@@ -344,17 +345,15 @@ export const CalendarWorkspace = ({
     return true;
   });
 
-  useEffect(() => {
+  const scrollToCurrentTime = (date = new Date()) => {
     const scroller = scrollRef.current;
-    if (!scroller || didApplyInitialViewportRef.current) return;
-    didApplyInitialViewportRef.current = true;
-    const currentDate = new Date();
-    const currentDay = getLocalDateString(currentDate);
+    if (!scroller) return;
+    const currentDay = getLocalDateString(date);
     if (anchorDate !== currentDay) {
       setAnchorDate(currentDay);
       setJumpDate(currentDay);
     }
-    const nextScrollTop = initialCalendarScrollTop(currentDate, slotHeight);
+    const nextScrollTop = initialCalendarScrollTop(date, slotHeight);
     scroller.scrollTop = nextScrollTop;
     scroller.scrollLeft = 0;
     if (scrollTop !== nextScrollTop) {
@@ -364,7 +363,21 @@ export const CalendarWorkspace = ({
       setScrollLeft(0);
       return;
     }
-  }, [anchorDate, scrollLeft, scrollTop, slotHeight]);
+  };
+
+  useLayoutEffect(() => {
+    if (didApplyInitialViewportRef.current) return;
+    didApplyInitialViewportRef.current = true;
+    const currentDate = new Date();
+    scrollToCurrentTime(currentDate);
+    const firstFrame = window.requestAnimationFrame(() => {
+      const secondFrame = window.requestAnimationFrame(() => {
+        scrollToCurrentTime(currentDate);
+      });
+      return () => window.cancelAnimationFrame(secondFrame);
+    });
+    return () => window.cancelAnimationFrame(firstFrame);
+  }, []);
 
   useEffect(() => {
     const scroller = scrollRef.current;
@@ -384,6 +397,10 @@ export const CalendarWorkspace = ({
       if (scrollPersistTimerRef.current) {
         clearTimeout(scrollPersistTimerRef.current);
         scrollPersistTimerRef.current = null;
+      }
+      if (cellClickTimerRef.current) {
+        clearTimeout(cellClickTimerRef.current);
+        cellClickTimerRef.current = null;
       }
     };
   }, []);
@@ -559,6 +576,24 @@ export const CalendarWorkspace = ({
     }
   };
 
+  const openTodoDraftFromGrid = (date: string, slot: number) => {
+    if (cellClickTimerRef.current) {
+      clearTimeout(cellClickTimerRef.current);
+    }
+    cellClickTimerRef.current = setTimeout(() => {
+      setSelectedItemId(null);
+      setDraftCell({ date, slot: clampSlot(slot) });
+      setDraftText("");
+      cellClickTimerRef.current = null;
+    }, 180);
+  };
+
+  const cancelPendingTodoDraft = () => {
+    if (!cellClickTimerRef.current) return;
+    clearTimeout(cellClickTimerRef.current);
+    cellClickTimerRef.current = null;
+  };
+
   const saveEditor = () => {
     if (!editorDraft) return;
     const startSlot = clampSlot(timeToSlot(editorDraft.startTime || "00:00"));
@@ -651,7 +686,7 @@ export const CalendarWorkspace = ({
         <div><h2>Calendar</h2></div>
         <div className="page-actions wrap-row calendar-primary-actions">
           <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, -daysInView))}>Previous</button>
-          <button className="shell-button" type="button" onClick={() => { setAnchorDate(today); setJumpDate(today); }}>Today</button>
+          <button className="shell-button" type="button" onClick={() => { const currentDate = new Date(); setAnchorDate(getLocalDateString(currentDate)); setJumpDate(getLocalDateString(currentDate)); window.requestAnimationFrame(() => scrollToCurrentTime(currentDate)); }}>Today</button>
           <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, daysInView))}>Next</button>
         </div>
       </div>
@@ -706,12 +741,11 @@ export const CalendarWorkspace = ({
                   const target = event.target as HTMLElement;
                   if (target.closest(".calendar-item-block") || target.closest(".calendar-cell-input")) return;
                   const rect = event.currentTarget.getBoundingClientRect();
-                  setSelectedItemId(null);
-                  setDraftCell({ date, slot: clampSlot(Math.floor((event.clientY - rect.top) / slotHeight)) });
-                  setDraftText("");
+                  openTodoDraftFromGrid(date, Math.floor((event.clientY - rect.top) / slotHeight));
                 }} onDoubleClick={(event) => {
                   const target = event.target as HTMLElement;
                   if (target.closest(".calendar-item-block") || target.closest(".calendar-cell-input")) return;
+                  cancelPendingTodoDraft();
                   const rect = event.currentTarget.getBoundingClientRect();
                   void createMeetingFromGrid(date, Math.floor((event.clientY - rect.top) / slotHeight));
                 }} onDragOver={(event) => {
