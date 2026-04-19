@@ -387,9 +387,6 @@ export const OutputWorkspace = ({
                       />
                       <span className="config-option-copy">
                         <span className="config-option-title">Polish Manual notes without AI</span>
-                        <span className="config-option-hint">
-                          Transfer Manual notes directly into Output without AI generation. Light rules-based cleanup is allowed.
-                        </span>
                       </span>
                     </label>
 
@@ -403,16 +400,10 @@ export const OutputWorkspace = ({
                       />
                       <span className="config-option-copy">
                         <span className="config-option-title">Generate with AI</span>
-                        <span className="config-option-hint">
-                          Default. Generate structured professional notes from Manual notes, transcript, and meeting context.
-                        </span>
                       </span>
                     </label>
                   </div>
 
-                  <p className="muted">
-                    Select the sections you want in the generated output. Checked sections are included, and unchecked sections are left out.
-                  </p>
                   <div className="output-section-grid">
                     {orderedSections.map((section) => {
                       const checked = !session.excludedSectionIds.includes(section.id);

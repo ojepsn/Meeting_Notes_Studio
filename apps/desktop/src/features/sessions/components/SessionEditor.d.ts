@@ -28,7 +28,7 @@ interface SessionEditorProps {
     onImportImage: () => void;
     onTranscribeAudio: () => void;
     onChangeRecordingMode: (mode: RecordingMode) => void;
-    onStartRecording: () => void;
+    onStartRecording: (mode?: RecordingMode) => void;
     onStopRecording: () => void;
     onRemoveAttachment: (attachmentId: string) => void;
     onUpdateAttachment: (attachment: AttachmentRecord) => void;

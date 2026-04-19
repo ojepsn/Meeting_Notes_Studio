@@ -1147,9 +1147,41 @@ select {
   box-shadow: 0 16px 30px color-mix(in srgb, var(--app-shadow) 42%, transparent 58%);
 }
 
+.capture-mode-button[data-active="true"] {
+  border-color: var(--app-accent-strong-border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 78%, white 22%) 0%, color-mix(in srgb, var(--app-surface) 96%, white 4%) 100%);
+}
+
+.capture-mode-button[data-recording="true"] {
+  border-color: color-mix(in srgb, var(--app-danger, #d94b4b) 76%, var(--app-accent-strong-border) 24%);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--app-danger, #d94b4b) 18%, var(--app-surface) 82%) 0%, color-mix(in srgb, var(--app-accent-soft) 68%, var(--app-surface) 32%) 100%);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--app-danger, #d94b4b) 18%, transparent 82%),
+    0 18px 34px color-mix(in srgb, var(--app-danger, #d94b4b) 22%, transparent 78%);
+}
+
 .capture-mode-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   font-weight: 700;
   font-size: 1rem;
+}
+
+.capture-mode-button[data-recording="true"] .capture-mode-title::before,
+.recording-mode-card[data-recording="true"] strong::before,
+.capture-mode-button-compact[data-recording="true"]::before {
+  content: "";
+  width: 0.58rem;
+  height: 0.58rem;
+  border-radius: 999px;
+  background: var(--app-danger, #d94b4b);
+  color: var(--app-danger, #d94b4b);
+  box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 36%, transparent 64%);
+  animation: recording-pulse 1.35s ease-in-out infinite;
+  flex: 0 0 auto;
 }
 
 .capture-mode-hint {
@@ -4070,6 +4102,28 @@ select {
   gap: 0.6rem;
 }
 
+.minimal-audio-mode-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.capture-mode-button-compact {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+}
+
+.capture-mode-button-compact[data-active="true"] {
+  border-color: var(--app-accent-strong-border);
+  background: var(--app-accent-soft);
+}
+
+.capture-mode-button-compact[data-recording="true"] {
+  border-color: color-mix(in srgb, var(--app-danger, #d94b4b) 72%, var(--app-accent-strong-border) 28%);
+  background: color-mix(in srgb, var(--app-danger, #d94b4b) 16%, var(--app-accent-soft) 84%);
+}
+
 .minimal-context-grid {
   display: grid;
   grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
@@ -4339,6 +4393,21 @@ select {
     linear-gradient(180deg, color-mix(in srgb, var(--app-accent-soft) 72%, white 28%) 0%, var(--app-surface) 100%),
     var(--app-surface);
   box-shadow: 0 18px 34px color-mix(in srgb, var(--app-accent-border) 38%, transparent 62%);
+}
+
+.recording-mode-card[data-recording="true"] {
+  border-color: color-mix(in srgb, var(--app-danger, #d94b4b) 76%, var(--app-accent-strong-border) 24%);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--app-danger, #d94b4b) 16%, var(--app-surface) 84%) 0%, color-mix(in srgb, var(--app-accent-soft) 70%, var(--app-surface) 30%) 100%);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--app-danger, #d94b4b) 16%, transparent 84%),
+    0 18px 34px color-mix(in srgb, var(--app-danger, #d94b4b) 22%, transparent 78%);
+}
+
+.recording-mode-card[data-recording="true"] strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 .recording-mode-card:disabled {

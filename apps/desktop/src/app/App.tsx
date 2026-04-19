@@ -1683,12 +1683,13 @@ export const App = () => {
     setRecordingStatusNote("Audio file attached to the current session.");
   };
 
-  const handleStartRecording = async () => {
+  const handleStartRecording = async (modeOverride?: RecordingMode) => {
     if (!activeSession) {
       return;
     }
     const recordingSession = activeSession;
-    const recordingModeForRun = recordingMode;
+    const recordingModeForRun = modeOverride ?? recordingMode;
+    setRecordingMode(recordingModeForRun);
 
     if (
       (recordingModeForRun === "microphone" && !navigator.mediaDevices?.getUserMedia) ||
@@ -2318,7 +2319,7 @@ export const App = () => {
             onImportAudio={() => void handleImportAudio()}
             onTranscribeAudio={() => void handleTranscribeAudio()}
             onChangeRecordingMode={setRecordingMode}
-            onStartRecording={() => void handleStartRecording()}
+            onStartRecording={(mode) => void handleStartRecording(mode)}
             onStopRecording={() => void handleStopRecording()}
             onImportTranscript={() => void handleImportTranscript()}
             onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
@@ -3213,7 +3214,7 @@ export const App = () => {
                       onImportAudio={() => void handleImportAudio()}
                       onTranscribeAudio={() => void handleTranscribeAudio()}
                       onChangeRecordingMode={setRecordingMode}
-                      onStartRecording={() => void handleStartRecording()}
+                      onStartRecording={(mode) => void handleStartRecording(mode)}
                       onStopRecording={() => void handleStopRecording()}
                       onImportTranscript={() => void handleImportTranscript()}
                       onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
