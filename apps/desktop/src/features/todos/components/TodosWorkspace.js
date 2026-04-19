@@ -47,6 +47,22 @@ const emptyColumnFilters = {
     dueDate: "",
     details: "",
 };
+const defaultColumnWidths = {
+    description: 420,
+    domain: 140,
+    project: 140,
+    activity: 140,
+    dueDate: 130,
+    details: 220,
+};
+const minColumnWidths = {
+    description: 220,
+    domain: 100,
+    project: 100,
+    activity: 100,
+    dueDate: 110,
+    details: 140,
+};
 const stripHtmlToText = (html) => html
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -78,6 +94,8 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
     const [sortKey, setSortKey] = useState("createdAt");
     const [sortDirection, setSortDirection] = useState("desc");
     const [columnFilters, setColumnFilters] = useState(emptyColumnFilters);
+    const [columnWidths, setColumnWidths] = useState(defaultColumnWidths);
+    const [visibilityFilter, setVisibilityFilter] = useState("open");
     const [selectedTodoId, setSelectedTodoId] = useState(null);
     const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [editingDraft, setEditingDraft] = useState(createBlankTodoDraft());
@@ -122,7 +140,14 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
         }
     };
     const filteredTodos = useMemo(() => {
-        const filtered = todos.filter((todo) => Object.entries(columnFilters).every(([key, filterValue]) => {
+        const statusFiltered = todos.filter((todo) => {
+            if (visibilityFilter === "open")
+                return !todo.isDone;
+            if (visibilityFilter === "done")
+                return todo.isDone;
+            return true;
+        });
+        const filtered = statusFiltered.filter((todo) => Object.entries(columnFilters).every(([key, filterValue]) => {
             const normalizedFilter = normalizeValue(filterValue);
             if (!normalizedFilter)
                 return true;
@@ -151,7 +176,7 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
             const comparison = valueForSort(left).localeCompare(valueForSort(right));
             return sortDirection === "asc" ? comparison : comparison * -1;
         });
-    }, [activityLookup, columnFilters, sortDirection, sortKey, todos]);
+    }, [activityLookup, columnFilters, sortDirection, sortKey, todos, visibilityFilter]);
     useEffect(() => {
         if (requestedDomain !== undefined && requestedDomain !== null) {
             setColumnFilters((current) => ({ ...current, domain: requestedDomain || "" }));
@@ -253,6 +278,12 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
         setTimeLogDraft(null);
         onEditorClose?.();
     };
+    const deleteSelectedTodo = () => {
+        if (!selectedTodoId)
+            return;
+        onDelete(selectedTodoId);
+        clearSelection();
+    };
     const updateColumnFilter = (key, value) => {
         setColumnFilters((current) => ({ ...current, [key]: value }));
     };
@@ -274,6 +305,32 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
     const saveTodoPatch = (todo, patch) => {
         onSave({ ...todo, ...patch });
     };
+    const startColumnResize = (key, event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const startX = event.clientX;
+        const startWidth = columnWidths[key];
+        const handlePointerMove = (moveEvent) => {
+            const nextWidth = Math.max(minColumnWidths[key], startWidth + moveEvent.clientX - startX);
+            setColumnWidths((current) => ({ ...current, [key]: nextWidth }));
+        };
+        const handlePointerUp = () => {
+            window.removeEventListener("mousemove", handlePointerMove);
+            window.removeEventListener("mouseup", handlePointerUp);
+            document.body.classList.remove("todos-column-resizing");
+        };
+        document.body.classList.add("todos-column-resizing");
+        window.addEventListener("mousemove", handlePointerMove);
+        window.addEventListener("mouseup", handlePointerUp);
+    };
+    const tableStyle = {
+        "--todo-col-description": `${columnWidths.description}px`,
+        "--todo-col-domain": `${columnWidths.domain}px`,
+        "--todo-col-project": `${columnWidths.project}px`,
+        "--todo-col-activity": `${columnWidths.activity}px`,
+        "--todo-col-dueDate": `${columnWidths.dueDate}px`,
+        "--todo-col-details": `${columnWidths.details}px`,
+    };
     const todoColumns = [
         { key: "description", label: "Todo", placeholder: "Filter todo" },
         { key: "domain", label: "Domain", placeholder: "Filter domain" },
@@ -290,13 +347,13 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
                                         event.preventDefault();
                                         submitDraft();
                                     }
-                                }, placeholder: "Add a focused next action" })] }), _jsx("button", { className: "primary-button", type: "submit", children: "Add" })] }), _jsxs("div", { className: "todos-hub-shell", children: [_jsxs("section", { className: "todos-hub-list-panel todos-table-panel", children: [_jsxs("div", { className: "todos-table-summary", children: [_jsxs("span", { className: "status-chip", children: [filteredTodos.length, " shown"] }), _jsxs("span", { className: "status-chip", children: [openTodos.length, " open"] }), _jsxs("span", { className: "status-chip", children: [todos.length - openTodos.length, " completed"] }), _jsx("span", { className: "muted", children: "Click a row to select. Double-click to open the full todo card." })] }), runningTodos.length ? (_jsxs("div", { className: "todos-running-strip", children: [_jsx("strong", { children: "Running now" }), _jsx("div", { className: "todos-running-list", children: runningTodos.map((todo) => {
+                                }, placeholder: "Add a focused next action" })] }), _jsx("button", { className: "primary-button", type: "submit", children: "Add" })] }), _jsxs("div", { className: "todos-hub-shell", children: [_jsxs("section", { className: "todos-hub-list-panel todos-table-panel", children: [_jsxs("div", { className: "todos-table-summary", children: [_jsxs("span", { className: "status-chip", children: [filteredTodos.length, " shown"] }), _jsxs("span", { className: "status-chip", children: [openTodos.length, " open"] }), _jsxs("span", { className: "status-chip", children: [todos.length - openTodos.length, " completed"] }), _jsxs("label", { className: "todos-visibility-control", children: [_jsx("span", { children: "Show" }), _jsxs("select", { value: visibilityFilter, onChange: (event) => setVisibilityFilter(event.target.value), children: [_jsx("option", { value: "open", children: "Open only" }), _jsx("option", { value: "all", children: "All todos" }), _jsx("option", { value: "done", children: "Done only" })] })] }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: deleteSelectedTodo, disabled: !selectedTodoId, children: "Delete selected" }), _jsx("span", { className: "muted", children: "Click a row to select. Double-click to open the full todo card." })] }), runningTodos.length ? (_jsxs("div", { className: "todos-running-strip", children: [_jsx("strong", { children: "Running now" }), _jsx("div", { className: "todos-running-list", children: runningTodos.map((todo) => {
                                             const runningLog = getRunningTimeLog(timeLogsByTodoId.get(todo.id) || []);
                                             const elapsedLabel = runningLog
                                                 ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now))
                                                 : "Running";
                                             return (_jsxs("div", { className: "todos-running-chip", children: [_jsxs("button", { type: "button", className: "status-chip", onClick: () => setSelectedTodoId(todo.id), children: [todo.description, " \u2022 ", elapsedLabel] }), _jsx("button", { className: "small-button", type: "button", onClick: () => onStopTracking("todo", todo.id), children: "Stop" })] }, todo.id));
-                                        }) })] })) : null, _jsx("div", { className: "todos-dense-table-shell", children: _jsxs("table", { className: "todos-dense-table", children: [_jsxs("thead", { children: [_jsx("tr", { children: todoColumns.map((column) => (_jsx("th", { scope: "col", children: _jsxs("button", { className: "todos-sort-button", type: "button", onClick: () => toggleSort(column.key), children: [_jsx("span", { children: column.label }), _jsx("span", { "aria-hidden": "true", children: sortKey === column.key ? (sortDirection === "asc" ? "↑" : "↓") : "↕" })] }) }, column.key))) }), _jsx("tr", { className: "todos-filter-row", children: todoColumns.map((column) => (_jsx("th", { scope: "col", children: _jsx("input", { "aria-label": `Filter ${column.label}`, value: columnFilters[column.key], onChange: (event) => updateColumnFilter(column.key, event.target.value), placeholder: column.placeholder }) }, column.key))) })] }), _jsx("tbody", { children: filteredTodos.length ? (filteredTodos.map((todo) => {
+                                        }) })] })) : null, _jsx("div", { className: "todos-dense-table-shell", children: _jsxs("table", { className: "todos-dense-table", style: tableStyle, children: [_jsxs("thead", { children: [_jsx("tr", { children: todoColumns.map((column) => (_jsx("th", { scope: "col", children: _jsxs("div", { className: "todos-header-cell", children: [_jsxs("button", { className: "todos-sort-button", type: "button", onClick: () => toggleSort(column.key), children: [_jsx("span", { children: column.label }), _jsx("span", { "aria-hidden": "true", children: sortKey === column.key ? (sortDirection === "asc" ? "↑" : "↓") : "↕" })] }), _jsx("button", { className: "todos-column-resize-handle", type: "button", "aria-label": `Resize ${column.label} column`, onMouseDown: (event) => startColumnResize(column.key, event) })] }) }, column.key))) }), _jsx("tr", { className: "todos-filter-row", children: todoColumns.map((column) => (_jsx("th", { scope: "col", children: _jsx("input", { "aria-label": `Filter ${column.label}`, value: columnFilters[column.key], onChange: (event) => updateColumnFilter(column.key, event.target.value), placeholder: column.placeholder }) }, column.key))) })] }), _jsx("tbody", { children: filteredTodos.length ? (filteredTodos.map((todo) => {
                                                 const logs = timeLogsByTodoId.get(todo.id) || [];
                                                 const totalMinutes = logs.reduce((sum, entry) => sum + entry.durationMinutes, 0);
                                                 const runningLog = getRunningTimeLog(logs);
@@ -322,7 +379,10 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
                                                                                 return;
                                                                             }
                                                                             onStartTracking("todo", todo.id);
-                                                                        }, children: running ? "Stop" : "Start" })] }) })] }, todo.id));
+                                                                        }, children: running ? "Stop" : "Start" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: (event) => {
+                                                                            event.stopPropagation();
+                                                                            onDelete(todo.id);
+                                                                        }, children: "Delete" })] }) })] }, todo.id));
                                             })) : (_jsx("tr", { children: _jsx("td", { colSpan: todoColumns.length, children: _jsxs("div", { className: "empty-state-card compact-empty-state", children: [_jsx("h3", { children: "No todos match the current filters" }), _jsx("p", { children: "Clear one or more column filters, or add a new focused next action above." })] }) }) })) })] }) }), _jsx("div", { className: "todos-compact-list", children: filteredTodos.length ? (filteredTodos.map((todo) => {
                                     const logs = timeLogsByTodoId.get(todo.id) || [];
                                     const totalMinutes = logs.reduce((sum, entry) => sum + entry.durationMinutes, 0);

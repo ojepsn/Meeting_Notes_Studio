@@ -753,6 +753,26 @@ export const CalendarWorkspace = ({
     setEditorDraft(null);
   };
 
+  const deleteSelectedCalendarItems = () => {
+    const idsToDelete = selectedItemIds.length ? selectedItemIds : selectedItemId ? [selectedItemId] : [];
+    const targets = new Map<string, Item>();
+    idsToDelete.forEach((itemId) => {
+      const item = items.find((entry) => entry.id === itemId);
+      if (item) targets.set(`${item.targetType}:${item.targetId}`, item);
+    });
+    targets.forEach((item) => {
+      if (item.targetType === "todo") {
+        onDeleteTodo(item.targetId);
+        return;
+      }
+      onDeleteActivity(item.targetId);
+    });
+    setPendingDelete(null);
+    setSelectedItemId(null);
+    setSelectedItemIds([]);
+    setEditorDraft(null);
+  };
+
   return (
     <div className={`card calendar-workspace${isFullScreen ? " calendar-workspace-fullscreen" : ""}`}>
       <div className="card-header session-editor-header-minimal calendar-workspace-header">
@@ -761,6 +781,9 @@ export const CalendarWorkspace = ({
           <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, -daysInView))}>Previous</button>
           <button className="shell-button" type="button" onClick={() => { const currentDate = new Date(); setAnchorDate(getLocalDateString(currentDate)); setJumpDate(getLocalDateString(currentDate)); window.requestAnimationFrame(() => scrollToCurrentTime(currentDate)); }}>Today</button>
           <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, daysInView))}>Next</button>
+          <button className="small-button danger-button" type="button" onClick={deleteSelectedCalendarItems} disabled={!selectedItemId && !selectedItemIds.length}>
+            Delete selected
+          </button>
         </div>
       </div>
 
@@ -841,7 +864,8 @@ export const CalendarWorkspace = ({
                       item.isMeeting && item.targetType === "activity" ? linkedSessionStateByActivity[item.targetId] : undefined;
                     const runningLabel = runningLog ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now)) : "";
                     const isSelected = selectedItemIds.includes(item.id) || selectedItemId === item.id;
-                    return <button key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${visualHeight <= 22 ? " calendar-item-block-compact" : ""}`} type="button" style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
+                    const sizeClass = visualHeight <= 22 ? " calendar-item-block-tiny" : visualHeight <= 54 ? " calendar-item-block-compact" : "";
+                    return <button key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${sizeClass}`} type="button" style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
                       const target = event.target as HTMLElement;
                       if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle")) return;
                       event.preventDefault();
@@ -853,8 +877,8 @@ export const CalendarWorkspace = ({
                         {item.isMeeting ? "Meeting" : item.targetType === "todo" ? "Todo" : "Activity"}
                         {item.isPrivate ? " • Private" : ""}
                       </span>
-                      <strong>{slotToTime(startSlot)} {item.title}</strong>
-                      <span>{item.isMeeting ? durationLabel(durationSlots) : item.label}{runningLog ? ` • Running ${runningLabel}` : ""}</span>
+                      <strong className="calendar-item-title">{slotToTime(startSlot)} {item.title}</strong>
+                      <span className="calendar-item-meta">{item.isMeeting ? durationLabel(durationSlots) : item.label}{runningLog ? ` • Running ${runningLabel}` : ""}</span>
                       {linkedSessionState?.sessionId ? (
                         <span className={`calendar-item-link-state${linkedSessionState.hasOutput ? " calendar-item-link-state-output" : ""}`}>
                           {linkedSessionState.hasOutput ? "Output ready" : "Session linked"}

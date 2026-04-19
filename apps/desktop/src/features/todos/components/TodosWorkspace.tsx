@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { SyntheticEvent } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, SyntheticEvent } from "react";
 import type { ActivityRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { TokenPicker } from "../../../components/TokenPicker";
@@ -9,6 +9,9 @@ import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog, 
 type TodoSortKey = "createdAt" | "description" | "domain" | "project" | "activity" | "dueDate" | "details";
 type TodoSortDirection = "asc" | "desc";
 type TodoColumnFilters = Record<TodoSortKey, string>;
+type TodoVisibilityFilter = "open" | "all" | "done";
+type VisibleTodoColumnKey = Exclude<TodoSortKey, "createdAt">;
+type TodoColumnWidths = Record<VisibleTodoColumnKey, number>;
 
 interface TodosWorkspaceProps {
   todos: TodoRecord[];
@@ -78,6 +81,24 @@ const emptyColumnFilters: TodoColumnFilters = {
   details: "",
 };
 
+const defaultColumnWidths: TodoColumnWidths = {
+  description: 420,
+  domain: 140,
+  project: 140,
+  activity: 140,
+  dueDate: 130,
+  details: 220,
+};
+
+const minColumnWidths: TodoColumnWidths = {
+  description: 220,
+  domain: 100,
+  project: 100,
+  activity: 100,
+  dueDate: 110,
+  details: 140,
+};
+
 const stripHtmlToText = (html: string) =>
   html
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -134,6 +155,8 @@ export const TodosWorkspace = ({
   const [sortKey, setSortKey] = useState<TodoSortKey>("createdAt");
   const [sortDirection, setSortDirection] = useState<TodoSortDirection>("desc");
   const [columnFilters, setColumnFilters] = useState<TodoColumnFilters>(emptyColumnFilters);
+  const [columnWidths, setColumnWidths] = useState<TodoColumnWidths>(defaultColumnWidths);
+  const [visibilityFilter, setVisibilityFilter] = useState<TodoVisibilityFilter>("open");
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [editingDraft, setEditingDraft] = useState<TodoRecord>(createBlankTodoDraft());
@@ -197,7 +220,12 @@ export const TodosWorkspace = ({
   };
 
   const filteredTodos = useMemo(() => {
-    const filtered = todos.filter((todo) =>
+    const statusFiltered = todos.filter((todo) => {
+      if (visibilityFilter === "open") return !todo.isDone;
+      if (visibilityFilter === "done") return todo.isDone;
+      return true;
+    });
+    const filtered = statusFiltered.filter((todo) =>
       (Object.entries(columnFilters) as [TodoSortKey, string][]).every(([key, filterValue]) => {
         const normalizedFilter = normalizeValue(filterValue);
         if (!normalizedFilter) return true;
@@ -229,7 +257,7 @@ export const TodosWorkspace = ({
       const comparison = valueForSort(left).localeCompare(valueForSort(right));
       return sortDirection === "asc" ? comparison : comparison * -1;
     });
-  }, [activityLookup, columnFilters, sortDirection, sortKey, todos]);
+  }, [activityLookup, columnFilters, sortDirection, sortKey, todos, visibilityFilter]);
 
   useEffect(() => {
     if (requestedDomain !== undefined && requestedDomain !== null) {
@@ -340,6 +368,12 @@ export const TodosWorkspace = ({
     onEditorClose?.();
   };
 
+  const deleteSelectedTodo = () => {
+    if (!selectedTodoId) return;
+    onDelete(selectedTodoId);
+    clearSelection();
+  };
+
   const updateColumnFilter = (key: TodoSortKey, value: string) => {
     setColumnFilters((current) => ({ ...current, [key]: value }));
   };
@@ -366,7 +400,35 @@ export const TodosWorkspace = ({
     onSave({ ...todo, ...patch });
   };
 
-  const todoColumns: { key: TodoSortKey; label: string; placeholder: string }[] = [
+  const startColumnResize = (key: VisibleTodoColumnKey, event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = columnWidths[key];
+    const handlePointerMove = (moveEvent: MouseEvent) => {
+      const nextWidth = Math.max(minColumnWidths[key], startWidth + moveEvent.clientX - startX);
+      setColumnWidths((current) => ({ ...current, [key]: nextWidth }));
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mouseup", handlePointerUp);
+      document.body.classList.remove("todos-column-resizing");
+    };
+    document.body.classList.add("todos-column-resizing");
+    window.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("mouseup", handlePointerUp);
+  };
+
+  const tableStyle = {
+    "--todo-col-description": `${columnWidths.description}px`,
+    "--todo-col-domain": `${columnWidths.domain}px`,
+    "--todo-col-project": `${columnWidths.project}px`,
+    "--todo-col-activity": `${columnWidths.activity}px`,
+    "--todo-col-dueDate": `${columnWidths.dueDate}px`,
+    "--todo-col-details": `${columnWidths.details}px`,
+  } as CSSProperties;
+
+  const todoColumns: { key: VisibleTodoColumnKey; label: string; placeholder: string }[] = [
     { key: "description", label: "Todo", placeholder: "Filter todo" },
     { key: "domain", label: "Domain", placeholder: "Filter domain" },
     { key: "project", label: "Project", placeholder: "Filter project" },
@@ -417,6 +479,17 @@ export const TodosWorkspace = ({
             <span className="status-chip">{filteredTodos.length} shown</span>
             <span className="status-chip">{openTodos.length} open</span>
             <span className="status-chip">{todos.length - openTodos.length} completed</span>
+            <label className="todos-visibility-control">
+              <span>Show</span>
+              <select value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value as TodoVisibilityFilter)}>
+                <option value="open">Open only</option>
+                <option value="all">All todos</option>
+                <option value="done">Done only</option>
+              </select>
+            </label>
+            <button className="small-button danger-button" type="button" onClick={deleteSelectedTodo} disabled={!selectedTodoId}>
+              Delete selected
+            </button>
             <span className="muted">Click a row to select. Double-click to open the full todo card.</span>
           </div>
 
@@ -449,15 +522,23 @@ export const TodosWorkspace = ({
           ) : null}
 
           <div className="todos-dense-table-shell">
-            <table className="todos-dense-table">
+            <table className="todos-dense-table" style={tableStyle}>
               <thead>
                 <tr>
                   {todoColumns.map((column) => (
                     <th key={column.key} scope="col">
-                      <button className="todos-sort-button" type="button" onClick={() => toggleSort(column.key)}>
-                        <span>{column.label}</span>
-                        <span aria-hidden="true">{sortKey === column.key ? (sortDirection === "asc" ? "↑" : "↓") : "↕"}</span>
-                      </button>
+                      <div className="todos-header-cell">
+                        <button className="todos-sort-button" type="button" onClick={() => toggleSort(column.key)}>
+                          <span>{column.label}</span>
+                          <span aria-hidden="true">{sortKey === column.key ? (sortDirection === "asc" ? "↑" : "↓") : "↕"}</span>
+                        </button>
+                        <button
+                          className="todos-column-resize-handle"
+                          type="button"
+                          aria-label={`Resize ${column.label} column`}
+                          onMouseDown={(event) => startColumnResize(column.key, event)}
+                        />
+                      </div>
                     </th>
                   ))}
                 </tr>
@@ -600,6 +681,16 @@ export const TodosWorkspace = ({
                               }}
                             >
                               {running ? "Stop" : "Start"}
+                            </button>
+                            <button
+                              className="small-button danger-button"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onDelete(todo.id);
+                              }}
+                            >
+                              Delete
                             </button>
                           </div>
                         </td>
