@@ -3295,13 +3295,13 @@ export const App = () => {
             )}
           </section>
 
-          {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && activeWorkspace !== "notes" ? (
+        {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && activeWorkspace !== "notes" && activeWorkspace !== "todos" ? (
           <aside className="workspace-inspector stack">
             <div className="sidebar-card">
               <div>
                 <h3>Notes status</h3>
               </div>
-              {activeWorkspace === "todos" || activeWorkspace === "activities" || activeWorkspace === "calendar" ? (
+              {activeWorkspace === "activities" || activeWorkspace === "calendar" ? (
                 <div className="sidebar-actions">
                   <button className="primary-button" type="button" onClick={() => setActiveWorkspace("notes")}>
                     Back to Notes
@@ -3320,12 +3320,7 @@ export const App = () => {
                 <h3>Status</h3>
               </div>
               <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
-              {activeWorkspace === "todos" ? (
-                <>
-                  <span className="status-chip">{snapshot.todos.filter((todo) => !todo.isDone).length} open todos</span>
-                  <span className="status-chip">{snapshot.todos.filter((todo) => todo.isDone).length} completed</span>
-                </>
-              ) : activeWorkspace === "activities" ? (
+              {activeWorkspace === "activities" ? (
                 <>
                   <span className="status-chip">{snapshot.activities.filter((activity) => !activity.isDone).length} open activities</span>
                   <span className="status-chip">{snapshot.activities.filter((activity) => activity.isDone).length} completed</span>

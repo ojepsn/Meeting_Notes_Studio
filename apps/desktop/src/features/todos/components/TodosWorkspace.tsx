@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { SyntheticEvent } from "react";
 import type { ActivityRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { TokenPicker } from "../../../components/TokenPicker";
@@ -88,6 +89,19 @@ const stripHtmlToText = (html: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+const textToDetailsHtml = (value: string) => {
+  const trimmed = value.trim();
+  return trimmed ? `<p>${escapeHtml(trimmed)}</p>` : "";
+};
+
 const calculateDurationMinutes = (date: string, startTime: string, endTime: string) => {
   const start = new Date(`${date}T${startTime || "00:00"}:00`);
   const end = new Date(`${date}T${endTime || startTime || "00:00"}:00`);
@@ -116,7 +130,6 @@ export const TodosWorkspace = ({
   onOpenActivityDetail,
 }: TodosWorkspaceProps) => {
   const [draft, setDraft] = useState("");
-  const [selectedActivityId, setSelectedActivityId] = useState("");
   const [sortKey, setSortKey] = useState<TodoSortKey>("dueDate");
   const [sortDirection, setSortDirection] = useState<TodoSortDirection>("asc");
   const [columnFilters, setColumnFilters] = useState<TodoColumnFilters>(emptyColumnFilters);
@@ -269,7 +282,7 @@ export const TodosWorkspace = ({
   const submitDraft = () => {
     const nextValue = draft.trim();
     if (!nextValue) return;
-    onAdd(nextValue, { activityId: selectedActivityId || undefined });
+    onAdd(nextValue);
     setDraft("");
   };
 
@@ -340,6 +353,14 @@ export const TodosWorkspace = ({
     setIsDetailOpen(true);
   };
 
+  const stopTableEditPropagation = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
+
+  const saveTodoPatch = (todo: TodoRecord, patch: Partial<TodoRecord>) => {
+    onSave({ ...todo, ...patch });
+  };
+
   const todoColumns: { key: TodoSortKey; label: string; placeholder: string }[] = [
     { key: "description", label: "Todo", placeholder: "Filter todo" },
     { key: "domain", label: "Domain", placeholder: "Filter domain" },
@@ -359,17 +380,6 @@ export const TodosWorkspace = ({
       </div>
 
       <div className="todos-workspace-input-row">
-        <div className="field">
-          <label htmlFor="todos-workspace-activity">Activity</label>
-          <select id="todos-workspace-activity" value={selectedActivityId} onChange={(event) => setSelectedActivityId(event.target.value)}>
-            <option value="">Unassigned</option>
-            {activityOptions.map((activity) => (
-              <option key={activity.id} value={activity.id}>
-                {activity.description}
-              </option>
-            ))}
-          </select>
-        </div>
         <div className="field field-wide">
           <label htmlFor="todos-workspace-draft">New todo</label>
           <input
@@ -492,18 +502,80 @@ export const TodosWorkspace = ({
                               }}
                             />
                             <div className="todos-dense-title-copy">
-                              <strong>{todo.description || "Untitled todo"}</strong>
+                              <input
+                                className="todos-inline-title-input"
+                                aria-label="Todo title"
+                                value={todo.description}
+                                onClick={stopTableEditPropagation}
+                                onDoubleClick={stopTableEditPropagation}
+                                onKeyDown={stopTableEditPropagation}
+                                onChange={(event) => saveTodoPatch(todo, { description: event.target.value })}
+                                placeholder="Untitled todo"
+                              />
                               <span>{running ? `Running • ${elapsedLabel}` : totalMinutes ? formatTrackedMinutes(totalMinutes) : "No time logged"}</span>
                             </div>
                           </div>
                         </td>
-                        <td><span className="todos-dense-two-line">{todo.domain || "—"}</span></td>
-                        <td><span className="todos-dense-two-line">{todo.project || "—"}</span></td>
-                        <td><span className="todos-dense-two-line">{activityLabel || "Unassigned"}</span></td>
-                        <td><span className="todos-dense-two-line">{dueDateLabel || "—"}</span></td>
+                        <td>
+                          <input
+                            className="todos-inline-cell-input"
+                            aria-label="Todo domain"
+                            value={todo.domain}
+                            onClick={stopTableEditPropagation}
+                            onDoubleClick={stopTableEditPropagation}
+                            onKeyDown={stopTableEditPropagation}
+                            onChange={(event) => saveTodoPatch(todo, { domain: event.target.value })}
+                            placeholder="Domain"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="todos-inline-cell-input"
+                            aria-label="Todo project"
+                            value={todo.project}
+                            onClick={stopTableEditPropagation}
+                            onDoubleClick={stopTableEditPropagation}
+                            onKeyDown={stopTableEditPropagation}
+                            onChange={(event) => saveTodoPatch(todo, { project: event.target.value })}
+                            placeholder="Project"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="todos-inline-cell-input"
+                            aria-label="Todo activity"
+                            value={activityLabel}
+                            onClick={stopTableEditPropagation}
+                            onDoubleClick={stopTableEditPropagation}
+                            onKeyDown={stopTableEditPropagation}
+                            onChange={(event) => saveTodoPatch(todo, { activity: event.target.value, activityId: "" })}
+                            placeholder="Activity"
+                          />
+                        </td>
+                        <td>
+                          <DateInput
+                            id={`todo-dense-due-${todo.id}`}
+                            className="todos-inline-date-input"
+                            aria-label="Todo due date"
+                            value={dueDateLabel}
+                            onClick={stopTableEditPropagation}
+                            onDoubleClick={stopTableEditPropagation}
+                            onKeyDown={stopTableEditPropagation}
+                            onChange={(event) => saveTodoPatch(todo, { dueDate: event.target.value })}
+                          />
+                        </td>
                         <td>
                           <div className="todos-dense-details-cell">
-                            <span className="todos-dense-two-line">{detailsText || "No details"}</span>
+                            <input
+                              className="todos-inline-cell-input"
+                              aria-label="Todo details"
+                              value={detailsText}
+                              onClick={stopTableEditPropagation}
+                              onDoubleClick={stopTableEditPropagation}
+                              onKeyDown={stopTableEditPropagation}
+                              onChange={(event) => saveTodoPatch(todo, { detailsHtml: textToDetailsHtml(event.target.value) })}
+                              placeholder="No details"
+                            />
                             <button
                               className={`small-button${running ? " primary-button" : ""}`}
                               type="button"

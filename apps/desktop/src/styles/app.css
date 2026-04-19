@@ -2294,7 +2294,7 @@ select {
 
 .todos-dense-table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1080px;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
@@ -2303,8 +2303,8 @@ select {
 .todos-dense-table th,
 .todos-dense-table td {
   border-bottom: 1px solid var(--app-border);
-  padding: 0.35rem 0.5rem;
-  vertical-align: top;
+  padding: 0.42rem 0.55rem;
+  vertical-align: middle;
   text-align: left;
 }
 
@@ -2322,7 +2322,7 @@ select {
 
 .todos-dense-table th:nth-child(1),
 .todos-dense-table td:nth-child(1) {
-  width: 29%;
+  width: 42%;
 }
 
 .todos-dense-table th:nth-child(2),
@@ -2331,22 +2331,23 @@ select {
 .todos-dense-table td:nth-child(3),
 .todos-dense-table th:nth-child(4),
 .todos-dense-table td:nth-child(4) {
-  width: 13%;
+  width: 11%;
 }
 
 .todos-dense-table th:nth-child(5),
 .todos-dense-table td:nth-child(5) {
-  width: 10%;
+  width: 9%;
 }
 
 .todos-dense-table th:nth-child(6),
 .todos-dense-table td:nth-child(6) {
-  width: 22%;
+  width: 16%;
 }
 
 .todos-dense-table tbody tr {
   cursor: pointer;
   background: var(--app-surface);
+  min-height: 42px;
 }
 
 .todos-dense-table tbody tr:hover,
@@ -2358,7 +2359,7 @@ select {
   color: var(--app-muted);
 }
 
-.todos-dense-row-done .todos-dense-title-copy strong {
+.todos-dense-row-done .todos-inline-title-input {
   text-decoration: line-through;
 }
 
@@ -2387,25 +2388,72 @@ select {
 .todos-dense-title-cell,
 .todos-dense-details-cell {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.45rem;
   min-width: 0;
 }
 
 .todos-dense-title-cell input[type="checkbox"] {
+  flex: 0 0 auto;
   width: auto;
   min-height: 0;
-  margin-top: 0.18rem;
+  margin: 0;
 }
 
 .todos-dense-title-copy {
   min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: 0.08rem;
 }
 
-.todos-dense-title-copy strong,
+.todos-inline-title-input {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--app-text);
+  font-size: clamp(0.98rem, 0.45vw + 0.82rem, 1.08rem);
+  font-weight: 850;
+  line-height: 1.3;
+  padding: 0.12rem 0.25rem;
+  overflow-wrap: anywhere;
+}
+
+.todos-inline-title-input:hover,
+.todos-inline-title-input:focus,
+.todos-inline-cell-input:hover,
+.todos-inline-cell-input:focus,
+.todos-inline-date-input:hover,
+.todos-inline-date-input:focus {
+  border-color: var(--app-accent-border);
+  background: var(--app-input-bg);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-accent-soft) 36%, transparent 64%);
+}
+
+.todos-inline-cell-input,
+.todos-inline-date-input {
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--app-muted);
+  font-size: 0.82rem;
+  line-height: 1.25;
+  padding: 0.18rem 0.25rem;
+}
+
+.todos-inline-cell-input::placeholder {
+  color: color-mix(in srgb, var(--app-muted) 72%, transparent 28%);
+}
+
 .todos-dense-two-line {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -2413,6 +2461,8 @@ select {
   overflow: hidden;
   line-height: 1.25;
   overflow-wrap: anywhere;
+  color: var(--app-muted);
+  font-size: 0.82rem;
 }
 
 .todos-dense-title-copy span {
