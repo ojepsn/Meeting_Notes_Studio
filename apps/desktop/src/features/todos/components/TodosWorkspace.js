@@ -39,6 +39,7 @@ const createBlankTimeLogDraft = (targetId) => {
 };
 const normalizeValue = (value) => value.trim().toLowerCase();
 const emptyColumnFilters = {
+    createdAt: "",
     description: "",
     domain: "",
     project: "",
@@ -74,8 +75,8 @@ const calculateDurationMinutes = (date, startTime, endTime) => {
 };
 export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, requestedTodoId, requestedDomain, requestedProject, onEditorClose, onToggle, onAdd, onSave, onDelete, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }) => {
     const [draft, setDraft] = useState("");
-    const [sortKey, setSortKey] = useState("dueDate");
-    const [sortDirection, setSortDirection] = useState("asc");
+    const [sortKey, setSortKey] = useState("createdAt");
+    const [sortDirection, setSortDirection] = useState("desc");
     const [columnFilters, setColumnFilters] = useState(emptyColumnFilters);
     const [selectedTodoId, setSelectedTodoId] = useState(null);
     const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -103,6 +104,8 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
     }, [runningTodos.length]);
     const getTodoColumnValue = (todo, key) => {
         switch (key) {
+            case "createdAt":
+                return todo.createdAt;
             case "description":
                 return todo.description;
             case "domain":
@@ -127,6 +130,8 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
         }));
         const valueForSort = (todo) => {
             switch (sortKey) {
+                case "createdAt":
+                    return todo.createdAt || "";
                 case "description":
                     return normalizeValue(todo.description);
                 case "domain":
@@ -277,12 +282,15 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
         { key: "dueDate", label: "Due date", placeholder: "Filter date" },
         { key: "details", label: "Details", placeholder: "Filter details" },
     ];
-    return (_jsxs("div", { className: "card todos-workspace todos-workspace-minimal todos-hub-card", children: [_jsx("div", { className: "card-header session-editor-header-minimal", children: _jsxs("div", { children: [_jsx("h2", { children: "Todos" }), _jsx("p", { className: "muted", children: "Execution happens here. Start work fast, stay in context, and correct time afterward when needed." })] }) }), _jsxs("div", { className: "todos-workspace-input-row", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "todos-workspace-draft", children: "New todo" }), _jsx("input", { id: "todos-workspace-draft", value: draft, onChange: (event) => setDraft(event.target.value), onKeyDown: (event) => {
-                                    if (event.key === "Enter" && !event.shiftKey) {
+    return (_jsxs("div", { className: "card todos-workspace todos-workspace-minimal todos-hub-card", children: [_jsx("div", { className: "card-header session-editor-header-minimal", children: _jsxs("div", { children: [_jsx("h2", { children: "Todos" }), _jsx("p", { className: "muted", children: "Execution happens here. Start work fast, stay in context, and correct time afterward when needed." })] }) }), _jsxs("form", { className: "todos-workspace-input-row", onSubmit: (event) => {
+                    event.preventDefault();
+                    submitDraft();
+                }, children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "todos-workspace-draft", children: "New todo" }), _jsx("input", { id: "todos-workspace-draft", value: draft, onChange: (event) => setDraft(event.target.value), onKeyDown: (event) => {
+                                    if (event.key === "Enter") {
                                         event.preventDefault();
                                         submitDraft();
                                     }
-                                }, placeholder: "Add a focused next action" })] }), _jsx("button", { className: "primary-button", type: "button", onClick: submitDraft, children: "Add" })] }), _jsxs("div", { className: "todos-hub-shell", children: [_jsxs("section", { className: "todos-hub-list-panel todos-table-panel", children: [_jsxs("div", { className: "todos-table-summary", children: [_jsxs("span", { className: "status-chip", children: [filteredTodos.length, " shown"] }), _jsxs("span", { className: "status-chip", children: [openTodos.length, " open"] }), _jsxs("span", { className: "status-chip", children: [todos.length - openTodos.length, " completed"] }), _jsx("span", { className: "muted", children: "Click a row to select. Double-click to open the full todo card." })] }), runningTodos.length ? (_jsxs("div", { className: "todos-running-strip", children: [_jsx("strong", { children: "Running now" }), _jsx("div", { className: "todos-running-list", children: runningTodos.map((todo) => {
+                                }, placeholder: "Add a focused next action" })] }), _jsx("button", { className: "primary-button", type: "submit", children: "Add" })] }), _jsxs("div", { className: "todos-hub-shell", children: [_jsxs("section", { className: "todos-hub-list-panel todos-table-panel", children: [_jsxs("div", { className: "todos-table-summary", children: [_jsxs("span", { className: "status-chip", children: [filteredTodos.length, " shown"] }), _jsxs("span", { className: "status-chip", children: [openTodos.length, " open"] }), _jsxs("span", { className: "status-chip", children: [todos.length - openTodos.length, " completed"] }), _jsx("span", { className: "muted", children: "Click a row to select. Double-click to open the full todo card." })] }), runningTodos.length ? (_jsxs("div", { className: "todos-running-strip", children: [_jsx("strong", { children: "Running now" }), _jsx("div", { className: "todos-running-list", children: runningTodos.map((todo) => {
                                             const runningLog = getRunningTimeLog(timeLogsByTodoId.get(todo.id) || []);
                                             const elapsedLabel = runningLog
                                                 ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now))

@@ -6,7 +6,7 @@ import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog, isTimeLogRunning } from "../../../lib/time/tracking";
 
-type TodoSortKey = "description" | "domain" | "project" | "activity" | "dueDate" | "details";
+type TodoSortKey = "createdAt" | "description" | "domain" | "project" | "activity" | "dueDate" | "details";
 type TodoSortDirection = "asc" | "desc";
 type TodoColumnFilters = Record<TodoSortKey, string>;
 
@@ -69,6 +69,7 @@ const createBlankTimeLogDraft = (targetId: string): TimeLogRecord => {
 const normalizeValue = (value: string) => value.trim().toLowerCase();
 
 const emptyColumnFilters: TodoColumnFilters = {
+  createdAt: "",
   description: "",
   domain: "",
   project: "",
@@ -130,8 +131,8 @@ export const TodosWorkspace = ({
   onOpenActivityDetail,
 }: TodosWorkspaceProps) => {
   const [draft, setDraft] = useState("");
-  const [sortKey, setSortKey] = useState<TodoSortKey>("dueDate");
-  const [sortDirection, setSortDirection] = useState<TodoSortDirection>("asc");
+  const [sortKey, setSortKey] = useState<TodoSortKey>("createdAt");
+  const [sortDirection, setSortDirection] = useState<TodoSortDirection>("desc");
   const [columnFilters, setColumnFilters] = useState<TodoColumnFilters>(emptyColumnFilters);
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -177,6 +178,8 @@ export const TodosWorkspace = ({
 
   const getTodoColumnValue = (todo: TodoRecord, key: TodoSortKey) => {
     switch (key) {
+      case "createdAt":
+        return todo.createdAt;
       case "description":
         return todo.description;
       case "domain":
@@ -204,6 +207,8 @@ export const TodosWorkspace = ({
 
     const valueForSort = (todo: TodoRecord) => {
       switch (sortKey) {
+        case "createdAt":
+          return todo.createdAt || "";
         case "description":
           return normalizeValue(todo.description);
         case "domain":
@@ -379,7 +384,13 @@ export const TodosWorkspace = ({
         </div>
       </div>
 
-      <div className="todos-workspace-input-row">
+      <form
+        className="todos-workspace-input-row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitDraft();
+        }}
+      >
         <div className="field field-wide">
           <label htmlFor="todos-workspace-draft">New todo</label>
           <input
@@ -387,7 +398,7 @@ export const TodosWorkspace = ({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
+              if (event.key === "Enter") {
                 event.preventDefault();
                 submitDraft();
               }
@@ -395,10 +406,10 @@ export const TodosWorkspace = ({
             placeholder="Add a focused next action"
           />
         </div>
-        <button className="primary-button" type="button" onClick={submitDraft}>
+        <button className="primary-button" type="submit">
           Add
         </button>
-      </div>
+      </form>
 
       <div className="todos-hub-shell">
         <section className="todos-hub-list-panel todos-table-panel">
