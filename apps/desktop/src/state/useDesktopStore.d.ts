@@ -52,7 +52,9 @@ interface DesktopState {
     createCalendarEntryFromText: (date: string, startSlot: number, value: string, options?: {
         activityId?: string;
         parentActivityId?: string;
-    }) => Promise<void>;
+        kind?: "todo" | "activity" | "meeting";
+        endSlot?: number;
+    }) => Promise<string | null>;
     moveCalendarItem: (id: string, date: string, startSlot: number) => Promise<void>;
     updateCalendarItem: (id: string, updates: {
         date: string;

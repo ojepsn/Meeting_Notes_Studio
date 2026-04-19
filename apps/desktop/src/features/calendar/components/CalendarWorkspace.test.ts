@@ -5,6 +5,8 @@ import {
   dayColumnWidthForView,
   durationFromTimes,
   durationLabel,
+  getLocalDateString,
+  initialCalendarScrollTop,
   slotToTime,
   timeToSlot,
 } from "./CalendarWorkspace";
@@ -36,5 +38,11 @@ describe("CalendarWorkspace helpers", () => {
     expect(dayColumnWidthForView(3)).toBeGreaterThan(dayColumnWidthForView(5));
     expect(dayColumnWidthForView(5)).toBeGreaterThan(dayColumnWidthForView(7));
     expect(dayColumnWidthForView(7)).toBeGreaterThan(dayColumnWidthForView(14));
+  });
+
+  it("uses local dates and scrolls to the hour before now on open", () => {
+    expect(getLocalDateString(new Date(2026, 3, 19, 9, 30))).toBe("2026-04-19");
+    expect(initialCalendarScrollTop(new Date(2026, 3, 19, 9, 30), 16)).toBe(102 * 16);
+    expect(initialCalendarScrollTop(new Date(2026, 3, 19, 0, 20), 16)).toBe(0);
   });
 });

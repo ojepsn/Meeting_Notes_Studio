@@ -688,12 +688,15 @@ export const useDesktopStore = create((set, get) => ({
     },
     createCalendarEntryFromText: async (date, startSlot, value, options) => {
         const snapshot = get().snapshot;
-        const parsed = parseScheduledText(value);
+        const parsed = options?.kind
+            ? { kind: options.kind, description: value.trim() || (options.kind === "meeting" ? "New meeting" : options.kind === "activity" ? "New activity" : "New todo") }
+            : parseScheduledText(value);
         if (!snapshot || !parsed)
-            return;
+            return null;
         const createdAt = new Date().toISOString();
         const normalizedSlot = clampSlotIndex(startSlot);
         let nextSnapshot = snapshot;
+        let createdCalendarItemId = null;
         if (parsed.kind === "todo") {
             const inherited = applyActivityInheritance(snapshot, {
                 activityId: options?.activityId || "",
@@ -726,11 +729,12 @@ export const useDesktopStore = create((set, get) => ({
                     activity: todo.activity,
                 }),
             };
+            createdCalendarItemId = crypto.randomUUID();
             nextSnapshot = {
                 ...snapshot,
                 todos: [normalizedTodo, ...snapshot.todos],
                 calendarItems: upsertCalendarItem(snapshot.calendarItems, {
-                    id: crypto.randomUUID(),
+                    id: createdCalendarItemId,
                     targetType: "todo",
                     targetId: normalizedTodo.id,
                     date,
@@ -743,6 +747,9 @@ export const useDesktopStore = create((set, get) => ({
         }
         else {
             const isMeeting = parsed.kind === "meeting";
+            const durationSlots = isMeeting
+                ? Math.max(1, (typeof options?.endSlot === "number" ? clampSlotIndex(options.endSlot) : normalizedSlot + DEFAULT_MEETING_DURATION_SLOTS) - normalizedSlot)
+                : 1;
             const activity = normalizeActivityStructure({
                 id: crypto.randomUUID(),
                 type: isMeeting ? "meeting" : "task",
@@ -757,23 +764,24 @@ export const useDesktopStore = create((set, get) => ({
                 doOn: date,
                 dueDate: "",
                 startTime: isMeeting ? slotToTime(normalizedSlot) : "",
-                endTime: isMeeting ? slotToTime(normalizedSlot + DEFAULT_MEETING_DURATION_SLOTS) : "",
+                endTime: isMeeting ? slotToTime(normalizedSlot + durationSlots) : "",
                 detailsHtml: "",
                 timeRequiredMinutes: 0,
                 actualTimeSpentMinutes: 0,
                 createdAt,
                 sessionIds: toSessionIds(get().activeSessionId),
             });
+            createdCalendarItemId = crypto.randomUUID();
             nextSnapshot = {
                 ...snapshot,
                 activities: [activity, ...snapshot.activities],
                 calendarItems: upsertCalendarItem(snapshot.calendarItems, {
-                    id: crypto.randomUUID(),
+                    id: createdCalendarItemId,
                     targetType: "activity",
                     targetId: activity.id,
                     date,
                     startSlot: normalizedSlot,
-                    durationSlots: isMeeting ? DEFAULT_MEETING_DURATION_SLOTS : 1,
+                    durationSlots,
                     createdAt,
                     updatedAt: createdAt,
                 }),
@@ -781,6 +789,7 @@ export const useDesktopStore = create((set, get) => ({
         }
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        return createdCalendarItemId;
     },
     moveCalendarItem: async (id, date, startSlot) => {
         const snapshot = get().snapshot;

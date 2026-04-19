@@ -32,6 +32,13 @@ export const timeToSlot = (time: string) => {
 };
 export const formatDay = (date: string) =>
   new Intl.DateTimeFormat(undefined, { weekday: "short", month: "2-digit", day: "2-digit" }).format(new Date(`${date}T00:00:00`));
+export const getLocalDateString = (date = new Date()) =>
+  `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-${`${date.getDate()}`.padStart(2, "0")}`;
+export const initialCalendarScrollTop = (date: Date, slotHeight: number) => {
+  const currentSlot = clampSlot(date.getHours() * 12 + Math.floor(date.getMinutes() / MINUTES_PER_SLOT));
+  const previousHourSlot = Math.max(0, currentSlot - 12);
+  return previousHourSlot * slotHeight;
+};
 export const durationLabel = (slots: number) => {
   const minutes = slots * MINUTES_PER_SLOT;
   if (minutes < 60) return `${minutes} min`;
@@ -106,8 +113,8 @@ interface CalendarWorkspaceProps {
     date: string,
     startSlot: number,
     value: string,
-    options?: { activityId?: string; parentActivityId?: string },
-  ) => void;
+    options?: { activityId?: string; parentActivityId?: string; kind?: "todo" | "activity" | "meeting"; endSlot?: number },
+  ) => Promise<string | null> | string | null | void;
   onMoveItem: (id: string, date: string, startSlot: number) => void;
   onSaveTodo: (todo: TodoRecord) => void;
   onDeleteTodo: (id: string) => void;
@@ -155,7 +162,7 @@ export const CalendarWorkspace = ({
   onPreviewSessionOutput,
   onFullScreenChange,
 }: CalendarWorkspaceProps) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateString();
   const initialIsFullScreen = true;
   const [anchorDate, setAnchorDate] = useState(today);
   const [daysInView, setDaysInView] = useState<typeof DAYS[number]>(settings.calendarDaysInView);
@@ -179,6 +186,7 @@ export const CalendarWorkspace = ({
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const splitterDraggingRef = useRef(false);
+  const didApplyInitialViewportRef = useRef(false);
   const scrollPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggedItemIdRef = useRef<string | null>(null);
   const pointerDragCandidateRef = useRef<null | { itemId: string; startX: number; startY: number }>(null);
@@ -338,18 +346,25 @@ export const CalendarWorkspace = ({
 
   useEffect(() => {
     const scroller = scrollRef.current;
-    if (!scroller) return;
-    const hasSavedViewport = (settings.calendarScrollTop ?? 0) > 0 || (settings.calendarScrollLeft ?? 0) > 0;
-    if (hasSavedViewport) {
-      scroller.scrollTop = Math.max(0, settings.calendarScrollTop ?? 0);
-      scroller.scrollLeft = Math.max(0, settings.calendarScrollLeft ?? 0);
+    if (!scroller || didApplyInitialViewportRef.current) return;
+    didApplyInitialViewportRef.current = true;
+    const currentDate = new Date();
+    const currentDay = getLocalDateString(currentDate);
+    if (anchorDate !== currentDay) {
+      setAnchorDate(currentDay);
+      setJumpDate(currentDay);
+    }
+    const nextScrollTop = initialCalendarScrollTop(currentDate, slotHeight);
+    scroller.scrollTop = nextScrollTop;
+    scroller.scrollLeft = 0;
+    if (scrollTop !== nextScrollTop) {
+      setScrollTop(nextScrollTop);
+    }
+    if (scrollLeft !== 0) {
+      setScrollLeft(0);
       return;
     }
-    const now = new Date();
-    const currentSlot = clampSlot(now.getHours() * 12 + Math.floor(now.getMinutes() / MINUTES_PER_SLOT));
-    scroller.scrollTop = Math.max(0, currentSlot * slotHeight - scroller.clientHeight / 2);
-    scroller.scrollLeft = 0;
-  }, [settings.calendarScrollLeft, settings.calendarScrollTop, slotHeight]);
+  }, [anchorDate, scrollLeft, scrollTop, slotHeight]);
 
   useEffect(() => {
     const scroller = scrollRef.current;
@@ -528,6 +543,22 @@ export const CalendarWorkspace = ({
     setDraftCell(null);
   };
 
+  const createMeetingFromGrid = async (date: string, slot: number) => {
+    const normalizedSlot = clampSlot(slot);
+    setDraftText("");
+    setDraftCell(null);
+    setSelectedItemId(null);
+    const createdItemId = await onCreateFromText(date, normalizedSlot, "New meeting", {
+      activityId: creationContextActivityId || undefined,
+      parentActivityId: creationContextActivityId || undefined,
+      kind: "meeting",
+      endSlot: clampSlot(normalizedSlot + DEFAULT_MEETING_DURATION_SLOTS),
+    });
+    if (createdItemId) {
+      setSelectedItemId(createdItemId);
+    }
+  };
+
   const saveEditor = () => {
     if (!editorDraft) return;
     const startSlot = clampSlot(timeToSlot(editorDraft.startTime || "00:00"));
@@ -671,12 +702,18 @@ export const CalendarWorkspace = ({
                 const dayItems = itemsByDate.get(date) ?? [];
                 const active = draftCell?.date === date ? draftCell : null;
                 return <div key={`col-${date}`} data-date={date} className="calendar-day-column" style={{ gridColumn: `${index + 2} / ${index + 3}`, gridRow: `2 / span ${TOTAL_SLOTS}`, height: `calc(var(--calendar-slot-height) * ${TOTAL_SLOTS})` }} onClick={(event) => {
+                  if (event.detail > 1) return;
                   const target = event.target as HTMLElement;
                   if (target.closest(".calendar-item-block") || target.closest(".calendar-cell-input")) return;
                   const rect = event.currentTarget.getBoundingClientRect();
                   setSelectedItemId(null);
                   setDraftCell({ date, slot: clampSlot(Math.floor((event.clientY - rect.top) / slotHeight)) });
                   setDraftText("");
+                }} onDoubleClick={(event) => {
+                  const target = event.target as HTMLElement;
+                  if (target.closest(".calendar-item-block") || target.closest(".calendar-cell-input")) return;
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  void createMeetingFromGrid(date, Math.floor((event.clientY - rect.top) / slotHeight));
                 }} onDragOver={(event) => {
                   event.preventDefault();
                   event.dataTransfer.dropEffect = "move";

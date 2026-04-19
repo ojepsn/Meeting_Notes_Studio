@@ -2976,7 +2976,7 @@ export const App = () => {
                 structureOptions={structureOptions}
                 linkedSessionStateByActivity={linkedSessionStateByActivity}
                 onSaveSettings={(settings) => void saveSettings(settings)}
-                onCreateFromText={(date, startSlot, value, options) => void createCalendarEntryFromText(date, startSlot, value, options)}
+                onCreateFromText={(date, startSlot, value, options) => createCalendarEntryFromText(date, startSlot, value, options)}
                 onMoveItem={(id, date, startSlot) => void moveCalendarItem(id, date, startSlot)}
                 onSaveTodo={(todo) => void saveTodo(todo)}
                 onDeleteTodo={(id) => void deleteTodo(id)}

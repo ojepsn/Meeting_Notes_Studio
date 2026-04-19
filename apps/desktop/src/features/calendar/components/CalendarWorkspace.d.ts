@@ -8,6 +8,8 @@ export declare const durationFromTimes: (startTime: string, endTime: string) => 
 export declare const slotToTime: (slot: number) => string;
 export declare const timeToSlot: (time: string) => number;
 export declare const formatDay: (date: string) => string;
+export declare const getLocalDateString: (date?: Date) => string;
+export declare const initialCalendarScrollTop: (date: Date, slotHeight: number) => number;
 export declare const durationLabel: (slots: number) => string;
 export declare const dayColumnWidthForView: (daysInView: (typeof DAYS)[number]) => 118 | 156 | 220 | 280;
 interface CalendarWorkspaceProps {
@@ -26,7 +28,9 @@ interface CalendarWorkspaceProps {
     onCreateFromText: (date: string, startSlot: number, value: string, options?: {
         activityId?: string;
         parentActivityId?: string;
-    }) => void;
+        kind?: "todo" | "activity" | "meeting";
+        endSlot?: number;
+    }) => Promise<string | null> | string | null | void;
     onMoveItem: (id: string, date: string, startSlot: number) => void;
     onSaveTodo: (todo: TodoRecord) => void;
     onDeleteTodo: (id: string) => void;

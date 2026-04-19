@@ -30,6 +30,12 @@ export const timeToSlot = (time) => {
     return hours * 12 + Math.floor(minutes / MINUTES_PER_SLOT);
 };
 export const formatDay = (date) => new Intl.DateTimeFormat(undefined, { weekday: "short", month: "2-digit", day: "2-digit" }).format(new Date(`${date}T00:00:00`));
+export const getLocalDateString = (date = new Date()) => `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-${`${date.getDate()}`.padStart(2, "0")}`;
+export const initialCalendarScrollTop = (date, slotHeight) => {
+    const currentSlot = clampSlot(date.getHours() * 12 + Math.floor(date.getMinutes() / MINUTES_PER_SLOT));
+    const previousHourSlot = Math.max(0, currentSlot - 12);
+    return previousHourSlot * slotHeight;
+};
 export const durationLabel = (slots) => {
     const minutes = slots * MINUTES_PER_SLOT;
     if (minutes < 60)
@@ -52,7 +58,7 @@ export const dayColumnWidthForView = (daysInView) => {
     }
 };
 export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, onCreateLinkedMeetingSession, onPreviewSessionOutput, onFullScreenChange, }) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateString();
     const initialIsFullScreen = true;
     const [anchorDate, setAnchorDate] = useState(today);
     const [daysInView, setDaysInView] = useState(settings.calendarDaysInView);
@@ -76,6 +82,7 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
     const layoutRef = useRef(null);
     const scrollRef = useRef(null);
     const splitterDraggingRef = useRef(false);
+    const didApplyInitialViewportRef = useRef(false);
     const scrollPersistTimerRef = useRef(null);
     const draggedItemIdRef = useRef(null);
     const pointerDragCandidateRef = useRef(null);
@@ -220,19 +227,26 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
     });
     useEffect(() => {
         const scroller = scrollRef.current;
-        if (!scroller)
+        if (!scroller || didApplyInitialViewportRef.current)
             return;
-        const hasSavedViewport = (settings.calendarScrollTop ?? 0) > 0 || (settings.calendarScrollLeft ?? 0) > 0;
-        if (hasSavedViewport) {
-            scroller.scrollTop = Math.max(0, settings.calendarScrollTop ?? 0);
-            scroller.scrollLeft = Math.max(0, settings.calendarScrollLeft ?? 0);
+        didApplyInitialViewportRef.current = true;
+        const currentDate = new Date();
+        const currentDay = getLocalDateString(currentDate);
+        if (anchorDate !== currentDay) {
+            setAnchorDate(currentDay);
+            setJumpDate(currentDay);
+        }
+        const nextScrollTop = initialCalendarScrollTop(currentDate, slotHeight);
+        scroller.scrollTop = nextScrollTop;
+        scroller.scrollLeft = 0;
+        if (scrollTop !== nextScrollTop) {
+            setScrollTop(nextScrollTop);
+        }
+        if (scrollLeft !== 0) {
+            setScrollLeft(0);
             return;
         }
-        const now = new Date();
-        const currentSlot = clampSlot(now.getHours() * 12 + Math.floor(now.getMinutes() / MINUTES_PER_SLOT));
-        scroller.scrollTop = Math.max(0, currentSlot * slotHeight - scroller.clientHeight / 2);
-        scroller.scrollLeft = 0;
-    }, [settings.calendarScrollLeft, settings.calendarScrollTop, slotHeight]);
+    }, [anchorDate, scrollLeft, scrollTop, slotHeight]);
     useEffect(() => {
         const scroller = scrollRef.current;
         if (!scroller)
@@ -415,6 +429,21 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
         setDraftText("");
         setDraftCell(null);
     };
+    const createMeetingFromGrid = async (date, slot) => {
+        const normalizedSlot = clampSlot(slot);
+        setDraftText("");
+        setDraftCell(null);
+        setSelectedItemId(null);
+        const createdItemId = await onCreateFromText(date, normalizedSlot, "New meeting", {
+            activityId: creationContextActivityId || undefined,
+            parentActivityId: creationContextActivityId || undefined,
+            kind: "meeting",
+            endSlot: clampSlot(normalizedSlot + DEFAULT_MEETING_DURATION_SLOTS),
+        });
+        if (createdItemId) {
+            setSelectedItemId(createdItemId);
+        }
+    };
     const saveEditor = () => {
         if (!editorDraft)
             return;
@@ -507,6 +536,8 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
                                         const dayItems = itemsByDate.get(date) ?? [];
                                         const active = draftCell?.date === date ? draftCell : null;
                                         return _jsxs("div", { "data-date": date, className: "calendar-day-column", style: { gridColumn: `${index + 2} / ${index + 3}`, gridRow: `2 / span ${TOTAL_SLOTS}`, height: `calc(var(--calendar-slot-height) * ${TOTAL_SLOTS})` }, onClick: (event) => {
+                                                if (event.detail > 1)
+                                                    return;
                                                 const target = event.target;
                                                 if (target.closest(".calendar-item-block") || target.closest(".calendar-cell-input"))
                                                     return;
@@ -514,6 +545,12 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
                                                 setSelectedItemId(null);
                                                 setDraftCell({ date, slot: clampSlot(Math.floor((event.clientY - rect.top) / slotHeight)) });
                                                 setDraftText("");
+                                            }, onDoubleClick: (event) => {
+                                                const target = event.target;
+                                                if (target.closest(".calendar-item-block") || target.closest(".calendar-cell-input"))
+                                                    return;
+                                                const rect = event.currentTarget.getBoundingClientRect();
+                                                void createMeetingFromGrid(date, Math.floor((event.clientY - rect.top) / slotHeight));
                                             }, onDragOver: (event) => {
                                                 event.preventDefault();
                                                 event.dataTransfer.dropEffect = "move";
