@@ -134,7 +134,7 @@ interface CalendarWorkspaceProps {
   onOpenTodoDetail: (todoId: string) => void;
   onOpenActivityWorkspace: (activityId: string) => void;
   onOpenActivityDetail: (activityId: string) => void;
-  onOpenSession: (sessionId: string) => void;
+  onOpenSession: (sessionId: string, calendarItemId?: string) => void;
   highlightedItemId?: string | null;
   onCreateLinkedMeetingSession: (activityId: string) => void;
   onPreviewSessionOutput: (sessionId: string) => void;
@@ -911,7 +911,7 @@ export const CalendarWorkspace = ({
                                 onClick={(event) => {
                                   event.preventDefault();
                                   event.stopPropagation();
-                                  onOpenSession(linkedSessionState.sessionId!);
+                                  onOpenSession(linkedSessionState.sessionId!, item.id);
                                 }}
                               >
                                 Open session

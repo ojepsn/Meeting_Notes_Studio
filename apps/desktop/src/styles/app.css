@@ -1250,14 +1250,25 @@ select {
 }
 
 .output-textarea-pwa {
+  display: block;
+  width: 100%;
   border: 0;
   background: transparent;
   box-shadow: none;
+  color: var(--app-text);
+  caret-color: var(--app-accent);
   padding: 0;
+  resize: vertical;
+  scrollbar-color: color-mix(in srgb, var(--app-muted) 48%, transparent 52%) transparent;
 }
 
 .output-textarea-pwa:focus {
+  outline: none;
   box-shadow: none;
+}
+
+.output-textarea-pwa::placeholder {
+  color: var(--app-muted);
 }
 
 .output-version-note {

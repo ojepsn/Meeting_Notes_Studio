@@ -733,7 +733,7 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
                                                                             }, onClick: (event) => {
                                                                                 event.preventDefault();
                                                                                 event.stopPropagation();
-                                                                                onOpenSession(linkedSessionState.sessionId);
+                                                                                onOpenSession(linkedSessionState.sessionId, item.id);
                                                                             }, children: "Open session" }), linkedSessionState.hasOutput ? (_jsx("span", { className: "calendar-item-inline-action calendar-item-inline-action-secondary", role: "button", tabIndex: -1, onMouseDown: (event) => {
                                                                                 event.preventDefault();
                                                                                 event.stopPropagation();

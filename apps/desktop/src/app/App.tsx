@@ -3126,8 +3126,8 @@ export const App = () => {
                 onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "calendar")}
                 onOpenActivityWorkspace={(activityId) => openActivityFromLink(activityId, "calendar")}
                 onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "calendar")}
-                onOpenSession={(sessionId) => {
-                  const calendarItemId =
+                onOpenSession={(sessionId, openedCalendarItemId) => {
+                  const calendarItemId = openedCalendarItemId ??
                     snapshot.calendarItems.find((item) => {
                       if (item.targetType !== "activity") return false;
                       const activitySessionId = linkedSessionStateByActivity[item.targetId]?.sessionId;

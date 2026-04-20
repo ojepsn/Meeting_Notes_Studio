@@ -2069,13 +2069,14 @@ export const App = () => {
                                             date: options.date,
                                             startTime: options.startTime,
                                             endTime: options.endTime,
-                                        }), onUpdateCalendarItem: (id, updates) => void updateCalendarItem(id, updates), onStartTracking: (targetType, targetId) => void startTimeTracking(targetType, targetId), onStopTracking: (targetType, targetId) => void stopTimeTracking(targetType, targetId), onOpenTodoWorkspace: () => setActiveWorkspace("todos"), onOpenTodoDetail: (todoId) => openTodoDetailFromLink(todoId, "calendar"), onOpenActivityWorkspace: (activityId) => openActivityFromLink(activityId, "calendar"), onOpenActivityDetail: (activityId) => openActivityFromLink(activityId, "calendar"), onOpenSession: (sessionId) => {
-                                            const calendarItemId = snapshot.calendarItems.find((item) => {
-                                                if (item.targetType !== "activity")
-                                                    return false;
-                                                const activitySessionId = linkedSessionStateByActivity[item.targetId]?.sessionId;
-                                                return activitySessionId === sessionId;
-                                            })?.id ?? null;
+                                        }), onUpdateCalendarItem: (id, updates) => void updateCalendarItem(id, updates), onStartTracking: (targetType, targetId) => void startTimeTracking(targetType, targetId), onStopTracking: (targetType, targetId) => void stopTimeTracking(targetType, targetId), onOpenTodoWorkspace: () => setActiveWorkspace("todos"), onOpenTodoDetail: (todoId) => openTodoDetailFromLink(todoId, "calendar"), onOpenActivityWorkspace: (activityId) => openActivityFromLink(activityId, "calendar"), onOpenActivityDetail: (activityId) => openActivityFromLink(activityId, "calendar"), onOpenSession: (sessionId, openedCalendarItemId) => {
+                                            const calendarItemId = openedCalendarItemId ??
+                                                snapshot.calendarItems.find((item) => {
+                                                    if (item.targetType !== "activity")
+                                                        return false;
+                                                    const activitySessionId = linkedSessionStateByActivity[item.targetId]?.sessionId;
+                                                    return activitySessionId === sessionId;
+                                                })?.id ?? null;
                                             openSessionFromLink(sessionId, "calendar", calendarItemId);
                                         }, highlightedItemId: linkedCalendarReturnItemId, onCreateLinkedMeetingSession: (activityId) => void ensureSessionForActivity(activityId).then((sessionId) => {
                                             if (sessionId) {
