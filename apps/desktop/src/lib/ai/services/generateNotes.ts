@@ -8,6 +8,15 @@ const buildTemplateSectionPrompt = (template: TemplateDefinition) =>
     .map((section) => `- ${section.title}: ${section.instructions}`)
     .join("\n");
 
+const FALLBACK_SECTION = {
+  id: "generated-notes",
+  title: "Generated notes",
+  instructions:
+    "Create a useful polished output from the available manual notes, agenda, highlights, live transcript, or uploaded transcript.",
+  enabledByDefault: true,
+  position: 1,
+};
+
 const richTextToPlainText = (value: string) => {
   if (!value) return "";
   const wrapper = document.createElement("div");
@@ -89,7 +98,8 @@ export const generateNotes = async ({
   onEvent?: (event: AIRuntimeEvent) => void;
 }) => {
   const promptProfile = resolvePromptProfile(settings.promptProfile);
-  const activeSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
+  const selectedSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
+  const activeSections = selectedSections.length ? selectedSections : [FALLBACK_SECTION];
   const manualNotes = richTextToPlainText(session.manualNotes);
   const agendaText = template.fields
     .filter((field) => field.enabled && field.key === "agenda")
@@ -108,9 +118,6 @@ export const generateNotes = async ({
 
   if (!sourceText) {
     throw new Error("Add notes or transcript content before generating output.");
-  }
-  if (!activeSections.length) {
-    throw new Error("Enable at least one output section for this session before generating output.");
   }
 
   const extraPromptBlocks = formatEnabledPromptBlocks(promptProfile.profile.extraBlocks);

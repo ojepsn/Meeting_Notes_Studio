@@ -1064,8 +1064,9 @@ export const App = () => {
         return combinedDiscussion ? `${section.title}\n${combinedDiscussion}` : "";
       })
       .filter(Boolean);
+    const fallbackBlock = combinedDiscussion ? `Generated notes\n${combinedDiscussion}` : "";
 
-    return [title, metaBlock, ...sectionBlocks].filter(Boolean).join("\n\n").trim();
+    return [title, metaBlock, ...(sectionBlocks.length ? sectionBlocks : [fallbackBlock])].filter(Boolean).join("\n\n").trim();
   };
 
   const buildManualNotesOnlyOutput = (session = activeSession, template = activeTemplate) => {
@@ -1083,12 +1084,17 @@ export const App = () => {
     const metaBlock = buildOutputMetaBlock(session);
     const agenda = getAgendaText(session, template);
     const manualNotes = polishNonAiNotesText(richTextToPlainText(session.manualNotes), manualPolishOptions);
+    const transcript = polishNonAiNotesText(
+      [session.liveTranscript.trim(), session.uploadedTranscript.trim()].filter(Boolean).join("\n\n"),
+      manualPolishOptions,
+    );
+    const notesBody = [manualNotes, transcript].filter(Boolean).join("\n\n").trim();
 
     return [
       title,
       metaBlock,
       agenda ? `Agenda\n${agenda}` : "",
-      manualNotes ? `Manual notes\n${manualNotes}` : "",
+      notesBody ? `Notes\n${notesBody}` : "",
     ]
       .filter(Boolean)
       .join("\n\n")
@@ -1480,8 +1486,14 @@ export const App = () => {
         sessionForGeneration.liveTranscript.trim() || sessionForGeneration.uploadedTranscript.trim(),
       );
 
-      if (shouldUseManualMode && !richTextToPlainText(sessionForGeneration.manualNotes).trim()) {
-        setStatusNote("Add text to Manual notes first. This mode transfers Manual notes directly into Output without AI generation.");
+      const hasManualOrTranscriptText = Boolean(
+        richTextToPlainText(sessionForGeneration.manualNotes).trim() ||
+          sessionForGeneration.liveTranscript.trim() ||
+          sessionForGeneration.uploadedTranscript.trim(),
+      );
+
+      if (shouldUseManualMode && !hasManualOrTranscriptText) {
+        setStatusNote("Add text to Manual notes or Transcript first. This mode transfers captured text directly into Output without AI generation.");
         return;
       }
 
