@@ -196,6 +196,7 @@ export const CalendarWorkspace = ({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const splitterDraggingRef = useRef(false);
   const didApplyInitialViewportRef = useRef(false);
+  const appliedHighlightedItemIdRef = useRef<string | null>(null);
   const scrollPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cellClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggedGroupRef = useRef<null | { anchorId: string; itemIds: string[] }>(null);
@@ -471,9 +472,14 @@ export const CalendarWorkspace = ({
   }, [items]);
 
   useEffect(() => {
-    if (!highlightedItemId) return;
+    if (!highlightedItemId) {
+      appliedHighlightedItemIdRef.current = null;
+      return;
+    }
+    if (appliedHighlightedItemIdRef.current === highlightedItemId) return;
     const calendarItem = calendarItems.find((item) => item.id === highlightedItemId);
     if (!calendarItem) return;
+    appliedHighlightedItemIdRef.current = highlightedItemId;
     setAnchorDate(calendarItem.date);
     setJumpDate(calendarItem.date);
     setSelectedItemId(highlightedItemId);
@@ -641,6 +647,7 @@ export const CalendarWorkspace = ({
 
   const createMeetingFromGrid = async (date: string, slot: number) => {
     const normalizedSlot = clampSlot(slot);
+    cancelPendingTodoDraft();
     setDraftText("");
     setDraftCell(null);
     setSelectedItemId(null);

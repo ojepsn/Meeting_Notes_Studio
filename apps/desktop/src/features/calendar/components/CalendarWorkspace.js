@@ -90,6 +90,7 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
     const scrollRef = useRef(null);
     const splitterDraggingRef = useRef(false);
     const didApplyInitialViewportRef = useRef(false);
+    const appliedHighlightedItemIdRef = useRef(null);
     const scrollPersistTimerRef = useRef(null);
     const cellClickTimerRef = useRef(null);
     const draggedGroupRef = useRef(null);
@@ -347,11 +348,16 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
         setSelectedItemIds((current) => current.filter((id) => items.some((item) => item.id === id)));
     }, [items]);
     useEffect(() => {
-        if (!highlightedItemId)
+        if (!highlightedItemId) {
+            appliedHighlightedItemIdRef.current = null;
+            return;
+        }
+        if (appliedHighlightedItemIdRef.current === highlightedItemId)
             return;
         const calendarItem = calendarItems.find((item) => item.id === highlightedItemId);
         if (!calendarItem)
             return;
+        appliedHighlightedItemIdRef.current = highlightedItemId;
         setAnchorDate(calendarItem.date);
         setJumpDate(calendarItem.date);
         setSelectedItemId(highlightedItemId);
@@ -524,6 +530,7 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
     };
     const createMeetingFromGrid = async (date, slot) => {
         const normalizedSlot = clampSlot(slot);
+        cancelPendingTodoDraft();
         setDraftText("");
         setDraftCell(null);
         setSelectedItemId(null);
