@@ -59,7 +59,14 @@ export const generateNotes = async ({ session, settings, template, attachments =
     const promptProfile = resolvePromptProfile(settings.promptProfile);
     const activeSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
     const manualNotes = richTextToPlainText(session.manualNotes);
+    const agendaText = template.fields
+        .filter((field) => field.enabled && field.key === "agenda")
+        .map((field) => richTextToPlainText(session.customFieldValues[field.id] ?? ""))
+        .filter(Boolean)
+        .join("\n\n");
     const sourceText = [
+        agendaText ? `Agenda:\n${agendaText}` : "",
+        session.quickHighlights.trim() ? `Highlights:\n${session.quickHighlights.trim()}` : "",
         manualNotes ? `Manual notes:\n${manualNotes}` : "",
         session.liveTranscript.trim() ? `Live transcript:\n${session.liveTranscript.trim()}` : "",
         session.uploadedTranscript.trim() ? `Uploaded transcript:\n${session.uploadedTranscript.trim()}` : "",

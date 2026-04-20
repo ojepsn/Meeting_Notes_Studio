@@ -1093,21 +1093,44 @@ export const App = () => {
         setStatusNote("Restored the default built-in templates.");
     };
     const handleGenerate = async () => {
-        const template = activeTemplate;
+        if (isGenerating) {
+            return;
+        }
+        const latestState = useDesktopStore.getState();
+        const latestSnapshot = latestState.snapshot ?? snapshot;
+        const currentSessionId = activeSession?.id ?? latestState.activeSessionId;
+        const currentSession = latestSnapshot?.sessions.find((session) => session.id === currentSessionId && !session.deletedAt) ??
+            activeSession;
+        const template = currentSession && latestSnapshot
+            ? getTemplatesForCaptureMode(latestSnapshot.templates, currentSession.captureMode).find((entry) => entry.id === currentSession.templateId) ??
+                getTemplatesForCaptureMode(latestSnapshot.templates, currentSession.captureMode)[0] ??
+                activeTemplate
+            : activeTemplate;
+        if (!currentSession) {
+            setStatusNote("Open or create a session before generating output.");
+            return;
+        }
         if (!template) {
             setStatusNote("The selected template could not be found.");
             return;
         }
+        setStatusNote(currentSession.transcribeOnly ? "Polishing manual notes..." : "Generating output...");
         setIsGenerating(true);
         let usedCache = false;
         try {
-            let sessionForGeneration = activeSession;
+            let sessionForGeneration = currentSession;
             const shouldUseManualMode = sessionForGeneration.transcribeOnly === true;
+            const sessionAttachments = (latestSnapshot?.attachments ?? activeAttachments).filter((attachment) => attachment.sessionId === sessionForGeneration.id);
+            const sessionAudioAttachment = sessionAttachments.find((attachment) => attachment.kind === "audio") ?? null;
+            const sessionHasTranscriptText = Boolean(sessionForGeneration.liveTranscript.trim() || sessionForGeneration.uploadedTranscript.trim());
             if (shouldUseManualMode && !richTextToPlainText(sessionForGeneration.manualNotes).trim()) {
                 setStatusNote("Add text to Manual notes first. This mode transfers Manual notes directly into Output without AI generation.");
                 return;
             }
-            if (!shouldUseManualMode && activeCaptureMode === "voice-note" && !hasTranscriptText && (activeAudioAttachment || pendingAudioBySession[activeSession.id])) {
+            if (!shouldUseManualMode &&
+                sessionForGeneration.captureMode === "voice-note" &&
+                !sessionHasTranscriptText &&
+                (sessionAudioAttachment || pendingAudioBySession[sessionForGeneration.id])) {
                 const audioFile = await getAudioFileForActiveSession();
                 if (!audioFile) {
                     setStatusNote("No audio file was available to transcribe for this voice note.");
@@ -1121,8 +1144,8 @@ export const App = () => {
                         onEvent: createAIRuntimeHandler(),
                     });
                     sessionForGeneration = {
-                        ...activeSession,
-                        liveTranscript: [activeSession.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n"),
+                        ...sessionForGeneration,
+                        liveTranscript: [sessionForGeneration.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n"),
                     };
                     await saveSession(sessionForGeneration);
                 }
@@ -1132,12 +1155,12 @@ export const App = () => {
             }
             const output = shouldUseManualMode
                 ? buildManualNotesOnlyOutput(sessionForGeneration, template)
-                : snapshot.settings.apiKey
+                : latestSnapshot.settings.apiKey
                     ? await generateNotes({
                         session: sessionForGeneration,
-                        settings: snapshot.settings,
+                        settings: latestSnapshot.settings,
                         template,
-                        attachments: activeAttachments,
+                        attachments: sessionAttachments,
                         onEvent: createAIRuntimeHandler({
                             onCacheHit: () => {
                                 usedCache = true;
@@ -1146,12 +1169,15 @@ export const App = () => {
                     })
                     : buildLocalPolishedOutput(sessionForGeneration, template);
             setSelectedOutputVersionId(null);
+            if (!output.trim()) {
+                throw new Error("Generation completed but produced no output. Add notes, transcript, agenda, or highlights and try again.");
+            }
             await saveSession({ ...sessionForGeneration, ...buildOutputVersionPatch(sessionForGeneration, output) });
             setStatusNote(shouldUseManualMode
                 ? "Manual notes were transferred to Output without AI generation."
                 : usedCache
                     ? "Loaded structured output from a matching local AI cache entry."
-                    : snapshot.settings.apiKey
+                    : latestSnapshot.settings.apiKey
                         ? "Generated structured output with the desktop AI service."
                         : sessionForGeneration.outputLanguage !== "same"
                             ? "No API key was available, so a local polish pass was used. Language translation still requires AI generation."
