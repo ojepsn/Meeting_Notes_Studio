@@ -1526,21 +1526,44 @@ export const App = () => {
         }
       }
 
-      const output = shouldUseManualMode
+      const localFallbackOutput = shouldUseManualMode
         ? buildManualNotesOnlyOutput(sessionForGeneration, template)
-        : latestSnapshot.settings.apiKey
-          ? await generateNotes({
-              session: sessionForGeneration,
-              settings: latestSnapshot.settings,
-              template,
-              attachments: sessionAttachments,
-              onEvent: createAIRuntimeHandler({
-                onCacheHit: () => {
-                  usedCache = true;
-                },
-              }),
-            })
-          : buildLocalPolishedOutput(sessionForGeneration, template);
+        : buildLocalPolishedOutput(sessionForGeneration, template);
+      let output = localFallbackOutput;
+      let usedLocalFallback = shouldUseManualMode || !latestSnapshot.settings.apiKey;
+      let aiFallbackReason: "empty" | "error" | null = null;
+
+      if (!shouldUseManualMode && latestSnapshot.settings.apiKey) {
+        usedLocalFallback = false;
+        try {
+          output = await generateNotes({
+            session: sessionForGeneration,
+            settings: latestSnapshot.settings,
+            template,
+            attachments: sessionAttachments,
+            onEvent: createAIRuntimeHandler({
+              onCacheHit: () => {
+                usedCache = true;
+              },
+            }),
+          });
+
+          if (!output.trim() && localFallbackOutput.trim()) {
+            output = localFallbackOutput;
+            usedLocalFallback = true;
+            aiFallbackReason = "empty";
+          }
+        } catch (error) {
+          if (!localFallbackOutput.trim()) {
+            throw error;
+          }
+
+          output = localFallbackOutput;
+          usedLocalFallback = true;
+          aiFallbackReason = "error";
+        }
+      }
+
       setSelectedOutputVersionId(null);
       if (!output.trim()) {
         throw new Error("Generation completed but produced no output. Add notes, transcript, agenda, or highlights and try again.");
@@ -1550,13 +1573,17 @@ export const App = () => {
       setStatusNote(
         shouldUseManualMode
           ? "Manual notes were transferred to Output without AI generation."
+          : aiFallbackReason === "error"
+            ? "AI generation did not complete, so a local output was saved from the captured notes instead."
+            : aiFallbackReason === "empty"
+              ? "AI generation returned no text, so a local output was saved from the captured notes instead."
           : usedCache
             ? "Loaded structured output from a matching local AI cache entry."
-            : latestSnapshot.settings.apiKey
+            : !usedLocalFallback && latestSnapshot.settings.apiKey
               ? "Generated structured output with the desktop AI service."
-              : sessionForGeneration.outputLanguage !== "same"
-                ? "No API key was available, so a local polish pass was used. Language translation still requires AI generation."
-                : "No API key was available, so a local polish pass was used instead.",
+            : sessionForGeneration.outputLanguage !== "same"
+              ? "No API key was available, so a local polish pass was used. Language translation still requires AI generation."
+              : "No API key was available, so a local polish pass was used instead.",
       );
       await openMetadataReviewIfNeeded(sessionForGeneration);
       openNotesTarget({ sessionId: sessionForGeneration.id, view: "output" });
