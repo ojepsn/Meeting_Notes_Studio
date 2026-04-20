@@ -217,6 +217,10 @@ export const SessionEditor = ({
   useEffect(() => {
     if (!agendaEditorRef.current || !agendaField) return;
     const nextHtml = normalizeRichTextHtml(session.customFieldValues[agendaField.id] ?? "");
+    if (document.activeElement === agendaEditorRef.current) {
+      agendaEditorRef.current.dataset.empty = richTextToPlainText(agendaEditorRef.current.innerHTML) ? "false" : "true";
+      return;
+    }
     if (agendaEditorRef.current.innerHTML !== nextHtml) {
       agendaEditorRef.current.innerHTML = nextHtml;
     }
@@ -226,6 +230,10 @@ export const SessionEditor = ({
   useEffect(() => {
     if (!manualNotesEditorRef.current) return;
     const nextHtml = normalizeRichTextHtml(session.manualNotes);
+    if (document.activeElement === manualNotesEditorRef.current) {
+      manualNotesEditorRef.current.dataset.empty = richTextToPlainText(manualNotesEditorRef.current.innerHTML) ? "false" : "true";
+      return;
+    }
     if (manualNotesEditorRef.current.innerHTML !== nextHtml) {
       manualNotesEditorRef.current.innerHTML = nextHtml;
     }
@@ -234,18 +242,16 @@ export const SessionEditor = ({
 
   const updateAgenda = (html: string) => {
     if (!agendaField) return;
-    const normalized = normalizeRichTextHtml(html);
-    update("customFieldValues", { ...session.customFieldValues, [agendaField.id]: normalized });
+    update("customFieldValues", { ...session.customFieldValues, [agendaField.id]: html });
     if (agendaEditorRef.current) {
-      agendaEditorRef.current.dataset.empty = richTextToPlainText(normalized) ? "false" : "true";
+      agendaEditorRef.current.dataset.empty = richTextToPlainText(html) ? "false" : "true";
     }
   };
 
   const updateManualNotes = (html: string) => {
-    const normalized = normalizeRichTextHtml(html);
-    update("manualNotes", normalized);
+    update("manualNotes", html);
     if (manualNotesEditorRef.current) {
-      manualNotesEditorRef.current.dataset.empty = richTextToPlainText(normalized) ? "false" : "true";
+      manualNotesEditorRef.current.dataset.empty = richTextToPlainText(html) ? "false" : "true";
     }
   };
 

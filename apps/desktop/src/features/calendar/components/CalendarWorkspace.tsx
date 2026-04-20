@@ -667,20 +667,24 @@ export const CalendarWorkspace = ({
     cellClickTimerRef.current = null;
   };
 
-  const saveEditor = () => {
-    if (!editorDraft) return;
-    const startSlot = clampSlot(timeToSlot(editorDraft.startTime || "00:00"));
-    const durationSlots = editorDraft.isMeeting ? Math.max(1, durationFromTimes(editorDraft.startTime || "00:00", editorDraft.endTime || editorDraft.startTime || "00:05")) : 1;
-    if (editorDraft.targetType === "todo") {
-      const todo = todos.find((entry) => entry.id === editorDraft.targetId);
+  const persistEditorDraft = (draft: EditorDraft) => {
+    const startSlot = clampSlot(timeToSlot(draft.startTime || "00:00"));
+    const durationSlots = draft.isMeeting ? Math.max(1, durationFromTimes(draft.startTime || "00:00", draft.endTime || draft.startTime || "00:05")) : 1;
+    if (draft.targetType === "todo") {
+      const todo = todos.find((entry) => entry.id === draft.targetId);
       if (!todo) return;
-      onSaveTodo({ ...todo, description: editorDraft.title.trim() || todo.description, activityId: editorDraft.activityId, doOn: editorDraft.doOn, dueDate: editorDraft.dueDate, domain: editorDraft.domain, project: editorDraft.project, activity: editorDraft.activity, isPrivate: editorDraft.isPrivate });
+      onSaveTodo({ ...todo, description: draft.title.trim() || todo.description, activityId: draft.activityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate });
     } else {
-      const activity = activities.find((entry) => entry.id === editorDraft.targetId);
+      const activity = activities.find((entry) => entry.id === draft.targetId);
       if (!activity) return;
-      onSaveActivity({ ...activity, description: editorDraft.title.trim() || activity.description, parentActivityId: editorDraft.parentActivityId, doOn: editorDraft.doOn, dueDate: editorDraft.dueDate, domain: editorDraft.domain, project: editorDraft.project, activity: editorDraft.activity, isPrivate: editorDraft.isPrivate, startTime: editorDraft.isMeeting ? editorDraft.startTime : activity.startTime, endTime: editorDraft.isMeeting ? editorDraft.endTime : activity.endTime });
+      onSaveActivity({ ...activity, description: draft.title.trim() || activity.description, parentActivityId: draft.parentActivityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, startTime: draft.isMeeting ? draft.startTime : activity.startTime, endTime: draft.isMeeting ? draft.endTime : activity.endTime });
     }
-    onUpdateCalendarItem(editorDraft.itemId, { date: editorDraft.doOn, startSlot, durationSlots });
+    onUpdateCalendarItem(draft.itemId, { date: draft.doOn, startSlot, durationSlots });
+  };
+
+  const updateEditorDraft = (draft: EditorDraft) => {
+    setEditorDraft(draft);
+    persistEditorDraft(draft);
   };
 
   const handleEditorDomainChange = (domain: string) => {
@@ -697,7 +701,7 @@ export const CalendarWorkspace = ({
       (!nextProject || !linkedActivity.project || linkedActivity.project === nextProject)
         ? linkedId
         : "";
-    setEditorDraft({
+    updateEditorDraft({
       ...editorDraft,
       domain,
       project: nextProject,
@@ -719,7 +723,7 @@ export const CalendarWorkspace = ({
       (!project || !linkedActivity.project || linkedActivity.project === project)
         ? linkedId
         : "";
-    setEditorDraft({
+    updateEditorDraft({
       ...editorDraft,
       project,
       activity: nextActivity,
@@ -996,7 +1000,7 @@ export const CalendarWorkspace = ({
                 <input
                   id="calendar-edit-title"
                   value={editorDraft.title}
-                  onChange={(event) => setEditorDraft({ ...editorDraft, title: event.target.value })}
+                  onChange={(event) => updateEditorDraft({ ...editorDraft, title: event.target.value })}
                 />
               </div>
               {editorDraft.isMeeting ? (
@@ -1006,14 +1010,14 @@ export const CalendarWorkspace = ({
                     <DateInput
                       id="calendar-edit-date"
                       value={editorDraft.doOn}
-                      onChange={(event) => setEditorDraft({ ...editorDraft, doOn: event.target.value })}
+                      onChange={(event) => updateEditorDraft({ ...editorDraft, doOn: event.target.value })}
                     />
                   </div>
                   <label className="compact-private-toggle">
                     <input
                       type="checkbox"
                       checked={editorDraft.isPrivate}
-                      onChange={(event) => setEditorDraft({ ...editorDraft, isPrivate: event.target.checked })}
+                      onChange={(event) => updateEditorDraft({ ...editorDraft, isPrivate: event.target.checked })}
                     />
                     <span>Private</span>
                   </label>
@@ -1028,14 +1032,14 @@ export const CalendarWorkspace = ({
                         <DateInput
                           id="calendar-edit-date"
                           value={editorDraft.doOn}
-                          onChange={(event) => setEditorDraft({ ...editorDraft, doOn: event.target.value })}
+                          onChange={(event) => updateEditorDraft({ ...editorDraft, doOn: event.target.value })}
                         />
                       </div>
                       <label className="compact-private-toggle">
                         <input
                           type="checkbox"
                           checked={editorDraft.isPrivate}
-                          onChange={(event) => setEditorDraft({ ...editorDraft, isPrivate: event.target.checked })}
+                          onChange={(event) => updateEditorDraft({ ...editorDraft, isPrivate: event.target.checked })}
                         />
                         <span>Private</span>
                       </label>
@@ -1054,7 +1058,7 @@ export const CalendarWorkspace = ({
                         type="time"
                         step={300}
                         value={editorDraft.startTime}
-                        onChange={(event) => setEditorDraft({ ...editorDraft, startTime: event.target.value })}
+                        onChange={(event) => updateEditorDraft({ ...editorDraft, startTime: event.target.value })}
                       />
                     </div>
                     <div className="field">
@@ -1064,7 +1068,7 @@ export const CalendarWorkspace = ({
                         type="time"
                         step={300}
                         value={editorDraft.endTime}
-                        onChange={(event) => setEditorDraft({ ...editorDraft, endTime: event.target.value })}
+                        onChange={(event) => updateEditorDraft({ ...editorDraft, endTime: event.target.value })}
                       />
                     </div>
                   </div>
@@ -1143,7 +1147,7 @@ export const CalendarWorkspace = ({
                       const nextId = event.target.value;
                       const linkedActivity = nextId ? activityLookup[nextId] : null;
                       if (editorDraft.targetType === "todo") {
-                        setEditorDraft({
+                        updateEditorDraft({
                           ...editorDraft,
                           activityId: nextId,
                           domain: linkedActivity?.domain || editorDraft.domain,
@@ -1152,7 +1156,7 @@ export const CalendarWorkspace = ({
                         });
                         return;
                       }
-                      setEditorDraft({
+                      updateEditorDraft({
                         ...editorDraft,
                         parentActivityId: nextId,
                         domain: linkedActivity?.domain || editorDraft.domain,
@@ -1205,7 +1209,7 @@ export const CalendarWorkspace = ({
                     suggestionSummary="Activities"
                     suggestionBadgeText="Available"
                     mode="single"
-                    onChange={(value) => setEditorDraft({ ...editorDraft, activity: value })}
+                    onChange={(value) => updateEditorDraft({ ...editorDraft, activity: value })}
                   />
                 </div>
               </div>
@@ -1214,7 +1218,7 @@ export const CalendarWorkspace = ({
                 <DateInput
                   id="calendar-edit-due"
                   value={editorDraft.dueDate}
-                  onChange={(event) => setEditorDraft({ ...editorDraft, dueDate: event.target.value })}
+                  onChange={(event) => updateEditorDraft({ ...editorDraft, dueDate: event.target.value })}
                 />
               </div>
                 </div>
@@ -1247,9 +1251,6 @@ export const CalendarWorkspace = ({
               </div>
               <div className="calendar-inspector-section-label">Actions</div>
               <div className="calendar-editor-actions">
-                <button className="primary-button" type="button" onClick={saveEditor}>
-                  Save calendar edits
-                </button>
                 <button
                   className="shell-button"
                   type="button"
