@@ -12,6 +12,9 @@ const DAYS = [3, 5, 7, 14] as const;
 const HEIGHTS = [12, 16, 22] as const;
 const MIN_PANE = 240;
 const MAX_PANE = 520;
+const HORIZONTAL_BUFFER_DAYS = 28;
+const HORIZONTAL_EXTEND_DAYS = 14;
+const HORIZONTAL_EDGE_DAYS = 7;
 
 export const addDays = (date: string, days: number) => {
   const next = new Date(`${date}T00:00:00`);
@@ -99,13 +102,6 @@ type EditorDraft = {
   isMeeting: boolean;
 };
 
-type PendingDeleteState = {
-  itemId: string;
-  targetType: "todo" | "activity";
-  targetId: string;
-  title: string;
-};
-
 interface CalendarWorkspaceProps {
   todos: TodoRecord[];
   activities: ActivityRecord[];
@@ -190,13 +186,15 @@ export const CalendarWorkspace = ({
   const [typeFilter, setTypeFilter] = useState<"all" | "todo" | "activity" | "meeting">("all");
   const [visibilityFilter, setVisibilityFilter] = useState<"all" | "public" | "private">("all");
   const [resizeState, setResizeState] = useState<null | { itemId: string; edge: "start" | "end"; date: string; startSlot: number; durationSlots: number }>(null);
-  const [pendingDelete, setPendingDelete] = useState<PendingDeleteState | null>(null);
   const [now, setNow] = useState(() => new Date());
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const splitterDraggingRef = useRef(false);
   const didApplyInitialViewportRef = useRef(false);
   const appliedHighlightedItemIdRef = useRef<string | null>(null);
+  const pendingHorizontalScrollDeltaRef = useRef(0);
+  const pendingScrollDateRef = useRef<string | null>(null);
+  const isExtendingHorizontalRangeRef = useRef(false);
   const scrollPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cellClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggedGroupRef = useRef<null | { anchorId: string; itemIds: string[] }>(null);
@@ -232,7 +230,13 @@ export const CalendarWorkspace = ({
     }
   }, [daysInView, detailsPaneWidth, isFullScreen, onSaveSettings, scrollLeft, scrollTop, settings, slotHeight]);
 
-  const visibleDates = useMemo(() => Array.from({ length: daysInView }, (_, index) => addDays(anchorDate, index)), [anchorDate, daysInView]);
+  const visibleDates = useMemo(
+    () =>
+      Array.from({ length: daysInView + HORIZONTAL_BUFFER_DAYS * 2 }, (_, index) =>
+        addDays(anchorDate, index - HORIZONTAL_BUFFER_DAYS),
+      ),
+    [anchorDate, daysInView],
+  );
   const dayColumnWidth = useMemo(() => dayColumnWidthForView(daysInView), [daysInView]);
   const topLevelActivities = useMemo(
     () => activities.filter((entry) => !entry.parentActivityId).sort((left, right) => left.description.localeCompare(right.description)),
@@ -360,20 +364,54 @@ export const CalendarWorkspace = ({
     if (!scroller) return;
     const currentDay = getLocalDateString(date);
     if (anchorDate !== currentDay) {
+      pendingScrollDateRef.current = currentDay;
       setAnchorDate(currentDay);
       setJumpDate(currentDay);
     }
     const nextScrollTop = initialCalendarScrollTop(date, slotHeight);
+    const nextScrollLeft = HORIZONTAL_BUFFER_DAYS * dayColumnWidth;
     scroller.scrollTop = nextScrollTop;
-    scroller.scrollLeft = 0;
+    scroller.scrollLeft = nextScrollLeft;
     if (scrollTop !== nextScrollTop) {
       setScrollTop(nextScrollTop);
     }
-    if (scrollLeft !== 0) {
-      setScrollLeft(0);
+    if (scrollLeft !== nextScrollLeft) {
+      setScrollLeft(nextScrollLeft);
       return;
     }
   };
+
+  const jumpToCalendarDate = (date: string) => {
+    const nextDate = date || today;
+    pendingScrollDateRef.current = nextDate;
+    setAnchorDate(nextDate);
+    setJumpDate(nextDate);
+  };
+
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+
+    const pendingDate = pendingScrollDateRef.current;
+    if (pendingDate) {
+      const dateIndex = visibleDates.indexOf(pendingDate);
+      if (dateIndex >= 0) {
+        const nextScrollLeft = dateIndex * dayColumnWidth;
+        scroller.scrollLeft = nextScrollLeft;
+        setScrollLeft(nextScrollLeft);
+        pendingScrollDateRef.current = null;
+      }
+    }
+
+    const pendingDelta = pendingHorizontalScrollDeltaRef.current;
+    if (pendingDelta) {
+      const nextScrollLeft = Math.max(0, Math.round(scroller.scrollLeft + pendingDelta));
+      scroller.scrollLeft = nextScrollLeft;
+      setScrollLeft(nextScrollLeft);
+      pendingHorizontalScrollDeltaRef.current = 0;
+      isExtendingHorizontalRangeRef.current = false;
+    }
+  }, [dayColumnWidth, visibleDates]);
 
   useLayoutEffect(() => {
     if (didApplyInitialViewportRef.current) return;
@@ -387,7 +425,7 @@ export const CalendarWorkspace = ({
       return () => window.cancelAnimationFrame(secondFrame);
     });
     return () => window.cancelAnimationFrame(firstFrame);
-  }, []);
+  }, [dayColumnWidth]);
 
   useEffect(() => {
     const scroller = scrollRef.current;
@@ -397,6 +435,20 @@ export const CalendarWorkspace = ({
         clearTimeout(scrollPersistTimerRef.current);
       }
       scrollPersistTimerRef.current = setTimeout(() => {
+        const leftEdge = HORIZONTAL_EDGE_DAYS * dayColumnWidth;
+        const rightEdge = Math.max(leftEdge, scroller.scrollWidth - scroller.clientWidth - leftEdge);
+        if (!isExtendingHorizontalRangeRef.current && scroller.scrollLeft <= leftEdge) {
+          isExtendingHorizontalRangeRef.current = true;
+          pendingHorizontalScrollDeltaRef.current = HORIZONTAL_EXTEND_DAYS * dayColumnWidth;
+          setAnchorDate((current) => addDays(current, -HORIZONTAL_EXTEND_DAYS));
+          return;
+        }
+        if (!isExtendingHorizontalRangeRef.current && scroller.scrollLeft >= rightEdge) {
+          isExtendingHorizontalRangeRef.current = true;
+          pendingHorizontalScrollDeltaRef.current = -HORIZONTAL_EXTEND_DAYS * dayColumnWidth;
+          setAnchorDate((current) => addDays(current, HORIZONTAL_EXTEND_DAYS));
+          return;
+        }
         setScrollTop(Math.max(0, Math.round(scroller.scrollTop)));
         setScrollLeft(Math.max(0, Math.round(scroller.scrollLeft)));
       }, 120);
@@ -413,7 +465,7 @@ export const CalendarWorkspace = ({
         cellClickTimerRef.current = null;
       }
     };
-  }, []);
+  }, [dayColumnWidth]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -431,17 +483,19 @@ export const CalendarWorkspace = ({
         return;
       }
       event.preventDefault();
-      setPendingDelete({
-        itemId: selectedItem.id,
-        targetType: selectedItem.targetType,
-        targetId: selectedItem.targetId,
-        title: selectedItem.title,
-      });
+      if (selectedItem.targetType === "todo") {
+        onDeleteTodo(selectedItem.targetId);
+      } else {
+        onDeleteActivity(selectedItem.targetId);
+      }
+      setSelectedItemId(null);
+      setSelectedItemIds([]);
+      setEditorDraft(null);
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedItem]);
+  }, [onDeleteActivity, onDeleteTodo, selectedItem]);
 
   useEffect(() => {
     if (!selectedItemId) {
@@ -480,6 +534,7 @@ export const CalendarWorkspace = ({
     const calendarItem = calendarItems.find((item) => item.id === highlightedItemId);
     if (!calendarItem) return;
     appliedHighlightedItemIdRef.current = highlightedItemId;
+    pendingScrollDateRef.current = calendarItem.date;
     setAnchorDate(calendarItem.date);
     setJumpDate(calendarItem.date);
     setSelectedItemId(highlightedItemId);
@@ -487,16 +542,8 @@ export const CalendarWorkspace = ({
       const scroller = scrollRef.current;
       if (!scroller) return;
       scroller.scrollTop = Math.max(0, (calendarItem.startSlot - 12) * slotHeight);
-      scroller.scrollLeft = 0;
     });
   }, [calendarItems, highlightedItemId, slotHeight]);
-
-  useEffect(() => {
-    if (!pendingDelete) return;
-      if (!selectedItemId || pendingDelete.itemId !== selectedItemId) {
-      setPendingDelete(null);
-    }
-  }, [pendingDelete, selectedItemId]);
 
   const selectCalendarItem = (itemId: string, additive: boolean) => {
     setDraftCell(null);
@@ -758,18 +805,6 @@ export const CalendarWorkspace = ({
     });
   };
 
-  const confirmDeleteSelectedItem = () => {
-    if (!pendingDelete) return;
-    if (pendingDelete.targetType === "todo") {
-      onDeleteTodo(pendingDelete.targetId);
-    } else {
-      onDeleteActivity(pendingDelete.targetId);
-    }
-    setPendingDelete(null);
-    setSelectedItemId(null);
-    setEditorDraft(null);
-  };
-
   const deleteSelectedCalendarItems = () => {
     const idsToDelete = selectedItemIds.length ? selectedItemIds : selectedItemId ? [selectedItemId] : [];
     const targets = new Map<string, Item>();
@@ -784,7 +819,6 @@ export const CalendarWorkspace = ({
       }
       onDeleteActivity(item.targetId);
     });
-    setPendingDelete(null);
     setSelectedItemId(null);
     setSelectedItemIds([]);
     setEditorDraft(null);
@@ -795,9 +829,9 @@ export const CalendarWorkspace = ({
       <div className="card-header session-editor-header-minimal calendar-workspace-header">
         <div><h2>Calendar</h2></div>
         <div className="page-actions wrap-row calendar-primary-actions">
-          <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, -daysInView))}>Previous</button>
-          <button className="shell-button" type="button" onClick={() => { const currentDate = new Date(); setAnchorDate(getLocalDateString(currentDate)); setJumpDate(getLocalDateString(currentDate)); window.requestAnimationFrame(() => scrollToCurrentTime(currentDate)); }}>Today</button>
-          <button className="shell-button" type="button" onClick={() => setAnchorDate((current) => addDays(current, daysInView))}>Next</button>
+          <button className="shell-button" type="button" onClick={() => jumpToCalendarDate(addDays(anchorDate, -daysInView))}>Previous</button>
+          <button className="shell-button" type="button" onClick={() => { const currentDate = new Date(); jumpToCalendarDate(getLocalDateString(currentDate)); window.requestAnimationFrame(() => scrollToCurrentTime(currentDate)); }}>Today</button>
+          <button className="shell-button" type="button" onClick={() => jumpToCalendarDate(addDays(anchorDate, daysInView))}>Next</button>
           <button className="small-button danger-button" type="button" onClick={deleteSelectedCalendarItems} disabled={!selectedItemId && !selectedItemIds.length}>
             Delete selected
           </button>
@@ -815,7 +849,7 @@ export const CalendarWorkspace = ({
           <div className="workspace-disclosure-body">
             <div className="calendar-toolbar calendar-toolbar-dense">
               <div className="field"><label htmlFor="calendar-jump-date">Jump</label><DateInput id="calendar-jump-date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} /></div>
-              <button className="shell-button" type="button" onClick={() => setAnchorDate(jumpDate || today)}>Go</button>
+              <button className="shell-button" type="button" onClick={() => jumpToCalendarDate(jumpDate || today)}>Go</button>
               <div className="field field-wide"><label htmlFor="calendar-search">Search</label><input id="calendar-search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search title" /></div>
               <div className="field"><label htmlFor="calendar-type-filter">Type</label><select id="calendar-type-filter" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | "todo" | "activity" | "meeting")}><option value="all">All</option><option value="todo">Todos</option><option value="activity">Activities</option><option value="meeting">Meetings</option></select></div>
               <div className="field"><label htmlFor="calendar-visibility-filter">Private</label><select id="calendar-visibility-filter" value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value as "all" | "public" | "private")}><option value="all">All</option><option value="public">Public</option><option value="private">Private</option></select></div>
@@ -991,9 +1025,9 @@ export const CalendarWorkspace = ({
           </div>
         </div>
         <div className="calendar-splitter" role="separator" aria-orientation="vertical" onMouseDown={() => { splitterDraggingRef.current = true; document.body.style.cursor = "col-resize"; }} />
-        <aside className={`calendar-editor-card${detailsPaneWidth <= 280 ? " calendar-editor-card-compact" : ""}`}>
+        <aside className={`calendar-editor-card${detailsPaneWidth <= 340 ? " calendar-editor-card-compact" : ""}`}>
           {editorDraft ? (
-            <div className={`stack${detailsPaneWidth <= 280 ? " calendar-editor-stack-compact" : ""}`}>
+            <div className={`stack calendar-editor-stack${detailsPaneWidth <= 340 ? " calendar-editor-stack-compact" : ""}`}>
               <div className="card-header">
                 <div>
                   <h3>{editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity"}</h3>
@@ -1145,21 +1179,19 @@ export const CalendarWorkspace = ({
                   ) : null}
                 </>
               ) : null}
-              <details className="workspace-disclosure calendar-inspector-disclosure">
+              <details className="workspace-disclosure calendar-inspector-disclosure calendar-structure-disclosure">
                 <summary>{editorDraft.isMeeting ? "Structure and advanced details" : "More details"}</summary>
                 <div className="workspace-disclosure-body stack">
               <div className="metadata-triplet-grid">
-                <div className="field metadata-subfield">
-                  <label htmlFor="calendar-edit-link">
-                    {editorDraft.targetType === "todo" ? "Activity link" : "Parent activity"}
-                  </label>
-                  <select
-                    id="calendar-edit-link"
-                    value={editorDraft.targetType === "todo" ? editorDraft.activityId : editorDraft.parentActivityId}
-                    onChange={(event) => {
-                      const nextId = event.target.value;
-                      const linkedActivity = nextId ? activityLookup[nextId] : null;
-                      if (editorDraft.targetType === "todo") {
+                {!editorDraft.isMeeting ? (
+                  <div className="field metadata-subfield">
+                    <label htmlFor="calendar-edit-link">Activity link</label>
+                    <select
+                      id="calendar-edit-link"
+                      value={editorDraft.activityId}
+                      onChange={(event) => {
+                        const nextId = event.target.value;
+                        const linkedActivity = nextId ? activityLookup[nextId] : null;
                         updateEditorDraft({
                           ...editorDraft,
                           activityId: nextId,
@@ -1167,25 +1199,17 @@ export const CalendarWorkspace = ({
                           project: linkedActivity?.project || editorDraft.project,
                           activity: linkedActivity?.description || editorDraft.activity,
                         });
-                        return;
-                      }
-                      updateEditorDraft({
-                        ...editorDraft,
-                        parentActivityId: nextId,
-                        domain: linkedActivity?.domain || editorDraft.domain,
-                        project: linkedActivity?.project || editorDraft.project,
-                        activity: linkedActivity?.description || editorDraft.activity,
-                      });
-                    }}
-                  >
-                    <option value="">{editorDraft.targetType === "todo" ? "Unassigned" : "No parent activity"}</option>
-                    {linkedActivityOptions.map((activity) => (
+                      }}
+                    >
+                      <option value="">Unassigned</option>
+                      {linkedActivityOptions.map((activity) => (
                         <option key={activity.id} value={activity.id}>
                           {activity.description}
                         </option>
                       ))}
-                  </select>
-                </div>
+                    </select>
+                  </div>
+                ) : null}
                 <div className="field metadata-subfield">
                   <label htmlFor="calendar-edit-domain">Domain</label>
                   <TokenPicker
@@ -1226,14 +1250,16 @@ export const CalendarWorkspace = ({
                   />
                 </div>
               </div>
-              <div className="field">
-                <label htmlFor="calendar-edit-due">Due date</label>
-                <DateInput
-                  id="calendar-edit-due"
-                  value={editorDraft.dueDate}
-                  onChange={(event) => updateEditorDraft({ ...editorDraft, dueDate: event.target.value })}
-                />
-              </div>
+              {!editorDraft.isMeeting ? (
+                <div className="field">
+                  <label htmlFor="calendar-edit-due">Due date</label>
+                  <DateInput
+                    id="calendar-edit-due"
+                    value={editorDraft.dueDate}
+                    onChange={(event) => updateEditorDraft({ ...editorDraft, dueDate: event.target.value })}
+                  />
+                </div>
+              ) : null}
                 </div>
               </details>
               <div className="calendar-inspector-section-label">Time</div>
@@ -1262,8 +1288,7 @@ export const CalendarWorkspace = ({
                   );
                 })()}
               </div>
-              <div className="calendar-inspector-section-label">Actions</div>
-              <div className="calendar-editor-actions">
+              <div className="calendar-editor-actions calendar-editor-actions-inline">
                 <button
                   className="shell-button"
                   type="button"
@@ -1271,35 +1296,12 @@ export const CalendarWorkspace = ({
                 >
                   Open full {editorDraft.targetType === "todo" ? "todo" : "activity"}
                 </button>
+                {editorDraft.targetType === "todo" ? (
+                  <button className="shell-button" type="button" onClick={convertEditorTodoToMeeting}>
+                    Convert to meeting
+                  </button>
+                ) : null}
               </div>
-              <details className="workspace-disclosure calendar-inspector-disclosure">
-                <summary>More actions</summary>
-                <div className="workspace-disclosure-body stack">
-                  {editorDraft.targetType === "todo" ? (
-                    <button className="shell-button" type="button" onClick={convertEditorTodoToMeeting}>
-                      Convert to meeting
-                    </button>
-                  ) : null}
-                  {pendingDelete && pendingDelete.itemId === editorDraft.itemId ? (
-                    <div className="calendar-delete-confirmation">
-                      <strong>Delete this {editorDraft.isMeeting ? "meeting" : editorDraft.targetType}?</strong>
-                      <p className="muted">"{pendingDelete.title}" will be removed from the app and from the calendar.</p>
-                      <div className="calendar-delete-confirmation-actions">
-                        <button className="small-button danger-button" type="button" onClick={confirmDeleteSelectedItem}>
-                          Delete
-                        </button>
-                        <button className="small-button" type="button" onClick={() => setPendingDelete(null)}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button className="small-button danger-button" type="button" onClick={() => setPendingDelete({ itemId: editorDraft.itemId, targetType: editorDraft.targetType, targetId: editorDraft.targetId, title: editorDraft.title })}>
-                      Delete from calendar
-                    </button>
-                  )}
-                </div>
-              </details>
             </div>
           ) : (
             <div className="stack">
