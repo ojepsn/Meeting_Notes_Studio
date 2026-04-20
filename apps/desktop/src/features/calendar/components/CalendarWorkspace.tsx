@@ -447,8 +447,14 @@ export const CalendarWorkspace = ({
       setEditorDraft(null);
       return;
     }
+    if (editorDraft?.itemId === selectedItemId) {
+      return;
+    }
     const calendarItem = calendarItems.find((item) => item.id === selectedItemId);
-    if (!calendarItem) return;
+    if (!calendarItem) {
+      setEditorDraft(null);
+      return;
+    }
     if (calendarItem.targetType === "todo") {
       const todo = todos.find((entry) => entry.id === calendarItem.targetId);
       if (!todo) return;
@@ -458,7 +464,7 @@ export const CalendarWorkspace = ({
     const activity = activities.find((entry) => entry.id === calendarItem.targetId);
     if (!activity) return;
     setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isMeeting: activity.type === "meeting" });
-  }, [activities, calendarItems, selectedItemId, todos]);
+  }, [activities, calendarItems, editorDraft?.itemId, selectedItemId, todos]);
 
   useEffect(() => {
     setSelectedItemIds((current) => current.filter((id) => items.some((item) => item.id === id)));

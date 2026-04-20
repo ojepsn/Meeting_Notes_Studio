@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type CaptureMode, type RuleSuggestionRecord } from "@notesmith/domain";
+import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type CaptureMode, type RuleSuggestionRecord, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
@@ -286,6 +286,7 @@ export const App = () => {
   const [visibleRuleSuggestions, setVisibleRuleSuggestions] = useState<RuleSuggestionRecord[]>([]);
   const [dismissedRuleSuggestionIds, setDismissedRuleSuggestionIds] = useState<string[]>([]);
   const notesLayoutRef = useRef<HTMLDivElement | null>(null);
+  const activeSessionDraftRef = useRef<SessionRecord | null>(null);
   const notesSplitterDraggingRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -707,6 +708,10 @@ export const App = () => {
     const directMatch = snapshot.sessions.find((session) => session.id === activeSessionId && !session.deletedAt);
     return directMatch ?? snapshot.sessions.find((session) => !session.deletedAt) ?? null;
   }, [activeSessionId, snapshot]);
+
+  useEffect(() => {
+    activeSessionDraftRef.current = activeSession;
+  }, [activeSession]);
 
   const activeTemplate = useMemo(
     () =>
@@ -1395,6 +1400,37 @@ export const App = () => {
     setStatusNote("Restored the default built-in templates.");
   };
 
+  const readVisibleCaptureDraft = (session: SessionRecord, template: TemplateDefinition) => {
+    const manualNotesElement = document.getElementById("manual-notes");
+    const agendaElement = document.getElementById("session-agenda");
+    const liveTranscriptElement = document.getElementById("session-transcript");
+    const uploadedTranscriptElement = document.getElementById("session-uploaded-transcript");
+    const agendaField = template.fields.find((field) => field.enabled && field.key === "agenda");
+    const nextCustomFieldValues =
+      agendaField && agendaElement instanceof HTMLDivElement
+        ? {
+            ...session.customFieldValues,
+            [agendaField.id]: agendaElement.innerHTML,
+          }
+        : session.customFieldValues;
+
+    return {
+      ...session,
+      manualNotes: manualNotesElement instanceof HTMLDivElement ? manualNotesElement.innerHTML : session.manualNotes,
+      liveTranscript: liveTranscriptElement instanceof HTMLTextAreaElement ? liveTranscriptElement.value : session.liveTranscript,
+      uploadedTranscript:
+        uploadedTranscriptElement instanceof HTMLTextAreaElement
+          ? uploadedTranscriptElement.value
+          : session.uploadedTranscript,
+      customFieldValues: nextCustomFieldValues,
+    };
+  };
+
+  const handleCaptureSessionChange = (session: SessionRecord) => {
+    activeSessionDraftRef.current = session;
+    void saveSession(session);
+  };
+
   const handleGenerate = async () => {
     if (isGenerating) {
       return;
@@ -1404,6 +1440,7 @@ export const App = () => {
     const latestSnapshot = latestState.snapshot ?? snapshot;
     const currentSessionId = activeSession?.id ?? latestState.activeSessionId;
     const currentSession =
+      (activeSessionDraftRef.current?.id === currentSessionId ? activeSessionDraftRef.current : null) ??
       latestSnapshot?.sessions.find((session) => session.id === currentSessionId && !session.deletedAt) ??
       activeSession;
     const template =
@@ -1425,11 +1462,15 @@ export const App = () => {
       return;
     }
 
-    setStatusNote(currentSession.transcribeOnly ? "Polishing manual notes..." : "Generating output...");
+    const visibleSession = readVisibleCaptureDraft(currentSession, template);
+
+    setStatusNote(visibleSession.transcribeOnly ? "Polishing manual notes..." : "Generating output...");
     setIsGenerating(true);
     let usedCache = false;
     try {
-      let sessionForGeneration = currentSession;
+      let sessionForGeneration = visibleSession;
+      activeSessionDraftRef.current = visibleSession;
+      await saveSession(visibleSession);
       const shouldUseManualMode = sessionForGeneration.transcribeOnly === true;
       const sessionAttachments = (latestSnapshot?.attachments ?? activeAttachments).filter(
         (attachment) => attachment.sessionId === sessionForGeneration.id,
@@ -2354,7 +2395,7 @@ export const App = () => {
             recordingMode={recordingMode}
             isRecordingAudio={isRecordingAudio}
             recordingStatusNote={recordingStatusNote}
-            onChange={(session) => void saveSession(session)}
+            onChange={handleCaptureSessionChange}
             onImportImage={() => void handleImportImage()}
             onImportAudio={() => void handleImportAudio()}
             onTranscribeAudio={() => void handleTranscribeAudio()}
@@ -3249,7 +3290,7 @@ export const App = () => {
                       recordingMode={recordingMode}
                       isRecordingAudio={isRecordingAudio}
                       recordingStatusNote={recordingStatusNote}
-                      onChange={(session) => void saveSession(session)}
+                      onChange={handleCaptureSessionChange}
                       onImportImage={() => void handleImportImage()}
                       onImportAudio={() => void handleImportAudio()}
                       onTranscribeAudio={() => void handleTranscribeAudio()}
