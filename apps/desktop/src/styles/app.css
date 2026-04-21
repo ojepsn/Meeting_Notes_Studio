@@ -3981,6 +3981,7 @@ select {
   color: var(--app-text);
   font-size: 0.64rem;
   font-weight: 500;
+  cursor: pointer;
 }
 
 .calendar-item-inline-action-secondary {
@@ -4002,6 +4003,7 @@ select {
   color: var(--app-muted);
   font-size: 0.58rem;
   font-weight: 500;
+  cursor: default;
 }
 
 .calendar-item-link-state-output {
@@ -4045,12 +4047,14 @@ select {
 
 .calendar-item-block-single-row-todo {
   padding: 0 0.08rem;
+  min-height: calc(var(--calendar-slot-height) - 2px);
 }
 
 .calendar-item-block-single-row-todo .calendar-item-title {
-  font-size: clamp(0.24rem, 0.32vw, 0.32rem);
+  font-family: "Aptos Narrow", "Arial Narrow", "Segoe UI", sans-serif;
+  font-size: clamp(0.34rem, 0.43vw, 0.42rem);
   font-weight: 400;
-  line-height: 0.72;
+  line-height: 0.82;
 }
 
 .calendar-item-block-todo .calendar-item-inline-action {
@@ -4133,9 +4137,10 @@ select {
 .calendar-item-block-tiny.calendar-item-block-todo .calendar-item-title,
 .calendar-item-block-compact.calendar-item-block-todo .calendar-item-title,
 .calendar-item-block-single-row-todo.calendar-item-block-todo .calendar-item-title {
-  font-size: clamp(0.24rem, 0.32vw, 0.32rem);
+  font-family: "Aptos Narrow", "Arial Narrow", "Segoe UI", sans-serif;
+  font-size: clamp(0.34rem, 0.43vw, 0.42rem);
   font-weight: 400;
-  line-height: 0.72;
+  line-height: 0.82;
 }
 
 .calendar-item-block-tiny .calendar-item-launcher-row {
@@ -4164,15 +4169,15 @@ select {
 }
 
 .calendar-item-block-medium-meeting .calendar-item-title {
-  font-size: clamp(0.58rem, 0.72vw, 0.68rem);
+  font-size: 0.78rem;
   font-weight: 500;
-  line-height: 1;
+  line-height: 1.12;
   min-height: 0;
 }
 
 .calendar-item-block-medium-meeting .calendar-item-link-state {
-  padding: 0.04rem 0.26rem;
-  font-size: 0.5rem;
+  padding: 0.08rem 0.4rem;
+  font-size: 0.58rem;
   font-weight: 500;
   line-height: 1;
 }
@@ -4182,8 +4187,8 @@ select {
 }
 
 .calendar-item-block-medium-meeting .calendar-item-inline-action {
-  padding: 0.03rem 0.26rem;
-  font-size: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.64rem;
   font-weight: 500;
   line-height: 1;
   margin-top: 0;
@@ -4221,9 +4226,9 @@ select {
 }
 
 .calendar-item-block-short-meeting .calendar-item-title {
-  font-size: clamp(0.5rem, 0.62vw, 0.58rem);
+  font-size: clamp(0.56rem, 0.68vw, 0.64rem);
   font-weight: 500;
-  line-height: 0.95;
+  line-height: 1;
 }
 
 .calendar-item-block-short-meeting .calendar-item-meta {
@@ -4232,10 +4237,10 @@ select {
 }
 
 .calendar-item-block-short-meeting .calendar-item-link-state {
-  padding: 0.02rem 0.2rem;
-  font-size: 0.42rem;
+  padding: 0.03rem 0.24rem;
+  font-size: 0.5rem;
   font-weight: 500;
-  line-height: 0.95;
+  line-height: 1;
 }
 
 .calendar-item-block-short-meeting .calendar-item-launcher-row {
@@ -4243,10 +4248,10 @@ select {
 }
 
 .calendar-item-block-short-meeting .calendar-item-inline-action {
-  padding: 0.02rem 0.2rem;
-  font-size: 0.42rem;
+  padding: 0.03rem 0.24rem;
+  font-size: 0.5rem;
   font-weight: 500;
-  line-height: 0.95;
+  line-height: 1;
   margin-top: 0;
 }
 
