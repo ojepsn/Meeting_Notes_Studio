@@ -4052,9 +4052,9 @@ select {
 
 .calendar-item-block-single-row-todo .calendar-item-title {
   font-family: "Aptos Narrow", "Arial Narrow", "Segoe UI", sans-serif;
-  font-size: clamp(0.34rem, 0.43vw, 0.42rem);
+  font-size: var(--calendar-single-row-todo-font-size, 0.54rem);
   font-weight: 400;
-  line-height: 0.82;
+  line-height: 0.86;
 }
 
 .calendar-item-block-todo .calendar-item-inline-action {
@@ -4138,9 +4138,9 @@ select {
 .calendar-item-block-compact.calendar-item-block-todo .calendar-item-title,
 .calendar-item-block-single-row-todo.calendar-item-block-todo .calendar-item-title {
   font-family: "Aptos Narrow", "Arial Narrow", "Segoe UI", sans-serif;
-  font-size: clamp(0.34rem, 0.43vw, 0.42rem);
+  font-size: var(--calendar-single-row-todo-font-size, 0.54rem);
   font-weight: 400;
-  line-height: 0.82;
+  line-height: 0.86;
 }
 
 .calendar-item-block-tiny .calendar-item-launcher-row {

@@ -824,6 +824,8 @@ export const CalendarWorkspace = ({
     setEditorDraft(null);
   };
 
+  const singleRowTodoFontSize = slotHeight === 12 ? "0.42rem" : slotHeight === 16 ? "0.54rem" : "0.72rem";
+
   return (
     <div className={`card calendar-workspace${isFullScreen ? " calendar-workspace-fullscreen" : ""}`}>
       <div className="card-header session-editor-header-minimal calendar-workspace-header">
@@ -875,7 +877,14 @@ export const CalendarWorkspace = ({
 
       <div ref={layoutRef} className={`calendar-layout${isFullScreen ? " calendar-layout-fullscreen" : ""}`} style={{ gridTemplateColumns: `minmax(0, 1fr) 8px ${detailsPaneWidth}px` }}>
         <div className="calendar-main stack">
-          <div ref={scrollRef} className={`calendar-scroll${isFullScreen ? " calendar-scroll-fullscreen" : ""}`} style={{ ["--calendar-slot-height" as string]: `${slotHeight}px` }}>
+          <div
+            ref={scrollRef}
+            className={`calendar-scroll${isFullScreen ? " calendar-scroll-fullscreen" : ""}`}
+            style={{
+              ["--calendar-slot-height" as string]: `${slotHeight}px`,
+              ["--calendar-single-row-todo-font-size" as string]: singleRowTodoFontSize,
+            }}
+          >
             <div className="calendar-surface" style={{ gridTemplateColumns: `84px repeat(${visibleDates.length}, minmax(${dayColumnWidth}px, 1fr))`, gridTemplateRows: `52px repeat(${TOTAL_SLOTS}, var(--calendar-slot-height))` }}>
               <div className="calendar-corner" style={{ gridColumn: "1 / 2", gridRow: "1 / 2" }} />
               {visibleDates.map((date, index) => <div key={date} className="calendar-day-header" style={{ gridColumn: `${index + 2} / ${index + 3}`, gridRow: "1 / 2" }}><strong>{date}</strong><span>{formatDay(date)}</span></div>)}
