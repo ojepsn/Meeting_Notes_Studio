@@ -379,19 +379,6 @@ export const OutputWorkspace = ({
                   <div className="generation-mode-group" role="radiogroup" aria-label="Generation mode">
                     <label className="config-option config-option-featured">
                       <input
-                        checked={session.transcribeOnly === true}
-                        name="desktop-generation-mode"
-                        type="radio"
-                        value="manual"
-                        onChange={() => onChange({ ...session, transcribeOnly: true })}
-                      />
-                      <span className="config-option-copy">
-                        <span className="config-option-title">Polish Manual notes without AI</span>
-                      </span>
-                    </label>
-
-                    <label className="config-option config-option-featured">
-                      <input
                         checked={session.transcribeOnly !== true}
                         name="desktop-generation-mode"
                         type="radio"
@@ -400,6 +387,19 @@ export const OutputWorkspace = ({
                       />
                       <span className="config-option-copy">
                         <span className="config-option-title">Generate with AI</span>
+                      </span>
+                    </label>
+
+                    <label className="config-option config-option-featured">
+                      <input
+                        checked={session.transcribeOnly === true}
+                        name="desktop-generation-mode"
+                        type="radio"
+                        value="manual"
+                        onChange={() => onChange({ ...session, transcribeOnly: true })}
+                      />
+                      <span className="config-option-copy">
+                        <span className="config-option-title">Polish Manual notes without AI</span>
                       </span>
                     </label>
                   </div>

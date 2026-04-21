@@ -117,5 +117,6 @@ export const generateNotes = async ({ session, settings, template, attachments =
             ? `\nIncluded images for polished output:\n${includedImagesPrompt}\nReference these images where appropriate and preserve their captions.`
             : ""}\n\n${sourceText}${extraPromptBlocks ? `\n\nAdditional prompt blocks:\n${extraPromptBlocks}` : ""}`,
         onEvent,
+        cacheMode: "bypass",
     });
 };

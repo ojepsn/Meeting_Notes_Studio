@@ -164,5 +164,6 @@ export const generateNotes = async ({
         : ""
     }\n\n${sourceText}${extraPromptBlocks ? `\n\nAdditional prompt blocks:\n${extraPromptBlocks}` : ""}`,
     onEvent,
+    cacheMode: "bypass",
   });
 };

@@ -908,14 +908,15 @@ export const App = () => {
             .map((filePath) => removePersistedAttachment(filePath)));
     };
     const outputActionConfig = (() => {
+        const isManualPolishMode = activeSession?.transcribeOnly === true;
         return {
-            primaryLabel: "Generate",
+            primaryLabel: isManualPolishMode ? "Polish Manual notes" : "Generate with AI",
             secondaryLabel: null,
             onPrimary: () => void handleGenerate(),
             onSecondary: undefined,
             isPrimaryRunning: isGenerating || (activeSession?.transcribeOnly ? false : isTranscribingAudio && hasAudioOnlyVoiceCapture),
             isSecondaryRunning: false,
-            emptyStatePrimaryLabel: "Generate",
+            emptyStatePrimaryLabel: isManualPolishMode ? "Polish Manual notes" : "Generate with AI",
             emptyStateSecondaryLabel: null,
         };
     })();

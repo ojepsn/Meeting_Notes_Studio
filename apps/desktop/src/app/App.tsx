@@ -1185,14 +1185,15 @@ export const App = () => {
   };
 
   const outputActionConfig = (() => {
+    const isManualPolishMode = activeSession?.transcribeOnly === true;
     return {
-      primaryLabel: "Generate",
+      primaryLabel: isManualPolishMode ? "Polish Manual notes" : "Generate with AI",
       secondaryLabel: null as string | null,
       onPrimary: () => void handleGenerate(),
       onSecondary: undefined as (() => void) | undefined,
       isPrimaryRunning: isGenerating || (activeSession?.transcribeOnly ? false : isTranscribingAudio && hasAudioOnlyVoiceCapture),
       isSecondaryRunning: false,
-      emptyStatePrimaryLabel: "Generate",
+      emptyStatePrimaryLabel: isManualPolishMode ? "Polish Manual notes" : "Generate with AI",
       emptyStateSecondaryLabel: null as string | null,
     };
   })();
