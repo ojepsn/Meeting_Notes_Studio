@@ -18,9 +18,9 @@ const FALLBACK_SECTION = {
 };
 
 const LONG_SOURCE_CHAR_LIMIT = 30_000;
-const SOURCE_CHUNK_CHAR_LIMIT = 16_000;
-const FINAL_OUTPUT_TOKEN_BUDGET = 6_000;
-const CHUNK_SUMMARY_TOKEN_BUDGET = 1_600;
+const SOURCE_CHUNK_CHAR_LIMIT = 8_000;
+const FINAL_OUTPUT_TOKEN_BUDGET = 20_000;
+const CHUNK_SUMMARY_TOKEN_BUDGET = 4_000;
 const MIN_GENERATED_OUTPUT_CHARS = 80;
 
 const richTextToPlainText = (value: string) => {
@@ -74,6 +74,35 @@ const assertUsefulGeneratedText = (text: string, sourceMaterial: string) => {
   throw new Error(
     "OpenAI returned an unusably short generation. No output was saved. Please try again; if it repeats, switch to a stronger text model in Settings.",
   );
+};
+
+const executeUsableGeneration = async ({
+  sourceMaterial,
+  retryUserText,
+  ...options
+}: Parameters<typeof executeAITextOperation>[0] & {
+  sourceMaterial: string;
+  retryUserText?: string;
+}) => {
+  try {
+    const output = await executeAITextOperation(options);
+    assertUsefulGeneratedText(output, sourceMaterial);
+    return output;
+  } catch (error) {
+    if (!retryUserText) {
+      throw error;
+    }
+
+    const retryOutput = await executeAITextOperation({
+      ...options,
+      userText: retryUserText,
+      promptVersion: options.promptVersion ? `${options.promptVersion}:retry` : "retry",
+      maxOutputTokens: Math.max(options.maxOutputTokens ?? 0, FINAL_OUTPUT_TOKEN_BUDGET),
+      timeoutMs: Math.max(options.timeoutMs ?? 0, 120_000),
+    });
+    assertUsefulGeneratedText(retryOutput, sourceMaterial);
+    return retryOutput;
+  }
 };
 
 const buildTemplateFieldPrompt = ({
@@ -220,23 +249,24 @@ export const generateNotes = async ({
     const summaries: string[] = [];
 
     for (let index = 0; index < chunks.length; index += 1) {
-      const summary = await executeAITextOperation({
+      const chunkUserText = `Transcript chunk ${index + 1} of ${chunks.length}.\n\nReturn a dense but compact intermediate summary of this chunk. Preserve decisions, actions, risks, open questions, important discussion substance, names, dates, and numbers. Merge repetition and ignore filler. Do not copy transcript wording except for essential short phrases.\n\n${chunks[index]}`;
+      const summary = await executeUsableGeneration({
         settings,
         operation: "generate-notes",
         promptVersion: `${promptProfile.version}:chunk-summary`,
         systemTexts: [
           "You are preparing an intermediate summary for later meeting-minutes generation.",
-          "Extract decisions, actions, risks, open questions, important discussion substance, names, dates, and context. Merge repetition and ignore filler. Do not copy transcript wording except for essential short phrases.",
+          "Summarize the transcript chunk into factual source notes for a later final synthesis. Return enough detail for a high-quality final document, but keep it compact.",
           outputLanguageInstruction,
         ],
-        userText: `Transcript chunk ${index + 1} of ${chunks.length}.\n\nReturn a dense structured summary that preserves the facts needed to write final meeting minutes later.\n\n${chunks[index]}`,
+        userText: chunkUserText,
         onEvent,
         cacheMode: "bypass",
         maxOutputTokens: CHUNK_SUMMARY_TOKEN_BUDGET,
         timeoutMs: 90_000,
+        sourceMaterial: chunks[index],
+        retryUserText: `${chunkUserText}\n\nThe previous attempt did not return usable text. Try again and return a complete intermediate summary.`,
       });
-
-      assertUsefulGeneratedText(summary, chunks[index]);
       summaries.push(`Chunk ${index + 1} summary:\n${summary}`);
     }
 
@@ -247,18 +277,19 @@ export const generateNotes = async ({
     ].join("\n\n");
   }
 
-  const output = await executeAITextOperation({
+  const finalUserText = buildUserText(sourceForFinalGeneration, sourceForFinalGeneration === sourceText ? "Source material" : "Condensed source summaries");
+  const output = await executeUsableGeneration({
     settings,
     operation: "generate-notes",
     promptVersion: promptProfile.version,
     systemTexts,
-    userText: buildUserText(sourceForFinalGeneration, sourceForFinalGeneration === sourceText ? "Source material" : "Condensed source summaries"),
+    userText: finalUserText,
     onEvent,
     cacheMode: "bypass",
     maxOutputTokens: FINAL_OUTPUT_TOKEN_BUDGET,
-    timeoutMs: sourceForFinalGeneration === sourceText ? undefined : 90_000,
+    timeoutMs: sourceForFinalGeneration === sourceText ? 120_000 : 120_000,
+    sourceMaterial: sourceText,
+    retryUserText: `${finalUserText}\n\nThe previous attempt did not produce a usable output. Try again and return complete, synthesized notes. Do not return a single character, partial word, or copied transcript.`,
   });
-
-  assertUsefulGeneratedText(output, sourceText);
   return output;
 };

@@ -13,7 +13,7 @@ export const formatAIErrorMessage = (error, fallback) => {
         case "rate-limited":
             return "OpenAI is rate limiting requests right now. Wait a moment and try again.";
         case "invalid-response":
-            return "OpenAI returned an unreadable response. Please try again.";
+            return error.message || "OpenAI returned an unreadable response. Please try again.";
         case "upstream-error":
             return error.message || fallback;
         default:

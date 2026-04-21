@@ -123,7 +123,7 @@ describe("generateNotes", () => {
     const finalCall = executeAITextOperationMock.mock.calls.at(-1)?.[0];
     expect(finalCall?.userText).toContain("Condensed source summaries");
     expect(finalCall?.userText).toContain("Chunk 1 summary");
-    expect(finalCall?.maxOutputTokens).toBe(6000);
+    expect(finalCall?.maxOutputTokens).toBe(20000);
   });
 
   it("rejects unusably short generated output instead of returning a partial response", async () => {
