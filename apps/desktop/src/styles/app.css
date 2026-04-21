@@ -3952,7 +3952,7 @@ select {
 
 .calendar-item-kicker {
   font-size: 0.58rem;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--app-muted);
@@ -3960,6 +3960,7 @@ select {
 
 .calendar-item-title {
   font-size: 0.78rem;
+  font-weight: 500;
   line-height: 1.12;
   min-height: 0.85rem;
   color: var(--app-text);
@@ -3979,7 +3980,7 @@ select {
   background: color-mix(in srgb, var(--app-surface) 82%, transparent 18%);
   color: var(--app-text);
   font-size: 0.64rem;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .calendar-item-inline-action-secondary {
@@ -4000,7 +4001,7 @@ select {
   background: color-mix(in srgb, var(--app-surface-soft) 88%, var(--app-accent-soft) 12%);
   color: var(--app-muted);
   font-size: 0.58rem;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .calendar-item-link-state-output {
@@ -4036,18 +4037,20 @@ select {
 
 .calendar-item-block-todo .calendar-item-title {
   display: block;
-  font-size: clamp(0.46rem, 0.58vw, 0.56rem);
-  line-height: 0.94;
+  font-size: clamp(0.38rem, 0.48vw, 0.48rem);
+  font-weight: 400;
+  line-height: 0.86;
   min-height: 0;
 }
 
 .calendar-item-block-single-row-todo {
-  padding: 0 0.12rem;
+  padding: 0 0.08rem;
 }
 
 .calendar-item-block-single-row-todo .calendar-item-title {
-  font-size: clamp(0.4rem, 0.5vw, 0.48rem);
-  line-height: 0.9;
+  font-size: clamp(0.31rem, 0.4vw, 0.39rem);
+  font-weight: 400;
+  line-height: 0.78;
 }
 
 .calendar-item-block-todo .calendar-item-inline-action {
@@ -4078,7 +4081,7 @@ select {
 }
 
 .calendar-item-block-compact.calendar-item-block-todo .calendar-item-title {
-  font-size: clamp(0.56rem, 0.7vw, 0.66rem);
+  font-size: clamp(0.36rem, 0.46vw, 0.46rem);
 }
 
 .calendar-item-block-compact .calendar-item-meta,
@@ -4147,6 +4150,42 @@ select {
   display: none;
 }
 
+.calendar-item-block-medium-meeting {
+  padding: 0.14rem 0.26rem;
+  gap: 0.035rem;
+}
+
+.calendar-item-block-medium-meeting .calendar-item-kicker,
+.calendar-item-block-medium-meeting .calendar-item-meta {
+  display: none;
+}
+
+.calendar-item-block-medium-meeting .calendar-item-title {
+  font-size: clamp(0.46rem, 0.58vw, 0.56rem);
+  font-weight: 500;
+  line-height: 0.95;
+  min-height: 0;
+}
+
+.calendar-item-block-medium-meeting .calendar-item-link-state {
+  padding: 0.02rem 0.2rem;
+  font-size: 0.42rem;
+  font-weight: 500;
+  line-height: 0.95;
+}
+
+.calendar-item-block-medium-meeting .calendar-item-launcher-row {
+  gap: 0.05rem;
+}
+
+.calendar-item-block-medium-meeting .calendar-item-inline-action {
+  padding: 0.01rem 0.2rem;
+  font-size: 0.42rem;
+  font-weight: 500;
+  line-height: 0.95;
+  margin-top: 0;
+}
+
 .calendar-item-block-meeting {
   border-color: var(--app-accent-strong-border);
   background:
@@ -4156,8 +4195,8 @@ select {
 }
 
 .calendar-item-block-short-meeting {
-  padding: 0.16rem 0.28rem;
-  gap: 0.04rem;
+  padding: 0.1rem 0.22rem;
+  gap: 0.02rem;
 }
 
 .calendar-item-block-short-meeting .calendar-item-kicker {
@@ -4167,8 +4206,9 @@ select {
 }
 
 .calendar-item-block-short-meeting .calendar-item-title {
-  font-size: clamp(0.56rem, 0.68vw, 0.64rem);
-  line-height: 1;
+  font-size: clamp(0.39rem, 0.5vw, 0.48rem);
+  font-weight: 500;
+  line-height: 0.88;
 }
 
 .calendar-item-block-short-meeting .calendar-item-meta {
@@ -4177,46 +4217,56 @@ select {
 }
 
 .calendar-item-block-short-meeting .calendar-item-link-state {
-  padding: 0.03rem 0.24rem;
-  font-size: 0.48rem;
-  line-height: 1;
+  padding: 0 0.16rem;
+  font-size: 0.34rem;
+  font-weight: 500;
+  line-height: 0.88;
 }
 
 .calendar-item-block-short-meeting .calendar-item-launcher-row {
-  gap: 0.08rem;
+  gap: 0.04rem;
 }
 
 .calendar-item-block-short-meeting .calendar-item-inline-action {
-  padding: 0.02rem 0.24rem;
-  font-size: 0.48rem;
-  line-height: 1;
+  padding: 0 0.16rem;
+  font-size: 0.34rem;
+  font-weight: 500;
+  line-height: 0.88;
   margin-top: 0;
 }
 
 .calendar-item-block-micro-meeting {
-  padding: 0.04rem 0.18rem;
+  padding: 0.02rem 0.12rem;
   gap: 0;
 }
 
 .calendar-item-block-micro-meeting .calendar-item-kicker,
-.calendar-item-block-micro-meeting .calendar-item-meta,
-.calendar-item-block-micro-meeting .calendar-item-link-state {
+.calendar-item-block-micro-meeting .calendar-item-meta {
   display: none;
 }
 
 .calendar-item-block-micro-meeting .calendar-item-title {
-  font-size: clamp(0.44rem, 0.54vw, 0.52rem);
-  line-height: 0.92;
+  font-size: clamp(0.3rem, 0.38vw, 0.36rem);
+  font-weight: 400;
+  line-height: 0.78;
+}
+
+.calendar-item-block-micro-meeting .calendar-item-link-state {
+  padding: 0 0.1rem;
+  font-size: 0.28rem;
+  font-weight: 400;
+  line-height: 0.78;
 }
 
 .calendar-item-block-micro-meeting .calendar-item-launcher-row {
-  gap: 0.06rem;
+  gap: 0.025rem;
 }
 
 .calendar-item-block-micro-meeting .calendar-item-inline-action {
-  padding: 0 0.18rem;
-  font-size: 0.42rem;
-  line-height: 0.95;
+  padding: 0 0.1rem;
+  font-size: 0.28rem;
+  font-weight: 400;
+  line-height: 0.78;
 }
 
 .calendar-item-block-meeting::before {

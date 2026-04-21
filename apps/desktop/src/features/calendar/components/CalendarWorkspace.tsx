@@ -923,6 +923,7 @@ export const CalendarWorkspace = ({
                     const sizeClass = [
                       visualHeight <= 22 ? "calendar-item-block-tiny" : visualHeight <= 54 ? "calendar-item-block-compact" : "",
                       item.targetType === "todo" && durationSlots <= 1 ? "calendar-item-block-single-row-todo" : "",
+                      item.isMeeting && durationSlots <= 12 ? "calendar-item-block-medium-meeting" : "",
                       item.isMeeting && durationSlots <= 6 ? "calendar-item-block-short-meeting" : "",
                       item.isMeeting && durationSlots <= 3 ? "calendar-item-block-micro-meeting" : "",
                     ].filter(Boolean).map((className) => ` ${className}`).join("");
