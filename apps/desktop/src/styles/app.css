@@ -4048,9 +4048,9 @@ select {
 }
 
 .calendar-item-block-single-row-todo .calendar-item-title {
-  font-size: clamp(0.31rem, 0.4vw, 0.39rem);
+  font-size: clamp(0.24rem, 0.32vw, 0.32rem);
   font-weight: 400;
-  line-height: 0.78;
+  line-height: 0.72;
 }
 
 .calendar-item-block-todo .calendar-item-inline-action {
@@ -4130,6 +4130,14 @@ select {
   line-height: 1;
 }
 
+.calendar-item-block-tiny.calendar-item-block-todo .calendar-item-title,
+.calendar-item-block-compact.calendar-item-block-todo .calendar-item-title,
+.calendar-item-block-single-row-todo.calendar-item-block-todo .calendar-item-title {
+  font-size: clamp(0.24rem, 0.32vw, 0.32rem);
+  font-weight: 400;
+  line-height: 0.72;
+}
+
 .calendar-item-block-tiny .calendar-item-launcher-row {
   display: flex;
   gap: 0.08rem;
@@ -4155,23 +4163,18 @@ select {
   gap: 0.035rem;
 }
 
-.calendar-item-block-medium-meeting .calendar-item-kicker,
-.calendar-item-block-medium-meeting .calendar-item-meta {
-  display: none;
-}
-
 .calendar-item-block-medium-meeting .calendar-item-title {
-  font-size: clamp(0.46rem, 0.58vw, 0.56rem);
+  font-size: clamp(0.58rem, 0.72vw, 0.68rem);
   font-weight: 500;
-  line-height: 0.95;
+  line-height: 1;
   min-height: 0;
 }
 
 .calendar-item-block-medium-meeting .calendar-item-link-state {
-  padding: 0.02rem 0.2rem;
-  font-size: 0.42rem;
+  padding: 0.04rem 0.26rem;
+  font-size: 0.5rem;
   font-weight: 500;
-  line-height: 0.95;
+  line-height: 1;
 }
 
 .calendar-item-block-medium-meeting .calendar-item-launcher-row {
@@ -4179,11 +4182,23 @@ select {
 }
 
 .calendar-item-block-medium-meeting .calendar-item-inline-action {
-  padding: 0.01rem 0.2rem;
-  font-size: 0.42rem;
+  padding: 0.03rem 0.26rem;
+  font-size: 0.5rem;
   font-weight: 500;
-  line-height: 0.95;
+  line-height: 1;
   margin-top: 0;
+}
+
+.calendar-item-block-meeting.calendar-item-block-compact .calendar-item-kicker,
+.calendar-item-block-meeting.calendar-item-block-tiny .calendar-item-kicker {
+  display: block;
+}
+
+.calendar-item-block-meeting.calendar-item-block-compact .calendar-item-meta,
+.calendar-item-block-meeting.calendar-item-block-tiny .calendar-item-meta,
+.calendar-item-block-meeting.calendar-item-block-compact .calendar-item-link-state,
+.calendar-item-block-meeting.calendar-item-block-tiny .calendar-item-link-state {
+  display: inline-flex;
 }
 
 .calendar-item-block-meeting {
@@ -4200,27 +4215,27 @@ select {
 }
 
 .calendar-item-block-short-meeting .calendar-item-kicker {
-  font-size: 0.48rem;
-  line-height: 0.95;
+  font-size: 0.42rem;
+  line-height: 0.88;
   letter-spacing: 0.035em;
 }
 
 .calendar-item-block-short-meeting .calendar-item-title {
-  font-size: clamp(0.39rem, 0.5vw, 0.48rem);
+  font-size: clamp(0.5rem, 0.62vw, 0.58rem);
   font-weight: 500;
-  line-height: 0.88;
-}
-
-.calendar-item-block-short-meeting .calendar-item-meta {
-  font-size: 0.5rem;
   line-height: 0.95;
 }
 
-.calendar-item-block-short-meeting .calendar-item-link-state {
-  padding: 0 0.16rem;
-  font-size: 0.34rem;
-  font-weight: 500;
+.calendar-item-block-short-meeting .calendar-item-meta {
+  font-size: 0.4rem;
   line-height: 0.88;
+}
+
+.calendar-item-block-short-meeting .calendar-item-link-state {
+  padding: 0.02rem 0.2rem;
+  font-size: 0.42rem;
+  font-weight: 500;
+  line-height: 0.95;
 }
 
 .calendar-item-block-short-meeting .calendar-item-launcher-row {
@@ -4228,10 +4243,10 @@ select {
 }
 
 .calendar-item-block-short-meeting .calendar-item-inline-action {
-  padding: 0 0.16rem;
-  font-size: 0.34rem;
+  padding: 0.02rem 0.2rem;
+  font-size: 0.42rem;
   font-weight: 500;
-  line-height: 0.88;
+  line-height: 0.95;
   margin-top: 0;
 }
 
@@ -4240,9 +4255,18 @@ select {
   gap: 0;
 }
 
-.calendar-item-block-micro-meeting .calendar-item-kicker,
+.calendar-item-block-micro-meeting .calendar-item-kicker {
+  display: block;
+  font-size: 0.24rem;
+  font-weight: 400;
+  line-height: 0.72;
+  letter-spacing: 0.025em;
+}
+
 .calendar-item-block-micro-meeting .calendar-item-meta {
-  display: none;
+  display: block;
+  font-size: 0.24rem;
+  line-height: 0.72;
 }
 
 .calendar-item-block-micro-meeting .calendar-item-title {
