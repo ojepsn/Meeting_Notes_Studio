@@ -89,6 +89,14 @@ type OutputVersionRecord = {
   generatedAt: string;
 };
 
+type GenerationLogEntry = {
+  id: string;
+  timestamp: string;
+  level: "info" | "success" | "warning" | "error";
+  message: string;
+  details?: string;
+};
+
 const richTextToPlainText = (value: string) => {
   if (!value) return "";
   const wrapper = document.createElement("div");
@@ -259,6 +267,7 @@ export const App = () => {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [statusNote, setStatusNote] = useState("Ready.");
+  const [generationLog, setGenerationLog] = useState<GenerationLogEntry[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRevising, setIsRevising] = useState(false);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
@@ -825,6 +834,23 @@ export const App = () => {
           ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
           : "Saved locally";
 
+  const appendGenerationLog = (
+    message: string,
+    level: GenerationLogEntry["level"] = "info",
+    details?: string,
+  ) => {
+    setGenerationLog((current) => [
+      {
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        level,
+        message,
+        details,
+      },
+      ...current,
+    ].slice(0, 160));
+  };
+
   const createAIRuntimeHandler = ({
     onCacheHit,
   }: {
@@ -834,6 +860,39 @@ export const App = () => {
       setStatus: setStatusNote,
       logEvent: (event) => {
         logAIRuntimeEvent(event);
+        if (event.type === "request-start") {
+          appendGenerationLog(
+            `OpenAI request started: ${event.operation}`,
+            "info",
+            `request id: ${event.requestId}\nprompt: ${event.promptVersion ?? "default"}`,
+          );
+        } else if (event.type === "request-retry") {
+          appendGenerationLog(
+            `OpenAI request retry: ${event.operation}`,
+            "warning",
+            `attempt: ${event.attempt} of ${event.maxRetries}\ndelay: ${event.delayMs} ms\nerror: ${event.error.message}`,
+          );
+        } else if (event.type === "request-success") {
+          appendGenerationLog(
+            `OpenAI request succeeded: ${event.operation}`,
+            "success",
+            `request id: ${event.requestId}\nduration: ${event.durationMs} ms\nprompt: ${event.promptVersion ?? "default"}`,
+          );
+        } else if (event.type === "request-failure") {
+          appendGenerationLog(
+            `OpenAI request failed: ${event.operation}`,
+            "error",
+            `request id: ${event.requestId}\nduration: ${event.durationMs} ms\nprompt: ${event.promptVersion ?? "default"}\nerror: ${
+              event.error instanceof Error ? event.error.message : String(event.error)
+            }`,
+          );
+        } else if (event.type === "cache-hit") {
+          appendGenerationLog(
+            `AI cache hit: ${event.operation}`,
+            "success",
+            `request id: ${event.requestId}\nprompt: ${event.promptVersion ?? "default"}`,
+          );
+        }
         setAIDiagnostics(getAIDiagnosticsItems());
         setAIRequestHistory(getAIRequestHistory());
       },
@@ -1446,6 +1505,12 @@ export const App = () => {
     const visibleSession = readVisibleCaptureDraft(currentSession, template);
 
     setStatusNote(visibleSession.transcribeOnly ? "Polishing manual notes..." : "Generating output...");
+    setGenerationLog([]);
+    appendGenerationLog(
+      visibleSession.transcribeOnly ? "Manual polish started." : "AI generation started.",
+      "info",
+      `session: ${visibleSession.title || "Untitled session"}\ntemplate: ${template.name}`,
+    );
     setIsGenerating(true);
     let usedCache = false;
     try {
@@ -1466,8 +1531,21 @@ export const App = () => {
           sessionForGeneration.liveTranscript.trim() ||
           sessionForGeneration.uploadedTranscript.trim(),
       );
+      const sourceTextForLog = buildGenerationSourceText(sessionForGeneration, template);
+      appendGenerationLog(
+        "Captured source text checked.",
+        "info",
+        [
+          `total source characters: ${sourceTextForLog.length}`,
+          `manual notes characters: ${richTextToPlainText(sessionForGeneration.manualNotes).trim().length}`,
+          `live transcript characters: ${sessionForGeneration.liveTranscript.trim().length}`,
+          `uploaded transcript characters: ${sessionForGeneration.uploadedTranscript.trim().length}`,
+          `has text: ${hasManualOrTranscriptText ? "yes" : "no"}`,
+        ].join("\n"),
+      );
 
       if (shouldUseManualMode && !hasManualOrTranscriptText) {
+        appendGenerationLog("Manual polish stopped because no source text was found.", "warning");
         setStatusNote("Add text to Manual notes or Transcript first. This mode transfers captured text directly into Output without AI generation.");
         return;
       }
@@ -1480,6 +1558,7 @@ export const App = () => {
       ) {
         const audioFile = await getAudioFileForActiveSession();
         if (!audioFile) {
+          appendGenerationLog("Generation stopped because no audio file was available for transcription.", "error");
           setStatusNote("No audio file was available to transcribe for this voice note.");
           return;
         }
@@ -1502,6 +1581,7 @@ export const App = () => {
       }
 
       if (!shouldUseManualMode && !latestSnapshot.settings.apiKey.trim()) {
+        appendGenerationLog("AI generation stopped because no OpenAI API key is configured.", "error");
         setStatusNote("Generate with AI requires an OpenAI API key in Settings. Use Polish Manual notes if you want non-AI output.");
         return;
       }
@@ -1513,6 +1593,7 @@ export const App = () => {
             settings: latestSnapshot.settings,
             template,
             attachments: sessionAttachments,
+            onDiagnostic: (message, details, level = "info") => appendGenerationLog(message, level, details),
             onEvent: createAIRuntimeHandler({
               onCacheHit: () => {
                 usedCache = true;
@@ -1522,16 +1603,23 @@ export const App = () => {
 
       setSelectedOutputVersionId(null);
       if (!output.trim()) {
+        appendGenerationLog("Generation completed but returned empty output.", "error");
         throw new Error("Generation completed but produced no output. Add notes, transcript, agenda, or highlights and try again.");
       }
 
       if (!shouldUseManualMode && isLikelyCopiedSourceOutput(output, buildGenerationSourceText(sessionForGeneration, template))) {
+        appendGenerationLog("AI output rejected because it looked too similar to the source text.", "error", `output characters: ${output.length}`);
         throw new Error(
           "AI generation returned output that was too similar to the source transcript. No output was saved. Try again, or add an instruction such as 'summarize into concise meeting minutes and do not reproduce the transcript'.",
         );
       }
 
       await saveSession({ ...sessionForGeneration, ...buildOutputVersionPatch(sessionForGeneration, output) });
+      appendGenerationLog(
+        "Output saved to the session.",
+        "success",
+        `output characters: ${output.trim().length}`,
+      );
       setStatusNote(
         shouldUseManualMode
           ? "Manual notes were transferred to Output without AI generation."
@@ -1542,6 +1630,11 @@ export const App = () => {
       await openMetadataReviewIfNeeded(sessionForGeneration);
       openNotesTarget({ sessionId: sessionForGeneration.id, view: "output" });
     } catch (error) {
+      appendGenerationLog(
+        visibleSession.transcribeOnly ? "Manual polish failed." : "Generation failed.",
+        "error",
+        error instanceof Error ? error.message : String(error),
+      );
       setStatusNote(
         visibleSession.transcribeOnly
           ? `Manual-notes transfer failed: ${error instanceof Error ? error.message : "Unknown error."}`
@@ -2426,6 +2519,8 @@ export const App = () => {
             isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
             isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
             isRevising={isRevising}
+            generationLog={generationLog}
+            onClearGenerationLog={() => setGenerationLog([])}
             onPrimaryAction={outputActionConfig.onPrimary}
             onSecondaryAction={outputActionConfig.onSecondary}
             onCopyOutput={() => void handleCopyOutput()}
@@ -3333,6 +3428,8 @@ export const App = () => {
                       isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
                       isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
                       isRevising={isRevising}
+                      generationLog={generationLog}
+                      onClearGenerationLog={() => setGenerationLog([])}
                       onPrimaryAction={outputActionConfig.onPrimary}
                       onSecondaryAction={outputActionConfig.onSecondary}
                       onCopyOutput={() => void handleCopyOutput()}

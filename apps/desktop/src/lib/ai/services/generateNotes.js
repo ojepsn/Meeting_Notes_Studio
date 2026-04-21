@@ -122,7 +122,7 @@ const getDiscussionFormatInstruction = (session) => {
         "When uncertain, choose prose.",
     ].join(" ");
 };
-export const generateNotes = async ({ session, settings, template, attachments = [], onEvent, }) => {
+export const generateNotes = async ({ session, settings, template, attachments = [], onEvent, onDiagnostic, }) => {
     const promptProfile = resolvePromptProfile(settings.promptProfile);
     const selectedSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
     const activeSections = selectedSections.length ? selectedSections : [FALLBACK_SECTION];
@@ -144,6 +144,15 @@ export const generateNotes = async ({ session, settings, template, attachments =
     if (!sourceText) {
         throw new Error("Add notes or transcript content before generating output.");
     }
+    onDiagnostic?.("Generation source prepared.", [
+        `source characters: ${sourceText.length}`,
+        `manual notes characters: ${manualNotes.length}`,
+        `live transcript characters: ${session.liveTranscript.trim().length}`,
+        `uploaded transcript characters: ${session.uploadedTranscript.trim().length}`,
+        `agenda characters: ${agendaText.length}`,
+        `template: ${template.name}`,
+        `model: ${settings.textModel}`,
+    ].join("\n"));
     const extraPromptBlocks = formatEnabledPromptBlocks(promptProfile.profile.extraBlocks);
     const requestedOutputLanguage = session.outputLanguage === "sv" || session.outputLanguage === "en"
         ? session.outputLanguage
@@ -177,7 +186,9 @@ export const generateNotes = async ({ session, settings, template, attachments =
     if (sourceText.length > LONG_SOURCE_CHAR_LIMIT) {
         const chunks = splitSourceIntoChunks(sourceText);
         const summaries = [];
+        onDiagnostic?.("Long source detected. Summarizing transcript in chunks before final generation.", `chunks: ${chunks.length}\nchunk size target: ${SOURCE_CHUNK_CHAR_LIMIT} characters`, "info");
         for (let index = 0; index < chunks.length; index += 1) {
+            onDiagnostic?.(`Summarizing chunk ${index + 1} of ${chunks.length}.`, `chunk characters: ${chunks[index].length}`);
             const chunkUserText = `Transcript chunk ${index + 1} of ${chunks.length}.\n\nReturn a dense but compact intermediate summary of this chunk. Preserve decisions, actions, risks, open questions, important discussion substance, names, dates, and numbers. Merge repetition and ignore filler. Do not copy transcript wording except for essential short phrases.\n\n${chunks[index]}`;
             const summary = await executeUsableGeneration({
                 settings,
@@ -196,6 +207,7 @@ export const generateNotes = async ({ session, settings, template, attachments =
                 sourceMaterial: chunks[index],
                 retryUserText: `${chunkUserText}\n\nThe previous attempt did not return usable text. Try again and return a complete intermediate summary.`,
             });
+            onDiagnostic?.(`Chunk ${index + 1} summarized.`, `summary characters: ${summary.trim().length}`, "success");
             summaries.push(`Chunk ${index + 1} summary:\n${summary}`);
         }
         sourceForFinalGeneration = [
@@ -203,8 +215,14 @@ export const generateNotes = async ({ session, settings, template, attachments =
             "Use these summaries as the source of truth for the final output. Synthesize them into coherent meeting minutes and do not list chunk-by-chunk summaries.",
             ...summaries,
         ].join("\n\n");
+        onDiagnostic?.("Chunk summaries prepared for final generation.", `condensed source characters: ${sourceForFinalGeneration.length}`, "success");
     }
     const finalUserText = buildUserText(sourceForFinalGeneration, sourceForFinalGeneration === sourceText ? "Source material" : "Condensed source summaries");
+    onDiagnostic?.("Starting final output generation.", [
+        `final prompt characters: ${finalUserText.length}`,
+        `max output tokens: ${FINAL_OUTPUT_TOKEN_BUDGET}`,
+        `sections requested: ${activeSections.map((section) => section.title).join(", ")}`,
+    ].join("\n"));
     const output = await executeUsableGeneration({
         settings,
         operation: "generate-notes",
@@ -218,5 +236,6 @@ export const generateNotes = async ({ session, settings, template, attachments =
         sourceMaterial: sourceText,
         retryUserText: `${finalUserText}\n\nThe previous attempt did not produce a usable output. Try again and return complete, synthesized notes. Do not return a single character, partial word, or copied transcript.`,
     });
+    onDiagnostic?.("Final output generated.", `output characters: ${output.trim().length}`, "success");
     return output;
 };

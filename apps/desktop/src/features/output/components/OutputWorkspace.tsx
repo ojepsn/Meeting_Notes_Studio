@@ -15,6 +15,14 @@ import { useState } from "react";
 
 type FollowUpKind = "todo" | "meeting";
 
+interface GenerationLogEntry {
+  id: string;
+  timestamp: string;
+  level: "info" | "success" | "warning" | "error";
+  message: string;
+  details?: string;
+}
+
 const parseFollowUpCandidate = (value: string) => {
   const trimmed = value.trim();
   const ownerMatch = trimmed.match(/(?:^|[\s(])@([A-Za-z][\w .-]{1,40})/);
@@ -76,6 +84,8 @@ interface OutputWorkspaceProps {
   isPrimaryActionRunning: boolean;
   isSecondaryActionRunning: boolean;
   isRevising: boolean;
+  generationLog?: GenerationLogEntry[];
+  onClearGenerationLog?: () => void;
   onPrimaryAction: () => void;
   onSecondaryAction?: () => void;
   onCopyOutput: () => void;
@@ -127,6 +137,8 @@ export const OutputWorkspace = ({
   isPrimaryActionRunning,
   isSecondaryActionRunning,
   isRevising,
+  generationLog = [],
+  onClearGenerationLog,
   onPrimaryAction,
   onSecondaryAction,
   onCopyOutput,
@@ -201,6 +213,49 @@ export const OutputWorkspace = ({
       minute: "2-digit",
     });
   };
+
+  const formatGenerationLogTime = (timestamp: string) => {
+    const parsed = new Date(timestamp);
+    if (Number.isNaN(parsed.getTime())) {
+      return timestamp;
+    }
+
+    return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  };
+
+  const renderGenerationLog = () => (
+    <details className="workspace-disclosure pwa-disclosure-card generation-log-card" open={generationLog.length > 0}>
+      <summary>Generation log</summary>
+      <div className="workspace-disclosure-body stack">
+        <div className="prompt-actions-row">
+          <div className="prompt-actions-copy">
+            <strong>Visible diagnostics</strong>
+            <span className="muted">Use this to see exactly where output generation stops.</span>
+          </div>
+          {onClearGenerationLog ? (
+            <button className="small-button" type="button" onClick={onClearGenerationLog} disabled={!generationLog.length}>
+              Clear
+            </button>
+          ) : null}
+        </div>
+        {generationLog.length ? (
+          <div className="generation-log-list">
+            {generationLog.map((entry) => (
+              <article key={entry.id} className="generation-log-entry" data-level={entry.level}>
+                <div className="generation-log-entry-head">
+                  <strong>{entry.message}</strong>
+                  <span className="muted">{formatGenerationLogTime(entry.timestamp)}</span>
+                </div>
+                {entry.details ? <pre>{entry.details}</pre> : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">No generation events logged yet. Click Generate with AI to start a fresh diagnostic log.</p>
+        )}
+      </div>
+    </details>
+  );
 
   const renderVersionHistory = () =>
     outputVersions.length ? (
@@ -458,6 +513,7 @@ export const OutputWorkspace = ({
               </details>
             </section>
 
+            {renderGenerationLog()}
             {renderRuleSuggestions()}
           </aside>
 
@@ -719,6 +775,7 @@ export const OutputWorkspace = ({
           </button>
         </div>
       </div>
+      {renderGenerationLog()}
       {!hasOutput ? (
         <div className={`empty-state-card compact-empty-state${isMinimal ? " output-empty-state-minimal" : ""}`}>
           <h3>Ready to generate</h3>
