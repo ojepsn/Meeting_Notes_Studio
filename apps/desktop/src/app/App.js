@@ -762,65 +762,37 @@ export const App = () => {
             .filter(Boolean)
             .join("\n");
     };
-    const buildLocalPolishedOutput = (session = activeSession, template = activeTemplate) => {
+    const buildGenerationSourceText = (session = activeSession, template = activeTemplate) => {
         if (!session || !template) {
             return "";
         }
-        const manualPolishOptions = {
-            abbreviations: snapshot?.settings.abbreviations ?? [],
-            sessionParticipants: session.participantText,
-            savedParticipants: snapshot?.settings.savedParticipants ?? [],
-            preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
-        };
-        const title = session.title.trim();
-        const metaBlock = buildOutputMetaBlock(session);
-        const agenda = getAgendaText(session, template);
-        const manualNotes = polishNonAiNotesText(richTextToPlainText(session.manualNotes), manualPolishOptions);
-        const transcript = polishNonAiNotesText([session.liveTranscript.trim(), session.uploadedTranscript.trim()].filter(Boolean).join("\n\n"), manualPolishOptions);
-        const highlights = polishNonAiNotesText(session.quickHighlights.trim(), manualPolishOptions);
-        const combinedDiscussion = [manualNotes, transcript].filter(Boolean).join("\n\n").trim();
-        const decisionLines = combinedDiscussion
-            .split(/\r?\n/)
-            .filter((line) => /^Decision:/i.test(line.trim()));
-        const actionLines = combinedDiscussion
-            .split(/\r?\n/)
-            .filter((line) => /^(Action|Next step):/i.test(line.trim()));
-        const firstDiscussionParagraph = combinedDiscussion
-            .split(/\n{2,}/)
-            .map((block) => block.trim())
-            .find(Boolean) ?? "";
-        const summary = firstDiscussionParagraph
-            ? firstDiscussionParagraph
-                .split(/(?<=[.!?])\s+/)
-                .slice(0, 2)
-                .join(" ")
-            : "";
-        const enabledSections = [...template.sections]
-            .sort((left, right) => left.position - right.position)
-            .filter((section) => !session.excludedSectionIds.includes(section.id));
-        const sectionBlocks = enabledSections
-            .map((section) => {
-            const lowerTitle = section.title.toLowerCase();
-            if (section.id === "agenda" || lowerTitle.includes("agenda")) {
-                return agenda ? `${section.title}\n${agenda}` : "";
-            }
-            if (section.id === "summary" || lowerTitle.includes("summary")) {
-                return summary ? `${section.title}\n${summary}` : "";
-            }
-            if (section.id === "decisions" || lowerTitle.includes("decision")) {
-                return decisionLines.length ? `${section.title}\n${decisionLines.join("\n")}` : "";
-            }
-            if (section.id === "actions" || lowerTitle.includes("action") || lowerTitle.includes("follow-up")) {
-                return actionLines.length ? `${section.title}\n${actionLines.join("\n")}` : "";
-            }
-            if (lowerTitle.includes("highlight")) {
-                return highlights ? `${section.title}\n${highlights}` : "";
-            }
-            return combinedDiscussion ? `${section.title}\n${combinedDiscussion}` : "";
-        })
-            .filter(Boolean);
-        const fallbackBlock = combinedDiscussion ? `Generated notes\n${combinedDiscussion}` : "";
-        return [title, metaBlock, ...(sectionBlocks.length ? sectionBlocks : [fallbackBlock])].filter(Boolean).join("\n\n").trim();
+        return [
+            getAgendaText(session, template),
+            session.quickHighlights.trim(),
+            richTextToPlainText(session.manualNotes),
+            session.liveTranscript.trim(),
+            session.uploadedTranscript.trim(),
+        ]
+            .filter(Boolean)
+            .join("\n\n")
+            .trim();
+    };
+    const normalizeForCopyCheck = (value) => value
+        .toLowerCase()
+        .replace(/[^a-z0-9\u00c0-\u024f]+/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    const isLikelyCopiedSourceOutput = (output, sourceText) => {
+        const normalizedOutput = normalizeForCopyCheck(output);
+        const normalizedSource = normalizeForCopyCheck(sourceText);
+        if (normalizedOutput.length < 700 || normalizedSource.length < 700) {
+            return false;
+        }
+        const outputToSourceRatio = normalizedOutput.length / normalizedSource.length;
+        const prefixLength = Math.min(260, normalizedOutput.length);
+        const outputPrefix = normalizedOutput.slice(0, prefixLength);
+        const sourcePrefix = normalizedSource.slice(0, prefixLength);
+        return outputToSourceRatio > 0.72 && (normalizedSource.includes(outputPrefix) || normalizedOutput.includes(sourcePrefix));
     };
     const buildManualNotesOnlyOutput = (session = activeSession, template = activeTemplate) => {
         if (!session || !template) {
@@ -1194,64 +1166,41 @@ export const App = () => {
                     setIsTranscribingAudio(false);
                 }
             }
-            const localFallbackOutput = shouldUseManualMode
-                ? buildManualNotesOnlyOutput(sessionForGeneration, template)
-                : buildLocalPolishedOutput(sessionForGeneration, template);
-            let output = localFallbackOutput;
-            let usedLocalFallback = shouldUseManualMode || !latestSnapshot.settings.apiKey;
-            let aiFallbackReason = null;
-            if (!shouldUseManualMode && latestSnapshot.settings.apiKey) {
-                usedLocalFallback = false;
-                try {
-                    output = await generateNotes({
-                        session: sessionForGeneration,
-                        settings: latestSnapshot.settings,
-                        template,
-                        attachments: sessionAttachments,
-                        onEvent: createAIRuntimeHandler({
-                            onCacheHit: () => {
-                                usedCache = true;
-                            },
-                        }),
-                    });
-                    if (!output.trim() && localFallbackOutput.trim()) {
-                        output = localFallbackOutput;
-                        usedLocalFallback = true;
-                        aiFallbackReason = "empty";
-                    }
-                }
-                catch (error) {
-                    if (!localFallbackOutput.trim()) {
-                        throw error;
-                    }
-                    output = localFallbackOutput;
-                    usedLocalFallback = true;
-                    aiFallbackReason = "error";
-                }
+            if (!shouldUseManualMode && !latestSnapshot.settings.apiKey.trim()) {
+                setStatusNote("Generate with AI requires an OpenAI API key in Settings. Use Polish Manual notes if you want non-AI output.");
+                return;
             }
+            const output = shouldUseManualMode
+                ? buildManualNotesOnlyOutput(sessionForGeneration, template)
+                : await generateNotes({
+                    session: sessionForGeneration,
+                    settings: latestSnapshot.settings,
+                    template,
+                    attachments: sessionAttachments,
+                    onEvent: createAIRuntimeHandler({
+                        onCacheHit: () => {
+                            usedCache = true;
+                        },
+                    }),
+                });
             setSelectedOutputVersionId(null);
             if (!output.trim()) {
                 throw new Error("Generation completed but produced no output. Add notes, transcript, agenda, or highlights and try again.");
             }
+            if (!shouldUseManualMode && isLikelyCopiedSourceOutput(output, buildGenerationSourceText(sessionForGeneration, template))) {
+                throw new Error("AI generation returned output that was too similar to the source transcript. No output was saved. Try again, or add an instruction such as 'summarize into concise meeting minutes and do not reproduce the transcript'.");
+            }
             await saveSession({ ...sessionForGeneration, ...buildOutputVersionPatch(sessionForGeneration, output) });
             setStatusNote(shouldUseManualMode
                 ? "Manual notes were transferred to Output without AI generation."
-                : aiFallbackReason === "error"
-                    ? "AI generation did not complete, so a local output was saved from the captured notes instead."
-                    : aiFallbackReason === "empty"
-                        ? "AI generation returned no text, so a local output was saved from the captured notes instead."
-                        : usedCache
-                            ? "Loaded structured output from a matching local AI cache entry."
-                            : !usedLocalFallback && latestSnapshot.settings.apiKey
-                                ? "Generated structured output with the desktop AI service."
-                                : sessionForGeneration.outputLanguage !== "same"
-                                    ? "No API key was available, so a local polish pass was used. Language translation still requires AI generation."
-                                    : "No API key was available, so a local polish pass was used instead.");
+                : usedCache
+                    ? "Loaded structured output from a matching local AI cache entry."
+                    : "Generated structured output with the desktop AI service.");
             await openMetadataReviewIfNeeded(sessionForGeneration);
             openNotesTarget({ sessionId: sessionForGeneration.id, view: "output" });
         }
         catch (error) {
-            setStatusNote(activeSession.transcribeOnly
+            setStatusNote(visibleSession.transcribeOnly
                 ? `Manual-notes transfer failed: ${error instanceof Error ? error.message : "Unknown error."}`
                 : formatAIErrorMessage(error, "Generation failed."));
         }

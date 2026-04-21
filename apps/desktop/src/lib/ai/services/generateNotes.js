@@ -107,6 +107,7 @@ export const generateNotes = async ({ session, settings, template, attachments =
             ...generationPromptTexts,
             getCaptureModeInstruction(session),
             getDiscussionFormatInstruction(session),
+            "Do not reproduce the transcript or source notes verbatim. Transform the source into a synthesized, business-ready output with clear wording, merged duplicates, and meaningful summarization.",
             outputLanguageInstruction,
             getDetailLevelInstruction(session.detailLevel),
             session.additionalInstructions.trim()
