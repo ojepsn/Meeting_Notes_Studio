@@ -755,7 +755,12 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
                                                     const linkedSessionState = item.isMeeting && item.targetType === "activity" ? linkedSessionStateByActivity[item.targetId] : undefined;
                                                     const runningLabel = runningLog ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now)) : "";
                                                     const isSelected = selectedItemIds.includes(item.id) || selectedItemId === item.id;
-                                                    const sizeClass = visualHeight <= 22 ? " calendar-item-block-tiny" : visualHeight <= 54 ? " calendar-item-block-compact" : "";
+                                                    const sizeClass = [
+                                                        visualHeight <= 22 ? "calendar-item-block-tiny" : visualHeight <= 54 ? "calendar-item-block-compact" : "",
+                                                        item.targetType === "todo" && durationSlots <= 1 ? "calendar-item-block-single-row-todo" : "",
+                                                        item.isMeeting && durationSlots <= 6 ? "calendar-item-block-short-meeting" : "",
+                                                        item.isMeeting && durationSlots <= 3 ? "calendar-item-block-micro-meeting" : "",
+                                                    ].filter(Boolean).map((className) => ` ${className}`).join("");
                                                     return _jsxs("button", { className: `calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${sizeClass}`, type: "button", style: { top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }, onMouseDown: (event) => {
                                                             const target = event.target;
                                                             if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle"))
