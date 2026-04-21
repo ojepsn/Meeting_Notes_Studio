@@ -1,6 +1,13 @@
 import { type StructureOptions } from "../../../lib/structure/options";
 import type { RecordingMode } from "../../../lib/files/recording";
 import { type AttachmentRecord, type CaptureWorkspaceDensity, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
+interface GenerationLogEntry {
+    id: string;
+    timestamp: string;
+    level: "info" | "success" | "warning" | "error";
+    message: string;
+    details?: string;
+}
 interface SessionEditorProps {
     session: SessionRecord;
     templates: TemplateDefinition[];
@@ -22,6 +29,8 @@ interface SessionEditorProps {
     recordingMode: RecordingMode;
     isRecordingAudio: boolean;
     recordingStatusNote?: string | null;
+    generationLog?: GenerationLogEntry[];
+    onClearGenerationLog?: () => void;
     onChange: (session: SessionRecord) => void;
     onImportTranscript: () => void;
     onImportAudio: () => void;
@@ -36,5 +45,5 @@ interface SessionEditorProps {
     onCreateSessionFromTemplate?: (templateId: string) => void;
     onOpenInstructions?: () => void;
 }
-export declare const SessionEditor: ({ session, templates, attachments, presentation, showPresentationActions, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isTranscribingAudio, recordingMode, isRecordingAudio, recordingStatusNote, onChange, onImportTranscript, onImportAudio, onImportImage, onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment, onUpdateAttachment, onOpenDetails, onCreateSessionFromTemplate, onOpenInstructions, }: SessionEditorProps) => import("react/jsx-runtime").JSX.Element;
+export declare const SessionEditor: ({ session, templates, attachments, presentation, showPresentationActions, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isTranscribingAudio, recordingMode, isRecordingAudio, recordingStatusNote, generationLog, onClearGenerationLog, onChange, onImportTranscript, onImportAudio, onImportImage, onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment, onUpdateAttachment, onOpenDetails, onCreateSessionFromTemplate, onOpenInstructions, }: SessionEditorProps) => import("react/jsx-runtime").JSX.Element;
 export {};

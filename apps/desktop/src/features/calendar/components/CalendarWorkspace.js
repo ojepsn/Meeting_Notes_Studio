@@ -749,7 +749,8 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
                                                     const startSlot = preview?.startSlot ?? item.startSlot;
                                                     const durationSlots = preview?.durationSlots ?? item.durationSlots;
                                                     const laneWidth = 100 / Math.max(1, item.laneCount);
-                                                    const visualHeight = Math.max(slotHeight * Math.max(durationSlots, item.isMeeting ? 3 : 1) - 4, 18);
+                                                    const minVisualHeight = item.targetType === "todo" && !item.isMeeting ? Math.max(10, slotHeight - 2) : 18;
+                                                    const visualHeight = Math.max(slotHeight * Math.max(durationSlots, item.isMeeting ? 3 : 1) - 4, minVisualHeight);
                                                     const runningLog = getRunningTimeLog(timeLogsByTarget.get(`${item.targetType}:${item.targetId}`) || []);
                                                     const linkedSessionState = item.isMeeting && item.targetType === "activity" ? linkedSessionStateByActivity[item.targetId] : undefined;
                                                     const runningLabel = runningLog ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now)) : "";

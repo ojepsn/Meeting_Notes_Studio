@@ -920,6 +920,17 @@ select {
   box-shadow: 0 16px 30px color-mix(in srgb, var(--app-accent) 30%, transparent 70%);
 }
 
+.primary-button[data-generating="true"] {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--app-accent) 74%, white 26%) 0%, var(--app-accent) 48%, color-mix(in srgb, var(--app-accent) 66%, black 34%) 100%);
+  border-color: color-mix(in srgb, var(--app-accent-strong-border) 72%, white 28%);
+  color: var(--app-accent-text);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--app-accent-soft) 58%, transparent 42%),
+    0 18px 34px color-mix(in srgb, var(--app-accent) 36%, transparent 64%);
+  transform: translateY(-1px);
+}
+
 .shell-button:focus-visible,
 .ghost-button:focus-visible,
 .secondary-button:focus-visible,
@@ -1302,6 +1313,49 @@ select {
 .generation-mode-group {
   display: grid;
   gap: 0.75rem;
+}
+
+.output-language-button-field {
+  gap: 0.55rem;
+}
+
+.output-language-button-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.output-language-button {
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  min-height: 40px;
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.output-language-button:hover:not(:disabled) {
+  border-color: var(--app-accent-border);
+  transform: translateY(-1px);
+}
+
+.output-language-button[data-active="true"] {
+  border-color: var(--app-accent-strong-border);
+  background: var(--app-accent);
+  color: var(--app-accent-contrast);
+}
+
+.output-language-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .config-option {
@@ -3966,9 +4020,34 @@ select {
 }
 
 .calendar-item-block-todo {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--app-surface-soft) 90%, white 10%) 0%, color-mix(in srgb, var(--app-surface) 92%, var(--app-bg-end) 8%) 100%),
-    var(--app-surface);
+  border-color: transparent;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 0.2rem;
+  justify-content: center;
+  gap: 0;
+}
+
+.calendar-item-block-todo .calendar-item-kicker,
+.calendar-item-block-todo .calendar-item-meta {
+  display: none;
+}
+
+.calendar-item-block-todo .calendar-item-title {
+  display: block;
+  font-size: clamp(0.54rem, 0.72vw, 0.68rem);
+  line-height: 1;
+  min-height: 0;
+}
+
+.calendar-item-block-todo .calendar-item-inline-action {
+  margin-top: 0.04rem;
+}
+
+.calendar-item-block-todo.calendar-item-block-tiny .calendar-item-inline-action,
+.calendar-item-block-todo.calendar-item-block-compact .calendar-item-inline-action {
+  display: none;
 }
 
 .calendar-item-block-activity {

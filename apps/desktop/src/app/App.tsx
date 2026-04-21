@@ -2481,6 +2481,8 @@ export const App = () => {
             recordingMode={recordingMode}
             isRecordingAudio={isRecordingAudio}
             recordingStatusNote={recordingStatusNote}
+            generationLog={generationLog}
+            onClearGenerationLog={() => setGenerationLog([])}
             onChange={handleCaptureSessionChange}
             onImportImage={() => void handleImportImage()}
             onImportAudio={() => void handleImportAudio()}
@@ -2519,8 +2521,6 @@ export const App = () => {
             isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
             isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
             isRevising={isRevising}
-            generationLog={generationLog}
-            onClearGenerationLog={() => setGenerationLog([])}
             onPrimaryAction={outputActionConfig.onPrimary}
             onSecondaryAction={outputActionConfig.onSecondary}
             onCopyOutput={() => void handleCopyOutput()}
@@ -3378,6 +3378,8 @@ export const App = () => {
                       recordingMode={recordingMode}
                       isRecordingAudio={isRecordingAudio}
                       recordingStatusNote={recordingStatusNote}
+                      generationLog={generationLog}
+                      onClearGenerationLog={() => setGenerationLog([])}
                       onChange={handleCaptureSessionChange}
                       onImportImage={() => void handleImportImage()}
                       onImportAudio={() => void handleImportAudio()}
@@ -3428,8 +3430,6 @@ export const App = () => {
                       isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
                       isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
                       isRevising={isRevising}
-                      generationLog={generationLog}
-                      onClearGenerationLog={() => setGenerationLog([])}
                       onPrimaryAction={outputActionConfig.onPrimary}
                       onSecondaryAction={outputActionConfig.onSecondary}
                       onCopyOutput={() => void handleCopyOutput()}

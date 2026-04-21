@@ -44,6 +44,7 @@ const RICH_TEXT_COMMANDS = [
   { id: "italic", label: "Italic", type: "command", command: "italic" },
   { id: "unordered", label: "Bullets", type: "command", command: "insertUnorderedList" },
   { id: "ordered", label: "Numbered", type: "command", command: "insertOrderedList" },
+  { id: "body", label: "Body", type: "block", value: "P" },
   { id: "h1", label: "H1", type: "block", value: "H1" },
   { id: "h2", label: "H2", type: "block", value: "H2" },
   { id: "h3", label: "H3", type: "block", value: "H3" },
@@ -51,6 +52,14 @@ const RICH_TEXT_COMMANDS = [
   { id: "h5", label: "H5", type: "block", value: "H5" },
   { id: "h6", label: "H6", type: "block", value: "H6" },
 ] as const;
+
+interface GenerationLogEntry {
+  id: string;
+  timestamp: string;
+  level: "info" | "success" | "warning" | "error";
+  message: string;
+  details?: string;
+}
 
 interface SessionEditorProps {
   session: SessionRecord;
@@ -73,6 +82,8 @@ interface SessionEditorProps {
   recordingMode: RecordingMode;
   isRecordingAudio: boolean;
   recordingStatusNote?: string | null;
+  generationLog?: GenerationLogEntry[];
+  onClearGenerationLog?: () => void;
   onChange: (session: SessionRecord) => void;
   onImportTranscript: () => void;
   onImportAudio: () => void;
@@ -144,7 +155,7 @@ export const SessionEditor = ({
   session, templates, attachments, presentation = "full", showPresentationActions = true,
   savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities,
   suggestedActivities, structureOptions, savedTags, suggestedTags, isTranscribingAudio, recordingMode,
-  isRecordingAudio, recordingStatusNote, onChange, onImportTranscript, onImportAudio, onImportImage,
+  isRecordingAudio, recordingStatusNote, generationLog = [], onClearGenerationLog, onChange, onImportTranscript, onImportAudio, onImportImage,
   onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment,
   onUpdateAttachment, onOpenDetails, onCreateSessionFromTemplate,
   onOpenInstructions,
@@ -213,6 +224,49 @@ export const SessionEditor = ({
     onChangeRecordingMode(mode);
     onStartRecording(mode);
   };
+
+  const formatGenerationLogTime = (timestamp: string) => {
+    const parsed = new Date(timestamp);
+    if (Number.isNaN(parsed.getTime())) {
+      return timestamp;
+    }
+
+    return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  };
+
+  const renderGenerationLog = () => (
+    <details className="field field-wide workspace-disclosure generation-log-card">
+      <summary>Generation log</summary>
+      <div className="workspace-disclosure-body stack">
+        <div className="prompt-actions-row">
+          <div className="prompt-actions-copy">
+            <strong>Visible diagnostics</strong>
+            <span className="muted">Usually hidden. Open this if output generation needs investigation.</span>
+          </div>
+          {onClearGenerationLog ? (
+            <button className="small-button" type="button" onClick={onClearGenerationLog} disabled={!generationLog.length}>
+              Clear
+            </button>
+          ) : null}
+        </div>
+        {generationLog.length ? (
+          <div className="generation-log-list">
+            {generationLog.map((entry) => (
+              <article key={entry.id} className="generation-log-entry" data-level={entry.level}>
+                <div className="generation-log-entry-head">
+                  <strong>{entry.message}</strong>
+                  <span className="muted">{formatGenerationLogTime(entry.timestamp)}</span>
+                </div>
+                {entry.details ? <pre>{entry.details}</pre> : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">No generation events logged yet. Click Generate with AI to start a fresh diagnostic log.</p>
+        )}
+      </div>
+    </details>
+  );
 
   useEffect(() => {
     if (!agendaEditorRef.current || !agendaField) return;
@@ -655,6 +709,8 @@ export const SessionEditor = ({
               </div>
             </div>
           </details>
+
+          {renderGenerationLog()}
         </section>
       </div>
     );
@@ -973,6 +1029,8 @@ export const SessionEditor = ({
             </div>
           </div>
         ) : null}
+
+        {renderGenerationLog()}
       </div>
     </div>
   );
