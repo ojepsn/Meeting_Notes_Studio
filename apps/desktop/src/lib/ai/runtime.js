@@ -22,7 +22,7 @@ const ensureResponseText = ({ text, operation, }) => {
         retryable: false,
     });
 };
-export const executeAITextOperation = async ({ settings, operation, systemTexts, userText, promptVersion, timeoutMs, maxRetries, onEvent, cacheMode = "default", }) => {
+export const executeAITextOperation = async ({ settings, operation, systemTexts, userText, promptVersion, timeoutMs, maxRetries, onEvent, cacheMode = "default", maxOutputTokens, }) => {
     const requestId = createRequestId();
     const startedAt = Date.now();
     const cacheKey = cacheMode === "default" && isAITextCacheableOperation(operation)
@@ -67,6 +67,9 @@ export const executeAITextOperation = async ({ settings, operation, systemTexts,
             }, onEvent),
             body: {
                 model: settings.textModel,
+                ...(typeof maxOutputTokens === "number" && maxOutputTokens > 0
+                    ? { max_output_tokens: Math.round(maxOutputTokens) }
+                    : {}),
                 input: [
                     {
                         role: "system",

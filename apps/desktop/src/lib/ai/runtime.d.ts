@@ -46,11 +46,12 @@ interface AITextExecutionOptions extends BaseAIExecutionOptions {
     systemTexts: string[];
     userText: string;
     cacheMode?: "default" | "bypass";
+    maxOutputTokens?: number;
 }
 interface AITranscriptionExecutionOptions extends BaseAIExecutionOptions {
     operation: "transcribe-audio";
     formData: FormData;
 }
-export declare const executeAITextOperation: ({ settings, operation, systemTexts, userText, promptVersion, timeoutMs, maxRetries, onEvent, cacheMode, }: AITextExecutionOptions) => Promise<string>;
+export declare const executeAITextOperation: ({ settings, operation, systemTexts, userText, promptVersion, timeoutMs, maxRetries, onEvent, cacheMode, maxOutputTokens, }: AITextExecutionOptions) => Promise<string>;
 export declare const executeAITranscriptionOperation: ({ settings, operation, formData, promptVersion, timeoutMs, maxRetries, onEvent, }: AITranscriptionExecutionOptions) => Promise<string>;
 export {};

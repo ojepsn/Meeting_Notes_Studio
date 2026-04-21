@@ -10,6 +10,11 @@ const FALLBACK_SECTION = {
     enabledByDefault: true,
     position: 1,
 };
+const LONG_SOURCE_CHAR_LIMIT = 30_000;
+const SOURCE_CHUNK_CHAR_LIMIT = 16_000;
+const FINAL_OUTPUT_TOKEN_BUDGET = 6_000;
+const CHUNK_SUMMARY_TOKEN_BUDGET = 1_600;
+const MIN_GENERATED_OUTPUT_CHARS = 80;
 const richTextToPlainText = (value) => {
     if (!value)
         return "";
@@ -17,6 +22,40 @@ const richTextToPlainText = (value) => {
     wrapper.innerHTML = value;
     const text = typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "";
     return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+};
+const splitSourceIntoChunks = (sourceText, maxChunkChars = SOURCE_CHUNK_CHAR_LIMIT) => {
+    const paragraphs = sourceText.split(/\n{2,}/).map((entry) => entry.trim()).filter(Boolean);
+    const chunks = [];
+    let currentChunk = "";
+    paragraphs.forEach((paragraph) => {
+        if (paragraph.length > maxChunkChars) {
+            if (currentChunk.trim()) {
+                chunks.push(currentChunk.trim());
+                currentChunk = "";
+            }
+            for (let index = 0; index < paragraph.length; index += maxChunkChars) {
+                chunks.push(paragraph.slice(index, index + maxChunkChars).trim());
+            }
+            return;
+        }
+        const nextChunk = [currentChunk, paragraph].filter(Boolean).join("\n\n");
+        if (nextChunk.length > maxChunkChars && currentChunk.trim()) {
+            chunks.push(currentChunk.trim());
+            currentChunk = paragraph;
+            return;
+        }
+        currentChunk = nextChunk;
+    });
+    if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+    }
+    return chunks;
+};
+const assertUsefulGeneratedText = (text, sourceMaterial) => {
+    if (sourceMaterial.trim().length < 500 || text.trim().length >= MIN_GENERATED_OUTPUT_CHARS) {
+        return;
+    }
+    throw new Error("OpenAI returned an unusably short generation. No output was saved. Please try again; if it repeats, switch to a stronger text model in Settings.");
 };
 const buildTemplateFieldPrompt = ({ template, session, }) => {
     const customFields = template.fields.filter((field) => field.enabled && !["title", "participants", "date", "startTime", "endTime"].includes(field.key));
@@ -99,25 +138,60 @@ export const generateNotes = async ({ session, settings, template, attachments =
     const generationPromptTexts = session.captureMode === "meeting-note"
         ? [promptProfile.profile.meetingMinutesSystem, promptProfile.profile.meetingMinutesRules]
         : [promptProfile.profile.personalNotesSystem, promptProfile.profile.personalNotesRules];
-    return executeAITextOperation({
+    const systemTexts = [
+        ...generationPromptTexts,
+        getCaptureModeInstruction(session),
+        getDiscussionFormatInstruction(session),
+        "Do not reproduce the transcript or source notes verbatim. Transform the source into a synthesized, business-ready output with clear wording, merged duplicates, and meaningful summarization.",
+        outputLanguageInstruction,
+        getDetailLevelInstruction(session.detailLevel),
+        session.additionalInstructions.trim()
+            ? `Additional generation instructions from the user:\n${session.additionalInstructions.trim()}`
+            : "",
+    ];
+    const buildUserText = (sourceMaterial, sourceLabel = "Source material") => `Template: ${template.name}\nSections:\n${buildTemplateSectionPrompt({ ...template, sections: activeSections })}${template.promptInstructions?.trim() ? `\nTemplate-specific instructions:\n${template.promptInstructions.trim()}` : ""}\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${session.participantText}\nDomain: ${session.domain}\nProject: ${session.project}\nActivity: ${session.activity}\nTags: ${session.tagsText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}${includedImagesPrompt
+        ? `\nIncluded images for polished output:\n${includedImagesPrompt}\nReference these images where appropriate and preserve their captions.`
+        : ""}\n\n${sourceLabel}:\n${sourceMaterial}${extraPromptBlocks ? `\n\nAdditional prompt blocks:\n${extraPromptBlocks}` : ""}`;
+    let sourceForFinalGeneration = sourceText;
+    if (sourceText.length > LONG_SOURCE_CHAR_LIMIT) {
+        const chunks = splitSourceIntoChunks(sourceText);
+        const summaries = [];
+        for (let index = 0; index < chunks.length; index += 1) {
+            const summary = await executeAITextOperation({
+                settings,
+                operation: "generate-notes",
+                promptVersion: `${promptProfile.version}:chunk-summary`,
+                systemTexts: [
+                    "You are preparing an intermediate summary for later meeting-minutes generation.",
+                    "Extract decisions, actions, risks, open questions, important discussion substance, names, dates, and context. Merge repetition and ignore filler. Do not copy transcript wording except for essential short phrases.",
+                    outputLanguageInstruction,
+                ],
+                userText: `Transcript chunk ${index + 1} of ${chunks.length}.\n\nReturn a dense structured summary that preserves the facts needed to write final meeting minutes later.\n\n${chunks[index]}`,
+                onEvent,
+                cacheMode: "bypass",
+                maxOutputTokens: CHUNK_SUMMARY_TOKEN_BUDGET,
+                timeoutMs: 90_000,
+            });
+            assertUsefulGeneratedText(summary, chunks[index]);
+            summaries.push(`Chunk ${index + 1} summary:\n${summary}`);
+        }
+        sourceForFinalGeneration = [
+            "The original source was too long for one reliable final-generation request, so it has been condensed into factual intermediate summaries.",
+            "Use these summaries as the source of truth for the final output. Synthesize them into coherent meeting minutes and do not list chunk-by-chunk summaries.",
+            ...summaries,
+        ].join("\n\n");
+    }
+    const output = await executeAITextOperation({
         settings,
         operation: "generate-notes",
         promptVersion: promptProfile.version,
-        systemTexts: [
-            ...generationPromptTexts,
-            getCaptureModeInstruction(session),
-            getDiscussionFormatInstruction(session),
-            "Do not reproduce the transcript or source notes verbatim. Transform the source into a synthesized, business-ready output with clear wording, merged duplicates, and meaningful summarization.",
-            outputLanguageInstruction,
-            getDetailLevelInstruction(session.detailLevel),
-            session.additionalInstructions.trim()
-                ? `Additional generation instructions from the user:\n${session.additionalInstructions.trim()}`
-                : "",
-        ],
-        userText: `Template: ${template.name}\nSections:\n${buildTemplateSectionPrompt({ ...template, sections: activeSections })}${template.promptInstructions?.trim() ? `\nTemplate-specific instructions:\n${template.promptInstructions.trim()}` : ""}\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${session.participantText}\nDomain: ${session.domain}\nProject: ${session.project}\nActivity: ${session.activity}\nTags: ${session.tagsText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}${includedImagesPrompt
-            ? `\nIncluded images for polished output:\n${includedImagesPrompt}\nReference these images where appropriate and preserve their captions.`
-            : ""}\n\n${sourceText}${extraPromptBlocks ? `\n\nAdditional prompt blocks:\n${extraPromptBlocks}` : ""}`,
+        systemTexts,
+        userText: buildUserText(sourceForFinalGeneration, sourceForFinalGeneration === sourceText ? "Source material" : "Condensed source summaries"),
         onEvent,
         cacheMode: "bypass",
+        maxOutputTokens: FINAL_OUTPUT_TOKEN_BUDGET,
+        timeoutMs: sourceForFinalGeneration === sourceText ? undefined : 90_000,
     });
+    assertUsefulGeneratedText(output, sourceText);
+    return output;
 };

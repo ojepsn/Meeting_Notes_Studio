@@ -73,6 +73,24 @@ describe("executeAITextOperation", () => {
         ]);
         expect(parsedBody.input[1].content[0].text).toBe("Translate this");
     });
+    it("can request a larger output budget for long-form generation", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ output_text: "Long generated output" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+        }));
+        vi.stubGlobal("fetch", fetchMock);
+        await executeAITextOperation({
+            settings,
+            operation: "generate-notes",
+            systemTexts: ["Generate"],
+            userText: "Long transcript",
+            maxOutputTokens: 6000,
+            maxRetries: 0,
+        });
+        const [, requestInit] = fetchMock.mock.calls[0];
+        const parsedBody = JSON.parse(String(requestInit.body));
+        expect(parsedBody.max_output_tokens).toBe(6000);
+    });
     it("fails when the model response does not contain readable text", async () => {
         vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ output: [] }), {
             status: 200,

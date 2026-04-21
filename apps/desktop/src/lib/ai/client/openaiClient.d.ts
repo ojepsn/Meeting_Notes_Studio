@@ -37,6 +37,10 @@ interface OpenAITextResponse {
         }>;
     }>;
     text?: string;
+    status?: string;
+    incomplete_details?: {
+        reason?: string;
+    };
 }
 export declare class AIRequestError extends Error {
     readonly code: AIErrorCode;

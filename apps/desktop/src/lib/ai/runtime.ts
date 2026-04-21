@@ -63,6 +63,7 @@ interface AITextExecutionOptions extends BaseAIExecutionOptions {
   systemTexts: string[];
   userText: string;
   cacheMode?: "default" | "bypass";
+  maxOutputTokens?: number;
 }
 
 interface AITranscriptionExecutionOptions extends BaseAIExecutionOptions {
@@ -112,6 +113,7 @@ export const executeAITextOperation = async ({
   maxRetries,
   onEvent,
   cacheMode = "default",
+  maxOutputTokens,
 }: AITextExecutionOptions) => {
   const requestId = createRequestId();
   const startedAt = Date.now();
@@ -168,6 +170,9 @@ export const executeAITextOperation = async ({
         ),
       body: {
         model: settings.textModel,
+        ...(typeof maxOutputTokens === "number" && maxOutputTokens > 0
+          ? { max_output_tokens: Math.round(maxOutputTokens) }
+          : {}),
         input: [
           {
             role: "system",

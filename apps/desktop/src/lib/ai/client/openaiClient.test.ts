@@ -90,6 +90,28 @@ describe("openaiClient", () => {
     ).rejects.toMatchObject({ code: "invalid-response", retryable: false });
   });
 
+  it("rejects incomplete Responses API payloads instead of accepting partial text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        createJsonResponse({
+          status: "incomplete",
+          incomplete_details: { reason: "max_output_tokens" },
+          output_text: "T",
+        }),
+      ),
+    );
+
+    await expect(
+      callResponsesApi({
+        apiKey: "test-key",
+        body: {},
+        operation: "generate-notes",
+        maxRetries: 0,
+      }),
+    ).rejects.toMatchObject({ code: "invalid-response", retryable: false });
+  });
+
   it("extracts text from output_text and nested output blocks", () => {
     expect(extractResponseText({ output_text: "Direct text" })).toBe("Direct text");
     expect(

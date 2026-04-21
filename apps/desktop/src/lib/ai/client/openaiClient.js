@@ -160,7 +160,7 @@ export const extractResponseText = (response) => {
 };
 export const callResponsesApi = async ({ apiKey, body, operation, timeoutMs = DEFAULT_TIMEOUT_MS, maxRetries = DEFAULT_MAX_RETRIES, onRetry, }) => {
     assertApiKey(apiKey, operation);
-    return performRequest({
+    const payload = await performRequest({
         url: OPENAI_RESPONSES_URL,
         init: {
             method: "POST",
@@ -176,6 +176,16 @@ export const callResponsesApi = async ({ apiKey, body, operation, timeoutMs = DE
         failurePrefix: "OpenAI request failed",
         onRetry,
     });
+    if (payload.status === "incomplete") {
+        const reason = payload.incomplete_details?.reason;
+        throw new AIRequestError({
+            message: `OpenAI returned an incomplete response${reason ? ` (${reason})` : ""}. No output was saved. Please try again or choose a stronger model in Settings.`,
+            code: "invalid-response",
+            operation,
+            retryable: false,
+        });
+    }
+    return payload;
 };
 export const callTranscriptionsApi = async ({ apiKey, formData, operation, timeoutMs = DEFAULT_TRANSCRIPTION_TIMEOUT_MS, maxRetries = DEFAULT_MAX_RETRIES, onRetry, }) => {
     assertApiKey(apiKey, operation);
