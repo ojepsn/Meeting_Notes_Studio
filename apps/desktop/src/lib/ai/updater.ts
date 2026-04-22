@@ -1,11 +1,12 @@
 import { isTauriRuntime } from "../storage/environment";
 
 const UPDATE_MANIFEST_URL =
-  "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest/download/latest.json";
+  "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest/download/latest-native.json";
 
 type UpdateManifest = {
   version?: string;
   platforms?: Record<string, { url?: string }>;
+  manual_url?: string;
 };
 
 export const normalizeVersion = (value: string) =>
@@ -80,18 +81,30 @@ export const checkForDesktopUpdates = async () => {
   const bundleType = await app.getBundleType().catch(() => null);
 
   let nativeErrorMessage: string | null = null;
+  let publishedManifest: UpdateManifest | null = null;
+  const getPublishedManifest = async () => {
+    if (!publishedManifest) {
+      publishedManifest = await loadPublishedManifest();
+    }
+    return publishedManifest;
+  };
 
   try {
     const updater = await import("@tauri-apps/plugin-updater");
     const update = await updater.check();
 
     if (update) {
+      const manifest = await getPublishedManifest().catch(() => null);
       return {
         available: true as const,
         version: normalizeVersion(update.version),
         currentVersion,
         bundleType,
         source: "native" as const,
+        downloadUrl:
+          manifest?.manual_url ||
+          manifest?.platforms?.["windows-x86_64"]?.url ||
+          "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest",
         install: async () => {
           await update.downloadAndInstall();
         },
@@ -102,9 +115,10 @@ export const checkForDesktopUpdates = async () => {
   }
 
   try {
-    const manifest = await loadPublishedManifest();
+    const manifest = await getPublishedManifest();
     const publishedVersion = normalizeVersion(manifest.version ?? "");
     const platformDownloadUrl =
+      manifest.manual_url ||
       manifest.platforms?.["windows-x86_64"]?.url ||
       "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest";
     if (compareVersions(publishedVersion, currentVersion) > 0) {

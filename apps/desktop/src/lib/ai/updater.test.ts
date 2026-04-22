@@ -102,6 +102,13 @@ describe("checkForDesktopUpdates", () => {
       version: "0.1.19",
       downloadAndInstall,
     });
+    invoke.mockResolvedValue(
+      JSON.stringify({
+        version: "0.1.19",
+        manual_url: "https://example.com/NoteSmith.Desktop_0.1.19_x64-setup.exe",
+        platforms: {},
+      }),
+    );
 
     const result = await checkForDesktopUpdates();
 
@@ -109,6 +116,7 @@ describe("checkForDesktopUpdates", () => {
     if (result.available) {
       expect(result.version).toBe("0.1.19");
       expect(result.source).toBe("native");
+      expect(result.downloadUrl).toContain("setup.exe");
       await result.install();
       expect(downloadAndInstall).toHaveBeenCalledTimes(1);
     }

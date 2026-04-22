@@ -1,5 +1,5 @@
 import { isTauriRuntime } from "../storage/environment";
-const UPDATE_MANIFEST_URL = "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest/download/latest.json";
+const UPDATE_MANIFEST_URL = "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest/download/latest-native.json";
 export const normalizeVersion = (value) => value.trim().replace(/^v/i, "");
 const normalizeBundleType = (value) => value?.trim().toLowerCase() ?? "";
 const isMsiBundle = (value) => normalizeBundleType(value).includes("msi");
@@ -60,16 +60,27 @@ export const checkForDesktopUpdates = async () => {
     const currentVersion = normalizeVersion(await app.getVersion());
     const bundleType = await app.getBundleType().catch(() => null);
     let nativeErrorMessage = null;
+    let publishedManifest = null;
+    const getPublishedManifest = async () => {
+        if (!publishedManifest) {
+            publishedManifest = await loadPublishedManifest();
+        }
+        return publishedManifest;
+    };
     try {
         const updater = await import("@tauri-apps/plugin-updater");
         const update = await updater.check();
         if (update) {
+            const manifest = await getPublishedManifest().catch(() => null);
             return {
                 available: true,
                 version: normalizeVersion(update.version),
                 currentVersion,
                 bundleType,
                 source: "native",
+                downloadUrl: manifest?.manual_url ||
+                    manifest?.platforms?.["windows-x86_64"]?.url ||
+                    "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest",
                 install: async () => {
                     await update.downloadAndInstall();
                 },
@@ -80,9 +91,10 @@ export const checkForDesktopUpdates = async () => {
         nativeErrorMessage = error instanceof Error ? error.message : "Could not check for updates.";
     }
     try {
-        const manifest = await loadPublishedManifest();
+        const manifest = await getPublishedManifest();
         const publishedVersion = normalizeVersion(manifest.version ?? "");
-        const platformDownloadUrl = manifest.platforms?.["windows-x86_64"]?.url ||
+        const platformDownloadUrl = manifest.manual_url ||
+            manifest.platforms?.["windows-x86_64"]?.url ||
             "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest";
         if (compareVersions(publishedVersion, currentVersion) > 0) {
             const manualReason = isMsiBundle(bundleType)

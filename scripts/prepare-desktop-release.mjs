@@ -91,6 +91,7 @@ const latestManifest = {
   version,
   notes: releaseNotes,
   pub_date: new Date().toISOString(),
+  manual_url: `https://github.com/${repository}/releases/download/${tag}/${normalizedNsisExe}`,
   platforms: {
     "windows-x86_64": {
       signature,
@@ -99,14 +100,29 @@ const latestManifest = {
   },
 };
 
+const legacyManualManifest = {
+  version,
+  notes: `${releaseNotes} Download and run the installer manually from GitHub Releases.`,
+  pub_date: latestManifest.pub_date,
+  manual_url: `https://github.com/${repository}/releases/download/${tag}/${normalizedNsisExe}`,
+  platforms: {},
+};
+
 await writeFile(
   path.join(outputDir, "latest.json"),
+  `${JSON.stringify(legacyManualManifest, null, 2)}\n`,
+  "utf8",
+);
+
+await writeFile(
+  path.join(outputDir, "latest-native.json"),
   `${JSON.stringify(latestManifest, null, 2)}\n`,
   "utf8",
 );
 
 const assetList = [
   "latest.json",
+  "latest-native.json",
   normalizedNsisExe,
   normalizedNsisExeSig,
   normalizedMsi,

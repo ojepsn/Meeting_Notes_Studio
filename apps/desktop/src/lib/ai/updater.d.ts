@@ -3,6 +3,7 @@ type UpdateManifest = {
     platforms?: Record<string, {
         url?: string;
     }>;
+    manual_url?: string;
 };
 export declare const normalizeVersion: (value: string) => string;
 export declare const compareVersions: (left: string, right: string) => number;
@@ -15,19 +16,19 @@ export declare const checkForDesktopUpdates: () => Promise<{
     currentVersion?: undefined;
     bundleType?: undefined;
     source?: undefined;
+    downloadUrl?: undefined;
     install?: undefined;
     publishedVersion?: undefined;
-    downloadUrl?: undefined;
 } | {
     available: true;
     version: string;
     currentVersion: string;
     bundleType: import("@tauri-apps/api/app").BundleType | null;
     source: "native";
+    downloadUrl: string;
     install: () => Promise<void>;
     note?: undefined;
     publishedVersion?: undefined;
-    downloadUrl?: undefined;
 } | {
     available: false;
     currentVersion: string;
@@ -45,8 +46,8 @@ export declare const checkForDesktopUpdates: () => Promise<{
     note: string;
     version?: undefined;
     source?: undefined;
+    downloadUrl?: undefined;
     install?: undefined;
     publishedVersion?: undefined;
-    downloadUrl?: undefined;
 }>;
 export {};

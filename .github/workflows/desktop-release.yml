@@ -72,6 +72,7 @@ jobs:
           name: desktop-release-${{ github.ref_name }}
           path: |
             apps/desktop/src-tauri/target/release/release-assets/latest.json
+            apps/desktop/src-tauri/target/release/release-assets/latest-native.json
             apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.exe
             apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.exe.sig
             apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.msi
@@ -83,6 +84,7 @@ jobs:
         with:
           files: |
             apps/desktop/src-tauri/target/release/release-assets/latest.json
+            apps/desktop/src-tauri/target/release/release-assets/latest-native.json
             apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.exe
             apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.exe.sig
             apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.msi

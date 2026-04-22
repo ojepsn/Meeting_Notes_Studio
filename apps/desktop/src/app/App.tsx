@@ -72,6 +72,8 @@ import { buildStructureOptions, createEmptyStructureOptions } from "../lib/struc
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
 
+const DESKTOP_UPDATE_INSTALL_TIMEOUT_MS = 120000;
+
 type AppWorkspace = "notes" | "todos" | "activities" | "calendar" | "time" | "structure" | "assistant" | "files";
 type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | "instructions" | null;
 type CommandAction = {
@@ -1376,7 +1378,7 @@ export const App = () => {
       if (result.available) {
         setAvailableUpdateVersion(result.version);
         setInstallUpdate(() => result.install);
-        setManualUpdateUrl(null);
+        setManualUpdateUrl(result.downloadUrl ?? null);
         setUpdateStatusNote(`Version ${result.version} is available to install.`);
         setStatusNote(`Update available: ${result.version}`);
       } else {
@@ -1409,7 +1411,27 @@ export const App = () => {
       if (backupPath) {
         setStatusNote(`Created a local safety backup at ${backupPath} before installing ${availableUpdateVersion}.`);
       }
-      await installUpdate();
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      try {
+        await Promise.race([
+          installUpdate(),
+          new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+              reject(
+                new Error(
+                  manualUpdateUrl
+                    ? `The in-app installer did not finish within ${Math.round(DESKTOP_UPDATE_INSTALL_TIMEOUT_MS / 1000)} seconds. Use Download installer and run it manually.`
+                    : `The in-app installer did not finish within ${Math.round(DESKTOP_UPDATE_INSTALL_TIMEOUT_MS / 1000)} seconds. Download the latest installer from GitHub Releases and run it manually.`,
+                ),
+              );
+            }, DESKTOP_UPDATE_INSTALL_TIMEOUT_MS);
+          }),
+        ]);
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
       setUpdateStatusNote(`Version ${availableUpdateVersion} was installed. Restart the app to finish updating.`);
       setStatusNote(`Update ${availableUpdateVersion} installed. Restart the app to finish updating.`);
       setInstallUpdate(null);
@@ -3064,6 +3086,11 @@ export const App = () => {
             >
               {isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}`}
             </button>
+            {manualUpdateUrl ? (
+              <button className="small-button" type="button" onClick={() => void handleOpenManualUpdate()} disabled={isInstallingUpdate}>
+                Download installer
+              </button>
+            ) : null}
           </div>
         ) : manualUpdateUrl ? (
           <div className="workspace-alert-bar">

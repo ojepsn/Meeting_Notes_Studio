@@ -1542,9 +1542,9 @@ export const SettingsCard = ({
                   {isInstallingUpdate ? "Installing update..." : `Install update ${availableUpdateVersion}`}
                 </button>
               ) : null}
-              {!availableUpdateVersion && manualUpdateUrl && onOpenManualUpdate ? (
+              {manualUpdateUrl && onOpenManualUpdate ? (
                 <button className="small-button" type="button" onClick={() => void onOpenManualUpdate()}>
-                  Download latest installer
+                  {availableUpdateVersion ? "Download installer manually" : "Download latest installer"}
                 </button>
               ) : null}
             </div>
