@@ -2,7 +2,12 @@ import type { CaptureMode, DesktopAppSnapshot, TimeLogRecord } from "@notesmith/
 import { createAppRepository } from "../lib/db/repository";
 type DesktopView = "capture" | "output";
 type SaveState = "saved" | "saving" | "error";
+type Snapshot = DesktopAppSnapshot;
 type TimeLog = TimeLogRecord;
+export declare const rollForwardOverdueCalendarTodos: (snapshot: Snapshot, today?: string) => {
+    snapshot: DesktopAppSnapshot;
+    changed: boolean;
+};
 interface DesktopState {
     snapshot: DesktopAppSnapshot | null;
     activeSessionId: string | null;
@@ -55,6 +60,7 @@ interface DesktopState {
         kind?: "todo" | "activity" | "meeting";
         endSlot?: number;
     }) => Promise<string | null>;
+    rollForwardOverdueTodos: () => Promise<void>;
     moveCalendarItem: (id: string, date: string, startSlot: number) => Promise<void>;
     updateCalendarItem: (id: string, updates: {
         date: string;

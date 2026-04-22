@@ -126,7 +126,7 @@ const buildOutputVersionPatch = (session, nextOutput) => {
     };
 };
 export const App = () => {
-    const { snapshot, activeSessionId, saveState, lastSavedAt, isLoaded, loadError, load, setActiveSessionId, setActiveView, repository, saveSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, saveTodo, addTodo, deleteTodo, saveActivity, addActivity, deleteActivity, saveTimeLog, deleteTimeLog, startTimeTracking, stopTimeTracking, createCalendarEntryFromText, moveCalendarItem, updateCalendarItem, convertTodoToActivity, ensureSessionForActivity, saveSettings, renameDomainValue, renameProjectValue, saveTemplate, resetTemplates, importLegacyBrowserData, importBackupSnapshot: restoreBackupSnapshot, saveAttachments, } = useDesktopStore();
+    const { snapshot, activeSessionId, saveState, lastSavedAt, isLoaded, loadError, load, setActiveSessionId, setActiveView, repository, saveSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, saveTodo, addTodo, deleteTodo, saveActivity, addActivity, deleteActivity, saveTimeLog, deleteTimeLog, startTimeTracking, stopTimeTracking, createCalendarEntryFromText, rollForwardOverdueTodos, moveCalendarItem, updateCalendarItem, convertTodoToActivity, ensureSessionForActivity, saveSettings, renameDomainValue, renameProjectValue, saveTemplate, resetTemplates, importLegacyBrowserData, importBackupSnapshot: restoreBackupSnapshot, saveAttachments, } = useDesktopStore();
     const [activeWorkspace, setActiveWorkspace] = useState("calendar");
     const [openPanel, setOpenPanel] = useState(null);
     const [isNotesSessionsOpen, setIsNotesSessionsOpen] = useState(false);
@@ -183,6 +183,7 @@ export const App = () => {
     const audioContextRef = useRef(null);
     const recordingChunksRef = useRef([]);
     const recordingSessionIdRef = useRef(null);
+    const todoRolloverDateRef = useRef(new Date().toDateString());
     const buildDesktopBackupBundle = () => {
         if (!snapshot) {
             return null;
@@ -200,6 +201,20 @@ export const App = () => {
     useEffect(() => {
         void load();
     }, [load]);
+    useEffect(() => {
+        if (!isLoaded || loadError)
+            return;
+        const checkTodoRolloverDate = () => {
+            const currentDate = new Date().toDateString();
+            if (todoRolloverDateRef.current === currentDate)
+                return;
+            todoRolloverDateRef.current = currentDate;
+            void rollForwardOverdueTodos();
+        };
+        checkTodoRolloverDate();
+        const intervalId = setInterval(checkTodoRolloverDate, 60000);
+        return () => clearInterval(intervalId);
+    }, [isLoaded, loadError, rollForwardOverdueTodos]);
     useEffect(() => {
         return () => {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {

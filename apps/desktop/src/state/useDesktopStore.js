@@ -14,6 +14,9 @@ const SLOTS_PER_HOUR = 12;
 const MINUTES_PER_SLOT = 5;
 const MAX_SLOT_INDEX = 24 * SLOTS_PER_HOUR - 1;
 const DEFAULT_MEETING_DURATION_SLOTS = 12;
+const ROLLED_TODO_START_SLOT = 8 * SLOTS_PER_HOUR;
+const ROLLED_TODO_EARLY_MORNING_ROWS = 24;
+const ROLLED_TODO_MAX_PER_ROW = 2;
 const OTHER_STRUCTURE_VALUE = "Other";
 const formatLocalDate = (value = new Date()) => {
     const year = value.getFullYear();
@@ -40,6 +43,87 @@ const durationFromTimes = (startTime, endTime) => {
     const startSlot = timeToSlot(startTime);
     const endSlot = timeToSlot(endTime);
     return Math.max(1, endSlot - startSlot || DEFAULT_MEETING_DURATION_SLOTS);
+};
+const getRolloverSlots = () => Array.from({ length: ROLLED_TODO_EARLY_MORNING_ROWS }, (_, index) => clampSlotIndex(ROLLED_TODO_START_SLOT + index));
+const countOccupiedRolloverSlots = (calendarItems, today, movingItemIds) => {
+    const occupancy = new Map();
+    calendarItems.forEach((item) => {
+        if (item.date !== today || movingItemIds.has(item.id))
+            return;
+        const duration = Math.max(1, item.durationSlots);
+        for (let offset = 0; offset < duration; offset += 1) {
+            const slot = clampSlotIndex(item.startSlot + offset);
+            occupancy.set(slot, (occupancy.get(slot) ?? 0) + 1);
+        }
+    });
+    return occupancy;
+};
+const findNextRolloverSlot = (occupancy, maxPerRow) => {
+    const preferredSlots = getRolloverSlots();
+    const candidate = preferredSlots.find((slot) => (occupancy.get(slot) ?? 0) < maxPerRow);
+    if (candidate !== undefined)
+        return candidate;
+    for (let slot = ROLLED_TODO_START_SLOT + ROLLED_TODO_EARLY_MORNING_ROWS; slot <= MAX_SLOT_INDEX; slot += 1) {
+        if ((occupancy.get(slot) ?? 0) < maxPerRow)
+            return slot;
+    }
+    return MAX_SLOT_INDEX;
+};
+export const rollForwardOverdueCalendarTodos = (snapshot, today = formatLocalDate()) => {
+    const todosById = new Map(snapshot.todos.map((todo) => [todo.id, todo]));
+    const overdueTodoItems = snapshot.calendarItems
+        .filter((item) => {
+        if (item.targetType !== "todo" || item.date >= today)
+            return false;
+        const todo = todosById.get(item.targetId);
+        return Boolean(todo && !todo.isDone);
+    })
+        .sort((left, right) => {
+        const byDate = left.date.localeCompare(right.date);
+        if (byDate !== 0)
+            return byDate;
+        const bySlot = left.startSlot - right.startSlot;
+        if (bySlot !== 0)
+            return bySlot;
+        const leftTitle = todosById.get(left.targetId)?.description ?? "";
+        const rightTitle = todosById.get(right.targetId)?.description ?? "";
+        return leftTitle.localeCompare(rightTitle) || left.id.localeCompare(right.id);
+    });
+    if (!overdueTodoItems.length)
+        return { snapshot, changed: false };
+    const movingItemIds = new Set(overdueTodoItems.map((item) => item.id));
+    const occupancy = countOccupiedRolloverSlots(snapshot.calendarItems, today, movingItemIds);
+    const availableSingleRows = getRolloverSlots().filter((slot) => (occupancy.get(slot) ?? 0) === 0).length;
+    const maxPerRow = overdueTodoItems.length <= availableSingleRows ? 1 : ROLLED_TODO_MAX_PER_ROW;
+    const todayByItemId = new Map();
+    overdueTodoItems.forEach((item) => {
+        const startSlot = findNextRolloverSlot(occupancy, maxPerRow);
+        occupancy.set(startSlot, (occupancy.get(startSlot) ?? 0) + 1);
+        todayByItemId.set(item.id, { startSlot });
+    });
+    const rolloverTimestamp = new Date().toISOString();
+    const movedTodoIds = new Set(overdueTodoItems.map((item) => item.targetId));
+    const nextCalendarItems = snapshot.calendarItems.map((item) => {
+        const movedItem = todayByItemId.get(item.id);
+        if (!movedItem)
+            return item;
+        return {
+            ...item,
+            date: today,
+            startSlot: movedItem.startSlot,
+            durationSlots: 1,
+            updatedAt: rolloverTimestamp,
+        };
+    });
+    const nextTodos = snapshot.todos.map((todo) => (movedTodoIds.has(todo.id) ? { ...todo, doOn: today } : todo));
+    return {
+        snapshot: {
+            ...snapshot,
+            todos: nextTodos,
+            calendarItems: nextCalendarItems,
+        },
+        changed: true,
+    };
 };
 const parseScheduledText = (value) => {
     const trimmed = value.trim();
@@ -311,6 +395,8 @@ export const useDesktopStore = create((set, get) => ({
                 attachments: nextAttachments,
                 activities: recalculateActivitiesWithTimeLogs(loadedSnapshot.activities, loadedSnapshot.timelogs),
             };
+            const rolloverResult = rollForwardOverdueCalendarTodos(snapshot);
+            snapshot = rolloverResult.snapshot;
             const activeCandidate = getFirstActiveSessionId(snapshot.sessions);
             if (!snapshot.sessions.length || !activeCandidate) {
                 const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting", "meeting-note");
@@ -319,7 +405,7 @@ export const useDesktopStore = create((set, get) => ({
                     sessions: [replacement, ...snapshot.sessions],
                 };
             }
-            if (expiredSessionIds.size) {
+            if (expiredSessionIds.size || rolloverResult.changed) {
                 await get().repository.saveSnapshot(snapshot);
             }
             configureAITextCachePersistence({
@@ -790,6 +876,16 @@ export const useDesktopStore = create((set, get) => ({
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);
         return createdCalendarItemId;
+    },
+    rollForwardOverdueTodos: async () => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const rolloverResult = rollForwardOverdueCalendarTodos(snapshot);
+        if (!rolloverResult.changed)
+            return;
+        set({ snapshot: rolloverResult.snapshot });
+        await flushSnapshotPersist(get().repository, rolloverResult.snapshot, set);
     },
     moveCalendarItem: async (id, date, startSlot) => {
         const snapshot = get().snapshot;

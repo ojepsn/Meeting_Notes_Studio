@@ -236,6 +236,7 @@ export const App = () => {
     startTimeTracking,
     stopTimeTracking,
     createCalendarEntryFromText,
+    rollForwardOverdueTodos,
     moveCalendarItem,
     updateCalendarItem,
     convertTodoToActivity,
@@ -305,6 +306,7 @@ export const App = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const recordingSessionIdRef = useRef<string | null>(null);
+  const todoRolloverDateRef = useRef(new Date().toDateString());
 
   const buildDesktopBackupBundle = (): DesktopBackupBundle | null => {
     if (!snapshot) {
@@ -325,6 +327,20 @@ export const App = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!isLoaded || loadError) return;
+    const checkTodoRolloverDate = () => {
+      const currentDate = new Date().toDateString();
+      if (todoRolloverDateRef.current === currentDate) return;
+      todoRolloverDateRef.current = currentDate;
+      void rollForwardOverdueTodos();
+    };
+
+    checkTodoRolloverDate();
+    const intervalId = setInterval(checkTodoRolloverDate, 60000);
+    return () => clearInterval(intervalId);
+  }, [isLoaded, loadError, rollForwardOverdueTodos]);
 
   useEffect(() => {
     return () => {
