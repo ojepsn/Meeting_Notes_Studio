@@ -75,8 +75,6 @@ jobs:
             apps/desktop/src-tauri/target/release/release-assets/latest-native.json
             apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.exe
             apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.exe.sig
-            apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.msi
-            apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.msi.sig
           if-no-files-found: error
 
       - name: Publish GitHub release
@@ -87,7 +85,5 @@ jobs:
             apps/desktop/src-tauri/target/release/release-assets/latest-native.json
             apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.exe
             apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.exe.sig
-            apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.msi
-            apps/desktop/src-tauri/target/release/release-assets/NoteSmith.Desktop_*.msi.sig
           fail_on_unmatched_files: true
           generate_release_notes: true

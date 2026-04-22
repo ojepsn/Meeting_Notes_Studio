@@ -25,9 +25,12 @@ const tag = process.env.RELEASE_TAG ?? process.env.GITHUB_REF_NAME ?? `v${versio
 const releaseNotes =
   process.env.RELEASE_NOTES?.trim() || `Desktop release ${version}.`;
 
-function findRequiredFile(files, matcher, description) {
+function findRequiredFile(files, matcher, description, options = {}) {
   const match = files.find(matcher);
   if (!match) {
+    if (options.optional) {
+      return null;
+    }
     throw new Error(`Could not find ${description}.`);
   }
   return match;
@@ -39,7 +42,14 @@ function normalizeAssetName(name) {
 
 async function listFiles(dir) {
   const fs = await import("node:fs/promises");
-  return fs.readdir(dir, { withFileTypes: true });
+  try {
+    return await fs.readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
 }
 
 const nsisFiles = await listFiles(nsisDir);
@@ -59,17 +69,16 @@ const msiInstaller = findRequiredFile(
   msiFiles,
   (entry) => entry.isFile() && entry.name.endsWith(".msi") && !entry.name.endsWith(".msi.zip"),
   "MSI installer",
-).name;
-const msiSig = findRequiredFile(
-  msiFiles,
-  (entry) => entry.isFile() && entry.name.endsWith(".msi.sig"),
-  "MSI installer signature",
-).name;
+  { optional: true },
+);
+const msiSig = msiInstaller
+  ? msiFiles.find((entry) => entry.isFile() && entry.name.endsWith(".msi.sig"))
+  : null;
 
 const normalizedNsisExe = normalizeAssetName(nsisExe);
 const normalizedNsisExeSig = normalizeAssetName(nsisExeSig);
-const normalizedMsi = normalizeAssetName(msiInstaller);
-const normalizedMsiSig = normalizeAssetName(msiSig);
+const normalizedMsi = msiInstaller ? normalizeAssetName(msiInstaller.name) : null;
+const normalizedMsiSig = msiSig ? normalizeAssetName(msiSig.name) : null;
 const optionalNsisZip = nsisFiles.find(
   (entry) => entry.isFile() && entry.name.endsWith(".nsis.zip"),
 )?.name;
@@ -80,8 +89,12 @@ await mkdir(outputDir, { recursive: true });
 
 await cp(path.join(nsisDir, nsisExe), path.join(outputDir, normalizedNsisExe));
 await cp(path.join(nsisDir, nsisExeSig), path.join(outputDir, normalizedNsisExeSig));
-await cp(path.join(msiDir, msiInstaller), path.join(outputDir, normalizedMsi));
-await cp(path.join(msiDir, msiSig), path.join(outputDir, normalizedMsiSig));
+if (msiInstaller && normalizedMsi) {
+  await cp(path.join(msiDir, msiInstaller.name), path.join(outputDir, normalizedMsi));
+}
+if (msiSig && normalizedMsiSig) {
+  await cp(path.join(msiDir, msiSig.name), path.join(outputDir, normalizedMsiSig));
+}
 if (optionalNsisZip && normalizedNsisZip) {
   await cp(path.join(nsisDir, optionalNsisZip), path.join(outputDir, normalizedNsisZip));
 }
@@ -125,9 +138,13 @@ const assetList = [
   "latest-native.json",
   normalizedNsisExe,
   normalizedNsisExeSig,
-  normalizedMsi,
-  normalizedMsiSig,
 ];
+if (normalizedMsi) {
+  assetList.push(normalizedMsi);
+}
+if (normalizedMsiSig) {
+  assetList.push(normalizedMsiSig);
+}
 if (normalizedNsisZip) {
   assetList.push(normalizedNsisZip);
 }
