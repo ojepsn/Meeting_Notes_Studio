@@ -20,6 +20,11 @@ const cargoVersionMatch = cargoToml.match(/^version\s*=\s*"([^"]+)"/m);
 const cargoVersion = cargoVersionMatch?.[1]?.trim();
 const releaseTag = (process.env.GITHUB_REF_NAME || "").trim();
 
+if (releaseTag && !/^v0\.1\.\d+$/.test(releaseTag)) {
+  console.log(`Skipping desktop release version check for non-desktop tag ${releaseTag}.`);
+  process.exit(0);
+}
+
 const mismatches = [];
 
 if (!packageVersion) {
