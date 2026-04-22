@@ -9,7 +9,7 @@ const PENDING_AUDIO_STORE_NAME = "audioDrafts";
 const STORAGE_HANDLE_DB_NAME = "notesmith-storage-handles";
 const STORAGE_HANDLE_STORE_NAME = "handles";
 const STORAGE_HANDLE_KEY = "localDataFile";
-const APP_VERSION = "v0.10.31";
+const APP_VERSION = "v0.10.32";
 
 const BUILT_IN_TEMPLATES = {
   meeting: {
@@ -1199,7 +1199,11 @@ void initializeApp().catch((error) => {
     });
   });
 
-  exportSessionsButton.addEventListener("click", exportSessions);
+  exportSessionsButton.addEventListener("click", () => {
+    exportSessions().catch((error) => {
+      sessionStorageStatus.textContent = `Backup export failed: ${error.message}`;
+    });
+  });
   importSessionsButton.addEventListener("click", () => {
     importSessionsInput.click();
   });
@@ -2225,7 +2229,9 @@ void initializeApp().catch((error) => {
   closeBackupReminderButton.addEventListener("click", closeBackupReminder);
   backupReminderLaterButton.addEventListener("click", closeBackupReminder);
   backupReminderExportButton.addEventListener("click", () => {
-    exportSessions();
+    exportSessions().catch((error) => {
+      sessionStorageStatus.textContent = `Backup export failed: ${error.message}`;
+    });
     closeBackupReminder();
   });
   backupReminderSaveLocalButton.addEventListener("click", async () => {
@@ -9955,6 +9961,183 @@ async function saveBlobAsFile(blob, filename, mimeType) {
   }
 }
 
+const ZIP_BACKUP_JSON_NAME = "notesmith-backup.json";
+let zipCrcTable = null;
+
+function getZipCrcTable() {
+  if (zipCrcTable) {
+    return zipCrcTable;
+  }
+  zipCrcTable = new Uint32Array(256);
+  for (let index = 0; index < 256; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    zipCrcTable[index] = value >>> 0;
+  }
+  return zipCrcTable;
+}
+
+function calculateZipCrc32(bytes) {
+  const table = getZipCrcTable();
+  let crc = 0xffffffff;
+  bytes.forEach((byte) => {
+    crc = table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  });
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function writeZipUint16(view, offset, value) {
+  view.setUint16(offset, value, true);
+}
+
+function writeZipUint32(view, offset, value) {
+  view.setUint32(offset, value >>> 0, true);
+}
+
+function concatZipBytes(chunks) {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const output = new Uint8Array(totalLength);
+  let offset = 0;
+  chunks.forEach((chunk) => {
+    output.set(chunk, offset);
+    offset += chunk.length;
+  });
+  return output;
+}
+
+async function deflateRawZipBytes(bytes) {
+  if (typeof CompressionStream !== "function") {
+    return null;
+  }
+  try {
+    const stream = new CompressionStream("deflate-raw");
+    const writer = stream.writable.getWriter();
+    await writer.write(bytes);
+    await writer.close();
+    return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+async function inflateRawZipBytes(bytes) {
+  if (typeof DecompressionStream !== "function") {
+    throw new Error("This browser cannot read compressed ZIP backups. Please update the browser or import the unzipped JSON file.");
+  }
+  const stream = new DecompressionStream("deflate-raw");
+  const writer = stream.writable.getWriter();
+  await writer.write(bytes);
+  await writer.close();
+  return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+}
+
+async function createSingleJsonZip(jsonText, filename = ZIP_BACKUP_JSON_NAME) {
+  const filenameBytes = new TextEncoder().encode(filename);
+  const originalBytes = new TextEncoder().encode(jsonText);
+  const compressedBytes = await deflateRawZipBytes(originalBytes);
+  const payloadBytes = compressedBytes || originalBytes;
+  const method = compressedBytes ? 8 : 0;
+  const crc = calculateZipCrc32(originalBytes);
+  const localHeader = new Uint8Array(30 + filenameBytes.length);
+  const localView = new DataView(localHeader.buffer);
+  writeZipUint32(localView, 0, 0x04034b50);
+  writeZipUint16(localView, 4, 20);
+  writeZipUint16(localView, 6, 0x0800);
+  writeZipUint16(localView, 8, method);
+  writeZipUint16(localView, 10, 0);
+  writeZipUint16(localView, 12, 0);
+  writeZipUint32(localView, 14, crc);
+  writeZipUint32(localView, 18, payloadBytes.length);
+  writeZipUint32(localView, 22, originalBytes.length);
+  writeZipUint16(localView, 26, filenameBytes.length);
+  writeZipUint16(localView, 28, 0);
+  localHeader.set(filenameBytes, 30);
+
+  const centralHeader = new Uint8Array(46 + filenameBytes.length);
+  const centralView = new DataView(centralHeader.buffer);
+  writeZipUint32(centralView, 0, 0x02014b50);
+  writeZipUint16(centralView, 4, 20);
+  writeZipUint16(centralView, 6, 20);
+  writeZipUint16(centralView, 8, 0x0800);
+  writeZipUint16(centralView, 10, method);
+  writeZipUint16(centralView, 12, 0);
+  writeZipUint16(centralView, 14, 0);
+  writeZipUint32(centralView, 16, crc);
+  writeZipUint32(centralView, 20, payloadBytes.length);
+  writeZipUint32(centralView, 24, originalBytes.length);
+  writeZipUint16(centralView, 28, filenameBytes.length);
+  writeZipUint16(centralView, 30, 0);
+  writeZipUint16(centralView, 32, 0);
+  writeZipUint16(centralView, 34, 0);
+  writeZipUint16(centralView, 36, 0);
+  writeZipUint32(centralView, 38, 0);
+  writeZipUint32(centralView, 42, 0);
+  centralHeader.set(filenameBytes, 46);
+
+  const endHeader = new Uint8Array(22);
+  const endView = new DataView(endHeader.buffer);
+  writeZipUint32(endView, 0, 0x06054b50);
+  writeZipUint16(endView, 4, 0);
+  writeZipUint16(endView, 6, 0);
+  writeZipUint16(endView, 8, 1);
+  writeZipUint16(endView, 10, 1);
+  writeZipUint32(endView, 12, centralHeader.length);
+  writeZipUint32(endView, 16, localHeader.length + payloadBytes.length);
+  writeZipUint16(endView, 20, 0);
+
+  return concatZipBytes([localHeader, payloadBytes, centralHeader, endHeader]);
+}
+
+async function extractJsonFromZipBytes(zipBytes) {
+  const view = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
+  let eocdOffset = -1;
+  for (let offset = zipBytes.length - 22; offset >= 0; offset -= 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) {
+      eocdOffset = offset;
+      break;
+    }
+  }
+  if (eocdOffset < 0) {
+    throw new Error("No ZIP directory was found in that backup file.");
+  }
+  const entryCount = view.getUint16(eocdOffset + 10, true);
+  let centralOffset = view.getUint32(eocdOffset + 16, true);
+  const decoder = new TextDecoder();
+  for (let entryIndex = 0; entryIndex < entryCount; entryIndex += 1) {
+    if (view.getUint32(centralOffset, true) !== 0x02014b50) {
+      throw new Error("The ZIP backup directory is not readable.");
+    }
+    const method = view.getUint16(centralOffset + 10, true);
+    const compressedSize = view.getUint32(centralOffset + 20, true);
+    const filenameLength = view.getUint16(centralOffset + 28, true);
+    const extraLength = view.getUint16(centralOffset + 30, true);
+    const commentLength = view.getUint16(centralOffset + 32, true);
+    const localOffset = view.getUint32(centralOffset + 42, true);
+    const filename = decoder.decode(zipBytes.slice(centralOffset + 46, centralOffset + 46 + filenameLength));
+    if (filename === ZIP_BACKUP_JSON_NAME || filename.toLowerCase().endsWith(".json")) {
+      const localNameLength = view.getUint16(localOffset + 26, true);
+      const localExtraLength = view.getUint16(localOffset + 28, true);
+      const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+      const payload = zipBytes.slice(dataStart, dataStart + compressedSize);
+      const jsonBytes = method === 0 ? payload : method === 8 ? await inflateRawZipBytes(payload) : null;
+      if (!jsonBytes) {
+        throw new Error("The ZIP backup uses an unsupported compression method.");
+      }
+      return decoder.decode(jsonBytes);
+    }
+    centralOffset += 46 + filenameLength + extraLength + commentLength;
+  }
+  throw new Error("The ZIP backup did not contain a JSON backup file.");
+}
+
+async function readBackupFileText(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const isZip = file.name.toLowerCase().endsWith(".zip") || (bytes[0] === 0x50 && bytes[1] === 0x4b);
+  return isZip ? extractJsonFromZipBytes(bytes) : new TextDecoder().decode(bytes);
+}
+
 function toFileSafeName(value) {
   return value
     .toLowerCase()
@@ -9962,19 +10145,20 @@ function toFileSafeName(value) {
     .replace(/^-+|-+$/g, "") || "meeting-notes";
 }
 
-function exportSessions() {
+async function exportSessions() {
   const payload = buildSharedDataPayload();
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const zipBytes = await createSingleJsonZip(JSON.stringify(payload, null, 2));
+  const blob = new Blob([zipBytes], { type: "application/zip" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `meeting-notes-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `meeting-notes-backup-${new Date().toISOString().slice(0, 10)}.zip`;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
   markBackupCompleted();
-  sessionStorageStatus.textContent = "Backup exported to a JSON file.";
+  sessionStorageStatus.textContent = "Backup exported to a compressed ZIP file.";
 }
 
 async function importSessionsFromFile(event) {
@@ -9985,7 +10169,7 @@ async function importSessionsFromFile(event) {
   }
 
   try {
-    const text = await file.text();
+    const text = await readBackupFileText(file);
     const payload = JSON.parse(text);
     if (Array.isArray(payload) || (payload && typeof payload === "object" && Array.isArray(payload.sessions))) {
       applySharedDataPayload(Array.isArray(payload) ? { version: 1, sessions: payload } : payload);
@@ -10011,19 +10195,19 @@ async function saveSessionsToLocalFile() {
 
   try {
     const handle = await window.showSaveFilePicker({
-      suggestedName: `meeting-notes-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      suggestedName: `meeting-notes-backup-${new Date().toISOString().slice(0, 10)}.zip`,
       types: [
         {
-          description: "JSON files",
+          description: "ZIP backup files",
           accept: {
-            "application/json": [".json"],
+            "application/zip": [".zip"],
           },
         },
       ],
     });
 
     const writable = await handle.createWritable();
-    await writable.write(JSON.stringify(buildSharedDataPayload(), null, 2));
+    await writable.write(await createSingleJsonZip(JSON.stringify(buildSharedDataPayload(), null, 2)));
     await writable.close();
     markBackupCompleted();
     sessionStorageStatus.textContent = "Backup was saved to your chosen local file.";

@@ -37,11 +37,17 @@ interface CalendarWorkspaceProps {
     onDeleteTodo: (id: string) => void;
     onSaveActivity: (activity: ActivityRecord) => void;
     onDeleteActivity: (id: string) => void;
+    onConvertTodoToActivity: (todo: TodoRecord, options: {
+        date: string;
+        startTime: string;
+        endTime: string;
+    }) => void;
     onConvertTodoToMeeting: (todo: TodoRecord, options: {
         date: string;
         startTime: string;
         endTime: string;
     }) => void;
+    onRemoveCalendarItems: (ids: string[]) => void;
     onUpdateCalendarItem: (id: string, updates: {
         date: string;
         startSlot: number;
@@ -59,5 +65,5 @@ interface CalendarWorkspaceProps {
     onPreviewSessionOutput: (sessionId: string) => void;
     onFullScreenChange?: (isFullScreen: boolean) => void;
 }
-export declare const CalendarWorkspace: ({ todos, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onPreviewSessionOutput, onFullScreenChange, }: CalendarWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const CalendarWorkspace: ({ todos, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToActivity, onConvertTodoToMeeting, onRemoveCalendarItems, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onPreviewSessionOutput, onFullScreenChange, }: CalendarWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

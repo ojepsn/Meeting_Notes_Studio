@@ -236,6 +236,7 @@ export const App = () => {
     createCalendarEntryFromText,
     moveCalendarItem,
     updateCalendarItem,
+    removeCalendarItems,
     convertTodoToActivity,
     ensureSessionForActivity,
     saveSettings,
@@ -3160,6 +3161,14 @@ export const App = () => {
                 onDeleteTodo={(id) => void deleteTodo(id)}
                 onSaveActivity={(activity) => void saveActivity(activity)}
                 onDeleteActivity={(id) => void deleteActivity(id)}
+                onConvertTodoToActivity={(todo, options) =>
+                  void convertTodoToActivity(todo, {
+                    type: "task",
+                    date: options.date,
+                    startTime: options.startTime,
+                    endTime: options.endTime,
+                  })
+                }
                 onConvertTodoToMeeting={(todo, options) =>
                   void convertTodoToActivity(todo, {
                     type: "meeting",
@@ -3168,6 +3177,7 @@ export const App = () => {
                     endTime: options.endTime,
                   })
                 }
+                onRemoveCalendarItems={(ids) => void removeCalendarItems(ids)}
                 onUpdateCalendarItem={(id, updates) => void updateCalendarItem(id, updates)}
                 onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}

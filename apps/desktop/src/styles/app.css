@@ -3773,12 +3773,25 @@ select {
   font-size: 0.76rem;
 }
 
+.calendar-primary-actions .small-button {
+  min-height: 32px;
+  padding: 0.34rem 0.62rem;
+  font-size: 0.76rem;
+}
+
 .calendar-top-private-toggle {
   min-height: 32px;
   padding: 0.34rem 0.62rem;
   border: 1px solid var(--app-border);
   border-radius: 999px;
   background: color-mix(in srgb, var(--app-surface) 82%, transparent 18%);
+}
+
+.calendar-done-toggle {
+  min-height: 42px;
+  padding: 0.6rem 0.75rem;
+  border-color: color-mix(in srgb, var(--app-accent-border) 72%, var(--app-border) 28%);
+  background: color-mix(in srgb, var(--app-accent-soft) 28%, var(--app-input) 72%);
 }
 
 .calendar-workspace-header .shell-button {
@@ -4083,6 +4096,18 @@ select {
 
 .calendar-item-block-todo .calendar-item-inline-action {
   margin-top: 0.04rem;
+}
+
+.calendar-item-block-completed-todo {
+  opacity: 0.62;
+  filter: grayscale(0.35);
+}
+
+.calendar-item-block-completed-todo .calendar-item-title {
+  color: var(--app-muted);
+  text-decoration-line: line-through overline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: currentColor;
 }
 
 .calendar-item-block-todo.calendar-item-block-tiny .calendar-item-inline-action,

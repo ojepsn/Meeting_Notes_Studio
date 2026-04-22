@@ -1,12 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultSnapshot } from "../db/repository";
-import { buildSnapshotBackupFilename, mergeImportedPwaSnapshot } from "./desktopStorage";
+import { buildSnapshotBackupFilename, createSingleJsonZip, extractJsonFromZipBytes, mergeImportedPwaSnapshot } from "./desktopStorage";
 
 describe("buildSnapshotBackupFilename", () => {
   it("creates a stable timestamped backup filename", () => {
     expect(buildSnapshotBackupFilename(new Date("2026-04-02T14:30:45Z"))).toBe(
-      "notesmith-desktop-backup-2026-04-02-14-30-45.json",
+      "notesmith-desktop-backup-2026-04-02-14-30-45.zip",
     );
+  });
+});
+
+describe("backup ZIP packaging", () => {
+  it("round-trips the JSON backup payload inside a ZIP file", async () => {
+    const payload = JSON.stringify({ kind: "notesmith-test", sessions: [{ id: "session-1" }] }, null, 2);
+    const zipBytes = await createSingleJsonZip(payload);
+    const extracted = await extractJsonFromZipBytes(zipBytes);
+
+    expect(extracted).toBe(payload);
+    expect(zipBytes[0]).toBe(0x50);
+    expect(zipBytes[1]).toBe(0x4b);
   });
 });
 

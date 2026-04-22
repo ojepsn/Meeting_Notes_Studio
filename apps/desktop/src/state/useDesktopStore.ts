@@ -395,6 +395,7 @@ interface DesktopState {
   ) => Promise<string | null>;
   moveCalendarItem: (id: string, date: string, startSlot: number) => Promise<void>;
   updateCalendarItem: (id: string, updates: { date: string; startSlot: number; durationSlots: number }) => Promise<void>;
+  removeCalendarItems: (ids: string[]) => Promise<void>;
   convertTodoToActivity: (
     todo: DesktopAppSnapshot["todos"][number],
     options?: {
@@ -979,11 +980,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         const nextActivity = {
           ...activity,
           doOn: date,
-          startTime: activity.type === "meeting" ? slotToTime(normalizedSlot) : activity.startTime,
-          endTime:
-            activity.type === "meeting"
-              ? slotToTime(normalizedSlot + durationSlots)
-              : activity.endTime,
+          startTime: slotToTime(normalizedSlot),
+          endTime: slotToTime(normalizedSlot + durationSlots),
         };
         nextSnapshot = {
           ...nextSnapshot,
@@ -1030,8 +1028,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         const nextActivity = {
           ...activity,
           doOn: updates.date,
-          startTime: activity.type === "meeting" ? slotToTime(normalizedSlot) : activity.startTime,
-          endTime: activity.type === "meeting" ? slotToTime(normalizedSlot + normalizedDuration) : activity.endTime,
+          startTime: slotToTime(normalizedSlot),
+          endTime: slotToTime(normalizedSlot + normalizedDuration),
         };
         nextSnapshot = {
           ...nextSnapshot,
@@ -1046,16 +1044,33 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     set({ snapshot: nextSnapshot });
     await flushSnapshotPersist(get().repository, nextSnapshot, set);
   },
+  removeCalendarItems: async (ids) => {
+    const snapshot = get().snapshot;
+    if (!snapshot || !ids.length) return;
+    const idsToRemove = new Set(ids);
+    const nextCalendarItems = snapshot.calendarItems.filter((item) => !idsToRemove.has(item.id));
+    if (nextCalendarItems.length === snapshot.calendarItems.length) return;
+    const nextSnapshot: DesktopAppSnapshot = {
+      ...snapshot,
+      calendarItems: nextCalendarItems,
+    };
+    set({ snapshot: nextSnapshot });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
+  },
   convertTodoToActivity: async (todo, options) => {
     const snapshot = get().snapshot;
     if (!snapshot) return null;
     const nextType = options?.type ?? "task";
     const nextDate = options?.date ?? todo.doOn;
-    const nextStartTime = nextType === "meeting" ? options?.startTime || "09:00" : "";
+    const hasScheduledTime = Boolean(options?.startTime || options?.endTime);
+    const nextStartTime = nextType === "meeting" || hasScheduledTime ? options?.startTime || "09:00" : "";
     const nextEndTime =
-      nextType === "meeting"
+      nextType === "meeting" || hasScheduledTime
         ? options?.endTime || slotToTime(timeToSlot(nextStartTime) + DEFAULT_MEETING_DURATION_SLOTS)
         : "";
+    const nextStartSlot = nextStartTime ? clampSlotIndex(timeToSlot(nextStartTime)) : null;
+    const nextDurationSlots =
+      nextStartTime && nextEndTime ? Math.max(1, timeToSlot(nextEndTime) - timeToSlot(nextStartTime)) : null;
     const nextActivity = {
       id: crypto.randomUUID(),
       type: nextType,
@@ -1097,6 +1112,9 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
               ...item,
               targetType: "activity" as const,
               targetId: nextActivity.id,
+              date: nextDate || item.date,
+              startSlot: nextStartSlot ?? item.startSlot,
+              durationSlots: nextDurationSlots ?? item.durationSlots,
               updatedAt: new Date().toISOString(),
             }
           : item,

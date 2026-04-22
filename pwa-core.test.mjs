@@ -542,10 +542,12 @@ runTest("pwa keeps suggested-rule refresh attached to generation and revision fl
 runTest("pwa backup export is a full backup and import restores settings plus sessions", () => {
   assert.match(appJsSource, /function buildSharedDataPayload\(\) \{[\s\S]*?sessions,[\s\S]*?settings:\s*\{[\s\S]*?\.\.\.settings,/);
   assert.match(appJsSource, /storageMode: STORAGE_MODES\.browser/);
-  assert.match(appJsSource, /function exportSessions\(\) \{[\s\S]*?buildSharedDataPayload\(\)/);
+  assert.match(appJsSource, /async function exportSessions\(\) \{[\s\S]*?buildSharedDataPayload\(\)/);
+  assert.match(appJsSource, /createSingleJsonZip\(JSON\.stringify\(payload, null, 2\)\)/);
   assert.match(appJsSource, /meeting-notes-backup-/);
-  assert.match(appJsSource, /function importSessionsFromFile\(event\) \{[\s\S]*?applySharedDataPayload/);
+  assert.match(appJsSource, /async function importSessionsFromFile\(event\) \{[\s\S]*?readBackupFileText\(file\)[\s\S]*?applySharedDataPayload/);
   assert.match(appJsSource, /persistSettings\(\);/);
+  assert.match(indexHtmlSource, /accept="application\/json,application\/zip,\.json,\.zip"/);
 });
 
 console.log("PWA core tests passed.");

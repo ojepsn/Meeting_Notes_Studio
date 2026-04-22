@@ -35,6 +35,9 @@ export interface DesktopBackupBundle {
     aiModelPricing: AIModelPricingSnapshot | null;
 }
 export declare const buildSnapshotBackupFilename: (date?: Date) => string;
+export declare const buildSnapshotBackupJsonFilename: (date?: Date) => string;
+export declare const createSingleJsonZip: (jsonText: string, filename?: string) => Promise<Uint8Array<ArrayBuffer>>;
+export declare const extractJsonFromZipBytes: (zipBytes: Uint8Array) => Promise<string>;
 export declare const saveTextFile: ({ content, defaultFilename, filters, }: {
     content: string;
     defaultFilename: string;

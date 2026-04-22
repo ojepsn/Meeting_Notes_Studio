@@ -216,7 +216,7 @@ fn get_desktop_storage_info(app: tauri::AppHandle) -> Result<DesktopStorageInfo,
 }
 
 #[tauri::command]
-fn load_latest_local_backup(app: tauri::AppHandle) -> Result<Option<String>, String> {
+fn load_latest_local_backup(app: tauri::AppHandle) -> Result<Option<Vec<u8>>, String> {
     let storage = prepare_storage(&app)?;
     let backups_dir = PathBuf::from(storage.backups_dir);
     if !backups_dir.exists() {
@@ -227,7 +227,8 @@ fn load_latest_local_backup(app: tauri::AppHandle) -> Result<Option<String>, Str
     for entry in fs::read_dir(&backups_dir).map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
         let path = entry.path();
-        if !path.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or_default();
+        if !path.is_file() || (extension != "json" && extension != "zip") {
             continue;
         }
 
@@ -244,7 +245,7 @@ fn load_latest_local_backup(app: tauri::AppHandle) -> Result<Option<String>, Str
     }
 
     match latest_file {
-        Some((_, path)) => fs::read_to_string(path)
+        Some((_, path)) => fs::read(path)
             .map(Some)
             .map_err(|error| error.to_string()),
         None => Ok(None),

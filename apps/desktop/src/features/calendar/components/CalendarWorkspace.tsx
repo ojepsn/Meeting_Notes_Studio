@@ -80,6 +80,7 @@ type Item = {
   label: string;
   isMeeting: boolean;
   isPrivate: boolean;
+  isDone: boolean;
   lane: number;
   laneCount: number;
 };
@@ -99,6 +100,7 @@ type EditorDraft = {
   project: string;
   activity: string;
   isPrivate: boolean;
+  isDone: boolean;
   isMeeting: boolean;
 };
 
@@ -122,7 +124,9 @@ interface CalendarWorkspaceProps {
   onDeleteTodo: (id: string) => void;
   onSaveActivity: (activity: ActivityRecord) => void;
   onDeleteActivity: (id: string) => void;
+  onConvertTodoToActivity: (todo: TodoRecord, options: { date: string; startTime: string; endTime: string }) => void;
   onConvertTodoToMeeting: (todo: TodoRecord, options: { date: string; startTime: string; endTime: string }) => void;
+  onRemoveCalendarItems: (ids: string[]) => void;
   onUpdateCalendarItem: (id: string, updates: { date: string; startSlot: number; durationSlots: number }) => void;
   onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
   onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
@@ -152,7 +156,9 @@ export const CalendarWorkspace = ({
   onDeleteTodo,
   onSaveActivity,
   onDeleteActivity,
+  onConvertTodoToActivity,
   onConvertTodoToMeeting,
+  onRemoveCalendarItems,
   onUpdateCalendarItem,
   onStartTracking,
   onStopTracking,
@@ -263,11 +269,11 @@ export const CalendarWorkspace = ({
         if (item.targetType === "todo") {
           const todo = todoMap.get(item.targetId);
           if (!todo) return null;
-          return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "todo" as const, targetId: item.targetId, title: todo.description, label: "Todo", isMeeting: false, isPrivate: todo.isPrivate, lane: 0, laneCount: 1 };
+          return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "todo" as const, targetId: item.targetId, title: todo.description, label: "Todo", isMeeting: false, isPrivate: todo.isPrivate, isDone: todo.isDone, lane: 0, laneCount: 1 };
         }
         const activity = activityMap.get(item.targetId);
         if (!activity) return null;
-        return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "activity" as const, targetId: item.targetId, title: activity.description, label: activity.type === "meeting" ? "Meeting" : "Activity", isMeeting: activity.type === "meeting", isPrivate: activity.isPrivate, lane: 0, laneCount: 1 };
+        return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "activity" as const, targetId: item.targetId, title: activity.description, label: activity.type === "meeting" ? "Meeting" : "Activity", isMeeting: activity.type === "meeting", isPrivate: activity.isPrivate, isDone: activity.isDone, lane: 0, laneCount: 1 };
       })
       .filter((item): item is Item => item !== null)
       .sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.title.localeCompare(right.title));
@@ -515,12 +521,12 @@ export const CalendarWorkspace = ({
     if (calendarItem.targetType === "todo") {
       const todo = todos.find((entry) => entry.id === calendarItem.targetId);
       if (!todo) return;
-      setEditorDraft({ itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, activityId: todo.activityId, parentActivityId: "", doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isMeeting: false });
+      setEditorDraft({ itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, activityId: todo.activityId, parentActivityId: "", doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isMeeting: false });
       return;
     }
     const activity = activities.find((entry) => entry.id === calendarItem.targetId);
     if (!activity) return;
-    setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isMeeting: activity.type === "meeting" });
+    setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isMeeting: activity.type === "meeting" });
   }, [activities, calendarItems, editorDraft?.itemId, selectedItemId, todos]);
 
   useEffect(() => {
@@ -759,15 +765,15 @@ export const CalendarWorkspace = ({
 
   const persistEditorDraft = (draft: EditorDraft) => {
     const startSlot = clampSlot(timeToSlot(draft.startTime || "00:00"));
-    const durationSlots = draft.isMeeting ? Math.max(1, durationFromTimes(draft.startTime || "00:00", draft.endTime || draft.startTime || "00:05")) : 1;
+    const durationSlots = draft.targetType === "activity" ? Math.max(1, durationFromTimes(draft.startTime || "00:00", draft.endTime || draft.startTime || "00:05")) : 1;
     if (draft.targetType === "todo") {
       const todo = todos.find((entry) => entry.id === draft.targetId);
       if (!todo) return;
-      onSaveTodo({ ...todo, description: draft.title.trim() || todo.description, activityId: draft.activityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate });
+      onSaveTodo({ ...todo, description: draft.title.trim() || todo.description, activityId: draft.activityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone });
     } else {
       const activity = activities.find((entry) => entry.id === draft.targetId);
       if (!activity) return;
-      onSaveActivity({ ...activity, description: draft.title.trim() || activity.description, parentActivityId: draft.parentActivityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, startTime: draft.isMeeting ? draft.startTime : activity.startTime, endTime: draft.isMeeting ? draft.endTime : activity.endTime });
+      onSaveActivity({ ...activity, description: draft.title.trim() || activity.description, parentActivityId: draft.parentActivityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone, startTime: draft.startTime, endTime: draft.endTime });
     }
     onUpdateCalendarItem(draft.itemId, { date: draft.doOn, startSlot, durationSlots });
   };
@@ -847,6 +853,34 @@ export const CalendarWorkspace = ({
     });
   };
 
+  const convertEditorTodoToActivity = () => {
+    if (!editorDraft || editorDraft.targetType !== "todo") return;
+    const todo = todos.find((entry) => entry.id === editorDraft.targetId);
+    if (!todo) return;
+    const startTime = editorDraft.startTime || "09:00";
+    onConvertTodoToActivity(todo, {
+      date: editorDraft.doOn || today,
+      startTime,
+      endTime: editorDraft.endTime || slotToTime(timeToSlot(startTime) + DEFAULT_MEETING_DURATION_SLOTS),
+    });
+  };
+
+  const completedTodoCalendarItemIds = useMemo(
+    () => items.filter((item) => item.targetType === "todo" && item.isDone).map((item) => item.id),
+    [items],
+  );
+
+  const removeCompletedTodosFromGrid = () => {
+    if (!completedTodoCalendarItemIds.length) return;
+    const removedIds = new Set(completedTodoCalendarItemIds);
+    onRemoveCalendarItems(completedTodoCalendarItemIds);
+    setSelectedItemIds((current) => current.filter((id) => !removedIds.has(id)));
+    if (selectedItemId && removedIds.has(selectedItemId)) {
+      setSelectedItemId(null);
+      setEditorDraft(null);
+    }
+  };
+
   const deleteSelectedCalendarItems = () => {
     const idsToDelete = selectedItemIds.length ? selectedItemIds : selectedItemId ? [selectedItemId] : [];
     const targets = new Map<string, Item>();
@@ -886,6 +920,9 @@ export const CalendarWorkspace = ({
           </label>
           <button className="small-button danger-button" type="button" onClick={deleteSelectedCalendarItems} disabled={!selectedItemId && !selectedItemIds.length}>
             Delete selected
+          </button>
+          <button className="small-button" type="button" onClick={removeCompletedTodosFromGrid} disabled={!completedTodoCalendarItemIds.length}>
+            Remove completed
           </button>
         </div>
       </div>
@@ -987,7 +1024,7 @@ export const CalendarWorkspace = ({
                       item.isMeeting && durationSlots <= 3 ? "calendar-item-block-micro-meeting" : "",
                     ].filter(Boolean).map((className) => ` ${className}`).join("");
                     const inlineTodoEditForItem = inlineTodoEdit?.itemId === item.id ? inlineTodoEdit : null;
-                    return <div key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${inlineTodoEditForItem ? " calendar-item-block-inline-editing" : ""}${sizeClass}`} role="button" tabIndex={0} style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
+                    return <div key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${item.targetType === "todo" && item.isDone ? " calendar-item-block-completed-todo" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${inlineTodoEditForItem ? " calendar-item-block-inline-editing" : ""}${sizeClass}`} role="button" tabIndex={0} style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
                       const target = event.target as HTMLElement;
                       if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle") || target.closest(".calendar-item-title-input")) return;
                       event.preventDefault();
@@ -1142,6 +1179,16 @@ export const CalendarWorkspace = ({
                   onChange={(event) => updateEditorDraft({ ...editorDraft, title: event.target.value })}
                 />
               </div>
+              {editorDraft.targetType === "todo" ? (
+                <label className="compact-private-toggle calendar-done-toggle">
+                  <input
+                    type="checkbox"
+                    checked={editorDraft.isDone}
+                    onChange={(event) => updateEditorDraft({ ...editorDraft, isDone: event.target.checked })}
+                  />
+                  <span>{editorDraft.isDone ? "Done" : "Mark as done"}</span>
+                </label>
+              ) : null}
               {editorDraft.isMeeting ? (
                 <div className="inline-row">
                   <div className="field">
@@ -1186,9 +1233,9 @@ export const CalendarWorkspace = ({
                   </div>
                 </details>
               )}
-              {editorDraft.isMeeting ? (
+              {editorDraft.targetType === "activity" ? (
                 <>
-                  <div className="calendar-inspector-section-label">Linked session</div>
+                  <div className="calendar-inspector-section-label">{editorDraft.isMeeting ? "Linked session" : "Schedule time"}</div>
                   <div className="inline-row">
                     <div className="field">
                       <label htmlFor="calendar-edit-start">Start</label>
@@ -1211,7 +1258,7 @@ export const CalendarWorkspace = ({
                       />
                     </div>
                   </div>
-                  {editorDraft.targetType === "activity" ? (
+                  {editorDraft.isMeeting ? (
                     <div className="field">
                       <label>Meeting session</label>
                       <div className="calendar-linked-session-card">
@@ -1389,9 +1436,14 @@ export const CalendarWorkspace = ({
                   Open full {editorDraft.targetType === "todo" ? "todo" : "activity"}
                 </button>
                 {editorDraft.targetType === "todo" ? (
-                  <button className="shell-button" type="button" onClick={convertEditorTodoToMeeting}>
-                    Convert to meeting
-                  </button>
+                  <>
+                    <button className="shell-button" type="button" onClick={convertEditorTodoToActivity}>
+                      Convert to activity
+                    </button>
+                    <button className="shell-button" type="button" onClick={convertEditorTodoToMeeting}>
+                      Convert to meeting
+                    </button>
+                  </>
                 ) : null}
               </div>
             </div>
