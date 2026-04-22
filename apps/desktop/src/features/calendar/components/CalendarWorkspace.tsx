@@ -126,7 +126,6 @@ interface CalendarWorkspaceProps {
   onDeleteActivity: (id: string) => void;
   onConvertTodoToActivity: (todo: TodoRecord, options: { date: string; startTime: string; endTime: string }) => void;
   onConvertTodoToMeeting: (todo: TodoRecord, options: { date: string; startTime: string; endTime: string }) => void;
-  onRemoveCalendarItems: (ids: string[]) => void;
   onUpdateCalendarItem: (id: string, updates: { date: string; startSlot: number; durationSlots: number }) => void;
   onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
   onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
@@ -158,7 +157,6 @@ export const CalendarWorkspace = ({
   onDeleteActivity,
   onConvertTodoToActivity,
   onConvertTodoToMeeting,
-  onRemoveCalendarItems,
   onUpdateCalendarItem,
   onStartTracking,
   onStopTracking,
@@ -191,6 +189,7 @@ export const CalendarWorkspace = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "todo" | "activity" | "meeting">("all");
   const [visibilityFilter, setVisibilityFilter] = useState<"all" | "public" | "private">("all");
+  const [hideCompletedTodos, setHideCompletedTodos] = useState(false);
   const [inlineTodoEdit, setInlineTodoEdit] = useState<{ itemId: string; todoId: string; value: string } | null>(null);
   const [resizeState, setResizeState] = useState<null | { itemId: string; edge: "start" | "end"; date: string; startSlot: number; durationSlots: number }>(null);
   const [now, setNow] = useState(() => new Date());
@@ -323,10 +322,11 @@ export const CalendarWorkspace = ({
       if (typeFilter === "meeting" && !item.isMeeting) return false;
       if (visibilityFilter === "private" && !item.isPrivate) return false;
       if (visibilityFilter === "public" && item.isPrivate) return false;
+      if (hideCompletedTodos && item.targetType === "todo" && item.isDone) return false;
       if (!query) return true;
       return `${item.title} ${item.label}`.toLowerCase().includes(query);
     });
-  }, [items, searchQuery, typeFilter, visibilityFilter]);
+  }, [hideCompletedTodos, items, searchQuery, typeFilter, visibilityFilter]);
 
   const itemsByDate = useMemo(() => {
     const grouped = new Map<string, Item[]>();
@@ -870,16 +870,27 @@ export const CalendarWorkspace = ({
     [items],
   );
 
-  const removeCompletedTodosFromGrid = () => {
-    if (!completedTodoCalendarItemIds.length) return;
-    const removedIds = new Set(completedTodoCalendarItemIds);
-    onRemoveCalendarItems(completedTodoCalendarItemIds);
-    setSelectedItemIds((current) => current.filter((id) => !removedIds.has(id)));
-    if (selectedItemId && removedIds.has(selectedItemId)) {
+  const toggleCompletedTodosVisibility = () => {
+    const nextHidden = !hideCompletedTodos;
+    setHideCompletedTodos(nextHidden);
+    if (nextHidden && completedTodoCalendarItemIds.length) {
+      const hiddenIds = new Set(completedTodoCalendarItemIds);
+      setSelectedItemIds((current) => current.filter((id) => !hiddenIds.has(id)));
+      if (selectedItemId && hiddenIds.has(selectedItemId)) {
+        setSelectedItemId(null);
+        setEditorDraft(null);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!hideCompletedTodos || !selectedItemId) return;
+    const selected = items.find((item) => item.id === selectedItemId);
+    if (selected?.targetType === "todo" && selected.isDone) {
       setSelectedItemId(null);
       setEditorDraft(null);
     }
-  };
+  }, [hideCompletedTodos, items, selectedItemId]);
 
   const deleteSelectedCalendarItems = () => {
     const idsToDelete = selectedItemIds.length ? selectedItemIds : selectedItemId ? [selectedItemId] : [];
@@ -921,8 +932,8 @@ export const CalendarWorkspace = ({
           <button className="small-button danger-button" type="button" onClick={deleteSelectedCalendarItems} disabled={!selectedItemId && !selectedItemIds.length}>
             Delete selected
           </button>
-          <button className="small-button" type="button" onClick={removeCompletedTodosFromGrid} disabled={!completedTodoCalendarItemIds.length}>
-            Remove completed
+          <button className="small-button" type="button" onClick={toggleCompletedTodosVisibility} disabled={!completedTodoCalendarItemIds.length}>
+            {hideCompletedTodos ? "Unhide completed" : "Hide completed"}
           </button>
         </div>
       </div>
@@ -1179,56 +1190,46 @@ export const CalendarWorkspace = ({
                   onChange={(event) => updateEditorDraft({ ...editorDraft, title: event.target.value })}
                 />
               </div>
-              {editorDraft.targetType === "todo" ? (
+              <div className="calendar-editor-quick-toggles">
+                {editorDraft.targetType === "todo" ? (
+                  <label className="compact-private-toggle calendar-done-toggle">
+                    <input
+                      type="checkbox"
+                      checked={editorDraft.isDone}
+                      onChange={(event) => updateEditorDraft({ ...editorDraft, isDone: event.target.checked })}
+                    />
+                    <span>{editorDraft.isDone ? "Done" : "Mark as done"}</span>
+                  </label>
+                ) : null}
                 <label className="compact-private-toggle calendar-done-toggle">
                   <input
                     type="checkbox"
-                    checked={editorDraft.isDone}
-                    onChange={(event) => updateEditorDraft({ ...editorDraft, isDone: event.target.checked })}
+                    checked={editorDraft.isPrivate}
+                    onChange={(event) => updateEditorDraft({ ...editorDraft, isPrivate: event.target.checked })}
                   />
-                  <span>{editorDraft.isDone ? "Done" : "Mark as done"}</span>
+                  <span>Private</span>
                 </label>
-              ) : null}
+              </div>
               {editorDraft.isMeeting ? (
-                <div className="inline-row">
-                  <div className="field">
-                    <label htmlFor="calendar-edit-date">Date</label>
-                    <DateInput
-                      id="calendar-edit-date"
-                      value={editorDraft.doOn}
-                      onChange={(event) => updateEditorDraft({ ...editorDraft, doOn: event.target.value })}
-                    />
-                  </div>
-                  <label className="compact-private-toggle">
-                    <input
-                      type="checkbox"
-                      checked={editorDraft.isPrivate}
-                      onChange={(event) => updateEditorDraft({ ...editorDraft, isPrivate: event.target.checked })}
-                    />
-                    <span>Private</span>
-                  </label>
+                <div className="field">
+                  <label htmlFor="calendar-edit-date">Date</label>
+                  <DateInput
+                    id="calendar-edit-date"
+                    value={editorDraft.doOn}
+                    onChange={(event) => updateEditorDraft({ ...editorDraft, doOn: event.target.value })}
+                  />
                 </div>
               ) : (
                 <details className="workspace-disclosure calendar-inspector-disclosure">
                   <summary>Schedule details</summary>
                   <div className="workspace-disclosure-body">
-                    <div className="inline-row">
-                      <div className="field">
-                        <label htmlFor="calendar-edit-date">Date</label>
-                        <DateInput
-                          id="calendar-edit-date"
-                          value={editorDraft.doOn}
-                          onChange={(event) => updateEditorDraft({ ...editorDraft, doOn: event.target.value })}
-                        />
-                      </div>
-                      <label className="compact-private-toggle">
-                        <input
-                          type="checkbox"
-                          checked={editorDraft.isPrivate}
-                          onChange={(event) => updateEditorDraft({ ...editorDraft, isPrivate: event.target.checked })}
-                        />
-                        <span>Private</span>
-                      </label>
+                    <div className="field">
+                      <label htmlFor="calendar-edit-date">Date</label>
+                      <DateInput
+                        id="calendar-edit-date"
+                        value={editorDraft.doOn}
+                        onChange={(event) => updateEditorDraft({ ...editorDraft, doOn: event.target.value })}
+                      />
                     </div>
                   </div>
                 </details>

@@ -3794,6 +3794,12 @@ select {
   background: color-mix(in srgb, var(--app-accent-soft) 28%, var(--app-input) 72%);
 }
 
+.calendar-editor-quick-toggles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
 .calendar-workspace-header .shell-button {
   border-radius: 999px;
 }

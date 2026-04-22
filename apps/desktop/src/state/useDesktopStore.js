@@ -888,21 +888,6 @@ export const useDesktopStore = create((set, get) => ({
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);
     },
-    removeCalendarItems: async (ids) => {
-        const snapshot = get().snapshot;
-        if (!snapshot || !ids.length)
-            return;
-        const idsToRemove = new Set(ids);
-        const nextCalendarItems = snapshot.calendarItems.filter((item) => !idsToRemove.has(item.id));
-        if (nextCalendarItems.length === snapshot.calendarItems.length)
-            return;
-        const nextSnapshot = {
-            ...snapshot,
-            calendarItems: nextCalendarItems,
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
     convertTodoToActivity: async (todo, options) => {
         const snapshot = get().snapshot;
         if (!snapshot)

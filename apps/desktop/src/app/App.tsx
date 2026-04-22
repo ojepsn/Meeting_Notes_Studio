@@ -236,7 +236,6 @@ export const App = () => {
     createCalendarEntryFromText,
     moveCalendarItem,
     updateCalendarItem,
-    removeCalendarItems,
     convertTodoToActivity,
     ensureSessionForActivity,
     saveSettings,
@@ -3177,7 +3176,6 @@ export const App = () => {
                     endTime: options.endTime,
                   })
                 }
-                onRemoveCalendarItems={(ids) => void removeCalendarItems(ids)}
                 onUpdateCalendarItem={(id, updates) => void updateCalendarItem(id, updates)}
                 onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}

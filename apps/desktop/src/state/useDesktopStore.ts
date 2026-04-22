@@ -395,7 +395,6 @@ interface DesktopState {
   ) => Promise<string | null>;
   moveCalendarItem: (id: string, date: string, startSlot: number) => Promise<void>;
   updateCalendarItem: (id: string, updates: { date: string; startSlot: number; durationSlots: number }) => Promise<void>;
-  removeCalendarItems: (ids: string[]) => Promise<void>;
   convertTodoToActivity: (
     todo: DesktopAppSnapshot["todos"][number],
     options?: {
@@ -1041,19 +1040,6 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       }
     }
 
-    set({ snapshot: nextSnapshot });
-    await flushSnapshotPersist(get().repository, nextSnapshot, set);
-  },
-  removeCalendarItems: async (ids) => {
-    const snapshot = get().snapshot;
-    if (!snapshot || !ids.length) return;
-    const idsToRemove = new Set(ids);
-    const nextCalendarItems = snapshot.calendarItems.filter((item) => !idsToRemove.has(item.id));
-    if (nextCalendarItems.length === snapshot.calendarItems.length) return;
-    const nextSnapshot: DesktopAppSnapshot = {
-      ...snapshot,
-      calendarItems: nextCalendarItems,
-    };
     set({ snapshot: nextSnapshot });
     await flushSnapshotPersist(get().repository, nextSnapshot, set);
   },

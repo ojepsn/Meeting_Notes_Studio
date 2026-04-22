@@ -125,7 +125,7 @@ const buildOutputVersionPatch = (session, nextOutput) => {
     };
 };
 export const App = () => {
-    const { snapshot, activeSessionId, saveState, lastSavedAt, isLoaded, loadError, load, setActiveSessionId, setActiveView, repository, saveSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, saveTodo, addTodo, deleteTodo, saveActivity, addActivity, deleteActivity, saveTimeLog, deleteTimeLog, startTimeTracking, stopTimeTracking, createCalendarEntryFromText, moveCalendarItem, updateCalendarItem, removeCalendarItems, convertTodoToActivity, ensureSessionForActivity, saveSettings, renameDomainValue, renameProjectValue, saveTemplate, resetTemplates, importLegacyBrowserData, importBackupSnapshot: restoreBackupSnapshot, saveAttachments, } = useDesktopStore();
+    const { snapshot, activeSessionId, saveState, lastSavedAt, isLoaded, loadError, load, setActiveSessionId, setActiveView, repository, saveSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, saveTodo, addTodo, deleteTodo, saveActivity, addActivity, deleteActivity, saveTimeLog, deleteTimeLog, startTimeTracking, stopTimeTracking, createCalendarEntryFromText, moveCalendarItem, updateCalendarItem, convertTodoToActivity, ensureSessionForActivity, saveSettings, renameDomainValue, renameProjectValue, saveTemplate, resetTemplates, importLegacyBrowserData, importBackupSnapshot: restoreBackupSnapshot, saveAttachments, } = useDesktopStore();
     const [activeWorkspace, setActiveWorkspace] = useState("calendar");
     const [openPanel, setOpenPanel] = useState(null);
     const [isNotesSessionsOpen, setIsNotesSessionsOpen] = useState(false);
@@ -2070,7 +2070,7 @@ export const App = () => {
                                             date: options.date,
                                             startTime: options.startTime,
                                             endTime: options.endTime,
-                                        }), onRemoveCalendarItems: (ids) => void removeCalendarItems(ids), onUpdateCalendarItem: (id, updates) => void updateCalendarItem(id, updates), onStartTracking: (targetType, targetId) => void startTimeTracking(targetType, targetId), onStopTracking: (targetType, targetId) => void stopTimeTracking(targetType, targetId), onOpenTodoWorkspace: () => setActiveWorkspace("todos"), onOpenTodoDetail: (todoId) => openTodoDetailFromLink(todoId, "calendar"), onOpenActivityWorkspace: (activityId) => openActivityFromLink(activityId, "calendar"), onOpenActivityDetail: (activityId) => openActivityFromLink(activityId, "calendar"), onOpenSession: (sessionId, openedCalendarItemId) => {
+                                        }), onUpdateCalendarItem: (id, updates) => void updateCalendarItem(id, updates), onStartTracking: (targetType, targetId) => void startTimeTracking(targetType, targetId), onStopTracking: (targetType, targetId) => void stopTimeTracking(targetType, targetId), onOpenTodoWorkspace: () => setActiveWorkspace("todos"), onOpenTodoDetail: (todoId) => openTodoDetailFromLink(todoId, "calendar"), onOpenActivityWorkspace: (activityId) => openActivityFromLink(activityId, "calendar"), onOpenActivityDetail: (activityId) => openActivityFromLink(activityId, "calendar"), onOpenSession: (sessionId, openedCalendarItemId) => {
                                             const calendarItemId = openedCalendarItemId ??
                                                 snapshot.calendarItems.find((item) => {
                                                     if (item.targetType !== "activity")

@@ -61,7 +61,6 @@ interface DesktopState {
         startSlot: number;
         durationSlots: number;
     }) => Promise<void>;
-    removeCalendarItems: (ids: string[]) => Promise<void>;
     convertTodoToActivity: (todo: DesktopAppSnapshot["todos"][number], options?: {
         type?: DesktopAppSnapshot["activities"][number]["type"];
         date?: string;
