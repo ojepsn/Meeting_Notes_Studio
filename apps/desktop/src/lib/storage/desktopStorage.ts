@@ -330,6 +330,31 @@ export const exportSnapshotBackup = async (bundle: DesktopBackupBundle) => {
   return { path: selectedPath, savedOutsideAppData: true };
 };
 
+export const exportSnapshotBackupToDownloads = async (bundle: DesktopBackupBundle) => {
+  const content = JSON.stringify(bundle, null, 2);
+  const zipBytes = await createSingleJsonZip(content);
+  const filename = buildSnapshotBackupFilename();
+
+  if (!isTauriRuntime()) {
+    const blob = new Blob([zipBytes], { type: "application/zip" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+    return { path: filename, savedOutsideAppData: true };
+  }
+
+  const destinationPath = joinPath(await downloadDir(), filename);
+  await invoke("write_bytes_to_path", {
+    path: destinationPath,
+    bytes: Array.from(zipBytes),
+  });
+
+  return { path: destinationPath, savedOutsideAppData: true };
+};
+
 export const createLocalSnapshotBackup = async (bundle: DesktopBackupBundle) => {
   if (!isTauriRuntime()) {
     return null;

@@ -41,6 +41,7 @@ interface SettingsCardProps {
   onOpenDataFolder: () => Promise<void>;
   onOpenDatabaseFolder: () => Promise<void>;
   onExportBackup: () => Promise<void>;
+  onSaveBackupAs: () => Promise<void>;
   onCreateLocalBackup: () => Promise<void>;
   onRefreshModelPricing: () => Promise<void> | void;
   updateStatusNote?: string | null;
@@ -236,6 +237,7 @@ export const SettingsCard = ({
   onOpenDataFolder,
   onOpenDatabaseFolder,
   onExportBackup,
+  onSaveBackupAs,
   onCreateLocalBackup,
   onRefreshModelPricing,
   updateStatusNote,
@@ -1523,7 +1525,10 @@ export const SettingsCard = ({
                 Import backup / PWA file
               </button>
               <button className="small-button" type="button" onClick={() => void onExportBackup()}>
-                Export backup file
+                Export backup to Downloads
+              </button>
+              <button className="small-button" type="button" onClick={() => void onSaveBackupAs()}>
+                Save backup as...
               </button>
               <button className="small-button" type="button" onClick={() => void onCreateLocalBackup()}>
                 Create local safety backup

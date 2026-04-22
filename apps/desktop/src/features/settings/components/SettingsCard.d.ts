@@ -19,6 +19,7 @@ interface SettingsCardProps {
     onOpenDataFolder: () => Promise<void>;
     onOpenDatabaseFolder: () => Promise<void>;
     onExportBackup: () => Promise<void>;
+    onSaveBackupAs: () => Promise<void>;
     onCreateLocalBackup: () => Promise<void>;
     onRefreshModelPricing: () => Promise<void> | void;
     updateStatusNote?: string | null;
@@ -36,5 +37,5 @@ interface SettingsCardProps {
     modelPricingStatus: string;
     isRefreshingModelPricing: boolean;
 }
-export declare const SettingsCard: ({ settings, templates, initialSection, onChange, onSaveTemplate, onResetTemplates, onImportLegacy, onImportBackup, onCheckForUpdates, onInstallUpdate, onOpenManualUpdate, onOpenDataFolder, onOpenDatabaseFolder, onExportBackup, onCreateLocalBackup, onRefreshModelPricing, updateStatusNote, desktopVersion, desktopBundleType, availableUpdateVersion, manualUpdateUrl, isCheckingForUpdates, isInstallingUpdate, storageInfo, aiDiagnostics, aiRequestHistory, textModelOptions, transcriptionModelOptions, modelPricingStatus, isRefreshingModelPricing, }: SettingsCardProps) => import("react/jsx-runtime").JSX.Element;
+export declare const SettingsCard: ({ settings, templates, initialSection, onChange, onSaveTemplate, onResetTemplates, onImportLegacy, onImportBackup, onCheckForUpdates, onInstallUpdate, onOpenManualUpdate, onOpenDataFolder, onOpenDatabaseFolder, onExportBackup, onSaveBackupAs, onCreateLocalBackup, onRefreshModelPricing, updateStatusNote, desktopVersion, desktopBundleType, availableUpdateVersion, manualUpdateUrl, isCheckingForUpdates, isInstallingUpdate, storageInfo, aiDiagnostics, aiRequestHistory, textModelOptions, transcriptionModelOptions, modelPricingStatus, isRefreshingModelPricing, }: SettingsCardProps) => import("react/jsx-runtime").JSX.Element;
 export {};

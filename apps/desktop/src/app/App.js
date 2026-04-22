@@ -26,7 +26,7 @@ import { checkForDesktopUpdates } from "../lib/ai/updater";
 import { exportOutputAsDocx, exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsPdf, exportOutputAsText } from "../lib/export/exportService";
 import { fileToAttachmentRecord, loadPersistedAttachmentFile, pickAudioFile, pickImageFile, pickTranscriptFile, persistGeneratedAttachment, persistSelectedAttachment, readTranscriptFile, removePersistedAttachment, } from "../lib/files/attachmentStore";
 import { buildRecordingFilename, getSupportedRecordingMimeType, getSystemAudioDisplayOptions, RECORDING_MODE_LABELS, } from "../lib/files/recording";
-import { createLocalSnapshotBackup, exportSnapshotBackup, getDesktopBundleType, getDesktopAppVersion, getDesktopStorageInfo, importSnapshotBackup, mergeImportedPwaSnapshot, openDesktopPath, } from "../lib/storage/desktopStorage";
+import { createLocalSnapshotBackup, exportSnapshotBackup, exportSnapshotBackupToDownloads, getDesktopBundleType, getDesktopAppVersion, getDesktopStorageInfo, importSnapshotBackup, mergeImportedPwaSnapshot, openDesktopPath, } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW } from "../lib/metadata/review";
 import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links/entityLinks";
 import { polishNonAiNotesText } from "../lib/output/manualPolish";
@@ -952,15 +952,29 @@ export const App = () => {
                 setStatusNote("Nothing is loaded yet to export.");
                 return;
             }
+            const result = await exportSnapshotBackupToDownloads(backupBundle);
+            setStatusNote(`Exported a desktop backup file to ${result.path}.`);
+        }
+        catch (error) {
+            setStatusNote(error instanceof Error ? error.message : "Could not export the desktop backup file.");
+        }
+    };
+    const handleSaveSnapshotAs = async () => {
+        try {
+            const backupBundle = buildDesktopBackupBundle();
+            if (!backupBundle) {
+                setStatusNote("Nothing is loaded yet to export.");
+                return;
+            }
             const result = await exportSnapshotBackup(backupBundle);
             if (!result) {
                 setStatusNote("Backup export was cancelled.");
                 return;
             }
-            setStatusNote(`Exported a desktop backup file to ${result.path}.`);
+            setStatusNote(`Saved a desktop backup file to ${result.path}.`);
         }
         catch (error) {
-            setStatusNote(error instanceof Error ? error.message : "Could not export the desktop backup file.");
+            setStatusNote(error instanceof Error ? error.message : "Could not save the desktop backup file.");
         }
     };
     const handleCreateLocalBackup = async () => {
@@ -1082,8 +1096,12 @@ export const App = () => {
         try {
             const backupBundle = buildDesktopBackupBundle();
             const backupPath = backupBundle ? await createLocalSnapshotBackup(backupBundle) : null;
+            const downloadsBackupPath = backupBundle ? await exportSnapshotBackupToDownloads(backupBundle) : null;
             if (backupPath) {
                 setStatusNote(`Created a local safety backup at ${backupPath} before installing ${availableUpdateVersion}.`);
+            }
+            if (downloadsBackupPath) {
+                setStatusNote(`Created a Downloads backup at ${downloadsBackupPath.path} before installing ${availableUpdateVersion}.`);
             }
             let timeoutId = null;
             try {
@@ -1122,8 +1140,13 @@ export const App = () => {
             return;
         }
         try {
+            const backupBundle = buildDesktopBackupBundle();
+            if (backupBundle) {
+                const backupPath = await exportSnapshotBackupToDownloads(backupBundle);
+                setStatusNote(`Created a Downloads backup at ${backupPath.path} before opening the installer download.`);
+            }
             await openDesktopPath(manualUpdateUrl);
-            setStatusNote("Opened the GitHub release page for manual update download.");
+            setStatusNote("Created a Downloads backup, then opened the GitHub release page for manual update download.");
         }
         catch (error) {
             setStatusNote(error instanceof Error ? error.message : "Could not open the GitHub release page.");
@@ -2080,11 +2103,11 @@ export const App = () => {
                                         closeOverlay();
                                     }, children: "Not now" })] })] }));
             case "settings":
-                return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onResetTemplates: handleResetTemplates, onImportLegacy: handleImportLegacy, onImportBackup: handleImportBackup, onCheckForUpdates: handleCheckForUpdates, onInstallUpdate: handleInstallUpdate, onOpenManualUpdate: handleOpenManualUpdate, onOpenDataFolder: handleOpenDataFolder, onOpenDatabaseFolder: handleOpenDatabaseFolder, onExportBackup: handleExportSnapshot, onCreateLocalBackup: handleCreateLocalBackup, updateStatusNote: updateStatusNote, desktopVersion: desktopVersion, desktopBundleType: desktopBundleType, availableUpdateVersion: availableUpdateVersion, manualUpdateUrl: manualUpdateUrl, isCheckingForUpdates: isCheckingForUpdates, isInstallingUpdate: isInstallingUpdate, storageInfo: storageInfo, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
+                return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onResetTemplates: handleResetTemplates, onImportLegacy: handleImportLegacy, onImportBackup: handleImportBackup, onCheckForUpdates: handleCheckForUpdates, onInstallUpdate: handleInstallUpdate, onOpenManualUpdate: handleOpenManualUpdate, onOpenDataFolder: handleOpenDataFolder, onOpenDatabaseFolder: handleOpenDatabaseFolder, onExportBackup: handleExportSnapshot, onSaveBackupAs: handleSaveSnapshotAs, onCreateLocalBackup: handleCreateLocalBackup, updateStatusNote: updateStatusNote, desktopVersion: desktopVersion, desktopBundleType: desktopBundleType, availableUpdateVersion: availableUpdateVersion, manualUpdateUrl: manualUpdateUrl, isCheckingForUpdates: isCheckingForUpdates, isInstallingUpdate: isInstallingUpdate, storageInfo: storageInfo, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
             case "more":
                 return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "More tools" }), _jsx("p", { children: "Secondary utilities stay grouped here so the main workspace remains calm and obvious." })] }), _jsxs("div", { className: "stack", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => setActiveWorkspace("todos"), children: "Open Todos workspace" }), _jsx("button", { className: "small-button", type: "button", onClick: () => setOpenPanel("backup"), children: "Open Back-up" }), _jsx("button", { className: "small-button", type: "button", onClick: () => openSettingsSection("other"), children: "Open Other settings" })] })] }));
             case "backup":
-                return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Back-up" }), _jsx("p", { children: "Keep backup and migration actions accessible without leaving the focused Notes workspace." })] }), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportLegacy(), children: "Import current browser data" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportBackup(), children: "Import backup file" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleExportSnapshot(), children: "Export backup file" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleCreateLocalBackup(), children: "Create local safety backup" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleOpenDataFolder(), children: "Open data folder" })] }), storageInfo ? (_jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Desktop version" }), _jsx("span", { className: "muted", children: desktopVersion || "Unknown" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Database path" }), _jsx("span", { className: "muted", children: storageInfo.databasePath })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Backups folder" }), _jsx("span", { className: "muted", children: storageInfo.backupsDir })] })] })) : null, _jsx("p", { className: "tiny-text", children: "Export a backup file to a folder outside AppData before uninstalling the app." })] }));
+                return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Back-up" }), _jsx("p", { children: "Keep backup and migration actions accessible without leaving the focused Notes workspace." })] }), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportLegacy(), children: "Import current browser data" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportBackup(), children: "Import backup file" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleExportSnapshot(), children: "Export backup to Downloads" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleSaveSnapshotAs(), children: "Save backup as..." }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleCreateLocalBackup(), children: "Create local safety backup" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleOpenDataFolder(), children: "Open data folder" })] }), storageInfo ? (_jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Desktop version" }), _jsx("span", { className: "muted", children: desktopVersion || "Unknown" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Database path" }), _jsx("span", { className: "muted", children: storageInfo.databasePath })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Backups folder" }), _jsx("span", { className: "muted", children: storageInfo.backupsDir })] })] })) : null, _jsx("p", { className: "tiny-text", children: "Export a backup file to a folder outside AppData before uninstalling the app." })] }));
             default:
                 return null;
         }

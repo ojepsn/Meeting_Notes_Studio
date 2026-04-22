@@ -57,6 +57,10 @@ export declare const exportSnapshotBackup: (bundle: DesktopBackupBundle) => Prom
     path: string;
     savedOutsideAppData: boolean;
 } | null>;
+export declare const exportSnapshotBackupToDownloads: (bundle: DesktopBackupBundle) => Promise<{
+    path: string;
+    savedOutsideAppData: boolean;
+}>;
 export declare const createLocalSnapshotBackup: (bundle: DesktopBackupBundle) => Promise<string | null>;
 export declare const mergeImportedPwaSnapshot: (current: DesktopAppSnapshot, imported: DesktopAppSnapshot) => DesktopAppSnapshot;
 export declare const importSnapshotBackup: () => Promise<ImportedSnapshotResult | null>;

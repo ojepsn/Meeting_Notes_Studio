@@ -56,6 +56,7 @@ import {
   type DesktopBackupBundle,
   createLocalSnapshotBackup,
   exportSnapshotBackup,
+  exportSnapshotBackupToDownloads,
   getDesktopBundleType,
   getDesktopAppVersion,
   getDesktopStorageInfo,
@@ -1296,14 +1297,28 @@ export const App = () => {
         setStatusNote("Nothing is loaded yet to export.");
         return;
       }
+      const result = await exportSnapshotBackupToDownloads(backupBundle);
+      setStatusNote(`Exported a desktop backup file to ${result.path}.`);
+    } catch (error) {
+      setStatusNote(error instanceof Error ? error.message : "Could not export the desktop backup file.");
+    }
+  };
+
+  const handleSaveSnapshotAs = async () => {
+    try {
+      const backupBundle = buildDesktopBackupBundle();
+      if (!backupBundle) {
+        setStatusNote("Nothing is loaded yet to export.");
+        return;
+      }
       const result = await exportSnapshotBackup(backupBundle);
       if (!result) {
         setStatusNote("Backup export was cancelled.");
         return;
       }
-      setStatusNote(`Exported a desktop backup file to ${result.path}.`);
+      setStatusNote(`Saved a desktop backup file to ${result.path}.`);
     } catch (error) {
-      setStatusNote(error instanceof Error ? error.message : "Could not export the desktop backup file.");
+      setStatusNote(error instanceof Error ? error.message : "Could not save the desktop backup file.");
     }
   };
 
@@ -1424,8 +1439,12 @@ export const App = () => {
     try {
       const backupBundle = buildDesktopBackupBundle();
       const backupPath = backupBundle ? await createLocalSnapshotBackup(backupBundle) : null;
+      const downloadsBackupPath = backupBundle ? await exportSnapshotBackupToDownloads(backupBundle) : null;
       if (backupPath) {
         setStatusNote(`Created a local safety backup at ${backupPath} before installing ${availableUpdateVersion}.`);
+      }
+      if (downloadsBackupPath) {
+        setStatusNote(`Created a Downloads backup at ${downloadsBackupPath.path} before installing ${availableUpdateVersion}.`);
       }
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
       try {
@@ -1466,8 +1485,13 @@ export const App = () => {
       return;
     }
     try {
+      const backupBundle = buildDesktopBackupBundle();
+      if (backupBundle) {
+        const backupPath = await exportSnapshotBackupToDownloads(backupBundle);
+        setStatusNote(`Created a Downloads backup at ${backupPath.path} before opening the installer download.`);
+      }
       await openDesktopPath(manualUpdateUrl);
-      setStatusNote("Opened the GitHub release page for manual update download.");
+      setStatusNote("Created a Downloads backup, then opened the GitHub release page for manual update download.");
     } catch (error) {
       setStatusNote(error instanceof Error ? error.message : "Could not open the GitHub release page.");
     }
@@ -2890,6 +2914,7 @@ export const App = () => {
             onOpenDataFolder={handleOpenDataFolder}
             onOpenDatabaseFolder={handleOpenDatabaseFolder}
             onExportBackup={handleExportSnapshot}
+            onSaveBackupAs={handleSaveSnapshotAs}
             onCreateLocalBackup={handleCreateLocalBackup}
             updateStatusNote={updateStatusNote}
             desktopVersion={desktopVersion}
@@ -2943,7 +2968,10 @@ export const App = () => {
                 Import backup file
               </button>
               <button className="small-button" type="button" onClick={() => void handleExportSnapshot()}>
-                Export backup file
+                Export backup to Downloads
+              </button>
+              <button className="small-button" type="button" onClick={() => void handleSaveSnapshotAs()}>
+                Save backup as...
               </button>
               <button className="small-button" type="button" onClick={() => void handleCreateLocalBackup()}>
                 Create local safety backup
