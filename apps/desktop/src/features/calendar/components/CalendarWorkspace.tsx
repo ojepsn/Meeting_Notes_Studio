@@ -185,6 +185,7 @@ export const CalendarWorkspace = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "todo" | "activity" | "meeting">("all");
   const [visibilityFilter, setVisibilityFilter] = useState<"all" | "public" | "private">("all");
+  const [inlineTodoEdit, setInlineTodoEdit] = useState<{ itemId: string; todoId: string; value: string } | null>(null);
   const [resizeState, setResizeState] = useState<null | { itemId: string; edge: "start" | "end"; date: string; startSlot: number; durationSlots: number }>(null);
   const [now, setNow] = useState(() => new Date());
   const layoutRef = useRef<HTMLDivElement | null>(null);
@@ -335,6 +336,7 @@ export const CalendarWorkspace = ({
     () => (selectedItemId ? items.find((item) => item.id === selectedItemId) ?? null : null),
     [items, selectedItemId],
   );
+  const showPrivateItems = visibilityFilter !== "public";
   const editorProjectOptions = editorDraft ? getProjectsForDomain(structureOptions, editorDraft.domain) : [];
   const editorActivityOptions = editorDraft ? getActivitiesForSelection(structureOptions, editorDraft.domain, editorDraft.project) : [];
   const linkedActivityOptions = topLevelActivities.filter((activity) => {
@@ -520,6 +522,34 @@ export const CalendarWorkspace = ({
     if (!activity) return;
     setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isMeeting: activity.type === "meeting" });
   }, [activities, calendarItems, editorDraft?.itemId, selectedItemId, todos]);
+
+  useEffect(() => {
+    if (!inlineTodoEdit || selectedItemId === inlineTodoEdit.itemId) return;
+    setInlineTodoEdit(null);
+  }, [inlineTodoEdit, selectedItemId]);
+
+  useEffect(() => {
+    if (!selectedItem || selectedItem.targetType !== "todo" || inlineTodoEdit) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const todo = todos.find((entry) => entry.id === selectedItem.targetId);
+      if (!todo) return;
+      if (event.key.length === 1) {
+        event.preventDefault();
+        setInlineTodoEdit({ itemId: selectedItem.id, todoId: todo.id, value: event.key });
+      } else if (event.key === "Backspace" || event.key === "Delete") {
+        event.preventDefault();
+        setInlineTodoEdit({ itemId: selectedItem.id, todoId: todo.id, value: "" });
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        setInlineTodoEdit({ itemId: selectedItem.id, todoId: todo.id, value: todo.description });
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [inlineTodoEdit, selectedItem, todos]);
 
   useEffect(() => {
     setSelectedItemIds((current) => current.filter((id) => items.some((item) => item.id === id)));
@@ -747,6 +777,18 @@ export const CalendarWorkspace = ({
     persistEditorDraft(draft);
   };
 
+  const saveInlineTodoEdit = () => {
+    if (!inlineTodoEdit) return;
+    const todo = todos.find((entry) => entry.id === inlineTodoEdit.todoId);
+    if (todo) {
+      const nextTitle = inlineTodoEdit.value.trim();
+      if (nextTitle && nextTitle !== todo.description) {
+        onSaveTodo({ ...todo, description: nextTitle });
+      }
+    }
+    setInlineTodoEdit(null);
+  };
+
   const handleEditorDomainChange = (domain: string) => {
     if (!editorDraft) return;
     const nextProjects = getProjectsForDomain(structureOptions, domain);
@@ -834,6 +876,14 @@ export const CalendarWorkspace = ({
           <button className="shell-button" type="button" onClick={() => jumpToCalendarDate(addDays(anchorDate, -daysInView))}>Previous</button>
           <button className="shell-button" type="button" onClick={() => { const currentDate = new Date(); jumpToCalendarDate(getLocalDateString(currentDate)); window.requestAnimationFrame(() => scrollToCurrentTime(currentDate)); }}>Today</button>
           <button className="shell-button" type="button" onClick={() => jumpToCalendarDate(addDays(anchorDate, daysInView))}>Next</button>
+          <label className="compact-private-toggle calendar-top-private-toggle">
+            <input
+              type="checkbox"
+              checked={showPrivateItems}
+              onChange={(event) => setVisibilityFilter(event.target.checked ? "all" : "public")}
+            />
+            <span>Show private</span>
+          </label>
           <button className="small-button danger-button" type="button" onClick={deleteSelectedCalendarItems} disabled={!selectedItemId && !selectedItemIds.length}>
             Delete selected
           </button>
@@ -936,9 +986,10 @@ export const CalendarWorkspace = ({
                       item.isMeeting && durationSlots <= 6 ? "calendar-item-block-short-meeting" : "",
                       item.isMeeting && durationSlots <= 3 ? "calendar-item-block-micro-meeting" : "",
                     ].filter(Boolean).map((className) => ` ${className}`).join("");
-                    return <button key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${sizeClass}`} type="button" style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
+                    const inlineTodoEditForItem = inlineTodoEdit?.itemId === item.id ? inlineTodoEdit : null;
+                    return <div key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${inlineTodoEditForItem ? " calendar-item-block-inline-editing" : ""}${sizeClass}`} role="button" tabIndex={0} style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
                       const target = event.target as HTMLElement;
-                      if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle")) return;
+                      if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle") || target.closest(".calendar-item-title-input")) return;
                       event.preventDefault();
                       pointerDragCandidateRef.current = { itemId: item.id, startX: event.clientX, startY: event.clientY };
                       draggedGroupRef.current = { anchorId: item.id, itemIds: itemIdsForDrag(item.id) };
@@ -948,7 +999,28 @@ export const CalendarWorkspace = ({
                         {item.isMeeting ? "Meeting" : item.targetType === "todo" ? "Todo" : "Activity"}
                         {item.isPrivate ? " • Private" : ""}
                       </span>
-                      <strong className="calendar-item-title">{slotToTime(startSlot)} {item.title}</strong>
+                      {inlineTodoEditForItem ? (
+                        <input
+                          className="calendar-item-title calendar-item-title-input"
+                          autoFocus
+                          value={inlineTodoEditForItem.value}
+                          onChange={(event) => setInlineTodoEdit((current) => current ? { ...current, value: event.target.value } : current)}
+                          onBlur={saveInlineTodoEdit}
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              saveInlineTodoEdit();
+                            } else if (event.key === "Escape") {
+                              event.preventDefault();
+                              setInlineTodoEdit(null);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <strong className="calendar-item-title">{slotToTime(startSlot)} {item.title}</strong>
+                      )}
                       <span className="calendar-item-meta">{item.isMeeting ? durationLabel(durationSlots) : item.label}{runningLog ? ` • Running ${runningLabel}` : ""}</span>
                       {linkedSessionState?.sessionId ? (
                         <span className={`calendar-item-link-state${linkedSessionState.hasOutput ? " calendar-item-link-state-output" : ""}`}>
@@ -1037,7 +1109,7 @@ export const CalendarWorkspace = ({
                         {runningLog ? "Stop" : "Start"}
                       </span>
                       {item.isMeeting ? <span className="calendar-resize-handle calendar-resize-handle-end" onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "end", date: item.date, startSlot, durationSlots }); }} /> : null}
-                    </button>;
+                    </div>;
                   })}
                 </div>;
               })}

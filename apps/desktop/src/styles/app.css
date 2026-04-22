@@ -3773,6 +3773,14 @@ select {
   font-size: 0.76rem;
 }
 
+.calendar-top-private-toggle {
+  min-height: 32px;
+  padding: 0.34rem 0.62rem;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-surface) 82%, transparent 18%);
+}
+
 .calendar-workspace-header .shell-button {
   border-radius: 999px;
 }
@@ -3964,6 +3972,22 @@ select {
   line-height: 1.12;
   min-height: 0.85rem;
   color: var(--app-text);
+}
+
+.calendar-item-title-input {
+  width: 100%;
+  min-height: 0;
+  padding: 0.02rem 0.16rem;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 6px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  outline: none;
+  cursor: text;
+}
+
+.calendar-item-block-inline-editing {
+  cursor: text;
 }
 
 .calendar-item-block span {
