@@ -30,6 +30,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ojepsn/agent_platform
+          ref: main
           path: agent_platform
 
       - name: Setup Node
