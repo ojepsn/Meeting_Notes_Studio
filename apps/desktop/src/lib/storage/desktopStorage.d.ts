@@ -55,6 +55,11 @@ export declare const saveTextFile: ({ content, defaultFilename, filters, }: {
 } | null>;
 export declare const getDesktopStorageInfo: () => Promise<DesktopStorageInfo | null>;
 export declare const openDesktopPath: (path: string) => Promise<void>;
+export declare const revealDesktopPath: (path: string) => Promise<void>;
+export declare const openDesktopUrl: (url: string) => Promise<void>;
+export declare const downloadInstallerToDownloads: (url: string, version: string) => Promise<{
+    path: string;
+}>;
 export declare const downloadInstallerToDownloadsAndOpen: (url: string, version: string) => Promise<{
     path: string;
 }>;

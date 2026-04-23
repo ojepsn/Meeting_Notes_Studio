@@ -55,6 +55,7 @@ import {
 import {
   type DesktopBackupBundle,
   createLocalSnapshotBackup,
+  downloadInstallerToDownloads,
   downloadInstallerToDownloadsAndOpen,
   exportSnapshotBackup,
   exportSnapshotBackupToDownloads,
@@ -65,6 +66,8 @@ import {
   importSnapshotBackup,
   mergeImportedPwaSnapshot,
   openDesktopPath,
+  openDesktopUrl,
+  revealDesktopPath,
   type LocalBackupInfo,
   type DesktopStorageInfo,
 } from "../lib/storage/desktopStorage";
@@ -1468,6 +1471,13 @@ export const App = () => {
       if (downloadsBackupPath) {
         setStatusNote(`Created a Downloads backup at ${downloadsBackupPath.path} before installing ${availableUpdateVersion}.`);
       }
+      if (!manualUpdateUrl.toLocaleLowerCase().includes(".exe")) {
+        await openDesktopUrl(manualUpdateUrl);
+        setUpdateStatusNote(`Opened the GitHub release page for ${availableUpdateVersion}. Download and run the installer from there.`);
+        setStatusNote(`Opened GitHub Releases for update ${availableUpdateVersion}.`);
+        setAvailableUpdateVersion(null);
+        return;
+      }
       setUpdateStatusNote(`Downloading the signed ${availableUpdateVersion} installer to Downloads...`);
       const installer = await downloadInstallerToDownloadsAndOpen(manualUpdateUrl, availableUpdateVersion);
       setUpdateStatusNote(
@@ -1494,8 +1504,18 @@ export const App = () => {
         const backupPath = await exportSnapshotBackupToDownloads(backupBundle);
         setStatusNote(`Created a Downloads backup at ${backupPath.path} before opening the installer download.`);
       }
-      await openDesktopPath(manualUpdateUrl);
-      setStatusNote("Created a Downloads backup, then opened the GitHub release page for manual update download.");
+      setUpdateStatusNote(`Downloading installer for ${availableUpdateVersion ?? "the latest version"} to Downloads...`);
+      if (manualUpdateUrl.toLocaleLowerCase().includes(".exe")) {
+        const installer = await downloadInstallerToDownloads(manualUpdateUrl, availableUpdateVersion ?? "latest");
+        await revealDesktopPath(installer.path);
+        setStatusNote(`Downloaded installer to ${installer.path}.`);
+        setUpdateStatusNote(`Downloaded installer to ${installer.path}. Run it when you are ready to update.`);
+        return;
+      }
+
+      await openDesktopUrl(manualUpdateUrl);
+      setStatusNote("Opened the GitHub release page for manual update download.");
+      setUpdateStatusNote("Opened the GitHub release page for manual update download.");
     } catch (error) {
       setStatusNote(error instanceof Error ? error.message : "Could not open the GitHub release page.");
     }

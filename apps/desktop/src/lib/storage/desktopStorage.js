@@ -215,6 +215,22 @@ export const openDesktopPath = async (path) => {
     }
     await invoke("open_path_in_file_manager", { path });
 };
+export const revealDesktopPath = async (path) => {
+    if (!isTauriRuntime() || !path) {
+        return;
+    }
+    await invoke("reveal_path_in_file_manager", { path });
+};
+export const openDesktopUrl = async (url) => {
+    if (!url) {
+        return;
+    }
+    if (!isTauriRuntime()) {
+        window.open(url, "_blank", "noopener,noreferrer");
+        return;
+    }
+    await invoke("open_url_in_default_browser", { url });
+};
 const getFilenameFromUrl = (url, fallback) => {
     try {
         const parsed = new URL(url);
@@ -225,9 +241,9 @@ const getFilenameFromUrl = (url, fallback) => {
         return fallback;
     }
 };
-export const downloadInstallerToDownloadsAndOpen = async (url, version) => {
+export const downloadInstallerToDownloads = async (url, version) => {
     if (!isTauriRuntime()) {
-        window.open(url, "_blank", "noopener,noreferrer");
+        await openDesktopUrl(url);
         return { path: url };
     }
     const filename = getFilenameFromUrl(url, `NoteSmith.Desktop_${version}_x64-setup.exe`);
@@ -236,8 +252,19 @@ export const downloadInstallerToDownloadsAndOpen = async (url, version) => {
         url,
         path: destinationPath,
     });
-    await openDesktopPath(downloadedPath);
     return { path: downloadedPath };
+};
+export const downloadInstallerToDownloadsAndOpen = async (url, version) => {
+    const downloaded = await downloadInstallerToDownloads(url, version);
+    if (!isTauriRuntime()) {
+        return downloaded;
+    }
+    if (downloaded.path.toLocaleLowerCase().endsWith(".exe")) {
+        await invoke("launch_installer_file", { path: downloaded.path });
+        return downloaded;
+    }
+    await revealDesktopPath(downloaded.path);
+    return downloaded;
 };
 export const getDesktopAppVersion = async () => {
     if (!isTauriRuntime()) {

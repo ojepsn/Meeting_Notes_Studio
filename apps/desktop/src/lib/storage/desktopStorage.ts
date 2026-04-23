@@ -284,6 +284,27 @@ export const openDesktopPath = async (path: string) => {
   await invoke("open_path_in_file_manager", { path });
 };
 
+export const revealDesktopPath = async (path: string) => {
+  if (!isTauriRuntime() || !path) {
+    return;
+  }
+
+  await invoke("reveal_path_in_file_manager", { path });
+};
+
+export const openDesktopUrl = async (url: string) => {
+  if (!url) {
+    return;
+  }
+
+  if (!isTauriRuntime()) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  await invoke("open_url_in_default_browser", { url });
+};
+
 const getFilenameFromUrl = (url: string, fallback: string) => {
   try {
     const parsed = new URL(url);
@@ -294,9 +315,9 @@ const getFilenameFromUrl = (url: string, fallback: string) => {
   }
 };
 
-export const downloadInstallerToDownloadsAndOpen = async (url: string, version: string) => {
+export const downloadInstallerToDownloads = async (url: string, version: string) => {
   if (!isTauriRuntime()) {
-    window.open(url, "_blank", "noopener,noreferrer");
+    await openDesktopUrl(url);
     return { path: url };
   }
 
@@ -306,8 +327,22 @@ export const downloadInstallerToDownloadsAndOpen = async (url: string, version: 
     url,
     path: destinationPath,
   });
-  await openDesktopPath(downloadedPath);
   return { path: downloadedPath };
+};
+
+export const downloadInstallerToDownloadsAndOpen = async (url: string, version: string) => {
+  const downloaded = await downloadInstallerToDownloads(url, version);
+  if (!isTauriRuntime()) {
+    return downloaded;
+  }
+
+  if (downloaded.path.toLocaleLowerCase().endsWith(".exe")) {
+    await invoke("launch_installer_file", { path: downloaded.path });
+    return downloaded;
+  }
+
+  await revealDesktopPath(downloaded.path);
+  return downloaded;
 };
 
 export const getDesktopAppVersion = async () => {

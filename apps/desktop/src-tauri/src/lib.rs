@@ -447,6 +447,117 @@ fn open_path_in_file_manager(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn reveal_path_in_file_manager(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(format!("/select,{}", path))
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg("-R")
+            .arg(path)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let target = PathBuf::from(path);
+        let folder = target
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_string_lossy()
+            .to_string();
+        Command::new("xdg-open")
+            .arg(folder)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[allow(unreachable_code)]
+    Err("Opening the installer location is not supported on this platform.".to_string())
+}
+
+#[tauri::command]
+fn open_url_in_default_browser(url: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("rundll32")
+            .arg("url.dll,FileProtocolHandler")
+            .arg(url)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(url)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(url)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[allow(unreachable_code)]
+    Err("Opening URLs is not supported on this platform.".to_string())
+}
+
+#[tauri::command]
+fn launch_installer_file(path: String) -> Result<(), String> {
+    let installer = PathBuf::from(&path);
+    if !installer.is_file() {
+        return Err(format!("Installer was not found at {path}."));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new(installer)
+            .spawn()
+            .map_err(|error| format!("Could not launch installer: {error}"))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(installer)
+            .spawn()
+            .map_err(|error| format!("Could not open installer: {error}"))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(installer)
+            .spawn()
+            .map_err(|error| format!("Could not open installer: {error}"))?;
+        return Ok(());
+    }
+
+    #[allow(unreachable_code)]
+    Err("Launching installers is not supported on this platform.".to_string())
+}
+
+#[tauri::command]
 fn write_bytes_into_app_data(
     app: tauri::AppHandle,
     session_id: String,
@@ -557,6 +668,9 @@ pub fn run() {
             get_latest_local_backup_info,
             delete_persisted_file,
             open_path_in_file_manager,
+            reveal_path_in_file_manager,
+            open_url_in_default_browser,
+            launch_installer_file,
             load_update_manifest,
             download_url_to_path
         ])
