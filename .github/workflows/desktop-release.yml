@@ -26,13 +26,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Checkout agent platform
-        uses: actions/checkout@v6
-        with:
-          repository: ojepsn/agent_platform
-          ref: main
-          path: agent_platform
-
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -64,8 +57,6 @@ jobs:
         run: node ./scripts/verify-desktop-release-version.mjs
 
       - name: Build bundled agent sidecar
-        env:
-          AGENT_PLATFORM_REPO_PATH: ${{ github.workspace }}/agent_platform
         run: node ./scripts/prepare-agent-sidecar.mjs
 
       - name: Build signed desktop release

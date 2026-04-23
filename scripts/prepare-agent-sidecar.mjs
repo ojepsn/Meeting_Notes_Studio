@@ -10,7 +10,8 @@ const srcTauriDir = path.join(repoRoot, "apps", "desktop", "src-tauri");
 const buildDir = path.join(srcTauriDir, "sidecar-build");
 const binariesDir = path.join(srcTauriDir, "binaries");
 const launcherPath = path.join(buildDir, "agent_sidecar_launcher.py");
-const agentPlatformSource = process.env.AGENT_PLATFORM_REPO_PATH?.trim();
+const vendoredAgentPlatformSource = path.join(repoRoot, "third_party", "agent_platform");
+const agentPlatformSource = process.env.AGENT_PLATFORM_REPO_PATH?.trim() || vendoredAgentPlatformSource;
 
 const log = (message) => console.log(`[agent-sidecar] ${message}`);
 
@@ -60,11 +61,11 @@ mkdirSync(binariesDir, { recursive: true });
 
 run(python, ["-m", "venv", path.join(buildDir, ".venv")]);
 run(venvPython, ["-m", "pip", "install", "--upgrade", "pip", "wheel", "setuptools"]);
-const agentPlatformRequirement = agentPlatformSource
-  ? `agent-platform[langgraph,openai,ollama,mcp] @ file:///${path.resolve(agentPlatformSource).replace(/\\/g, "/")}`
-  : "agent-platform[langgraph,openai,ollama,mcp] @ git+https://github.com/ojepsn/agent_platform.git";
+const agentPlatformRequirement = `agent-platform[langgraph,openai,ollama,mcp] @ file:///${path
+  .resolve(agentPlatformSource)
+  .replace(/\\/g, "/")}`;
 
-if (agentPlatformSource && !existsSync(path.resolve(agentPlatformSource, "pyproject.toml"))) {
+if (!existsSync(path.resolve(agentPlatformSource, "pyproject.toml"))) {
   throw new Error(`AGENT_PLATFORM_REPO_PATH does not look like an agent_platform checkout: ${agentPlatformSource}`);
 }
 
