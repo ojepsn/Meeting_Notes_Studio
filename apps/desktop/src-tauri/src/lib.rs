@@ -63,6 +63,13 @@ struct DesktopStorageInfo {
     backups_dir: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalBackupInfo {
+    path: String,
+    modified_ms: u64,
+}
+
 fn candidate_database_paths(app_config_dir: &Path, app_data_dir: &Path) -> Vec<PathBuf> {
     vec![
         app_config_dir.join("notesmith.db"),
@@ -193,6 +200,13 @@ fn write_bytes_to_path(path: String, bytes: Vec<u8>) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn write_text_to_path(path: String, content: String) -> Result<(), String> {
+    let destination = PathBuf::from(path);
+    ensure_parent_dir(&destination)?;
+    fs::write(destination, content).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn write_backup_snapshot(
     app: tauri::AppHandle,
     filename: String,
@@ -211,20 +225,32 @@ fn write_backup_snapshot(
 }
 
 #[tauri::command]
+fn write_backup_snapshot_text(
+    app: tauri::AppHandle,
+    filename: String,
+    content: String,
+) -> Result<String, String> {
+    let storage = prepare_storage(&app)?;
+
+    let destination = PathBuf::from(storage.backups_dir).join(filename);
+    ensure_parent_dir(&destination)?;
+    fs::write(&destination, content).map_err(|error| error.to_string())?;
+
+    Ok(destination.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn get_desktop_storage_info(app: tauri::AppHandle) -> Result<DesktopStorageInfo, String> {
     prepare_storage(&app)
 }
 
-#[tauri::command]
-fn load_latest_local_backup(app: tauri::AppHandle) -> Result<Option<Vec<u8>>, String> {
-    let storage = prepare_storage(&app)?;
-    let backups_dir = PathBuf::from(storage.backups_dir);
+fn find_latest_local_backup(backups_dir: &Path) -> Result<Option<(std::time::SystemTime, PathBuf)>, String> {
     if !backups_dir.exists() {
         return Ok(None);
     }
 
     let mut latest_file: Option<(std::time::SystemTime, PathBuf)> = None;
-    for entry in fs::read_dir(&backups_dir).map_err(|error| error.to_string())? {
+    for entry in fs::read_dir(backups_dir).map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
         let path = entry.path();
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or_default();
@@ -244,10 +270,38 @@ fn load_latest_local_backup(app: tauri::AppHandle) -> Result<Option<Vec<u8>>, St
         }
     }
 
-    match latest_file {
+    Ok(latest_file)
+}
+
+#[tauri::command]
+fn load_latest_local_backup(app: tauri::AppHandle) -> Result<Option<Vec<u8>>, String> {
+    let storage = prepare_storage(&app)?;
+    let backups_dir = PathBuf::from(storage.backups_dir);
+
+    match find_latest_local_backup(&backups_dir)? {
         Some((_, path)) => fs::read(path)
             .map(Some)
             .map_err(|error| error.to_string()),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+fn get_latest_local_backup_info(app: tauri::AppHandle) -> Result<Option<LocalBackupInfo>, String> {
+    let storage = prepare_storage(&app)?;
+    let backups_dir = PathBuf::from(storage.backups_dir);
+
+    match find_latest_local_backup(&backups_dir)? {
+        Some((modified, path)) => {
+            let modified_ms = modified
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            Ok(Some(LocalBackupInfo {
+                path: path.to_string_lossy().to_string(),
+                modified_ms,
+            }))
+        }
         None => Ok(None),
     }
 }
@@ -362,9 +416,12 @@ pub fn run() {
             copy_file_into_app_data,
             write_bytes_into_app_data,
             write_bytes_to_path,
+            write_text_to_path,
             write_backup_snapshot,
+            write_backup_snapshot_text,
             get_desktop_storage_info,
             load_latest_local_backup,
+            get_latest_local_backup_info,
             delete_persisted_file,
             open_path_in_file_manager,
             load_update_manifest

@@ -1,5 +1,5 @@
 import type { LocalAppSettings, TemplateDefinition } from "@notesmith/domain";
-import type { DesktopStorageInfo } from "../../../lib/storage/desktopStorage";
+import type { DesktopStorageInfo, LocalBackupInfo } from "../../../lib/storage/desktopStorage";
 import type { AIRequestHistoryEntry } from "../../../lib/ai/history";
 import type { AIDiagnosticsItem } from "../../../lib/ai/metrics";
 import type { SelectModelOption } from "../../../lib/ai/modelPricing";
@@ -20,7 +20,6 @@ interface SettingsCardProps {
     onOpenDatabaseFolder: () => Promise<void>;
     onExportBackup: () => Promise<void>;
     onSaveBackupAs: () => Promise<void>;
-    onCreateLocalBackup: () => Promise<void>;
     onRefreshModelPricing: () => Promise<void> | void;
     updateStatusNote?: string | null;
     desktopVersion?: string | null;
@@ -30,6 +29,7 @@ interface SettingsCardProps {
     isCheckingForUpdates?: boolean;
     isInstallingUpdate?: boolean;
     storageInfo: DesktopStorageInfo | null;
+    latestLocalBackupInfo: LocalBackupInfo | null;
     aiDiagnostics: AIDiagnosticsItem[];
     aiRequestHistory: AIRequestHistoryEntry[];
     textModelOptions: SelectModelOption[];
@@ -37,5 +37,5 @@ interface SettingsCardProps {
     modelPricingStatus: string;
     isRefreshingModelPricing: boolean;
 }
-export declare const SettingsCard: ({ settings, templates, initialSection, onChange, onSaveTemplate, onResetTemplates, onImportLegacy, onImportBackup, onCheckForUpdates, onInstallUpdate, onOpenManualUpdate, onOpenDataFolder, onOpenDatabaseFolder, onExportBackup, onSaveBackupAs, onCreateLocalBackup, onRefreshModelPricing, updateStatusNote, desktopVersion, desktopBundleType, availableUpdateVersion, manualUpdateUrl, isCheckingForUpdates, isInstallingUpdate, storageInfo, aiDiagnostics, aiRequestHistory, textModelOptions, transcriptionModelOptions, modelPricingStatus, isRefreshingModelPricing, }: SettingsCardProps) => import("react/jsx-runtime").JSX.Element;
+export declare const SettingsCard: ({ settings, templates, initialSection, onChange, onSaveTemplate, onResetTemplates, onImportLegacy, onImportBackup, onCheckForUpdates, onInstallUpdate, onOpenManualUpdate, onOpenDataFolder, onOpenDatabaseFolder, onExportBackup, onSaveBackupAs, onRefreshModelPricing, updateStatusNote, desktopVersion, desktopBundleType, availableUpdateVersion, manualUpdateUrl, isCheckingForUpdates, isInstallingUpdate, storageInfo, latestLocalBackupInfo, aiDiagnostics, aiRequestHistory, textModelOptions, transcriptionModelOptions, modelPricingStatus, isRefreshingModelPricing, }: SettingsCardProps) => import("react/jsx-runtime").JSX.Element;
 export {};

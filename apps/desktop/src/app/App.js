@@ -26,7 +26,7 @@ import { checkForDesktopUpdates } from "../lib/ai/updater";
 import { exportOutputAsDocx, exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsPdf, exportOutputAsText } from "../lib/export/exportService";
 import { fileToAttachmentRecord, loadPersistedAttachmentFile, pickAudioFile, pickImageFile, pickTranscriptFile, persistGeneratedAttachment, persistSelectedAttachment, readTranscriptFile, removePersistedAttachment, } from "../lib/files/attachmentStore";
 import { buildRecordingFilename, getSupportedRecordingMimeType, getSystemAudioDisplayOptions, RECORDING_MODE_LABELS, } from "../lib/files/recording";
-import { createLocalSnapshotBackup, exportSnapshotBackup, exportSnapshotBackupToDownloads, getDesktopBundleType, getDesktopAppVersion, getDesktopStorageInfo, importSnapshotBackup, mergeImportedPwaSnapshot, openDesktopPath, } from "../lib/storage/desktopStorage";
+import { createLocalSnapshotBackup, exportSnapshotBackup, exportSnapshotBackupToDownloads, getDesktopBundleType, getDesktopAppVersion, getDesktopStorageInfo, getLatestLocalBackupInfo, importSnapshotBackup, mergeImportedPwaSnapshot, openDesktopPath, } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW } from "../lib/metadata/review";
 import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links/entityLinks";
 import { polishNonAiNotesText } from "../lib/output/manualPolish";
@@ -163,6 +163,7 @@ export const App = () => {
     const [desktopVersion, setDesktopVersion] = useState(null);
     const [desktopBundleType, setDesktopBundleType] = useState(null);
     const [storageInfo, setStorageInfo] = useState(null);
+    const [latestLocalBackupInfo, setLatestLocalBackupInfo] = useState(null);
     const [manualUpdateUrl, setManualUpdateUrl] = useState(null);
     const [calendarOutputPreviewSessionId, setCalendarOutputPreviewSessionId] = useState(null);
     const [aiDiagnostics, setAIDiagnostics] = useState(() => getAIDiagnosticsItems());
@@ -184,6 +185,7 @@ export const App = () => {
     const recordingChunksRef = useRef([]);
     const recordingSessionIdRef = useRef(null);
     const todoRolloverDateRef = useRef(new Date().toDateString());
+    const localSafetyBackupDateRef = useRef(null);
     const buildDesktopBackupBundle = () => {
         if (!snapshot) {
             return null;
@@ -215,6 +217,45 @@ export const App = () => {
         const intervalId = setInterval(checkTodoRolloverDate, 60000);
         return () => clearInterval(intervalId);
     }, [isLoaded, loadError, rollForwardOverdueTodos]);
+    const refreshLatestLocalBackupInfo = async () => {
+        try {
+            setLatestLocalBackupInfo(await getLatestLocalBackupInfo());
+        }
+        catch {
+            setLatestLocalBackupInfo(null);
+        }
+    };
+    useEffect(() => {
+        if (!isLoaded || loadError)
+            return;
+        void refreshLatestLocalBackupInfo();
+    }, [isLoaded, loadError]);
+    useEffect(() => {
+        if (!isLoaded || loadError || !snapshot || !storageInfo)
+            return;
+        const latestBackupDate = latestLocalBackupInfo
+            ? new Date(latestLocalBackupInfo.modifiedMs).toLocaleDateString("sv-SE")
+            : null;
+        const today = new Date().toLocaleDateString("sv-SE");
+        if (localSafetyBackupDateRef.current === today || latestBackupDate === today) {
+            localSafetyBackupDateRef.current = today;
+            return;
+        }
+        localSafetyBackupDateRef.current = today;
+        const createAutomaticLocalBackup = async () => {
+            const backupBundle = buildDesktopBackupBundle();
+            if (!backupBundle)
+                return;
+            const backupPath = await createLocalSnapshotBackup(backupBundle);
+            if (!backupPath)
+                return;
+            await refreshLatestLocalBackupInfo();
+            setStatusNote(`Automatic local safety backup created at ${backupPath}.`);
+        };
+        void createAutomaticLocalBackup().catch((error) => {
+            setStatusNote(error instanceof Error ? error.message : "Could not create the automatic local safety backup.");
+        });
+    }, [isLoaded, loadError, snapshot, storageInfo, latestLocalBackupInfo?.modifiedMs]);
     useEffect(() => {
         return () => {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -952,6 +993,7 @@ export const App = () => {
                 setStatusNote("Nothing is loaded yet to export.");
                 return;
             }
+            setStatusNote("Exporting backup to Downloads...");
             const result = await exportSnapshotBackupToDownloads(backupBundle);
             setStatusNote(`Exported a desktop backup file to ${result.path}.`);
         }
@@ -966,6 +1008,7 @@ export const App = () => {
                 setStatusNote("Nothing is loaded yet to export.");
                 return;
             }
+            setStatusNote("Preparing backup file...");
             const result = await exportSnapshotBackup(backupBundle);
             if (!result) {
                 setStatusNote("Backup export was cancelled.");
@@ -975,24 +1018,6 @@ export const App = () => {
         }
         catch (error) {
             setStatusNote(error instanceof Error ? error.message : "Could not save the desktop backup file.");
-        }
-    };
-    const handleCreateLocalBackup = async () => {
-        try {
-            const backupBundle = buildDesktopBackupBundle();
-            if (!backupBundle) {
-                setStatusNote("Nothing is loaded yet to back up.");
-                return;
-            }
-            const backupPath = await createLocalSnapshotBackup(backupBundle);
-            if (!backupPath) {
-                setStatusNote("Local backup creation is only available in the installed desktop app.");
-                return;
-            }
-            setStatusNote(`Created a local safety backup at ${backupPath}.`);
-        }
-        catch (error) {
-            setStatusNote(error instanceof Error ? error.message : "Could not create the local safety backup.");
         }
     };
     const handleImportBackup = async () => {
@@ -1098,6 +1123,7 @@ export const App = () => {
             const backupPath = backupBundle ? await createLocalSnapshotBackup(backupBundle) : null;
             const downloadsBackupPath = backupBundle ? await exportSnapshotBackupToDownloads(backupBundle) : null;
             if (backupPath) {
+                await refreshLatestLocalBackupInfo();
                 setStatusNote(`Created a local safety backup at ${backupPath} before installing ${availableUpdateVersion}.`);
             }
             if (downloadsBackupPath) {
@@ -2130,11 +2156,13 @@ export const App = () => {
                                         closeOverlay();
                                     }, children: "Not now" })] })] }));
             case "settings":
-                return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onResetTemplates: handleResetTemplates, onImportLegacy: handleImportLegacy, onImportBackup: handleImportBackup, onCheckForUpdates: handleCheckForUpdates, onInstallUpdate: handleInstallUpdate, onOpenManualUpdate: handleOpenManualUpdate, onOpenDataFolder: handleOpenDataFolder, onOpenDatabaseFolder: handleOpenDatabaseFolder, onExportBackup: handleExportSnapshot, onSaveBackupAs: handleSaveSnapshotAs, onCreateLocalBackup: handleCreateLocalBackup, updateStatusNote: updateStatusNote, desktopVersion: desktopVersion, desktopBundleType: desktopBundleType, availableUpdateVersion: availableUpdateVersion, manualUpdateUrl: manualUpdateUrl, isCheckingForUpdates: isCheckingForUpdates, isInstallingUpdate: isInstallingUpdate, storageInfo: storageInfo, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
+                return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onResetTemplates: handleResetTemplates, onImportLegacy: handleImportLegacy, onImportBackup: handleImportBackup, onCheckForUpdates: handleCheckForUpdates, onInstallUpdate: handleInstallUpdate, onOpenManualUpdate: handleOpenManualUpdate, onOpenDataFolder: handleOpenDataFolder, onOpenDatabaseFolder: handleOpenDatabaseFolder, onExportBackup: handleExportSnapshot, onSaveBackupAs: handleSaveSnapshotAs, updateStatusNote: updateStatusNote, desktopVersion: desktopVersion, desktopBundleType: desktopBundleType, availableUpdateVersion: availableUpdateVersion, manualUpdateUrl: manualUpdateUrl, isCheckingForUpdates: isCheckingForUpdates, isInstallingUpdate: isInstallingUpdate, storageInfo: storageInfo, latestLocalBackupInfo: latestLocalBackupInfo, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
             case "more":
                 return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "More tools" }), _jsx("p", { children: "Secondary utilities stay grouped here so the main workspace remains calm and obvious." })] }), _jsxs("div", { className: "stack", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => setActiveWorkspace("todos"), children: "Open Todos workspace" }), _jsx("button", { className: "small-button", type: "button", onClick: () => setOpenPanel("backup"), children: "Open Back-up" }), _jsx("button", { className: "small-button", type: "button", onClick: () => openSettingsSection("other"), children: "Open Other settings" })] })] }));
             case "backup":
-                return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Back-up" }), _jsx("p", { children: "Keep backup and migration actions accessible without leaving the focused Notes workspace." })] }), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportLegacy(), children: "Import current browser data" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportBackup(), children: "Import backup file" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleExportSnapshot(), children: "Export backup to Downloads" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleSaveSnapshotAs(), children: "Save backup as..." }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleCreateLocalBackup(), children: "Create local safety backup" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleOpenDataFolder(), children: "Open data folder" })] }), storageInfo ? (_jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Desktop version" }), _jsx("span", { className: "muted", children: desktopVersion || "Unknown" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Database path" }), _jsx("span", { className: "muted", children: storageInfo.databasePath })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Backups folder" }), _jsx("span", { className: "muted", children: storageInfo.backupsDir })] })] })) : null, _jsx("p", { className: "tiny-text", children: "Export a backup file to a folder outside AppData before uninstalling the app." })] }));
+                return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Back-up" }), _jsx("p", { children: "Keep backup and migration actions accessible without leaving the focused Notes workspace." })] }), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportLegacy(), children: "Import current browser data" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportBackup(), children: "Import backup file" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleExportSnapshot(), children: "Export backup to Downloads" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleSaveSnapshotAs(), children: "Save backup as..." }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleOpenDataFolder(), children: "Open data folder" })] }), storageInfo ? (_jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Desktop version" }), _jsx("span", { className: "muted", children: desktopVersion || "Unknown" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Database path" }), _jsx("span", { className: "muted", children: storageInfo.databasePath })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Backups folder" }), _jsx("span", { className: "muted", children: storageInfo.backupsDir })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Latest local safety backup" }), _jsx("span", { className: "muted", children: latestLocalBackupInfo
+                                                ? `${new Date(latestLocalBackupInfo.modifiedMs).toLocaleString()}`
+                                                : "No local safety backup yet" })] })] })) : null, _jsx("p", { className: "tiny-text", children: "NoteSmith creates a local safety backup automatically, including before updates. Export to Downloads or use Save backup as... when you want a copy outside the app data folder." })] }));
             default:
                 return null;
         }

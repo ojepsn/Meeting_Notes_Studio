@@ -60,9 +60,11 @@ import {
   getDesktopBundleType,
   getDesktopAppVersion,
   getDesktopStorageInfo,
+  getLatestLocalBackupInfo,
   importSnapshotBackup,
   mergeImportedPwaSnapshot,
   openDesktopPath,
+  type LocalBackupInfo,
   type DesktopStorageInfo,
 } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW, type MetadataReviewState } from "../lib/metadata/review";
@@ -287,6 +289,7 @@ export const App = () => {
   const [desktopVersion, setDesktopVersion] = useState<string | null>(null);
   const [desktopBundleType, setDesktopBundleType] = useState<string | null>(null);
   const [storageInfo, setStorageInfo] = useState<DesktopStorageInfo | null>(null);
+  const [latestLocalBackupInfo, setLatestLocalBackupInfo] = useState<LocalBackupInfo | null>(null);
   const [manualUpdateUrl, setManualUpdateUrl] = useState<string | null>(null);
   const [calendarOutputPreviewSessionId, setCalendarOutputPreviewSessionId] = useState<string | null>(null);
   const [aiDiagnostics, setAIDiagnostics] = useState(() => getAIDiagnosticsItems());
@@ -308,6 +311,7 @@ export const App = () => {
   const recordingChunksRef = useRef<Blob[]>([]);
   const recordingSessionIdRef = useRef<string | null>(null);
   const todoRolloverDateRef = useRef(new Date().toDateString());
+  const localSafetyBackupDateRef = useRef<string | null>(null);
 
   const buildDesktopBackupBundle = (): DesktopBackupBundle | null => {
     if (!snapshot) {
@@ -342,6 +346,45 @@ export const App = () => {
     const intervalId = setInterval(checkTodoRolloverDate, 60000);
     return () => clearInterval(intervalId);
   }, [isLoaded, loadError, rollForwardOverdueTodos]);
+
+  const refreshLatestLocalBackupInfo = async () => {
+    try {
+      setLatestLocalBackupInfo(await getLatestLocalBackupInfo());
+    } catch {
+      setLatestLocalBackupInfo(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!isLoaded || loadError) return;
+    void refreshLatestLocalBackupInfo();
+  }, [isLoaded, loadError]);
+
+  useEffect(() => {
+    if (!isLoaded || loadError || !snapshot || !storageInfo) return;
+    const latestBackupDate = latestLocalBackupInfo
+      ? new Date(latestLocalBackupInfo.modifiedMs).toLocaleDateString("sv-SE")
+      : null;
+    const today = new Date().toLocaleDateString("sv-SE");
+    if (localSafetyBackupDateRef.current === today || latestBackupDate === today) {
+      localSafetyBackupDateRef.current = today;
+      return;
+    }
+
+    localSafetyBackupDateRef.current = today;
+    const createAutomaticLocalBackup = async () => {
+      const backupBundle = buildDesktopBackupBundle();
+      if (!backupBundle) return;
+      const backupPath = await createLocalSnapshotBackup(backupBundle);
+      if (!backupPath) return;
+      await refreshLatestLocalBackupInfo();
+      setStatusNote(`Automatic local safety backup created at ${backupPath}.`);
+    };
+
+    void createAutomaticLocalBackup().catch((error) => {
+      setStatusNote(error instanceof Error ? error.message : "Could not create the automatic local safety backup.");
+    });
+  }, [isLoaded, loadError, snapshot, storageInfo, latestLocalBackupInfo?.modifiedMs]);
 
   useEffect(() => {
     return () => {
@@ -1297,6 +1340,7 @@ export const App = () => {
         setStatusNote("Nothing is loaded yet to export.");
         return;
       }
+      setStatusNote("Exporting backup to Downloads...");
       const result = await exportSnapshotBackupToDownloads(backupBundle);
       setStatusNote(`Exported a desktop backup file to ${result.path}.`);
     } catch (error) {
@@ -1311,6 +1355,7 @@ export const App = () => {
         setStatusNote("Nothing is loaded yet to export.");
         return;
       }
+      setStatusNote("Preparing backup file...");
       const result = await exportSnapshotBackup(backupBundle);
       if (!result) {
         setStatusNote("Backup export was cancelled.");
@@ -1319,24 +1364,6 @@ export const App = () => {
       setStatusNote(`Saved a desktop backup file to ${result.path}.`);
     } catch (error) {
       setStatusNote(error instanceof Error ? error.message : "Could not save the desktop backup file.");
-    }
-  };
-
-  const handleCreateLocalBackup = async () => {
-    try {
-      const backupBundle = buildDesktopBackupBundle();
-      if (!backupBundle) {
-        setStatusNote("Nothing is loaded yet to back up.");
-        return;
-      }
-      const backupPath = await createLocalSnapshotBackup(backupBundle);
-      if (!backupPath) {
-        setStatusNote("Local backup creation is only available in the installed desktop app.");
-        return;
-      }
-      setStatusNote(`Created a local safety backup at ${backupPath}.`);
-    } catch (error) {
-      setStatusNote(error instanceof Error ? error.message : "Could not create the local safety backup.");
     }
   };
 
@@ -1441,6 +1468,7 @@ export const App = () => {
       const backupPath = backupBundle ? await createLocalSnapshotBackup(backupBundle) : null;
       const downloadsBackupPath = backupBundle ? await exportSnapshotBackupToDownloads(backupBundle) : null;
       if (backupPath) {
+        await refreshLatestLocalBackupInfo();
         setStatusNote(`Created a local safety backup at ${backupPath} before installing ${availableUpdateVersion}.`);
       }
       if (downloadsBackupPath) {
@@ -2944,7 +2972,6 @@ export const App = () => {
             onOpenDatabaseFolder={handleOpenDatabaseFolder}
             onExportBackup={handleExportSnapshot}
             onSaveBackupAs={handleSaveSnapshotAs}
-            onCreateLocalBackup={handleCreateLocalBackup}
             updateStatusNote={updateStatusNote}
             desktopVersion={desktopVersion}
             desktopBundleType={desktopBundleType}
@@ -2953,6 +2980,7 @@ export const App = () => {
             isCheckingForUpdates={isCheckingForUpdates}
             isInstallingUpdate={isInstallingUpdate}
             storageInfo={storageInfo}
+            latestLocalBackupInfo={latestLocalBackupInfo}
             aiDiagnostics={aiDiagnostics}
             aiRequestHistory={aiRequestHistory}
             textModelOptions={modelPricingSnapshot.textModels.map(buildTextModelOption)}
@@ -3002,9 +3030,6 @@ export const App = () => {
               <button className="small-button" type="button" onClick={() => void handleSaveSnapshotAs()}>
                 Save backup as...
               </button>
-              <button className="small-button" type="button" onClick={() => void handleCreateLocalBackup()}>
-                Create local safety backup
-              </button>
               <button className="small-button" type="button" onClick={() => void handleOpenDataFolder()}>
                 Open data folder
               </button>
@@ -3023,9 +3048,19 @@ export const App = () => {
                   <strong>Backups folder</strong>
                   <span className="muted">{storageInfo.backupsDir}</span>
                 </div>
+                <div className="list-item">
+                  <strong>Latest local safety backup</strong>
+                  <span className="muted">
+                    {latestLocalBackupInfo
+                      ? `${new Date(latestLocalBackupInfo.modifiedMs).toLocaleString()}`
+                      : "No local safety backup yet"}
+                  </span>
+                </div>
               </div>
             ) : null}
-            <p className="tiny-text">Export a backup file to a folder outside AppData before uninstalling the app.</p>
+            <p className="tiny-text">
+              NoteSmith creates a local safety backup automatically, including before updates. Export to Downloads or use Save backup as... when you want a copy outside the app data folder.
+            </p>
           </div>
         );
       default:

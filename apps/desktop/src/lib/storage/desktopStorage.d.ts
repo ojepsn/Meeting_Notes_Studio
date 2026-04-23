@@ -8,6 +8,10 @@ export interface DesktopStorageInfo {
     attachmentsDir: string;
     backupsDir: string;
 }
+export interface LocalBackupInfo {
+    path: string;
+    modifiedMs: number;
+}
 export interface ImportedSnapshotResult {
     kind: "desktop-backup" | "pwa-export";
     snapshot: DesktopAppSnapshot;
@@ -62,6 +66,7 @@ export declare const exportSnapshotBackupToDownloads: (bundle: DesktopBackupBund
     savedOutsideAppData: boolean;
 }>;
 export declare const createLocalSnapshotBackup: (bundle: DesktopBackupBundle) => Promise<string | null>;
+export declare const getLatestLocalBackupInfo: () => Promise<LocalBackupInfo | null>;
 export declare const mergeImportedPwaSnapshot: (current: DesktopAppSnapshot, imported: DesktopAppSnapshot) => DesktopAppSnapshot;
 export declare const importSnapshotBackup: () => Promise<ImportedSnapshotResult | null>;
 export declare const loadLatestLocalSnapshotBackup: () => Promise<DesktopAppSnapshot | null>;

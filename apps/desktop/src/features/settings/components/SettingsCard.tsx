@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { LocalAppSettings, PromptBlock, TemplateDefinition } from "@notesmith/domain";
 import { getTemplatesForCaptureMode } from "@notesmith/domain";
-import type { DesktopStorageInfo } from "../../../lib/storage/desktopStorage";
+import type { DesktopStorageInfo, LocalBackupInfo } from "../../../lib/storage/desktopStorage";
 import {
   DEFAULT_MEETING_MINUTES_RULES,
   DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT,
@@ -42,7 +42,6 @@ interface SettingsCardProps {
   onOpenDatabaseFolder: () => Promise<void>;
   onExportBackup: () => Promise<void>;
   onSaveBackupAs: () => Promise<void>;
-  onCreateLocalBackup: () => Promise<void>;
   onRefreshModelPricing: () => Promise<void> | void;
   updateStatusNote?: string | null;
   desktopVersion?: string | null;
@@ -52,6 +51,7 @@ interface SettingsCardProps {
   isCheckingForUpdates?: boolean;
   isInstallingUpdate?: boolean;
   storageInfo: DesktopStorageInfo | null;
+  latestLocalBackupInfo: LocalBackupInfo | null;
   aiDiagnostics: AIDiagnosticsItem[];
   aiRequestHistory: AIRequestHistoryEntry[];
   textModelOptions: SelectModelOption[];
@@ -238,7 +238,6 @@ export const SettingsCard = ({
   onOpenDatabaseFolder,
   onExportBackup,
   onSaveBackupAs,
-  onCreateLocalBackup,
   onRefreshModelPricing,
   updateStatusNote,
   desktopVersion,
@@ -248,6 +247,7 @@ export const SettingsCard = ({
   isCheckingForUpdates,
   isInstallingUpdate,
   storageInfo,
+  latestLocalBackupInfo,
   aiDiagnostics,
   aiRequestHistory,
   textModelOptions,
@@ -1530,9 +1530,6 @@ export const SettingsCard = ({
               <button className="small-button" type="button" onClick={() => void onSaveBackupAs()}>
                 Save backup as...
               </button>
-              <button className="small-button" type="button" onClick={() => void onCreateLocalBackup()}>
-                Create local safety backup
-              </button>
               <button className="small-button" type="button" onClick={() => void onOpenDataFolder()}>
                 Open data folder
               </button>
@@ -1578,6 +1575,14 @@ export const SettingsCard = ({
                 <div className="list-item">
                   <strong>Local backups folder</strong>
                   <span className="muted">{storageInfo.backupsDir}</span>
+                </div>
+                <div className="list-item">
+                  <strong>Latest local safety backup</strong>
+                  <span className="muted">
+                    {latestLocalBackupInfo
+                      ? `${new Date(latestLocalBackupInfo.modifiedMs).toLocaleString()}`
+                      : "No local safety backup yet"}
+                  </span>
                 </div>
               </div>
             ) : (
