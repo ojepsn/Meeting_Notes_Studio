@@ -69,6 +69,30 @@ const findNextRolloverSlot = (occupancy, maxPerRow) => {
     }
     return MAX_SLOT_INDEX;
 };
+const isCalendarSlotFree = (calendarItems, date, slot) => !calendarItems.some((item) => {
+    if (item.date !== date)
+        return false;
+    const start = clampSlotIndex(item.startSlot);
+    const end = Math.min(MAX_SLOT_INDEX + 1, start + Math.max(1, item.durationSlots));
+    return slot >= start && slot < end;
+});
+export const findNearestAvailableTodoSlot = (calendarItems, date, preferredSlot = timeToSlot(formatLocalTime())) => {
+    const normalizedPreferredSlot = clampSlotIndex(preferredSlot);
+    if (isCalendarSlotFree(calendarItems, date, normalizedPreferredSlot)) {
+        return normalizedPreferredSlot;
+    }
+    for (let distance = 1; distance <= MAX_SLOT_INDEX; distance += 1) {
+        const laterSlot = normalizedPreferredSlot + distance;
+        if (laterSlot <= MAX_SLOT_INDEX && isCalendarSlotFree(calendarItems, date, laterSlot)) {
+            return laterSlot;
+        }
+        const earlierSlot = normalizedPreferredSlot - distance;
+        if (earlierSlot >= 0 && isCalendarSlotFree(calendarItems, date, earlierSlot)) {
+            return earlierSlot;
+        }
+    }
+    return normalizedPreferredSlot;
+};
 export const rollForwardOverdueCalendarTodos = (snapshot, today = formatLocalDate()) => {
     const todosById = new Map(snapshot.todos.map((todo) => [todo.id, todo]));
     const overdueTodoItems = snapshot.calendarItems
@@ -576,33 +600,46 @@ export const useDesktopStore = create((set, get) => ({
         const snapshot = get().snapshot;
         if (!snapshot || !description.trim())
             return;
+        const createdAt = new Date().toISOString();
+        const scheduledDate = options?.doOn || formatLocalDate();
+        const todoId = crypto.randomUUID();
+        const calendarItemId = crypto.randomUUID();
+        const startSlot = findNearestAvailableTodoSlot(snapshot.calendarItems, scheduledDate);
         const inherited = applyActivityInheritance(snapshot, {
             activityId: options?.activityId || "",
             domain: options?.domain || "",
             project: options?.project || "",
             activity: options?.activityLabel || "",
         });
+        const nextTodo = {
+            id: todoId,
+            description: description.trim(),
+            isDone: false,
+            isPrivate: false,
+            comments: options?.comments || "",
+            activityId: inherited.activityId,
+            domain: inherited.domain,
+            project: inherited.project,
+            activity: inherited.activity,
+            doOn: scheduledDate,
+            dueDate: "",
+            detailsHtml: "",
+            createdAt,
+            sessionIds: toSessionIds(get().activeSessionId),
+        };
         const nextSnapshot = {
             ...snapshot,
-            todos: [
-                {
-                    id: crypto.randomUUID(),
-                    description: description.trim(),
-                    isDone: false,
-                    isPrivate: false,
-                    comments: options?.comments || "",
-                    activityId: inherited.activityId,
-                    domain: inherited.domain,
-                    project: inherited.project,
-                    activity: inherited.activity,
-                    doOn: options?.doOn || "",
-                    dueDate: "",
-                    detailsHtml: "",
-                    createdAt: new Date().toISOString(),
-                    sessionIds: toSessionIds(get().activeSessionId),
-                },
-                ...snapshot.todos,
-            ],
+            todos: [nextTodo, ...snapshot.todos],
+            calendarItems: upsertCalendarItem(snapshot.calendarItems, {
+                id: calendarItemId,
+                targetType: "todo",
+                targetId: todoId,
+                date: scheduledDate,
+                startSlot,
+                durationSlots: 1,
+                createdAt,
+                updatedAt: createdAt,
+            }),
         };
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);

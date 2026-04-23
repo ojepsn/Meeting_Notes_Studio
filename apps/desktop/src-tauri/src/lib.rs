@@ -1,6 +1,8 @@
-use base64::{engine::general_purpose, Engine as _};
+use flate2::write::DeflateEncoder;
+use flate2::Compression;
 use serde::Serialize;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::Manager;
@@ -207,14 +209,98 @@ fn write_text_to_path(path: String, content: String) -> Result<(), String> {
     fs::write(destination, content).map_err(|error| error.to_string())
 }
 
-#[tauri::command]
-fn write_base64_to_path(path: String, base64_content: String) -> Result<(), String> {
-    let destination = PathBuf::from(path);
-    ensure_parent_dir(&destination)?;
-    let bytes = general_purpose::STANDARD
-        .decode(base64_content)
-        .map_err(|error| format!("Could not decode backup ZIP data: {error}"))?;
+fn push_u16_le(output: &mut Vec<u8>, value: u16) {
+    output.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_u32_le(output: &mut Vec<u8>, value: u32) {
+    output.extend_from_slice(&value.to_le_bytes());
+}
+
+fn create_backup_zip_bytes(content: &str) -> Result<Vec<u8>, String> {
+    const ZIP_BACKUP_JSON_NAME: &str = "notesmith-backup.json";
+    let filename_bytes = ZIP_BACKUP_JSON_NAME.as_bytes();
+    let original_bytes = content.as_bytes();
+    if filename_bytes.len() > u16::MAX as usize {
+        return Err("Backup filename is too long for a ZIP archive.".to_string());
+    }
+    if original_bytes.len() > u32::MAX as usize {
+        return Err("Backup is too large for the current ZIP writer.".to_string());
+    }
+
+    let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
+    encoder
+        .write_all(original_bytes)
+        .map_err(|error| format!("Could not compress backup data: {error}"))?;
+    let compressed_bytes = encoder
+        .finish()
+        .map_err(|error| format!("Could not finish backup compression: {error}"))?;
+    if compressed_bytes.len() > u32::MAX as usize {
+        return Err("Compressed backup is too large for the current ZIP writer.".to_string());
+    }
+
+    let crc = crc32fast::hash(original_bytes);
+    let filename_length = filename_bytes.len() as u16;
+    let compressed_size = compressed_bytes.len() as u32;
+    let uncompressed_size = original_bytes.len() as u32;
+
+    let mut output = Vec::with_capacity(30 + filename_bytes.len() + compressed_bytes.len() + 46 + filename_bytes.len() + 22);
+    push_u32_le(&mut output, 0x04034b50);
+    push_u16_le(&mut output, 20);
+    push_u16_le(&mut output, 0x0800);
+    push_u16_le(&mut output, 8);
+    push_u16_le(&mut output, 0);
+    push_u16_le(&mut output, 0);
+    push_u32_le(&mut output, crc);
+    push_u32_le(&mut output, compressed_size);
+    push_u32_le(&mut output, uncompressed_size);
+    push_u16_le(&mut output, filename_length);
+    push_u16_le(&mut output, 0);
+    output.extend_from_slice(filename_bytes);
+    output.extend_from_slice(&compressed_bytes);
+
+    let central_directory_offset = output.len() as u32;
+    push_u32_le(&mut output, 0x02014b50);
+    push_u16_le(&mut output, 20);
+    push_u16_le(&mut output, 20);
+    push_u16_le(&mut output, 0x0800);
+    push_u16_le(&mut output, 8);
+    push_u16_le(&mut output, 0);
+    push_u16_le(&mut output, 0);
+    push_u32_le(&mut output, crc);
+    push_u32_le(&mut output, compressed_size);
+    push_u32_le(&mut output, uncompressed_size);
+    push_u16_le(&mut output, filename_length);
+    push_u16_le(&mut output, 0);
+    push_u16_le(&mut output, 0);
+    push_u16_le(&mut output, 0);
+    push_u16_le(&mut output, 0);
+    push_u32_le(&mut output, 0);
+    push_u32_le(&mut output, 0);
+    output.extend_from_slice(filename_bytes);
+
+    let central_directory_size = output.len() as u32 - central_directory_offset;
+    push_u32_le(&mut output, 0x06054b50);
+    push_u16_le(&mut output, 0);
+    push_u16_le(&mut output, 0);
+    push_u16_le(&mut output, 1);
+    push_u16_le(&mut output, 1);
+    push_u32_le(&mut output, central_directory_size);
+    push_u32_le(&mut output, central_directory_offset);
+    push_u16_le(&mut output, 0);
+
+    Ok(output)
+}
+
+fn write_backup_zip_to_path(destination: &Path, content: &str) -> Result<(), String> {
+    ensure_parent_dir(destination)?;
+    let bytes = create_backup_zip_bytes(content)?;
     fs::write(destination, bytes).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn write_backup_zip_to_path_command(path: String, content: String) -> Result<(), String> {
+    write_backup_zip_to_path(&PathBuf::from(path), &content)
 }
 
 #[tauri::command]
@@ -251,19 +337,11 @@ fn write_backup_snapshot_text(
 }
 
 #[tauri::command]
-fn write_backup_snapshot_base64(
-    app: tauri::AppHandle,
-    filename: String,
-    base64_content: String,
-) -> Result<String, String> {
+fn write_backup_snapshot_zip(app: tauri::AppHandle, filename: String, content: String) -> Result<String, String> {
     let storage = prepare_storage(&app)?;
 
     let destination = PathBuf::from(storage.backups_dir).join(filename);
-    ensure_parent_dir(&destination)?;
-    let bytes = general_purpose::STANDARD
-        .decode(base64_content)
-        .map_err(|error| format!("Could not decode local backup ZIP data: {error}"))?;
-    fs::write(&destination, bytes).map_err(|error| error.to_string())?;
+    write_backup_zip_to_path(&destination, &content)?;
 
     Ok(destination.to_string_lossy().to_string())
 }
@@ -470,10 +548,10 @@ pub fn run() {
             write_bytes_into_app_data,
             write_bytes_to_path,
             write_text_to_path,
-            write_base64_to_path,
+            write_backup_zip_to_path_command,
             write_backup_snapshot,
             write_backup_snapshot_text,
-            write_backup_snapshot_base64,
+            write_backup_snapshot_zip,
             get_desktop_storage_info,
             load_latest_local_backup,
             get_latest_local_backup_info,

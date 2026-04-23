@@ -1,5 +1,5 @@
 import { createDefaultSnapshot } from "../lib/db/repository";
-import { rollForwardOverdueCalendarTodos } from "./useDesktopStore";
+import { findNearestAvailableTodoSlot, rollForwardOverdueCalendarTodos } from "./useDesktopStore";
 
 const buildTodo = (id: string, description: string, doOn: string, isDone = false) => ({
   id,
@@ -103,5 +103,28 @@ describe("rollForwardOverdueCalendarTodos", () => {
 
     expect(result.changed).toBe(false);
     expect(result.snapshot).toBe(snapshot);
+  });
+});
+
+describe("findNearestAvailableTodoSlot", () => {
+  it("uses the preferred slot when it is empty", () => {
+    expect(findNearestAvailableTodoSlot([], "2026-04-22", 120)).toBe(120);
+  });
+
+  it("places new todos in the nearest free slot, preferring later slots over earlier slots", () => {
+    const calendarItems = [
+      buildCalendarActivity("current-meeting", "2026-04-22", 120, 1),
+    ];
+
+    expect(findNearestAvailableTodoSlot(calendarItems, "2026-04-22", 120)).toBe(121);
+  });
+
+  it("falls back to the nearest earlier slot when the immediate later slots are occupied", () => {
+    const calendarItems = [
+      buildCalendarActivity("current-meeting", "2026-04-22", 120, 2),
+      buildCalendarTodo("later-todo", "todo-later", "2026-04-22", 122),
+    ];
+
+    expect(findNearestAvailableTodoSlot(calendarItems, "2026-04-22", 120)).toBe(119);
   });
 });

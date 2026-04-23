@@ -539,9 +539,18 @@ export const CalendarWorkspace = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
       const todo = todos.find((entry) => entry.id === selectedItem.targetId);
       if (!todo) return;
+      if (event.key === "x") {
+        event.preventDefault();
+        const nextTodo = { ...todo, isDone: true };
+        onSaveTodo(nextTodo);
+        setEditorDraft((current) =>
+          current?.itemId === selectedItem.id ? { ...current, isDone: true } : current,
+        );
+        return;
+      }
       if (event.key.length === 1) {
         event.preventDefault();
         setInlineTodoEdit({ itemId: selectedItem.id, todoId: todo.id, value: event.key });
@@ -555,7 +564,7 @@ export const CalendarWorkspace = ({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [inlineTodoEdit, selectedItem, todos]);
+  }, [inlineTodoEdit, onSaveTodo, selectedItem, todos]);
 
   useEffect(() => {
     setSelectedItemIds((current) => current.filter((id) => items.some((item) => item.id === id)));

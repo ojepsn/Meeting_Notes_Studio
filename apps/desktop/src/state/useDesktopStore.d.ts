@@ -4,6 +4,7 @@ type DesktopView = "capture" | "output";
 type SaveState = "saved" | "saving" | "error";
 type Snapshot = DesktopAppSnapshot;
 type TimeLog = TimeLogRecord;
+export declare const findNearestAvailableTodoSlot: (calendarItems: Snapshot["calendarItems"], date: string, preferredSlot?: number) => number;
 export declare const rollForwardOverdueCalendarTodos: (snapshot: Snapshot, today?: string) => {
     snapshot: DesktopAppSnapshot;
     changed: boolean;
