@@ -16,10 +16,47 @@ const richTextToPlainText = (value: string) => {
   return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 };
 
+const RICH_TEXT_FONT_OPTIONS = [
+  { label: "Default", value: "" },
+  { label: "Aptos", value: "Aptos, Calibri, sans-serif" },
+  { label: "Georgia", value: "Georgia, serif" },
+  { label: "Garamond", value: "Garamond, Georgia, serif" },
+  { label: "Calibri", value: "Calibri, Arial, sans-serif" },
+  { label: "Arial", value: "Arial, sans-serif" },
+  { label: "Verdana", value: "Verdana, Geneva, sans-serif" },
+  { label: "Monospace", value: "Consolas, 'Courier New', monospace" },
+] as const;
+
+const normalizeFontFamily = (value: string) => value.replace(/["']/g, "").replace(/\s*,\s*/g, ", ").trim();
+
+const ALLOWED_RICH_TEXT_FONTS = new Set(
+  RICH_TEXT_FONT_OPTIONS.map((option) => normalizeFontFamily(option.value)).filter(Boolean),
+);
+
+const resolveAllowedRichTextFont = (value: string) => {
+  const normalized = normalizeFontFamily(value);
+  if (!ALLOWED_RICH_TEXT_FONTS.has(normalized)) {
+    return "";
+  }
+  return RICH_TEXT_FONT_OPTIONS.find((option) => normalizeFontFamily(option.value) === normalized)?.value ?? "";
+};
+
 const normalizeRichTextHtml = (value: string) => {
   const wrapper = document.createElement("div");
   wrapper.innerHTML = value || "";
-  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6"]);
+  wrapper.querySelectorAll("font").forEach((fontElement) => {
+    const face = fontElement.getAttribute("face") ?? "";
+    const span = document.createElement("span");
+    const allowedFont = resolveAllowedRichTextFont(face);
+    if (allowedFont) {
+      span.style.fontFamily = allowedFont;
+    }
+    while (fontElement.firstChild) {
+      span.appendChild(fontElement.firstChild);
+    }
+    fontElement.replaceWith(span);
+  });
+  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN"]);
   wrapper.querySelectorAll("*").forEach((element) => {
     if (!allowedTags.has(element.tagName)) {
       const fragment = document.createDocumentFragment();
@@ -29,11 +66,16 @@ const normalizeRichTextHtml = (value: string) => {
       element.replaceWith(fragment);
       return;
     }
+    const fontFamily = element instanceof HTMLElement ? element.style.fontFamily : "";
     [...element.attributes].forEach((attribute) => element.removeAttribute(attribute.name));
+    const allowedFont = resolveAllowedRichTextFont(fontFamily);
+    if (element instanceof HTMLElement && allowedFont) {
+      element.style.fontFamily = allowedFont;
+    }
   });
   const normalized = wrapper.innerHTML.replace(/<div>/gi, "<p>").replace(/<\/div>/gi, "</p>").trim();
   if (!normalized) return "";
-  if (!/<(p|ul|ol|li|br|h[1-6])\b/i.test(normalized)) {
+  if (!/<(p|ul|ol|li|br|h[1-6]|span)\b/i.test(normalized)) {
     return `<p>${normalized}</p>`;
   }
   return normalized;
@@ -324,13 +366,58 @@ export const SessionEditor = ({
     updater(editorRef.current.innerHTML);
   };
 
+  const applyRichTextFont = (
+    editorRef: { current: HTMLDivElement | null },
+    updater: (html: string) => void,
+    fontFamily: string,
+  ) => {
+    if (!editorRef.current) return;
+    if (!fontFamily) return;
+    editorRef.current.focus();
+    document.execCommand("fontName", false, fontFamily);
+    updater(editorRef.current.innerHTML);
+  };
+
   const applyAgendaCommand = (action: (typeof RICH_TEXT_COMMANDS)[number]) => {
     applyRichTextCommand(agendaEditorRef, updateAgenda, action);
+  };
+
+  const applyAgendaFont = (fontFamily: string) => {
+    applyRichTextFont(agendaEditorRef, updateAgenda, fontFamily);
   };
 
   const applyManualNotesCommand = (action: (typeof RICH_TEXT_COMMANDS)[number]) => {
     applyRichTextCommand(manualNotesEditorRef, updateManualNotes, action);
   };
+
+  const applyManualNotesFont = (fontFamily: string) => {
+    applyRichTextFont(manualNotesEditorRef, updateManualNotes, fontFamily);
+  };
+
+  const renderRichTextToolbar = (
+    idPrefix: string,
+    buttonClassName: string,
+    onCommand: (action: (typeof RICH_TEXT_COMMANDS)[number]) => void,
+    onFontChange: (fontFamily: string) => void,
+  ) => (
+    <div className="rich-text-toolbar">
+      <label className="rich-text-font-control" htmlFor={`${idPrefix}-font`}>
+        <span>Font</span>
+        <select id={`${idPrefix}-font`} defaultValue="" onChange={(event) => onFontChange(event.target.value)}>
+          {RICH_TEXT_FONT_OPTIONS.map((option) => (
+            <option key={option.label} value={option.value} style={option.value ? { fontFamily: option.value } : undefined}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {RICH_TEXT_COMMANDS.map((action) => (
+        <button key={action.id} className={`${buttonClassName} rich-text-command`} type="button" onClick={() => onCommand(action)}>
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
 
   const handleDomainChange = (domain: string) => {
     const nextProjects = getProjectsForDomain(structureOptions, domain);
@@ -461,13 +548,7 @@ export const SessionEditor = ({
                     <details className="field field-wide workspace-disclosure">
                       <summary>{agendaField.label}</summary>
                       <div className="workspace-disclosure-body">
-                        <div className="rich-text-toolbar">
-                          {RICH_TEXT_COMMANDS.map((action) => (
-                            <button key={action.id} className="shell-button rich-text-command" type="button" onClick={() => applyAgendaCommand(action)}>
-                              {action.label}
-                            </button>
-                          ))}
-                        </div>
+                        {renderRichTextToolbar("session-agenda-pwa", "shell-button", applyAgendaCommand, applyAgendaFont)}
                         <div
                           id="session-agenda"
                           ref={agendaEditorRef}
@@ -657,13 +738,7 @@ export const SessionEditor = ({
             <summary>Manual notes</summary>
             <div className="workspace-disclosure-body">
               <div className="field field-wide">
-                <div className="rich-text-toolbar">
-                  {RICH_TEXT_COMMANDS.map((action) => (
-                    <button key={action.id} className="shell-button rich-text-command" type="button" onClick={() => applyManualNotesCommand(action)}>
-                      {action.label}
-                    </button>
-                  ))}
-                </div>
+                {renderRichTextToolbar("manual-notes-pwa", "shell-button", applyManualNotesCommand, applyManualNotesFont)}
                 <div
                   className="rich-text-surface manual-notes-rich-text-surface editor-textarea-primary"
                   id="manual-notes"
@@ -759,13 +834,7 @@ export const SessionEditor = ({
               <details className="field field-wide workspace-disclosure">
                 <summary>{agendaField.label}</summary>
                 <div className="workspace-disclosure-body">
-                  <div className="rich-text-toolbar">
-                    {RICH_TEXT_COMMANDS.map((action) => (
-                      <button key={action.id} className="small-button rich-text-command" type="button" onClick={() => applyAgendaCommand(action)}>
-                        {action.label}
-                      </button>
-                    ))}
-                  </div>
+                  {renderRichTextToolbar("session-agenda", "small-button", applyAgendaCommand, applyAgendaFont)}
                   <div
                     id="session-agenda"
                     ref={agendaEditorRef}
@@ -855,13 +924,7 @@ export const SessionEditor = ({
 
         <div className="field field-wide">
           <label htmlFor="manual-notes">{modeMeta.primaryFieldLabel}</label>
-          <div className="rich-text-toolbar">
-            {RICH_TEXT_COMMANDS.map((action) => (
-              <button key={action.id} className="small-button rich-text-command" type="button" onClick={() => applyManualNotesCommand(action)}>
-                {action.label}
-              </button>
-            ))}
-          </div>
+          {renderRichTextToolbar("manual-notes", "small-button", applyManualNotesCommand, applyManualNotesFont)}
           <div
             className={`rich-text-surface manual-notes-rich-text-surface${isMinimal ? " editor-textarea-primary" : ""}`}
             id="manual-notes"
