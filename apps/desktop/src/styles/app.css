@@ -2902,6 +2902,166 @@ select {
   padding: 1.25rem;
 }
 
+.assistant-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.assistant-chat-card {
+  min-height: min(760px, calc(100vh - 190px));
+  display: grid;
+  grid-template-rows: auto auto minmax(260px, 1fr) auto;
+  gap: 1rem;
+}
+
+.assistant-workspace-header {
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.assistant-status-stack {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.assistant-option-row,
+.assistant-composer {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.assistant-option-row {
+  justify-content: space-between;
+}
+
+.assistant-private-toggle {
+  color: var(--app-muted);
+}
+
+.assistant-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  overflow: auto;
+  padding: 0.25rem;
+}
+
+.assistant-empty-state,
+.assistant-message {
+  border: 1px solid var(--app-border);
+  border-radius: 24px;
+  background: var(--app-surface-soft);
+  padding: 1rem;
+}
+
+.assistant-empty-state h3 {
+  margin: 0.25rem 0 0.45rem;
+}
+
+.assistant-message[data-role="user"] {
+  align-self: flex-end;
+  width: min(760px, 88%);
+  background: var(--app-accent-soft);
+  border-color: var(--app-accent-border);
+}
+
+.assistant-message[data-role="assistant"] {
+  align-self: flex-start;
+  width: min(840px, 92%);
+}
+
+.assistant-message p {
+  white-space: pre-wrap;
+  margin: 0.55rem 0 0;
+}
+
+.assistant-message-meta,
+.assistant-source-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.assistant-source-list {
+  margin-top: 0.75rem;
+}
+
+.assistant-tool-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+}
+
+.assistant-runtime-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+}
+
+.assistant-runtime-actions .primary-button,
+.assistant-runtime-actions .small-button {
+  min-height: 42px;
+}
+
+.assistant-runtime-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.88rem;
+}
+
+.assistant-source-chip {
+  border-radius: 999px;
+  background: var(--app-pill-bg);
+  color: var(--app-pill-text);
+  padding: 0.28rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.assistant-composer textarea {
+  min-height: 78px;
+  resize: vertical;
+  flex: 1;
+}
+
+.assistant-composer .primary-button {
+  align-self: stretch;
+  min-width: 140px;
+}
+
+.assistant-side-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.assistant-env-preview {
+  max-height: 260px;
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid var(--app-border);
+  background: var(--app-input);
+  color: var(--app-text);
+  padding: 0.85rem;
+  font-size: 0.78rem;
+}
+
+@media (max-width: 1100px) {
+  .assistant-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-side-panel {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+}
+
 .overlay-header {
   display: flex;
   justify-content: space-between;

@@ -10,6 +10,7 @@ import { TodosRailCard } from "../features/todos/components/TodosRailCard";
 import { TodosWorkspace } from "../features/todos/components/TodosWorkspace";
 import { TimeWorkspace } from "../features/time/components/TimeWorkspace";
 import { StructureWorkspace } from "../features/structure/components/StructureWorkspace";
+import { AssistantWorkspace } from "../features/assistant/components/AssistantWorkspace";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
 import type { SettingsSection } from "../features/settings/components/SettingsCard";
 import { hydrateAITextCache, snapshotAITextCache } from "../lib/ai/cache";
@@ -135,7 +136,7 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
   { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: true },
   { id: "time", label: "Timelogs", description: "Active timers, dense logs, and reporting", available: true },
   { id: "structure", label: "Structure", description: "Domains and projects as operational views", available: true },
-  { id: "assistant", label: "Assistant", description: "Future AI workflows and agents", available: false },
+  { id: "assistant", label: "Assistant", description: "Agentic chat with NoteSmith data", available: true },
   { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
 ];
 
@@ -3431,6 +3432,8 @@ export const App = () => {
                 onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "structure")}
                 onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "structure")}
               />
+            ) : activeWorkspace === "assistant" ? (
+              <AssistantWorkspace snapshot={snapshot} onOpenSettings={() => openSettingsSection("ai")} />
             ) : activeWorkspace !== "notes" ? (
               <div className="card empty-state-card">
                 <h2>Coming next</h2>

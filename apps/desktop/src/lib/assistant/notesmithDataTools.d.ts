@@ -1,0 +1,31 @@
+import type { DesktopAppSnapshot } from "@notesmith/domain";
+export type NoteSmithAssistantSourceType = "session" | "todo" | "activity" | "calendar" | "timelog" | "workspace";
+export interface NoteSmithAssistantSource {
+    id: string;
+    type: NoteSmithAssistantSourceType;
+    title: string;
+    date?: string;
+    snippet: string;
+    score: number;
+    metadata?: Record<string, string | number | boolean>;
+}
+export interface NoteSmithAssistantSearchOptions {
+    query: string;
+    includePrivate?: boolean;
+    limit?: number;
+    sourceTypes?: NoteSmithAssistantSourceType[];
+}
+export interface NoteSmithAssistantLinkedContext {
+    session: NoteSmithAssistantSource | null;
+    activity: NoteSmithAssistantSource | null;
+    calendarItems: NoteSmithAssistantSource[];
+    todos: NoteSmithAssistantSource[];
+    timelogs: NoteSmithAssistantSource[];
+}
+export declare const searchNoteSmithData: (snapshot: DesktopAppSnapshot, { query, includePrivate, limit, sourceTypes }: NoteSmithAssistantSearchOptions) => NoteSmithAssistantSource[];
+export declare const summarizeNoteSmithWorkspace: (snapshot: DesktopAppSnapshot, includePrivate?: boolean) => NoteSmithAssistantSource;
+export declare const getNoteSmithLinkedContext: (snapshot: DesktopAppSnapshot, id: string, includePrivate?: boolean) => NoteSmithAssistantLinkedContext;
+export declare const buildAssistantPreviewAnswer: (snapshot: DesktopAppSnapshot, query: string, includePrivate?: boolean) => {
+    answer: string;
+    sources: NoteSmithAssistantSource[];
+};

@@ -1,10 +1,14 @@
 use flate2::write::DeflateEncoder;
 use flate2::Compression;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
+use std::sync::{mpsc, Mutex};
+use std::thread;
+use std::time::Duration;
 use tauri::Manager;
 
 fn sanitize_filename(filename: &str) -> String {
@@ -71,6 +75,31 @@ struct DesktopStorageInfo {
 struct LocalBackupInfo {
     path: String,
     modified_ms: u64,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentSidecarReady {
+    host: String,
+    port: u16,
+    base_url: String,
+}
+
+#[derive(Deserialize)]
+struct AgentSidecarReadyLine {
+    event: String,
+    host: String,
+    port: u16,
+}
+
+struct AgentSidecarProcess {
+    child: Child,
+    ready: AgentSidecarReady,
+}
+
+#[derive(Default)]
+struct AgentSidecarState {
+    process: Mutex<Option<AgentSidecarProcess>>,
 }
 
 fn candidate_database_paths(app_config_dir: &Path, app_data_dir: &Path) -> Vec<PathBuf> {
@@ -647,9 +676,164 @@ async fn download_url_to_path(url: String, path: String) -> Result<String, Strin
     Ok(destination.to_string_lossy().to_string())
 }
 
+fn drain_sidecar_stdout(
+    stdout: impl std::io::Read + Send + 'static,
+    ready_tx: mpsc::Sender<AgentSidecarReady>,
+) {
+    thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        let mut sent_ready = false;
+        for line in reader.lines().map_while(Result::ok) {
+            if sent_ready {
+                continue;
+            }
+            let Ok(parsed) = serde_json::from_str::<AgentSidecarReadyLine>(&line) else {
+                continue;
+            };
+            if parsed.event != "ready" {
+                continue;
+            }
+            let ready = AgentSidecarReady {
+                host: parsed.host.clone(),
+                port: parsed.port,
+                base_url: format!("http://{}:{}", parsed.host, parsed.port),
+            };
+            let _ = ready_tx.send(ready);
+            sent_ready = true;
+        }
+    });
+}
+
+fn drain_sidecar_stderr(stderr: impl std::io::Read + Send + 'static) {
+    thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for _line in reader.lines().map_while(Result::ok) {}
+    });
+}
+
+fn resolve_agent_sidecar_command(app: &tauri::AppHandle) -> PathBuf {
+    let executable_name = if cfg!(windows) {
+        "agent-sidecar.exe"
+    } else {
+        "agent-sidecar"
+    };
+
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        for candidate in [
+            resource_dir.join(executable_name),
+            resource_dir.join("sidecars").join(executable_name),
+            resource_dir
+                .join("agent_platform")
+                .join(executable_name),
+        ] {
+            if candidate.exists() {
+                return candidate;
+            }
+        }
+    }
+
+    PathBuf::from(executable_name)
+}
+
+#[tauri::command]
+fn start_agent_sidecar(
+    app: tauri::AppHandle,
+    state: tauri::State<AgentSidecarState>,
+    env: HashMap<String, String>,
+) -> Result<AgentSidecarReady, String> {
+    let mut process_guard = state
+        .process
+        .lock()
+        .map_err(|_| "Could not lock the Assistant runtime state.".to_string())?;
+
+    if let Some(process) = process_guard.as_mut() {
+        match process.child.try_wait() {
+            Ok(None) => return Ok(process.ready.clone()),
+            Ok(Some(_)) | Err(_) => {
+                *process_guard = None;
+            }
+        }
+    }
+
+    let mut command = Command::new(resolve_agent_sidecar_command(&app));
+    command.envs(env).stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = command.spawn().map_err(|error| {
+        format!(
+            "Could not start agent-sidecar. Install agent_platform and make sure agent-sidecar is on PATH until it is bundled with NoteSmith. {error}"
+        )
+    })?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Could not listen for the agent-sidecar ready event.".to_string())?;
+    let (ready_tx, ready_rx) = mpsc::channel();
+    drain_sidecar_stdout(stdout, ready_tx);
+
+    if let Some(stderr) = child.stderr.take() {
+        drain_sidecar_stderr(stderr);
+    }
+
+    let ready = match ready_rx.recv_timeout(Duration::from_secs(15)) {
+        Ok(ready) => ready,
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(
+                "agent-sidecar started but did not emit a ready event within 15 seconds."
+                    .to_string(),
+            );
+        }
+    };
+
+    *process_guard = Some(AgentSidecarProcess {
+        child,
+        ready: ready.clone(),
+    });
+    Ok(ready)
+}
+
+#[tauri::command]
+fn stop_agent_sidecar(state: tauri::State<AgentSidecarState>) -> Result<(), String> {
+    let mut process_guard = state
+        .process
+        .lock()
+        .map_err(|_| "Could not lock the Assistant runtime state.".to_string())?;
+
+    if let Some(mut process) = process_guard.take() {
+        let _ = process.child.kill();
+        let _ = process.child.wait();
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn get_agent_sidecar_status(
+    state: tauri::State<AgentSidecarState>,
+) -> Result<Option<AgentSidecarReady>, String> {
+    let mut process_guard = state
+        .process
+        .lock()
+        .map_err(|_| "Could not lock the Assistant runtime state.".to_string())?;
+
+    if let Some(process) = process_guard.as_mut() {
+        match process.child.try_wait() {
+            Ok(None) => return Ok(Some(process.ready.clone())),
+            Ok(Some(_)) | Err(_) => {
+                *process_guard = None;
+            }
+        }
+    }
+
+    Ok(None)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(AgentSidecarState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -672,7 +856,10 @@ pub fn run() {
             open_url_in_default_browser,
             launch_installer_file,
             load_update_manifest,
-            download_url_to_path
+            download_url_to_path,
+            start_agent_sidecar,
+            stop_agent_sidecar,
+            get_agent_sidecar_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running NoteSmith desktop");
