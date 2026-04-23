@@ -405,6 +405,30 @@ async fn load_update_manifest(url: String) -> Result<String, String> {
         .map_err(|error| format!("Could not read update manifest body: {error}"))
 }
 
+#[tauri::command]
+async fn download_url_to_path(url: String, path: String) -> Result<String, String> {
+    let destination = PathBuf::from(path);
+    ensure_parent_dir(&destination)?;
+
+    let response = reqwest::get(&url)
+        .await
+        .map_err(|error| format!("Could not download installer: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Could not download installer from GitHub ({}).",
+            response.status()
+        ));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Could not read installer download: {error}"))?;
+    fs::write(&destination, bytes).map_err(|error| error.to_string())?;
+
+    Ok(destination.to_string_lossy().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -424,7 +448,8 @@ pub fn run() {
             get_latest_local_backup_info,
             delete_persisted_file,
             open_path_in_file_manager,
-            load_update_manifest
+            load_update_manifest,
+            download_url_to_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running NoteSmith desktop");

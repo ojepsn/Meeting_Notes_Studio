@@ -32,7 +32,7 @@ import { createAIRuntimeStatusHandler } from "../lib/ai/status";
 import { transcribeAudio } from "../lib/ai/services/transcribeAudio";
 import { translateOutput } from "../lib/ai/services/translateOutput";
 import type { AIRuntimeEvent } from "../lib/ai/runtime";
-import { checkForDesktopUpdates, type DesktopUpdateInstallEvent } from "../lib/ai/updater";
+import { checkForDesktopUpdates } from "../lib/ai/updater";
 import { exportOutputAsDocx, exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsPdf, exportOutputAsText } from "../lib/export/exportService";
 import {
   fileToAttachmentRecord,
@@ -55,6 +55,7 @@ import {
 import {
   type DesktopBackupBundle,
   createLocalSnapshotBackup,
+  downloadInstallerToDownloadsAndOpen,
   exportSnapshotBackup,
   exportSnapshotBackupToDownloads,
   getDesktopBundleType,
@@ -74,8 +75,6 @@ import { acceptRuleSuggestion, collectRuleSuggestionObservations, ignoreRuleSugg
 import { buildStructureOptions, createEmptyStructureOptions } from "../lib/structure/options";
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
-
-const DESKTOP_UPDATE_INSTALL_TIMEOUT_MS = 120000;
 
 type AppWorkspace = "notes" | "todos" | "activities" | "calendar" | "time" | "structure" | "assistant" | "files";
 type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | "instructions" | null;
@@ -282,7 +281,6 @@ export const App = () => {
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [recordingStatusNote, setRecordingStatusNote] = useState<string | null>(null);
   const [availableUpdateVersion, setAvailableUpdateVersion] = useState<string | null>(null);
-  const [installUpdate, setInstallUpdate] = useState<null | ((onEvent?: (event: DesktopUpdateInstallEvent) => void) => Promise<void>)>(null);
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
   const [updateStatusNote, setUpdateStatusNote] = useState<string | null>(null);
@@ -473,13 +471,11 @@ export const App = () => {
         if (cancelled) return;
         if (result.available) {
           setAvailableUpdateVersion(result.version);
-          setInstallUpdate(() => result.install);
-          setManualUpdateUrl(null);
+          setManualUpdateUrl(result.downloadUrl ?? null);
           setUpdateStatusNote(`Version ${result.version} is available to install.`);
           setStatusNote(`Update available: ${result.version}`);
         } else {
           setAvailableUpdateVersion(null);
-          setInstallUpdate(null);
           setManualUpdateUrl("downloadUrl" in result && result.downloadUrl ? result.downloadUrl : null);
           setUpdateStatusNote(result.note ?? "Desktop app is up to date.");
         }
@@ -1435,13 +1431,11 @@ export const App = () => {
       const result = await checkForDesktopUpdates();
       if (result.available) {
         setAvailableUpdateVersion(result.version);
-        setInstallUpdate(() => result.install);
         setManualUpdateUrl(result.downloadUrl ?? null);
         setUpdateStatusNote(`Version ${result.version} is available to install.`);
         setStatusNote(`Update available: ${result.version}`);
       } else {
         setAvailableUpdateVersion(null);
-        setInstallUpdate(null);
         setManualUpdateUrl("downloadUrl" in result && result.downloadUrl ? result.downloadUrl : null);
         setUpdateStatusNote(result.note ?? "Desktop app is already up to date.");
         setStatusNote(result.note ?? "Desktop app is already up to date.");
@@ -1456,13 +1450,13 @@ export const App = () => {
   };
 
   const handleInstallUpdate = async () => {
-    if (!installUpdate || !availableUpdateVersion) {
+    if (!availableUpdateVersion || !manualUpdateUrl) {
       return;
     }
 
     setIsInstallingUpdate(true);
-    setUpdateStatusNote(`Downloading and installing version ${availableUpdateVersion}...`);
-    setStatusNote(`Installing update ${availableUpdateVersion}...`);
+    setUpdateStatusNote(`Preparing installer for version ${availableUpdateVersion}...`);
+    setStatusNote(`Preparing update ${availableUpdateVersion}...`);
     try {
       const backupBundle = buildDesktopBackupBundle();
       const backupPath = backupBundle ? await createLocalSnapshotBackup(backupBundle) : null;
@@ -1474,59 +1468,12 @@ export const App = () => {
       if (downloadsBackupPath) {
         setStatusNote(`Created a Downloads backup at ${downloadsBackupPath.path} before installing ${availableUpdateVersion}.`);
       }
-      let updateDownloadTotal = 0;
-      let updateDownloaded = 0;
-      const handleUpdateInstallEvent = (event: DesktopUpdateInstallEvent) => {
-        if (event.event === "Started") {
-          updateDownloadTotal = event.data.contentLength ?? 0;
-          updateDownloaded = 0;
-          const sizeLabel = updateDownloadTotal ? `${Math.round(updateDownloadTotal / 1024 / 1024)} MB` : "the update";
-          setUpdateStatusNote(`Downloading ${availableUpdateVersion} (${sizeLabel})...`);
-          setStatusNote(`Downloading update ${availableUpdateVersion}...`);
-          return;
-        }
-        if (event.event === "Progress") {
-          updateDownloaded += event.data.chunkLength;
-          if (updateDownloadTotal > 0) {
-            const percent = Math.min(100, Math.round((updateDownloaded / updateDownloadTotal) * 100));
-            setUpdateStatusNote(`Downloading ${availableUpdateVersion}: ${percent}% complete...`);
-          }
-          return;
-        }
-        if (event.event === "Finished") {
-          setUpdateStatusNote(`Downloaded ${availableUpdateVersion}. Starting the Windows installer...`);
-          setStatusNote(`Downloaded update ${availableUpdateVersion}. Starting installer...`);
-          return;
-        }
-        setUpdateStatusNote(
-          `Installing ${availableUpdateVersion}. Windows may close NoteSmith while the update is applied. If this does not finish, use Download installer manually.`,
-        );
-        setStatusNote(`Installing update ${availableUpdateVersion}...`);
-      };
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-      try {
-        await Promise.race([
-          installUpdate(handleUpdateInstallEvent),
-          new Promise<never>((_, reject) => {
-            timeoutId = setTimeout(() => {
-              reject(
-                new Error(
-                  manualUpdateUrl
-                    ? `The in-app installer did not finish within ${Math.round(DESKTOP_UPDATE_INSTALL_TIMEOUT_MS / 1000)} seconds. Use Download installer and run it manually.`
-                    : `The in-app installer did not finish within ${Math.round(DESKTOP_UPDATE_INSTALL_TIMEOUT_MS / 1000)} seconds. Download the latest installer from GitHub Releases and run it manually.`,
-                ),
-              );
-            }, DESKTOP_UPDATE_INSTALL_TIMEOUT_MS);
-          }),
-        ]);
-      } finally {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-      }
-      setUpdateStatusNote(`Version ${availableUpdateVersion} was installed. Restart the app to finish updating.`);
-      setStatusNote(`Update ${availableUpdateVersion} installed. Restart the app to finish updating.`);
-      setInstallUpdate(null);
+      setUpdateStatusNote(`Downloading the signed ${availableUpdateVersion} installer to Downloads...`);
+      const installer = await downloadInstallerToDownloadsAndOpen(manualUpdateUrl, availableUpdateVersion);
+      setUpdateStatusNote(
+        `Downloaded and opened the ${availableUpdateVersion} installer from ${installer.path}. Close NoteSmith if Windows asks before continuing.`,
+      );
+      setStatusNote(`Opened installer for update ${availableUpdateVersion}.`);
       setAvailableUpdateVersion(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not install the update.";

@@ -215,6 +215,30 @@ export const openDesktopPath = async (path) => {
     }
     await invoke("open_path_in_file_manager", { path });
 };
+const getFilenameFromUrl = (url, fallback) => {
+    try {
+        const parsed = new URL(url);
+        const filename = parsed.pathname.split("/").filter(Boolean).pop();
+        return filename || fallback;
+    }
+    catch {
+        return fallback;
+    }
+};
+export const downloadInstallerToDownloadsAndOpen = async (url, version) => {
+    if (!isTauriRuntime()) {
+        window.open(url, "_blank", "noopener,noreferrer");
+        return { path: url };
+    }
+    const filename = getFilenameFromUrl(url, `NoteSmith.Desktop_${version}_x64-setup.exe`);
+    const destinationPath = joinPath(await downloadDir(), filename);
+    const downloadedPath = await invoke("download_url_to_path", {
+        url,
+        path: destinationPath,
+    });
+    await openDesktopPath(downloadedPath);
+    return { path: downloadedPath };
+};
 export const getDesktopAppVersion = async () => {
     if (!isTauriRuntime()) {
         return null;

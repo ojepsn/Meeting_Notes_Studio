@@ -41,7 +41,7 @@ export declare const checkForDesktopUpdates: () => Promise<{
     bundleType: import("@tauri-apps/api/app").BundleType | null;
     source: "native";
     downloadUrl: string;
-    install: (onEvent?: (event: DesktopUpdateInstallEvent) => void) => Promise<void>;
+    install: () => Promise<never>;
     note?: undefined;
     publishedVersion?: undefined;
 } | {
