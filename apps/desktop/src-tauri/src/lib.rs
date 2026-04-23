@@ -2,11 +2,12 @@ use flate2::write::DeflateEncoder;
 use flate2::Compression;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::{mpsc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tauri::Manager;
@@ -679,11 +680,13 @@ async fn download_url_to_path(url: String, path: String) -> Result<String, Strin
 fn drain_sidecar_stdout(
     stdout: impl std::io::Read + Send + 'static,
     ready_tx: mpsc::Sender<AgentSidecarReady>,
+    recent_logs: Arc<Mutex<VecDeque<String>>>,
 ) {
     thread::spawn(move || {
         let reader = BufReader::new(stdout);
         let mut sent_ready = false;
         for line in reader.lines().map_while(Result::ok) {
+            push_recent_sidecar_log(&recent_logs, format!("stdout: {line}"));
             if sent_ready {
                 continue;
             }
@@ -704,10 +707,31 @@ fn drain_sidecar_stdout(
     });
 }
 
-fn drain_sidecar_stderr(stderr: impl std::io::Read + Send + 'static) {
+fn push_recent_sidecar_log(recent_logs: &Arc<Mutex<VecDeque<String>>>, line: String) {
+    if let Ok(mut logs) = recent_logs.lock() {
+        logs.push_back(line);
+        while logs.len() > 40 {
+            logs.pop_front();
+        }
+    }
+}
+
+fn read_recent_sidecar_logs(recent_logs: &Arc<Mutex<VecDeque<String>>>) -> String {
+    match recent_logs.lock() {
+        Ok(logs) if !logs.is_empty() => logs.iter().cloned().collect::<Vec<_>>().join("\n"),
+        _ => "No sidecar output was captured.".to_string(),
+    }
+}
+
+fn drain_sidecar_stderr(
+    stderr: impl std::io::Read + Send + 'static,
+    recent_logs: Arc<Mutex<VecDeque<String>>>,
+) {
     thread::spawn(move || {
         let reader = BufReader::new(stderr);
-        for _line in reader.lines().map_while(Result::ok) {}
+        for line in reader.lines().map_while(Result::ok) {
+            push_recent_sidecar_log(&recent_logs, format!("stderr: {line}"));
+        }
     });
 }
 
@@ -812,20 +836,29 @@ fn start_agent_sidecar(
         .take()
         .ok_or_else(|| "Could not listen for the agent-sidecar ready event.".to_string())?;
     let (ready_tx, ready_rx) = mpsc::channel();
-    drain_sidecar_stdout(stdout, ready_tx);
+    let recent_logs = Arc::new(Mutex::new(VecDeque::new()));
+    drain_sidecar_stdout(stdout, ready_tx, Arc::clone(&recent_logs));
 
     if let Some(stderr) = child.stderr.take() {
-        drain_sidecar_stderr(stderr);
+        drain_sidecar_stderr(stderr, Arc::clone(&recent_logs));
     }
 
-    let ready = match ready_rx.recv_timeout(Duration::from_secs(15)) {
+    let ready = match ready_rx.recv_timeout(Duration::from_secs(60)) {
         Ok(ready) => ready,
         Err(_) => {
+            let exit_status = child.try_wait().ok().flatten();
             let _ = child.kill();
             let _ = child.wait();
+            let log_output = read_recent_sidecar_logs(&recent_logs);
             return Err(
-                "agent-sidecar started but did not emit a ready event within 15 seconds."
-                    .to_string(),
+                format!(
+                    "agent-sidecar did not emit a ready event within 60 seconds.{} Recent output:\n{}",
+                    match exit_status {
+                        Some(status) => format!(" The process exited early with status {status}."),
+                        None => " The process was still running when NoteSmith timed out.".to_string(),
+                    },
+                    log_output
+                ),
             );
         }
     };
