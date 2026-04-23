@@ -97,10 +97,14 @@ describe("checkForDesktopUpdates", () => {
   });
 
   it("returns a native install path when the updater plugin finds an update", async () => {
-    const downloadAndInstall = vi.fn();
+    const download = vi.fn(async (onEvent?: (event: unknown) => void) => {
+      onEvent?.({ event: "Finished" });
+    });
+    const install = vi.fn();
     updaterCheck.mockResolvedValue({
       version: "0.1.19",
-      downloadAndInstall,
+      download,
+      install,
     });
     invoke.mockResolvedValue(
       JSON.stringify({
@@ -117,8 +121,12 @@ describe("checkForDesktopUpdates", () => {
       expect(result.version).toBe("0.1.19");
       expect(result.source).toBe("native");
       expect(result.downloadUrl).toContain("setup.exe");
-      await result.install();
-      expect(downloadAndInstall).toHaveBeenCalledTimes(1);
+      const onEvent = vi.fn();
+      await result.install(onEvent);
+      expect(download).toHaveBeenCalledTimes(1);
+      expect(install).toHaveBeenCalledTimes(1);
+      expect(onEvent).toHaveBeenCalledWith({ event: "Finished" });
+      expect(onEvent).toHaveBeenCalledWith({ event: "Installing" });
     }
   });
 

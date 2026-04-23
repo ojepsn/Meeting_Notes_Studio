@@ -1103,10 +1103,37 @@ export const App = () => {
             if (downloadsBackupPath) {
                 setStatusNote(`Created a Downloads backup at ${downloadsBackupPath.path} before installing ${availableUpdateVersion}.`);
             }
+            let updateDownloadTotal = 0;
+            let updateDownloaded = 0;
+            const handleUpdateInstallEvent = (event) => {
+                if (event.event === "Started") {
+                    updateDownloadTotal = event.data.contentLength ?? 0;
+                    updateDownloaded = 0;
+                    const sizeLabel = updateDownloadTotal ? `${Math.round(updateDownloadTotal / 1024 / 1024)} MB` : "the update";
+                    setUpdateStatusNote(`Downloading ${availableUpdateVersion} (${sizeLabel})...`);
+                    setStatusNote(`Downloading update ${availableUpdateVersion}...`);
+                    return;
+                }
+                if (event.event === "Progress") {
+                    updateDownloaded += event.data.chunkLength;
+                    if (updateDownloadTotal > 0) {
+                        const percent = Math.min(100, Math.round((updateDownloaded / updateDownloadTotal) * 100));
+                        setUpdateStatusNote(`Downloading ${availableUpdateVersion}: ${percent}% complete...`);
+                    }
+                    return;
+                }
+                if (event.event === "Finished") {
+                    setUpdateStatusNote(`Downloaded ${availableUpdateVersion}. Starting the Windows installer...`);
+                    setStatusNote(`Downloaded update ${availableUpdateVersion}. Starting installer...`);
+                    return;
+                }
+                setUpdateStatusNote(`Installing ${availableUpdateVersion}. Windows may close NoteSmith while the update is applied. If this does not finish, use Download installer manually.`);
+                setStatusNote(`Installing update ${availableUpdateVersion}...`);
+            };
             let timeoutId = null;
             try {
                 await Promise.race([
-                    installUpdate(),
+                    installUpdate(handleUpdateInstallEvent),
                     new Promise((_, reject) => {
                         timeoutId = setTimeout(() => {
                             reject(new Error(manualUpdateUrl

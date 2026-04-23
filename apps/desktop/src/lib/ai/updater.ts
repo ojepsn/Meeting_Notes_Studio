@@ -9,6 +9,12 @@ type UpdateManifest = {
   manual_url?: string;
 };
 
+export type DesktopUpdateInstallEvent =
+  | { event: "Started"; data: { contentLength?: number } }
+  | { event: "Progress"; data: { chunkLength: number } }
+  | { event: "Finished" }
+  | { event: "Installing" };
+
 export const normalizeVersion = (value: string) =>
   value.trim().replace(/^v/i, "");
 
@@ -105,8 +111,10 @@ export const checkForDesktopUpdates = async () => {
           manifest?.manual_url ||
           manifest?.platforms?.["windows-x86_64"]?.url ||
           "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest",
-        install: async () => {
-          await update.downloadAndInstall();
+        install: async (onEvent?: (event: DesktopUpdateInstallEvent) => void) => {
+          await update.download((event) => onEvent?.(event as DesktopUpdateInstallEvent), { timeout: 120000 });
+          onEvent?.({ event: "Installing" });
+          await update.install();
         },
       };
     }

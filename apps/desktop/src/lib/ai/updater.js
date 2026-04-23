@@ -81,8 +81,10 @@ export const checkForDesktopUpdates = async () => {
                 downloadUrl: manifest?.manual_url ||
                     manifest?.platforms?.["windows-x86_64"]?.url ||
                     "https://github.com/ojepsn/Meeting_Notes_Studio/releases/latest",
-                install: async () => {
-                    await update.downloadAndInstall();
+                install: async (onEvent) => {
+                    await update.download((event) => onEvent?.(event), { timeout: 120000 });
+                    onEvent?.({ event: "Installing" });
+                    await update.install();
                 },
             };
         }

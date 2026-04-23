@@ -32,7 +32,7 @@ import { createAIRuntimeStatusHandler } from "../lib/ai/status";
 import { transcribeAudio } from "../lib/ai/services/transcribeAudio";
 import { translateOutput } from "../lib/ai/services/translateOutput";
 import type { AIRuntimeEvent } from "../lib/ai/runtime";
-import { checkForDesktopUpdates } from "../lib/ai/updater";
+import { checkForDesktopUpdates, type DesktopUpdateInstallEvent } from "../lib/ai/updater";
 import { exportOutputAsDocx, exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsPdf, exportOutputAsText } from "../lib/export/exportService";
 import {
   fileToAttachmentRecord,
@@ -280,7 +280,7 @@ export const App = () => {
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [recordingStatusNote, setRecordingStatusNote] = useState<string | null>(null);
   const [availableUpdateVersion, setAvailableUpdateVersion] = useState<string | null>(null);
-  const [installUpdate, setInstallUpdate] = useState<null | (() => Promise<void>)>(null);
+  const [installUpdate, setInstallUpdate] = useState<null | ((onEvent?: (event: DesktopUpdateInstallEvent) => void) => Promise<void>)>(null);
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
   const [updateStatusNote, setUpdateStatusNote] = useState<string | null>(null);
@@ -1446,10 +1446,39 @@ export const App = () => {
       if (downloadsBackupPath) {
         setStatusNote(`Created a Downloads backup at ${downloadsBackupPath.path} before installing ${availableUpdateVersion}.`);
       }
+      let updateDownloadTotal = 0;
+      let updateDownloaded = 0;
+      const handleUpdateInstallEvent = (event: DesktopUpdateInstallEvent) => {
+        if (event.event === "Started") {
+          updateDownloadTotal = event.data.contentLength ?? 0;
+          updateDownloaded = 0;
+          const sizeLabel = updateDownloadTotal ? `${Math.round(updateDownloadTotal / 1024 / 1024)} MB` : "the update";
+          setUpdateStatusNote(`Downloading ${availableUpdateVersion} (${sizeLabel})...`);
+          setStatusNote(`Downloading update ${availableUpdateVersion}...`);
+          return;
+        }
+        if (event.event === "Progress") {
+          updateDownloaded += event.data.chunkLength;
+          if (updateDownloadTotal > 0) {
+            const percent = Math.min(100, Math.round((updateDownloaded / updateDownloadTotal) * 100));
+            setUpdateStatusNote(`Downloading ${availableUpdateVersion}: ${percent}% complete...`);
+          }
+          return;
+        }
+        if (event.event === "Finished") {
+          setUpdateStatusNote(`Downloaded ${availableUpdateVersion}. Starting the Windows installer...`);
+          setStatusNote(`Downloaded update ${availableUpdateVersion}. Starting installer...`);
+          return;
+        }
+        setUpdateStatusNote(
+          `Installing ${availableUpdateVersion}. Windows may close NoteSmith while the update is applied. If this does not finish, use Download installer manually.`,
+        );
+        setStatusNote(`Installing update ${availableUpdateVersion}...`);
+      };
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
       try {
         await Promise.race([
-          installUpdate(),
+          installUpdate(handleUpdateInstallEvent),
           new Promise<never>((_, reject) => {
             timeoutId = setTimeout(() => {
               reject(

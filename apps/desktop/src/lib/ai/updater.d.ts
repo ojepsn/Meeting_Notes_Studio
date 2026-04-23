@@ -5,6 +5,21 @@ type UpdateManifest = {
     }>;
     manual_url?: string;
 };
+export type DesktopUpdateInstallEvent = {
+    event: "Started";
+    data: {
+        contentLength?: number;
+    };
+} | {
+    event: "Progress";
+    data: {
+        chunkLength: number;
+    };
+} | {
+    event: "Finished";
+} | {
+    event: "Installing";
+};
 export declare const normalizeVersion: (value: string) => string;
 export declare const compareVersions: (left: string, right: string) => number;
 export declare const loadPublishedManifest: () => Promise<UpdateManifest>;
@@ -26,7 +41,7 @@ export declare const checkForDesktopUpdates: () => Promise<{
     bundleType: import("@tauri-apps/api/app").BundleType | null;
     source: "native";
     downloadUrl: string;
-    install: () => Promise<void>;
+    install: (onEvent?: (event: DesktopUpdateInstallEvent) => void) => Promise<void>;
     note?: undefined;
     publishedVersion?: undefined;
 } | {
