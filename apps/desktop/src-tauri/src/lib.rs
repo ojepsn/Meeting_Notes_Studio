@@ -732,7 +732,44 @@ fn resolve_agent_sidecar_command(app: &tauri::AppHandle) -> PathBuf {
         }
     }
 
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            let candidate = exe_dir.join(executable_name);
+            if candidate.exists() {
+                return candidate;
+            }
+        }
+    }
+
     PathBuf::from(executable_name)
+}
+
+fn sqlite_url_for_path(path: &Path) -> String {
+    format!("sqlite+aiosqlite:///{}", path.to_string_lossy().replace('\\', "/"))
+}
+
+fn prepare_agent_sidecar_env(
+    app: &tauri::AppHandle,
+    mut env: HashMap<String, String>,
+) -> Result<HashMap<String, String>, String> {
+    let storage = prepare_storage(app)?;
+    let agent_data_dir = PathBuf::from(storage.app_data_dir).join("agent-platform");
+    fs::create_dir_all(&agent_data_dir).map_err(|error| error.to_string())?;
+
+    env.insert(
+        "AGENT_PLATFORM_DATA_DIR".to_string(),
+        agent_data_dir.to_string_lossy().to_string(),
+    );
+    env.insert(
+        "AGENT_PLATFORM_DATABASE__URL".to_string(),
+        sqlite_url_for_path(&agent_data_dir.join("agent_platform.db")),
+    );
+    env.insert(
+        "AGENT_PLATFORM_WORKFLOW__CHECKPOINT_DB_URL".to_string(),
+        sqlite_url_for_path(&agent_data_dir.join("checkpoints.db")),
+    );
+
+    Ok(env)
 }
 
 #[tauri::command]
@@ -755,12 +792,18 @@ fn start_agent_sidecar(
         }
     }
 
-    let mut command = Command::new(resolve_agent_sidecar_command(&app));
-    command.envs(env).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let sidecar_command = resolve_agent_sidecar_command(&app);
+    let sidecar_env = prepare_agent_sidecar_env(&app, env)?;
+    let mut command = Command::new(&sidecar_command);
+    command
+        .envs(sidecar_env)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
     let mut child = command.spawn().map_err(|error| {
         format!(
-            "Could not start agent-sidecar. Install agent_platform and make sure agent-sidecar is on PATH until it is bundled with NoteSmith. {error}"
+            "Could not start the bundled agent-sidecar at {}. If this is a development build, run `node ./scripts/prepare-agent-sidecar.mjs` or install agent-sidecar on PATH. {error}",
+            sidecar_command.to_string_lossy()
         )
     })?;
 

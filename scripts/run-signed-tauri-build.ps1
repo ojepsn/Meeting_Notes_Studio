@@ -16,4 +16,5 @@ $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
 Set-Location $repoRoot
 
 & "C:\Users\ojepp\.cargo\bin\cargo.exe" -V *>&1 | Tee-Object -FilePath $logPath -Append
+& "C:\Program Files\nodejs\node.exe" .\scripts\prepare-agent-sidecar.mjs *>&1 | Tee-Object -FilePath $logPath -Append
 & "C:\Program Files\nodejs\npm.cmd" run tauri:build --workspace @notesmith/desktop *>&1 | Tee-Object -FilePath $logPath -Append

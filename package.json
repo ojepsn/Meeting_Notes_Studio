@@ -12,6 +12,7 @@
     "tauri:build": "npm run tauri:build --workspace @notesmith/desktop",
     "desktop:dev": "npm run dev --workspace @notesmith/desktop",
     "desktop:build": "npm run build --workspace @notesmith/desktop",
+    "desktop:sidecar:prepare": "node ./scripts/prepare-agent-sidecar.mjs",
     "pwa:test": "node pwa-core.test.mjs && node pwa-smoke.test.mjs",
     "desktop:tauri:dev": "npm run tauri:dev --workspace @notesmith/desktop",
     "desktop:tauri:build": "npm run tauri:build --workspace @notesmith/desktop",

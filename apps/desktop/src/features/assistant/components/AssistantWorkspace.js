@@ -18,6 +18,7 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
     const [sidecarReady, setSidecarReady] = useState(null);
     const [runtimeStatus, setRuntimeStatus] = useState("Not started");
     const [runtimeHealth, setRuntimeHealth] = useState(null);
+    const [runtimeError, setRuntimeError] = useState(null);
     const [isStartingRuntime, setIsStartingRuntime] = useState(false);
     const [isAskingAgent, setIsAskingAgent] = useState(false);
     const [agentSessionId, setAgentSessionId] = useState(null);
@@ -50,6 +51,7 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
     const startRuntime = async () => {
         setIsStartingRuntime(true);
         setRuntimeHealth(null);
+        setRuntimeError(null);
         setRuntimeStatus("Starting agent-sidecar...");
         try {
             const ready = await startAgentSidecar(launchConfig.env);
@@ -59,8 +61,10 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
             setRuntimeHealth(health.ok ? "Health check passed" : "Runtime started; health endpoint not confirmed yet.");
         }
         catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
             setSidecarReady(null);
-            setRuntimeStatus(error instanceof Error ? error.message : String(error));
+            setRuntimeError(message);
+            setRuntimeStatus("Runtime not available");
         }
         finally {
             setIsStartingRuntime(false);
@@ -70,6 +74,7 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
         await stopAgentSidecar();
         setSidecarReady(null);
         setRuntimeHealth(null);
+        setRuntimeError(null);
         setRuntimeStatus("Stopped");
     };
     const collectMcpSources = (query) => [
@@ -115,10 +120,10 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
         const userMessage = { id: createMessageId(), role: "user", text: query, sources: [], createdAt };
         const assistantMessageId = createMessageId();
         const fallbackAnswer = sources.length
-            ? `MCP preview found ${sources.length} matching NoteSmith ${sources.length === 1 ? "record" : "records"} for "${query}". Start the local agent runtime to generate a full answer.\n\n${sources
+            ? `MCP preview found ${sources.length} matching NoteSmith ${sources.length === 1 ? "record" : "records"} for "${query}". The local agent runtime is not running, so this is source preview only.\n\n${sources
                 .map((source) => `- ${source.title}${source.date ? ` (${source.date})` : ""}: ${source.snippet}`)
                 .join("\n")}`
-            : `MCP preview did not find matching NoteSmith records for "${query}". Start the local agent runtime to ask the model anyway.`;
+            : `MCP preview did not find matching NoteSmith records for "${query}". The local agent runtime is not running, so no model answer was generated.`;
         setMessages((current) => [
             ...current,
             userMessage,
@@ -175,5 +180,5 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
                                         event.preventDefault();
                                         void submit();
                                     }
-                                }, placeholder: "Ask, for example: What did we decide about the ARE project?" }), _jsx("button", { className: "primary-button", type: "button", onClick: () => void submit(), disabled: !draft.trim() || isAskingAgent, children: isAskingAgent ? "Asking..." : sidecarReady ? "Ask Agent" : "Preview Sources" })] })] }), _jsxs("aside", { className: "assistant-side-panel", children: [_jsxs("section", { className: "card sidebar-card", children: [_jsx("h3", { children: "Agent runtime" }), _jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Integration" }), _jsx("span", { className: "muted", children: "agent_platform sidecar over local HTTP/SSE" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Tool boundary" }), _jsx("span", { className: "muted", children: "NoteSmith data is exposed through MCP tools only." })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Ready event" }), _jsx("span", { className: "muted", children: launchConfig.expectedReadyEvent })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Status" }), _jsx("span", { className: "muted", children: runtimeStatus })] }), sidecarReady ? (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Endpoint" }), _jsx("span", { className: "muted", children: sidecarReady.baseUrl })] })) : null, runtimeHealth ? (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Health" }), _jsx("span", { className: "muted", children: runtimeHealth })] })) : null] }), _jsxs("div", { className: "assistant-runtime-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: startRuntime, disabled: isStartingRuntime || Boolean(sidecarReady), children: isStartingRuntime ? "Starting..." : sidecarReady ? "Runtime running" : "Start local agent runtime" }), _jsx("button", { className: "small-button", type: "button", onClick: stopRuntime, disabled: !sidecarReady && !isStartingRuntime, children: "Stop runtime" })] }), _jsx("p", { className: "muted assistant-runtime-note", children: "This first bridge expects `agent-sidecar` to be installed on PATH. Packaging it with the NoteSmith installer is the next integration slice." })] }), _jsxs("section", { className: "card sidebar-card", children: [_jsx("h3", { children: "Available MCP tools" }), _jsx("div", { className: "assistant-tool-list", children: mcpTools.map((tool) => (_jsx("span", { className: "assistant-source-chip", children: tool.name }, tool.name))) })] }), _jsxs("section", { className: "card sidebar-card", children: [_jsx("h3", { children: "API key handling" }), _jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Owner" }), _jsx("span", { className: "muted", children: storagePolicy.owner })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Runtime" }), _jsx("span", { className: "muted", children: storagePolicy.runtime })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Persistence" }), _jsx("span", { className: "muted", children: storagePolicy.persistence })] })] })] }), _jsxs("details", { className: "card sidebar-card workspace-disclosure", children: [_jsx("summary", { children: "Sidecar environment preview" }), _jsx("div", { className: "workspace-disclosure-body", children: _jsx("pre", { className: "assistant-env-preview", children: JSON.stringify(launchConfig.redactedEnv, null, 2) }) })] })] })] }));
+                                }, placeholder: "Ask, for example: What did we decide about the ARE project?" }), _jsx("button", { className: "primary-button", type: "button", onClick: () => void submit(), disabled: !draft.trim() || isAskingAgent, children: isAskingAgent ? "Asking..." : sidecarReady ? "Ask Agent" : "Preview Sources" })] })] }), _jsxs("aside", { className: "assistant-side-panel", children: [_jsxs("section", { className: "card sidebar-card", children: [_jsx("h3", { children: "Agent runtime" }), _jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Integration" }), _jsx("span", { className: "muted", children: "agent_platform sidecar over local HTTP/SSE" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Tool boundary" }), _jsx("span", { className: "muted", children: "NoteSmith data is exposed through MCP tools only." })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Ready event" }), _jsx("span", { className: "muted", children: launchConfig.expectedReadyEvent })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Status" }), _jsx("span", { className: "muted", children: runtimeStatus })] }), sidecarReady ? (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Endpoint" }), _jsx("span", { className: "muted", children: sidecarReady.baseUrl })] })) : null, runtimeHealth ? (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Health" }), _jsx("span", { className: "muted", children: runtimeHealth })] })) : null] }), runtimeError ? (_jsxs("div", { className: "assistant-runtime-error", role: "status", children: [_jsx("strong", { children: "Runtime could not start" }), _jsx("span", { children: runtimeError }), _jsx("span", { children: "Release builds include the agent sidecar. In development builds, run `npm run desktop:sidecar:prepare` or install `agent-sidecar` on PATH." })] })) : null, _jsxs("div", { className: "assistant-runtime-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: startRuntime, disabled: isStartingRuntime || Boolean(sidecarReady), children: isStartingRuntime ? "Starting..." : sidecarReady ? "Runtime running" : "Start local agent runtime" }), _jsx("button", { className: "small-button", type: "button", onClick: stopRuntime, disabled: !sidecarReady && !isStartingRuntime, children: "Stop runtime" })] }), _jsx("p", { className: "muted assistant-runtime-note", children: "Release builds include the local `agent_platform` sidecar. Development builds fall back to `agent-sidecar` on PATH if the bundled binary has not been prepared." })] }), _jsxs("section", { className: "card sidebar-card", children: [_jsx("h3", { children: "Available MCP tools" }), _jsx("div", { className: "assistant-tool-list", children: mcpTools.map((tool) => (_jsx("span", { className: "assistant-source-chip", children: tool.name }, tool.name))) })] }), _jsxs("section", { className: "card sidebar-card", children: [_jsx("h3", { children: "API key handling" }), _jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Owner" }), _jsx("span", { className: "muted", children: storagePolicy.owner })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Runtime" }), _jsx("span", { className: "muted", children: storagePolicy.runtime })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Persistence" }), _jsx("span", { className: "muted", children: storagePolicy.persistence })] })] })] }), _jsxs("details", { className: "card sidebar-card workspace-disclosure", children: [_jsx("summary", { children: "Sidecar environment preview" }), _jsx("div", { className: "workspace-disclosure-body", children: _jsx("pre", { className: "assistant-env-preview", children: JSON.stringify(launchConfig.redactedEnv, null, 2) }) })] })] })] }));
 };

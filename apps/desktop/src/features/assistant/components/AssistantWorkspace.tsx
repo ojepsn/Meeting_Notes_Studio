@@ -46,6 +46,7 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }: AssistantWorksp
   const [sidecarReady, setSidecarReady] = useState<AgentSidecarReady | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState("Not started");
   const [runtimeHealth, setRuntimeHealth] = useState<string | null>(null);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [isStartingRuntime, setIsStartingRuntime] = useState(false);
   const [isAskingAgent, setIsAskingAgent] = useState(false);
   const [agentSessionId, setAgentSessionId] = useState<string | null>(null);
@@ -83,6 +84,7 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }: AssistantWorksp
   const startRuntime = async () => {
     setIsStartingRuntime(true);
     setRuntimeHealth(null);
+    setRuntimeError(null);
     setRuntimeStatus("Starting agent-sidecar...");
     try {
       const ready = await startAgentSidecar(launchConfig.env);
@@ -91,8 +93,10 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }: AssistantWorksp
       const health = await checkAgentSidecarHealth(ready.baseUrl);
       setRuntimeHealth(health.ok ? "Health check passed" : "Runtime started; health endpoint not confirmed yet.");
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       setSidecarReady(null);
-      setRuntimeStatus(error instanceof Error ? error.message : String(error));
+      setRuntimeError(message);
+      setRuntimeStatus("Runtime not available");
     } finally {
       setIsStartingRuntime(false);
     }
@@ -102,6 +106,7 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }: AssistantWorksp
     await stopAgentSidecar();
     setSidecarReady(null);
     setRuntimeHealth(null);
+    setRuntimeError(null);
     setRuntimeStatus("Stopped");
   };
 
@@ -154,10 +159,10 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }: AssistantWorksp
     const userMessage: AssistantMessage = { id: createMessageId(), role: "user", text: query, sources: [], createdAt };
     const assistantMessageId = createMessageId();
     const fallbackAnswer = sources.length
-      ? `MCP preview found ${sources.length} matching NoteSmith ${sources.length === 1 ? "record" : "records"} for "${query}". Start the local agent runtime to generate a full answer.\n\n${sources
+      ? `MCP preview found ${sources.length} matching NoteSmith ${sources.length === 1 ? "record" : "records"} for "${query}". The local agent runtime is not running, so this is source preview only.\n\n${sources
           .map((source) => `- ${source.title}${source.date ? ` (${source.date})` : ""}: ${source.snippet}`)
           .join("\n")}`
-      : `MCP preview did not find matching NoteSmith records for "${query}". Start the local agent runtime to ask the model anyway.`;
+      : `MCP preview did not find matching NoteSmith records for "${query}". The local agent runtime is not running, so no model answer was generated.`;
 
     setMessages((current) => [
       ...current,
@@ -335,6 +340,15 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }: AssistantWorksp
               </div>
             ) : null}
           </div>
+          {runtimeError ? (
+            <div className="assistant-runtime-error" role="status">
+              <strong>Runtime could not start</strong>
+              <span>{runtimeError}</span>
+              <span>
+                Release builds include the agent sidecar. In development builds, run `npm run desktop:sidecar:prepare` or install `agent-sidecar` on PATH.
+              </span>
+            </div>
+          ) : null}
           <div className="assistant-runtime-actions">
             <button className="primary-button" type="button" onClick={startRuntime} disabled={isStartingRuntime || Boolean(sidecarReady)}>
               {isStartingRuntime ? "Starting..." : sidecarReady ? "Runtime running" : "Start local agent runtime"}
@@ -344,7 +358,7 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }: AssistantWorksp
             </button>
           </div>
           <p className="muted assistant-runtime-note">
-            This first bridge expects `agent-sidecar` to be installed on PATH. Packaging it with the NoteSmith installer is the next integration slice.
+            Release builds include the local `agent_platform` sidecar. Development builds fall back to `agent-sidecar` on PATH if the bundled binary has not been prepared.
           </p>
         </section>
 
