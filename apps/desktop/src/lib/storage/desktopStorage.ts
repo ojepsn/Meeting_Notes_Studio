@@ -52,6 +52,16 @@ export const buildSnapshotBackupFilename = (date = new Date()) => {
 
 export const buildSnapshotBackupJsonFilename = (date = new Date()) => buildSnapshotBackupFilename(date).replace(/\.zip$/, ".json");
 
+const uint8ArrayToBase64 = (bytes: Uint8Array) => {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    const chunk = bytes.slice(offset, offset + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+};
+
 const getZipCrcTable = () => {
   if (zipCrcTable) {
     return zipCrcTable;
@@ -330,9 +340,9 @@ export const getDesktopBundleType = async () => {
 
 export const exportSnapshotBackup = async (bundle: DesktopBackupBundle) => {
   const content = JSON.stringify(bundle, null, 2);
+  const zipBytes = await createSingleJsonZip(content);
 
   if (!isTauriRuntime()) {
-    const zipBytes = await createSingleJsonZip(content);
     const blob = new Blob([zipBytes], { type: "application/zip" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -343,19 +353,19 @@ export const exportSnapshotBackup = async (bundle: DesktopBackupBundle) => {
     return { path: link.download, savedOutsideAppData: true };
   }
 
-  const suggestedPath = joinPath(await downloadDir(), buildSnapshotBackupJsonFilename());
+  const suggestedPath = joinPath(await downloadDir(), buildSnapshotBackupFilename());
   const selectedPath = await save({
     defaultPath: suggestedPath,
-    filters: [{ name: "JSON backup", extensions: ["json"] }],
+    filters: [{ name: "ZIP backup", extensions: ["zip"] }],
   });
 
   if (!selectedPath) {
     return null;
   }
 
-  await invoke("write_text_to_path", {
+  await invoke("write_base64_to_path", {
     path: selectedPath,
-    content,
+    base64Content: uint8ArrayToBase64(zipBytes),
   });
 
   return { path: selectedPath, savedOutsideAppData: true };
@@ -363,9 +373,9 @@ export const exportSnapshotBackup = async (bundle: DesktopBackupBundle) => {
 
 export const exportSnapshotBackupToDownloads = async (bundle: DesktopBackupBundle) => {
   const content = JSON.stringify(bundle, null, 2);
+  const zipBytes = await createSingleJsonZip(content);
 
   if (!isTauriRuntime()) {
-    const zipBytes = await createSingleJsonZip(content);
     const filename = buildSnapshotBackupFilename();
     const blob = new Blob([zipBytes], { type: "application/zip" });
     const url = URL.createObjectURL(blob);
@@ -377,11 +387,11 @@ export const exportSnapshotBackupToDownloads = async (bundle: DesktopBackupBundl
     return { path: filename, savedOutsideAppData: true };
   }
 
-  const filename = buildSnapshotBackupJsonFilename();
+  const filename = buildSnapshotBackupFilename();
   const destinationPath = joinPath(await downloadDir(), filename);
-  await invoke("write_text_to_path", {
+  await invoke("write_base64_to_path", {
     path: destinationPath,
-    content,
+    base64Content: uint8ArrayToBase64(zipBytes),
   });
 
   return { path: destinationPath, savedOutsideAppData: true };
@@ -392,9 +402,10 @@ export const createLocalSnapshotBackup = async (bundle: DesktopBackupBundle) => 
     return null;
   }
 
-  return invoke<string>("write_backup_snapshot_text", {
-    filename: buildSnapshotBackupJsonFilename(),
-    content: JSON.stringify(bundle, null, 2),
+  const zipBytes = await createSingleJsonZip(JSON.stringify(bundle, null, 2));
+  return invoke<string>("write_backup_snapshot_base64", {
+    filename: buildSnapshotBackupFilename(),
+    base64Content: uint8ArrayToBase64(zipBytes),
   });
 };
 

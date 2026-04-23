@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose, Engine as _};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -207,6 +208,16 @@ fn write_text_to_path(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn write_base64_to_path(path: String, base64_content: String) -> Result<(), String> {
+    let destination = PathBuf::from(path);
+    ensure_parent_dir(&destination)?;
+    let bytes = general_purpose::STANDARD
+        .decode(base64_content)
+        .map_err(|error| format!("Could not decode backup ZIP data: {error}"))?;
+    fs::write(destination, bytes).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn write_backup_snapshot(
     app: tauri::AppHandle,
     filename: String,
@@ -235,6 +246,24 @@ fn write_backup_snapshot_text(
     let destination = PathBuf::from(storage.backups_dir).join(filename);
     ensure_parent_dir(&destination)?;
     fs::write(&destination, content).map_err(|error| error.to_string())?;
+
+    Ok(destination.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn write_backup_snapshot_base64(
+    app: tauri::AppHandle,
+    filename: String,
+    base64_content: String,
+) -> Result<String, String> {
+    let storage = prepare_storage(&app)?;
+
+    let destination = PathBuf::from(storage.backups_dir).join(filename);
+    ensure_parent_dir(&destination)?;
+    let bytes = general_purpose::STANDARD
+        .decode(base64_content)
+        .map_err(|error| format!("Could not decode local backup ZIP data: {error}"))?;
+    fs::write(&destination, bytes).map_err(|error| error.to_string())?;
 
     Ok(destination.to_string_lossy().to_string())
 }
@@ -441,8 +470,10 @@ pub fn run() {
             write_bytes_into_app_data,
             write_bytes_to_path,
             write_text_to_path,
+            write_base64_to_path,
             write_backup_snapshot,
             write_backup_snapshot_text,
+            write_backup_snapshot_base64,
             get_desktop_storage_info,
             load_latest_local_backup,
             get_latest_local_backup_info,
