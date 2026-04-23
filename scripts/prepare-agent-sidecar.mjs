@@ -12,6 +12,7 @@ const binariesDir = path.join(srcTauriDir, "binaries");
 const launcherPath = path.join(buildDir, "agent_sidecar_launcher.py");
 const vendoredAgentPlatformSource = path.join(repoRoot, "third_party", "agent_platform");
 const agentPlatformSource = process.env.AGENT_PLATFORM_REPO_PATH?.trim() || vendoredAgentPlatformSource;
+const pyInstallerDataSeparator = process.platform === "win32" ? ";" : ":";
 
 const log = (message) => console.log(`[agent-sidecar] ${message}`);
 
@@ -103,6 +104,10 @@ run(venvPython, [
   path.join(buildDir, "work"),
   "--specpath",
   buildDir,
+  "--add-data",
+  `${path.join(agentPlatformSource, "alembic.ini")}${pyInstallerDataSeparator}.`,
+  "--add-data",
+  `${path.join(agentPlatformSource, "alembic")}${pyInstallerDataSeparator}alembic`,
   "--collect-all",
   "agent_platform",
   "--collect-all",
