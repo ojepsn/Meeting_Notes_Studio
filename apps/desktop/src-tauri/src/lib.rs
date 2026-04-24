@@ -111,6 +111,7 @@ impl AgentSidecarState {
                 let _ = process.child.wait();
             }
         }
+        terminate_stale_agent_sidecars();
     }
 }
 
@@ -785,6 +786,29 @@ fn resolve_agent_sidecar_command(app: &tauri::AppHandle) -> PathBuf {
     PathBuf::from(executable_name)
 }
 
+fn terminate_stale_agent_sidecars() {
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("taskkill")
+            .args(["/F", "/T", "/IM", "agent-sidecar.exe"])
+            .output();
+
+        if let Ok(result) = output {
+            if !result.status.success() {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                let stdout = String::from_utf8_lossy(&result.stdout);
+                let combined = format!("{stdout}\n{stderr}").to_lowercase();
+                if !combined.contains("not found")
+                    && !combined.contains("no running instance")
+                    && !combined.contains("no tasks are running")
+                {
+                    eprintln!("Could not terminate stale agent-sidecar.exe processes: {stdout} {stderr}");
+                }
+            }
+        }
+    }
+}
+
 fn sqlite_url_for_path(path: &Path) -> String {
     format!("sqlite+aiosqlite:///{}", path.to_string_lossy().replace('\\', "/"))
 }
@@ -832,6 +856,8 @@ fn start_agent_sidecar(
             }
         }
     }
+
+    terminate_stale_agent_sidecars();
 
     let sidecar_command = resolve_agent_sidecar_command(&app);
     let sidecar_env = prepare_agent_sidecar_env(&app, env)?;
