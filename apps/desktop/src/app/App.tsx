@@ -34,6 +34,7 @@ import { transcribeAudio } from "../lib/ai/services/transcribeAudio";
 import { translateOutput } from "../lib/ai/services/translateOutput";
 import type { AIRuntimeEvent } from "../lib/ai/runtime";
 import { checkForDesktopUpdates } from "../lib/ai/updater";
+import { stopAgentSidecar } from "../lib/assistant/agentSidecar";
 import { exportOutputAsDocx, exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsPdf, exportOutputAsText } from "../lib/export/exportService";
 import {
   fileToAttachmentRecord,
@@ -1479,6 +1480,7 @@ export const App = () => {
         setAvailableUpdateVersion(null);
         return;
       }
+      await stopAgentSidecar().catch(() => {});
       setUpdateStatusNote(`Downloading the signed ${availableUpdateVersion} installer to Downloads...`);
       const installer = await downloadInstallerToDownloadsAndOpen(manualUpdateUrl, availableUpdateVersion);
       setUpdateStatusNote(
@@ -1505,6 +1507,7 @@ export const App = () => {
         const backupPath = await exportSnapshotBackupToDownloads(backupBundle);
         setStatusNote(`Created a Downloads backup at ${backupPath.path} before opening the installer download.`);
       }
+      await stopAgentSidecar().catch(() => {});
       setUpdateStatusNote(`Downloading installer for ${availableUpdateVersion ?? "the latest version"} to Downloads...`);
       if (manualUpdateUrl.toLocaleLowerCase().includes(".exe")) {
         const installer = await downloadInstallerToDownloads(manualUpdateUrl, availableUpdateVersion ?? "latest");

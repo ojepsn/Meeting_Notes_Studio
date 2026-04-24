@@ -24,6 +24,7 @@ import { createAIRuntimeStatusHandler } from "../lib/ai/status";
 import { transcribeAudio } from "../lib/ai/services/transcribeAudio";
 import { translateOutput } from "../lib/ai/services/translateOutput";
 import { checkForDesktopUpdates } from "../lib/ai/updater";
+import { stopAgentSidecar } from "../lib/assistant/agentSidecar";
 import { exportOutputAsDocx, exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsPdf, exportOutputAsText } from "../lib/export/exportService";
 import { fileToAttachmentRecord, loadPersistedAttachmentFile, pickAudioFile, pickImageFile, pickTranscriptFile, persistGeneratedAttachment, persistSelectedAttachment, readTranscriptFile, removePersistedAttachment, } from "../lib/files/attachmentStore";
 import { buildRecordingFilename, getSupportedRecordingMimeType, getSystemAudioDisplayOptions, RECORDING_MODE_LABELS, } from "../lib/files/recording";
@@ -1131,6 +1132,7 @@ export const App = () => {
                 setAvailableUpdateVersion(null);
                 return;
             }
+            await stopAgentSidecar().catch(() => { });
             setUpdateStatusNote(`Downloading the signed ${availableUpdateVersion} installer to Downloads...`);
             const installer = await downloadInstallerToDownloadsAndOpen(manualUpdateUrl, availableUpdateVersion);
             setUpdateStatusNote(`Downloaded and opened the ${availableUpdateVersion} installer from ${installer.path}. Close NoteSmith if Windows asks before continuing.`);
@@ -1156,6 +1158,7 @@ export const App = () => {
                 const backupPath = await exportSnapshotBackupToDownloads(backupBundle);
                 setStatusNote(`Created a Downloads backup at ${backupPath.path} before opening the installer download.`);
             }
+            await stopAgentSidecar().catch(() => { });
             setUpdateStatusNote(`Downloading installer for ${availableUpdateVersion ?? "the latest version"} to Downloads...`);
             if (manualUpdateUrl.toLocaleLowerCase().includes(".exe")) {
                 const installer = await downloadInstallerToDownloads(manualUpdateUrl, availableUpdateVersion ?? "latest");
