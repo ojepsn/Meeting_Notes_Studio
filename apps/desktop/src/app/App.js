@@ -30,7 +30,7 @@ import { fileToAttachmentRecord, loadPersistedAttachmentFile, pickAudioFile, pic
 import { buildRecordingFilename, getSupportedRecordingMimeType, getSystemAudioDisplayOptions, RECORDING_MODE_LABELS, } from "../lib/files/recording";
 import { createLocalSnapshotBackup, downloadInstallerToDownloads, downloadInstallerToDownloadsAndOpen, exportSnapshotBackup, exportSnapshotBackupToDownloads, getDesktopBundleType, getDesktopAppVersion, getDesktopStorageInfo, getLatestLocalBackupInfo, importSnapshotBackup, mergeImportedPwaSnapshot, openDesktopPath, openDesktopUrl, revealDesktopPath, } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW } from "../lib/metadata/review";
-import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links/entityLinks";
+import { findActivityIdForSession, findSessionIdForActivity, findSessionIdForTodo } from "../lib/links/entityLinks";
 import { polishNonAiNotesText } from "../lib/output/manualPolish";
 import { acceptRuleSuggestion, collectRuleSuggestionObservations, ignoreRuleSuggestion, mergeRuleSuggestionObservations } from "../lib/output/ruleSuggestions";
 import { buildStructureOptions, createEmptyStructureOptions } from "../lib/structure/options";
@@ -62,17 +62,17 @@ const isStructuredHeading = (line) => {
     return /^[\p{L}\p{N}&/(),:'" -]+:?$/u.test(line);
 };
 const WORKSPACE_ITEMS = [
-    { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
-    { id: "todos", label: "Todos", description: "Focused follow-up management", available: true },
-    { id: "activities", label: "Activities", description: "Tracked work with time and scheduling", available: true },
     { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: true },
+    { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
+    { id: "todos", label: "Tasks", description: "Focused follow-up management", available: true },
+    { id: "activities", label: "Activities", description: "Tracked work with time and scheduling", available: true },
     { id: "time", label: "Timelogs", description: "Active timers, dense logs, and reporting", available: true },
     { id: "structure", label: "Structure", description: "Domains and projects as operational views", available: true },
     { id: "assistant", label: "Assistant", description: "Agentic chat with NoteSmith data", available: true },
     { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
 ];
-const PRIMARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(0, 1);
-const SECONDARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(2);
+const PRIMARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(0, 2);
+const SECONDARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(3);
 const logAIRuntimeEvent = (event) => {
     recordAIRequestHistory(event);
     if (event.type === "request-failure") {
@@ -127,7 +127,7 @@ const buildOutputVersionPatch = (session, nextOutput) => {
     };
 };
 export const App = () => {
-    const { snapshot, activeSessionId, saveState, lastSavedAt, isLoaded, loadError, load, setActiveSessionId, setActiveView, repository, saveSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, saveTodo, addTodo, deleteTodo, saveActivity, addActivity, deleteActivity, saveTimeLog, deleteTimeLog, startTimeTracking, stopTimeTracking, createCalendarEntryFromText, rollForwardOverdueTodos, moveCalendarItem, updateCalendarItem, convertTodoToActivity, ensureSessionForActivity, saveSettings, renameDomainValue, renameProjectValue, saveTemplate, resetTemplates, importLegacyBrowserData, importBackupSnapshot: restoreBackupSnapshot, saveAttachments, } = useDesktopStore();
+    const { snapshot, activeSessionId, saveState, lastSavedAt, isLoaded, loadError, load, setActiveSessionId, setActiveView, repository, saveSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, saveTodo, addTodo, deleteTodo, saveActivity, addActivity, deleteActivity, saveTimeLog, deleteTimeLog, startTimeTracking, stopTimeTracking, createCalendarEntryFromText, rollForwardOverdueTodos, moveCalendarItem, updateCalendarItem, convertTodoToActivity, ensureSessionForActivity, ensureSessionForTodo, saveSettings, renameDomainValue, renameProjectValue, saveTemplate, resetTemplates, importLegacyBrowserData, importBackupSnapshot: restoreBackupSnapshot, saveAttachments, } = useDesktopStore();
     const [activeWorkspace, setActiveWorkspace] = useState("calendar");
     const [openPanel, setOpenPanel] = useState(null);
     const [isNotesSessionsOpen, setIsNotesSessionsOpen] = useState(false);
@@ -646,6 +646,18 @@ export const App = () => {
             },
         ];
     })), [snapshot]);
+    const linkedSessionStateByTodo = useMemo(() => Object.fromEntries((snapshot?.todos ?? []).map((todo) => {
+        const sessionId = snapshot ? findSessionIdForTodo(snapshot.entityLinks, todo.id) : null;
+        const session = sessionId ? snapshot?.sessions.find((entry) => entry.id === sessionId) ?? null : null;
+        return [
+            todo.id,
+            {
+                sessionId,
+                hasOutput: Boolean(session?.output.trim()),
+                sessionTitle: session?.title ?? "",
+            },
+        ];
+    })), [snapshot]);
     const calendarPreviewSession = useMemo(() => calendarOutputPreviewSessionId
         ? snapshot?.sessions.find((session) => session.id === calendarOutputPreviewSessionId) ?? null
         : null, [calendarOutputPreviewSessionId, snapshot]);
@@ -772,7 +784,7 @@ export const App = () => {
             });
             target.value = "";
             target.dispatchEvent(new Event("input", { bubbles: true }));
-            setStatusNote(`Added to-do: ${todoDescription}`);
+            setStatusNote(`Added task: ${todoDescription}`);
             return;
         }
         const activityDescription = parseActivityShortcut(target.value);
@@ -1813,7 +1825,7 @@ export const App = () => {
         workspace: "todos",
         todoId,
         returnWorkspace,
-        status: "Opened linked todo.",
+        status: "Opened linked task.",
     });
     const returnFromLinkedDetail = () => {
         if (!requestedActivityId && !requestedTodoId && !linkedDetailReturnWorkspace) {
@@ -1902,8 +1914,8 @@ export const App = () => {
         },
         {
             id: "todos",
-            label: "Open To-dos",
-            description: "See personal follow-ups captured from notes.",
+            label: "Open Tasks",
+            description: "See personal work items and follow-ups captured from notes.",
             keywords: ["todo tasks follow up"],
             action: () => setActiveWorkspace("todos"),
         },
@@ -1917,7 +1929,7 @@ export const App = () => {
         {
             id: "calendar",
             label: "Open Calendar",
-            description: "Schedule todos, activities, and meetings across time.",
+            description: "Schedule tasks and meetings across time.",
             keywords: ["calendar schedule plan meeting"],
             action: () => setActiveWorkspace("calendar"),
         },
@@ -2131,7 +2143,7 @@ export const App = () => {
             case "settings":
                 return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onResetTemplates: handleResetTemplates, onImportLegacy: handleImportLegacy, onImportBackup: handleImportBackup, onCheckForUpdates: handleCheckForUpdates, onInstallUpdate: handleInstallUpdate, onOpenManualUpdate: handleOpenManualUpdate, onOpenDataFolder: handleOpenDataFolder, onOpenDatabaseFolder: handleOpenDatabaseFolder, onExportBackup: handleExportSnapshot, onSaveBackupAs: handleSaveSnapshotAs, updateStatusNote: updateStatusNote, desktopVersion: desktopVersion, desktopBundleType: desktopBundleType, availableUpdateVersion: availableUpdateVersion, manualUpdateUrl: manualUpdateUrl, isCheckingForUpdates: isCheckingForUpdates, isInstallingUpdate: isInstallingUpdate, storageInfo: storageInfo, latestLocalBackupInfo: latestLocalBackupInfo, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
             case "more":
-                return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "More tools" }), _jsx("p", { children: "Secondary utilities stay grouped here so the main workspace remains calm and obvious." })] }), _jsxs("div", { className: "stack", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => setActiveWorkspace("todos"), children: "Open Todos workspace" }), _jsx("button", { className: "small-button", type: "button", onClick: () => setOpenPanel("backup"), children: "Open Back-up" }), _jsx("button", { className: "small-button", type: "button", onClick: () => openSettingsSection("other"), children: "Open Other settings" })] })] }));
+                return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "More tools" }), _jsx("p", { children: "Secondary utilities stay grouped here so the main workspace remains calm and obvious." })] }), _jsxs("div", { className: "stack", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => setActiveWorkspace("todos"), children: "Open Tasks workspace" }), _jsx("button", { className: "small-button", type: "button", onClick: () => setOpenPanel("backup"), children: "Open Back-up" }), _jsx("button", { className: "small-button", type: "button", onClick: () => openSettingsSection("other"), children: "Open Other settings" })] })] }));
             case "backup":
                 return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Back-up" }), _jsx("p", { children: "Keep backup and migration actions accessible without leaving the focused Notes workspace." })] }), _jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportLegacy(), children: "Import current browser data" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleImportBackup(), children: "Import backup file" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleExportSnapshot(), children: "Export backup to Downloads" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleSaveSnapshotAs(), children: "Save backup as..." }), _jsx("button", { className: "small-button", type: "button", onClick: () => void handleOpenDataFolder(), children: "Open data folder" })] }), storageInfo ? (_jsxs("div", { className: "section-list", children: [_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Desktop version" }), _jsx("span", { className: "muted", children: desktopVersion || "Unknown" })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Database path" }), _jsx("span", { className: "muted", children: storageInfo.databasePath })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Backups folder" }), _jsx("span", { className: "muted", children: storageInfo.backupsDir })] }), _jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "Latest local safety backup" }), _jsx("span", { className: "muted", children: latestLocalBackupInfo
                                                 ? `${new Date(latestLocalBackupInfo.modifiedMs).toLocaleString()}`
@@ -2144,12 +2156,7 @@ export const App = () => {
                                             if (sessionId) {
                                                 openSessionFromLink(sessionId, "activities");
                                             }
-                                        }), onOpenSession: (sessionId) => openSessionFromLink(sessionId, "activities"), onPreviewSessionOutput: openCalendarOutputPreview, onOpenTodoDetail: (todoId) => openTodoDetailFromLink(todoId, "activities"), onSaveTimeLog: (timeLog) => void saveTimeLog(timeLog), onDeleteTimeLog: (id) => void deleteTimeLog(id), onStartTracking: (targetType, targetId) => void startTimeTracking(targetType, targetId), onStopTracking: (targetType, targetId) => void stopTimeTracking(targetType, targetId) })) : activeWorkspace === "calendar" ? (_jsx(CalendarWorkspace, { todos: snapshot.todos, activities: snapshot.activities, timeLogs: snapshot.timelogs, calendarItems: snapshot.calendarItems ?? [], settings: snapshot.settings, structureOptions: structureOptions, linkedSessionStateByActivity: linkedSessionStateByActivity, onSaveSettings: (settings) => void saveSettings(settings), onCreateFromText: (date, startSlot, value, options) => createCalendarEntryFromText(date, startSlot, value, options), onMoveItem: (id, date, startSlot) => void moveCalendarItem(id, date, startSlot), onSaveTodo: (todo) => void saveTodo(todo), onDeleteTodo: (id) => void deleteTodo(id), onSaveActivity: (activity) => void saveActivity(activity), onDeleteActivity: (id) => void deleteActivity(id), onConvertTodoToActivity: (todo, options) => void convertTodoToActivity(todo, {
-                                            type: "task",
-                                            date: options.date,
-                                            startTime: options.startTime,
-                                            endTime: options.endTime,
-                                        }), onConvertTodoToMeeting: (todo, options) => void convertTodoToActivity(todo, {
+                                        }), onOpenSession: (sessionId) => openSessionFromLink(sessionId, "activities"), onPreviewSessionOutput: openCalendarOutputPreview, onOpenTodoDetail: (todoId) => openTodoDetailFromLink(todoId, "activities"), onSaveTimeLog: (timeLog) => void saveTimeLog(timeLog), onDeleteTimeLog: (id) => void deleteTimeLog(id), onStartTracking: (targetType, targetId) => void startTimeTracking(targetType, targetId), onStopTracking: (targetType, targetId) => void stopTimeTracking(targetType, targetId) })) : activeWorkspace === "calendar" ? (_jsx(CalendarWorkspace, { todos: snapshot.todos, activities: snapshot.activities, timeLogs: snapshot.timelogs, calendarItems: snapshot.calendarItems ?? [], settings: snapshot.settings, structureOptions: structureOptions, linkedSessionStateByActivity: linkedSessionStateByActivity, linkedSessionStateByTodo: linkedSessionStateByTodo, onSaveSettings: (settings) => void saveSettings(settings), onCreateFromText: (date, startSlot, value, options) => createCalendarEntryFromText(date, startSlot, value, options), onMoveItem: (id, date, startSlot) => void moveCalendarItem(id, date, startSlot), onSaveTodo: (todo) => void saveTodo(todo), onDeleteTodo: (id) => void deleteTodo(id), onSaveActivity: (activity) => void saveActivity(activity), onDeleteActivity: (id) => void deleteActivity(id), onConvertTodoToMeeting: (todo, options) => void convertTodoToActivity(todo, {
                                             type: "meeting",
                                             date: options.date,
                                             startTime: options.startTime,
@@ -2157,15 +2164,19 @@ export const App = () => {
                                         }), onUpdateCalendarItem: (id, updates) => void updateCalendarItem(id, updates), onStartTracking: (targetType, targetId) => void startTimeTracking(targetType, targetId), onStopTracking: (targetType, targetId) => void stopTimeTracking(targetType, targetId), onOpenTodoWorkspace: () => setActiveWorkspace("todos"), onOpenTodoDetail: (todoId) => openTodoDetailFromLink(todoId, "calendar"), onOpenActivityWorkspace: (activityId) => openActivityFromLink(activityId, "calendar"), onOpenActivityDetail: (activityId) => openActivityFromLink(activityId, "calendar"), onOpenSession: (sessionId, openedCalendarItemId) => {
                                             const calendarItemId = openedCalendarItemId ??
                                                 snapshot.calendarItems.find((item) => {
-                                                    if (item.targetType !== "activity")
-                                                        return false;
-                                                    const activitySessionId = linkedSessionStateByActivity[item.targetId]?.sessionId;
-                                                    return activitySessionId === sessionId;
+                                                    if (item.targetType === "activity") {
+                                                        return linkedSessionStateByActivity[item.targetId]?.sessionId === sessionId;
+                                                    }
+                                                    return linkedSessionStateByTodo[item.targetId]?.sessionId === sessionId;
                                                 })?.id ?? null;
                                             openSessionFromLink(sessionId, "calendar", calendarItemId);
                                         }, highlightedItemId: linkedCalendarReturnItemId, onCreateLinkedMeetingSession: (activityId) => void ensureSessionForActivity(activityId).then((sessionId) => {
                                             if (sessionId) {
                                                 setStatusNote("Created linked meeting session.");
+                                            }
+                                        }), onCreateLinkedTaskSession: (todoId) => void ensureSessionForTodo(todoId).then((sessionId) => {
+                                            if (sessionId) {
+                                                setStatusNote("Created linked task note.");
                                             }
                                         }), onPreviewSessionOutput: openCalendarOutputPreview, onFullScreenChange: setIsCalendarWorkspaceFullScreen })) : activeWorkspace === "time" ? (_jsx(TimeWorkspace, { todos: snapshot.todos, activities: snapshot.activities, timeLogs: snapshot.timelogs, requestedDomain: requestedTimeDomain, requestedProject: requestedTimeProject, reportPresets: snapshot.settings.timeReportPresets, onSaveTimeLog: (timeLog) => void saveTimeLog(timeLog), onDeleteTimeLog: (id) => void deleteTimeLog(id), onStartTracking: (targetType, targetId) => void startTimeTracking(targetType, targetId), onStopTracking: (targetType, targetId) => void stopTimeTracking(targetType, targetId), onOpenTodoDetail: (todoId) => openTodoDetailFromLink(todoId, "time"), onOpenActivityDetail: (activityId) => openActivityFromLink(activityId, "time"), onSaveReportPreset: (preset) => void saveSettings({
                                             ...snapshot.settings,
@@ -2217,12 +2228,12 @@ export const App = () => {
                                             workspace: "todos",
                                             todoDomain: domain || null,
                                             returnWorkspace: "structure",
-                                            status: domain ? `Opened Todos filtered to ${domain}.` : "Opened Todos.",
+                                            status: domain ? `Opened Tasks filtered to ${domain}.` : "Opened Tasks.",
                                         }), onOpenTodosForProject: (project) => openLinkedDestination({
                                             workspace: "todos",
                                             todoProject: project || null,
                                             returnWorkspace: "structure",
-                                            status: project ? `Opened Todos filtered to ${project}.` : "Opened Todos.",
+                                            status: project ? `Opened Tasks filtered to ${project}.` : "Opened Tasks.",
                                         }), onOpenTimeForDomain: (domain) => openLinkedDestination({
                                             workspace: "time",
                                             timeDomain: domain || null,

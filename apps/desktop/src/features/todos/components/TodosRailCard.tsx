@@ -11,7 +11,7 @@ export const TodosRailCard = ({ active, onOpen }: TodosRailCardProps) => {
       data-active={active}
       onClick={onOpen}
     >
-      <span>Todos</span>
+      <span>Tasks</span>
       <small>Focused follow-up management</small>
     </button>
   );

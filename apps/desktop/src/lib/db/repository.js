@@ -126,8 +126,8 @@ const normalizeCalendarItemRecord = (item) => ({
 });
 const normalizeEntityLinkRecord = (link) => ({
     ...link,
-    fromType: link.fromType === "session" ? "session" : "activity",
-    toType: link.toType === "activity" ? "activity" : "session",
+    fromType: link.fromType === "session" ? "session" : link.fromType === "todo" ? "todo" : "activity",
+    toType: link.toType === "activity" ? "activity" : link.toType === "todo" ? "todo" : "session",
     relation: "has_session",
 });
 const normalizeTemplateRecord = (template) => ({

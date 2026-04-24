@@ -58,7 +58,7 @@ interface DesktopState {
     createCalendarEntryFromText: (date: string, startSlot: number, value: string, options?: {
         activityId?: string;
         parentActivityId?: string;
-        kind?: "todo" | "activity" | "meeting";
+        kind?: "todo" | "meeting";
         endSlot?: number;
     }) => Promise<string | null>;
     rollForwardOverdueTodos: () => Promise<void>;
@@ -75,6 +75,7 @@ interface DesktopState {
         endTime?: string;
     }) => Promise<string | null>;
     ensureSessionForActivity: (activityId: string) => Promise<string | null>;
+    ensureSessionForTodo: (todoId: string) => Promise<string | null>;
     saveSettings: (settings: DesktopAppSnapshot["settings"]) => Promise<void>;
     renameDomainValue: (previousValue: string, nextValue: string) => Promise<void>;
     renameProjectValue: (previousValue: string, nextValue: string) => Promise<void>;

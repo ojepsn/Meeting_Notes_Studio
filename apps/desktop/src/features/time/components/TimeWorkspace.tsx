@@ -105,6 +105,8 @@ export const TimeWorkspace = ({
   const [toDate, setToDate] = useState(initialWeek.toDate);
   const [projectFilter, setProjectFilter] = useState("all");
   const [domainFilter, setDomainFilter] = useState("all");
+  const [activityFilter, setActivityFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [presetDraft, setPresetDraft] = useState("");
   const [now, setNow] = useState(() => new Date());
 
@@ -171,6 +173,19 @@ export const TimeWorkspace = ({
       ).sort(),
     [activityLookup, enrichedLogs, todoLookup],
   );
+  const activityOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          enrichedLogs.map((log) => {
+            const todo = log.targetType === "todo" ? todoLookup[log.targetId] : null;
+            const activity = log.targetType === "activity" ? activityLookup[log.targetId] : todo?.activityId ? activityLookup[todo.activityId] : null;
+            return activity?.description || todo?.activity || "No activity";
+          }),
+        ),
+      ).sort(),
+    [activityLookup, enrichedLogs, todoLookup],
+  );
 
   const logsMatchingStructure = useMemo(
     () =>
@@ -179,11 +194,13 @@ export const TimeWorkspace = ({
         const activity = log.targetType === "activity" ? activityLookup[log.targetId] : todo?.activityId ? activityLookup[todo.activityId] : null;
         const project = activity?.project || todo?.project || "No project";
         const domain = activity?.domain || todo?.domain || "No domain";
+        const activityName = activity?.description || todo?.activity || "No activity";
         if (projectFilter !== "all" && project !== projectFilter) return false;
         if (domainFilter !== "all" && domain !== domainFilter) return false;
+        if (activityFilter !== "all" && activityName !== activityFilter) return false;
         return true;
       }),
-    [activityLookup, domainFilter, enrichedLogs, projectFilter, todoLookup],
+    [activityFilter, activityLookup, domainFilter, enrichedLogs, projectFilter, todoLookup],
   );
 
   const filteredLogs = useMemo(
@@ -191,9 +208,14 @@ export const TimeWorkspace = ({
       logsMatchingStructure.filter((log) => {
         if (fromDate && log.date < fromDate) return false;
         if (toDate && log.date > toDate) return false;
+        if (searchQuery.trim()) {
+          const query = searchQuery.trim().toLocaleLowerCase();
+          const haystack = `${log.title} ${log.contextLabel} ${log.notes}`.toLocaleLowerCase();
+          if (!haystack.includes(query)) return false;
+        }
         return true;
       }),
-    [fromDate, logsMatchingStructure, toDate],
+    [fromDate, logsMatchingStructure, searchQuery, toDate],
   );
 
   const comparisonRange = useMemo(() => {
@@ -350,7 +372,7 @@ export const TimeWorkspace = ({
   const exportJson = async () => {
     const content = JSON.stringify(
       {
-        filters: { datePreset, fromDate, toDate, project: projectFilter, domain: domainFilter },
+        filters: { datePreset, fromDate, toDate, project: projectFilter, domain: domainFilter, activity: activityFilter },
         comparison: comparisonRange
           ? {
               range: comparisonRange,
@@ -382,140 +404,79 @@ export const TimeWorkspace = ({
       <div className="card-header session-editor-header-minimal">
         <div>
           <h2>Timelogs</h2>
-          <p className="muted">This is the main workspace for starting, stopping, correcting, and commenting on time logs.</p>
         </div>
-        <div className="page-actions">
-          <button className="shell-button" type="button" onClick={() => void exportCsv()}>Export CSV</button>
-          <button className="shell-button" type="button" onClick={() => void exportMarkdown()}>Export Markdown</button>
-          <button className="shell-button" type="button" onClick={() => void exportJson()}>Export JSON</button>
+        <div className="page-actions time-export-actions">
+          <button className="small-button" type="button" onClick={() => void exportCsv()}>CSV</button>
+          <button className="small-button" type="button" onClick={() => void exportMarkdown()}>Markdown</button>
+          <button className="small-button" type="button" onClick={() => void exportJson()}>JSON</button>
         </div>
       </div>
 
       <div className="time-filter-stack">
-        <div className="time-preset-row">
-          <div className="capture-density-toggle">
-            <button className="segment-button" data-active={datePreset === "today"} type="button" onClick={() => applyPreset("today")}>Today</button>
-            <button className="segment-button" data-active={datePreset === "this-week"} type="button" onClick={() => applyPreset("this-week")}>This week</button>
-            <button className="segment-button" data-active={datePreset === "this-month"} type="button" onClick={() => applyPreset("this-month")}>This month</button>
-            <button className="segment-button" data-active={datePreset === "custom"} type="button" onClick={() => setDatePreset("custom")}>Custom</button>
-          </div>
-          <div className="time-comparison-inline">
-            <span className="tiny-text">Current</span>
-            <strong>{formatMinutes(currentTotalMinutes)}</strong>
-            {comparisonRange ? (
-              <>
-                <span className="tiny-text">Previous</span>
-                <strong>{formatMinutes(comparisonTotalMinutes)}</strong>
-                <span className={`tiny-text ${comparisonDeltaMinutes >= 0 ? "time-delta-positive" : "time-delta-negative"}`}>
-                  {comparisonDeltaMinutes >= 0 ? "+" : ""}
-                  {formatMinutes(comparisonDeltaMinutes)}
-                  {comparisonDeltaPercent !== null ? ` (${comparisonDeltaPercent >= 0 ? "+" : ""}${comparisonDeltaPercent}%)` : ""}
-                </span>
-              </>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="todos-workspace-toolbar">
-          <div className="field">
-            <label htmlFor="time-filter-from">From</label>
-            <DateInput id="time-filter-from" value={fromDate} onChange={(event) => { setDatePreset("custom"); setFromDate(event.target.value); }} />
-          </div>
-          <div className="field">
-            <label htmlFor="time-filter-to">To</label>
-            <DateInput id="time-filter-to" value={toDate} onChange={(event) => { setDatePreset("custom"); setToDate(event.target.value); }} />
-          </div>
-          <div className="field">
-            <label htmlFor="time-filter-project">Project</label>
-            <select id="time-filter-project" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
-              <option value="all">All</option>
-              {projectOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="time-filter-domain">Domain</label>
-            <select id="time-filter-domain" value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}>
-              <option value="all">All</option>
-              {domainOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div className="sidebar-card">
-          <div className="card-header">
-            <div>
-              <h3>Saved reports</h3>
-              <p className="muted">Save the current range and filters as a reusable reporting view.</p>
-            </div>
-          </div>
-          <div className="todos-workspace-input-row">
-            <div className="field field-wide">
-              <label htmlFor="time-report-preset-label">Preset name</label>
-              <input
-                id="time-report-preset-label"
-                value={presetDraft}
-                onChange={(event) => setPresetDraft(event.target.value)}
-                placeholder="For example: This month - Product"
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && presetDraft.trim()) {
-                    event.preventDefault();
-                    onSaveReportPreset({
-                      label: presetDraft.trim(),
-                      fromDate,
-                      toDate,
-                      domain: domainFilter === "all" ? "" : domainFilter,
-                      project: projectFilter === "all" ? "" : projectFilter,
-                    });
-                    setPresetDraft("");
-                  }
-                }}
-              />
-            </div>
-            <button
-              className="small-button"
-              type="button"
-              onClick={() => {
-                if (!presetDraft.trim()) return;
-                onSaveReportPreset({
-                  label: presetDraft.trim(),
-                  fromDate,
-                  toDate,
-                  domain: domainFilter === "all" ? "" : domainFilter,
-                  project: projectFilter === "all" ? "" : projectFilter,
-                });
-                setPresetDraft("");
-              }}
-            >
-              Save preset
-            </button>
-          </div>
-          {reportPresets.length ? (
-            <div className="section-list">
-              {reportPresets.map((preset) => (
-                <div key={preset.id} className="list-item">
-                  <button className="list-item-button list-item-button-inline" type="button" onClick={() => applySavedPreset(preset)}>
-                    <span>
-                      <strong>{preset.label}</strong>
-                      <span className="tiny-text">
-                        {preset.fromDate} to {preset.toDate}
-                        {preset.domain ? ` - ${preset.domain}` : ""}
-                        {preset.project ? ` - ${preset.project}` : ""}
-                      </span>
+        <details className="workspace-disclosure time-disclosure-card">
+          <summary>Timelogs</summary>
+          <div className="workspace-disclosure-body stack">
+            <div className="time-preset-row">
+              <div className="capture-density-toggle">
+                <button className="segment-button" data-active={datePreset === "today"} type="button" onClick={() => applyPreset("today")}>Today</button>
+                <button className="segment-button" data-active={datePreset === "this-week"} type="button" onClick={() => applyPreset("this-week")}>This week</button>
+                <button className="segment-button" data-active={datePreset === "this-month"} type="button" onClick={() => applyPreset("this-month")}>This month</button>
+                <button className="segment-button" data-active={datePreset === "custom"} type="button" onClick={() => setDatePreset("custom")}>Custom</button>
+              </div>
+              <div className="time-comparison-inline">
+                <span className="tiny-text">Current</span>
+                <strong>{formatMinutes(currentTotalMinutes)}</strong>
+                {comparisonRange ? (
+                  <>
+                    <span className="tiny-text">Previous</span>
+                    <strong>{formatMinutes(comparisonTotalMinutes)}</strong>
+                    <span className={`tiny-text ${comparisonDeltaMinutes >= 0 ? "time-delta-positive" : "time-delta-negative"}`}>
+                      {comparisonDeltaMinutes >= 0 ? "+" : ""}
+                      {formatMinutes(comparisonDeltaMinutes)}
+                      {comparisonDeltaPercent !== null ? ` (${comparisonDeltaPercent >= 0 ? "+" : ""}${comparisonDeltaPercent}%)` : ""}
                     </span>
-                  </button>
-                  <button className="small-button danger-button" type="button" onClick={() => onDeleteReportPreset(preset.id)}>
-                    Delete
-                  </button>
-                </div>
-              ))}
+                  </>
+                ) : null}
+              </div>
             </div>
-          ) : (
-            <p className="muted">No saved report presets yet.</p>
-          )}
-        </div>
+
+            <div className="time-filter-grid-compact">
+              <div className="field">
+                <label htmlFor="time-filter-from">From</label>
+                <DateInput id="time-filter-from" value={fromDate} onChange={(event) => { setDatePreset("custom"); setFromDate(event.target.value); }} />
+              </div>
+              <div className="field">
+                <label htmlFor="time-filter-to">To</label>
+                <DateInput id="time-filter-to" value={toDate} onChange={(event) => { setDatePreset("custom"); setToDate(event.target.value); }} />
+              </div>
+              <div className="field">
+                <label htmlFor="time-filter-project">Project</label>
+                <select id="time-filter-project" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+                  <option value="all">All</option>
+                  {projectOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="time-filter-domain">Domain</label>
+                <select id="time-filter-domain" value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}>
+                  <option value="all">All</option>
+                  {domainOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="time-filter-activity">Activity</label>
+                <select id="time-filter-activity" value={activityFilter} onChange={(event) => setActivityFilter(event.target.value)}>
+                  <option value="all">All</option>
+                  {activityOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        </details>
+
       </div>
-      <div className="time-workspace-layout">
-        <section className="time-workspace-main">
+      <div className="time-workspace-layout time-workspace-layout-minimal">
+        <section className="time-workspace-main time-workspace-main-full">
           <div className="sidebar-card timelog-active-card">
             <div className="card-header">
               <div>
@@ -553,7 +514,7 @@ export const TimeWorkspace = ({
             )}
           </div>
 
-          <div className="sidebar-card">
+          <div className="sidebar-card time-logs-primary-card">
             <div className="card-header">
               <div>
                 <h3>All time logs</h3>
@@ -561,7 +522,30 @@ export const TimeWorkspace = ({
               </div>
               <span className="status-chip">{filteredLogs.length} visible</span>
             </div>
-            <div className="time-log-editor-table">
+            <div className="time-log-editor-scroll-area">
+            <div className="time-log-sticky-controls">
+            <div className="time-log-toolbar">
+              <div className="field field-wide">
+                <label htmlFor="time-log-search">Search</label>
+                <input
+                  id="time-log-search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Filter by title or comment"
+                />
+              </div>
+            </div>
+              <div className="time-log-editor-header" aria-hidden="true">
+                <span>Source</span>
+                <span>Date</span>
+                <span>Start</span>
+                <span>Stop</span>
+                <span>Duration</span>
+                <span>Comment</span>
+                <span>Actions</span>
+              </div>
+              </div>
+              <div className="time-log-editor-table">
               {filteredLogs.length ? filteredLogs.map((log) => {
                 const running = log.startTime === log.endTime;
                 const displayedMinutes = running ? calculateLiveDurationMinutes(log, now) : log.durationMinutes;
@@ -636,91 +620,64 @@ export const TimeWorkspace = ({
                 );
               }) : <div className="empty-state-card compact-empty-state"><h3>No time logs yet</h3><p>Start and stop work from Todos, Activities, or Calendar, then manage the logs here.</p></div>}
             </div>
-          </div>
-
-          <div className="time-summary-grid">
-            <div className="sidebar-card">
-              <h3>Active timers</h3>
-              <div className="time-summary-stat">{runningLogs.length}</div>
-              <div className="stack tight-stack">
-                {runningLogs.length ? runningLogs.map((log) => (
-                  <div key={log.id} className="list-item">
-                    <div><strong>{log.title}</strong><div className="tiny-text">{log.contextLabel}</div></div>
-                    <button className="small-button" type="button" onClick={() => onStopTracking(log.targetType, log.targetId)}>Stop</button>
-                  </div>
-                )) : <p className="muted">No timers are running right now.</p>}
-              </div>
-            </div>
-            <div className="sidebar-card">
-              <h3>Compare periods</h3>
-              <div className="time-summary-stat">{formatMinutes(currentTotalMinutes)}</div>
-              <div className="stack tight-stack">
-                <div className="list-item"><span>Previous period</span><strong>{formatMinutes(comparisonTotalMinutes)}</strong></div>
-                <div className="list-item">
-                  <span>Delta</span>
-                  <strong className={comparisonDeltaMinutes >= 0 ? "time-delta-positive" : "time-delta-negative"}>
-                    {comparisonDeltaMinutes >= 0 ? "+" : ""}{formatMinutes(comparisonDeltaMinutes)}
-                  </strong>
-                </div>
-                {comparisonRange ? <div className="tiny-text">{comparisonRange.label}</div> : null}
-              </div>
-            </div>
-            <div className="sidebar-card">
-              <h3>By workspace</h3>
-              <div className="stack tight-stack">
-                {workspaceTotals.length ? workspaceTotals.map((entry) => (
-                  <div key={entry.label} className="list-item"><strong>{entry.label}</strong><span>{formatMinutes(entry.minutes)}</span></div>
-                )) : <p className="muted">No logged time in this range.</p>}
-              </div>
-            </div>
-            <div className="sidebar-card">
-              <h3>By work type</h3>
-              <div className="stack tight-stack">
-                {workTypeTotals.length ? workTypeTotals.map((entry) => (
-                  <div key={entry.label} className="list-item"><strong>{entry.label}</strong><span>{formatMinutes(entry.minutes)}</span></div>
-                )) : <p className="muted">No logged time in this range.</p>}
-              </div>
-            </div>
-            <div className="sidebar-card">
-              <h3>Per day</h3>
-              <div className="stack tight-stack">
-                {dailyTotals.slice(0, 8).map((entry) => (
-                  <div key={entry.date} className="list-item"><strong>{entry.date}</strong><span>{formatMinutes(entry.minutes)}</span></div>
-                ))}
-              </div>
             </div>
           </div>
 
-          <details className="workspace-disclosure">
-            <summary>Reports and exports</summary>
+          <details className="workspace-disclosure time-disclosure-card">
+            <summary>Insights</summary>
             <div className="workspace-disclosure-body stack">
-              <div className="sidebar-card">
-                <div className="card-header">
-                  <div>
-                    <h3>Grouped tables</h3>
-                    <p className="muted">Use these as dashboard tables now, and as chart-ready exports later.</p>
+              <div className="time-summary-grid">
+                <div className="sidebar-card">
+                  <h3>Active timers</h3>
+                  <div className="time-summary-stat">{runningLogs.length}</div>
+                  <div className="stack tight-stack">
+                    {runningLogs.length ? runningLogs.map((log) => (
+                      <div key={log.id} className="list-item">
+                        <div><strong>{log.title}</strong><div className="tiny-text">{log.contextLabel}</div></div>
+                        <button className="small-button" type="button" onClick={() => onStopTracking(log.targetType, log.targetId)}>Stop</button>
+                      </div>
+                    )) : <p className="muted">No timers are running right now.</p>}
                   </div>
                 </div>
-                <div className="time-grouped-grid">
+                <div className="sidebar-card">
+                  <h3>Compare periods</h3>
+                  <div className="time-summary-stat">{formatMinutes(currentTotalMinutes)}</div>
                   <div className="stack tight-stack">
-                    <strong>Projects</strong>
-                    {projectTotals.slice(0, 10).map((entry) => <div key={entry.label} className="list-item"><span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span></div>)}
+                    <div className="list-item"><span>Previous period</span><strong>{formatMinutes(comparisonTotalMinutes)}</strong></div>
+                    <div className="list-item">
+                      <span>Delta</span>
+                      <strong className={comparisonDeltaMinutes >= 0 ? "time-delta-positive" : "time-delta-negative"}>
+                        {comparisonDeltaMinutes >= 0 ? "+" : ""}{formatMinutes(comparisonDeltaMinutes)}
+                      </strong>
+                    </div>
+                    {comparisonRange ? <div className="tiny-text">{comparisonRange.label}</div> : null}
                   </div>
+                </div>
+                <div className="sidebar-card">
+                  <h3>By workspace</h3>
                   <div className="stack tight-stack">
-                    <strong>Domains</strong>
-                    {domainTotals.slice(0, 10).map((entry) => <div key={entry.label} className="list-item"><span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span></div>)}
+                    {workspaceTotals.length ? workspaceTotals.map((entry) => (
+                      <div key={entry.label} className="list-item"><strong>{entry.label}</strong><span>{formatMinutes(entry.minutes)}</span></div>
+                    )) : <p className="muted">No logged time in this range.</p>}
                   </div>
+                </div>
+                <div className="sidebar-card">
+                  <h3>By work type</h3>
                   <div className="stack tight-stack">
-                    <strong>Activities</strong>
-                    {activityTotals.slice(0, 10).map((entry) => (
-                      <button key={`${entry.targetType}-${entry.targetId}`} className="list-item list-item-button" type="button" onClick={() => entry.targetType === "activity" ? onOpenActivityDetail(entry.targetId) : onOpenTodoDetail(entry.targetId)}>
-                        <span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span>
-                      </button>
+                    {workTypeTotals.length ? workTypeTotals.map((entry) => (
+                      <div key={entry.label} className="list-item"><strong>{entry.label}</strong><span>{formatMinutes(entry.minutes)}</span></div>
+                    )) : <p className="muted">No logged time in this range.</p>}
+                  </div>
+                </div>
+                <div className="sidebar-card">
+                  <h3>Per day</h3>
+                  <div className="stack tight-stack">
+                    {dailyTotals.slice(0, 8).map((entry) => (
+                      <div key={entry.date} className="list-item"><strong>{entry.date}</strong><span>{formatMinutes(entry.minutes)}</span></div>
                     ))}
                   </div>
                 </div>
               </div>
-
               <div className="time-visual-grid">
                 <div className="sidebar-card">
                   <div className="card-header">
@@ -769,25 +726,116 @@ export const TimeWorkspace = ({
               </div>
             </div>
           </details>
-        </section>
 
-        <aside className="time-workspace-detail">
-          <div className="stack">
-            <div className="sidebar-card">
-              <h3>Editing guide</h3>
-              <div className="stack tight-stack">
-                <div className="list-item"><strong>One row = one log</strong><span>Change date, start, stop, and comment inline.</span></div>
-                <div className="list-item"><strong>Start / Stop</strong><span>Use these to continue logging on the same todo or activity naturally.</span></div>
-                <div className="list-item"><strong>Open source</strong><span>Click a title to jump back to the todo or activity behind the log.</span></div>
+          <details className="workspace-disclosure time-disclosure-card">
+            <summary>Exports</summary>
+            <div className="workspace-disclosure-body stack">
+              <div className="sidebar-card">
+                <div className="card-header">
+                  <div>
+                    <h3>Grouped tables</h3>
+                    <p className="muted">Use these as dashboard tables now, and as chart-ready exports later.</p>
+                  </div>
+                </div>
+                <div className="time-grouped-grid">
+                  <div className="stack tight-stack">
+                    <strong>Projects</strong>
+                    {projectTotals.slice(0, 10).map((entry) => <div key={entry.label} className="list-item"><span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span></div>)}
+                  </div>
+                  <div className="stack tight-stack">
+                    <strong>Domains</strong>
+                    {domainTotals.slice(0, 10).map((entry) => <div key={entry.label} className="list-item"><span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span></div>)}
+                  </div>
+                  <div className="stack tight-stack">
+                    <strong>Activities</strong>
+                    {activityTotals.slice(0, 10).map((entry) => (
+                      <button key={`${entry.targetType}-${entry.targetId}`} className="list-item list-item-button" type="button" onClick={() => entry.targetType === "activity" ? onOpenActivityDetail(entry.targetId) : onOpenTodoDetail(entry.targetId)}>
+                        <span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="sidebar-card">
-              <h3>Visible rows</h3>
-              <div className="time-summary-stat">{filteredLogs.length}</div>
-              <p className="muted">All filtered logs are shown in the editable table, not only the most recent ones.</p>
+          </details>
+          <details className="workspace-disclosure time-disclosure-card">
+            <summary>Saved reports</summary>
+            <div className="workspace-disclosure-body stack">
+              <div className="sidebar-card">
+                <div className="card-header">
+                  <div>
+                    <h3>Saved reports</h3>
+                    <p className="muted">Save the current range and filters as a reusable reporting view.</p>
+                  </div>
+                </div>
+                <div className="todos-workspace-input-row">
+                  <div className="field field-wide">
+                    <label htmlFor="time-report-preset-label">Preset name</label>
+                    <input
+                      id="time-report-preset-label"
+                      value={presetDraft}
+                      onChange={(event) => setPresetDraft(event.target.value)}
+                      placeholder="For example: This month - Product"
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && presetDraft.trim()) {
+                          event.preventDefault();
+                          onSaveReportPreset({
+                            label: presetDraft.trim(),
+                            fromDate,
+                            toDate,
+                            domain: domainFilter === "all" ? "" : domainFilter,
+                            project: projectFilter === "all" ? "" : projectFilter,
+                          });
+                          setPresetDraft("");
+                        }
+                      }}
+                    />
+                  </div>
+                  <button
+                    className="small-button"
+                    type="button"
+                    onClick={() => {
+                      if (!presetDraft.trim()) return;
+                      onSaveReportPreset({
+                        label: presetDraft.trim(),
+                        fromDate,
+                        toDate,
+                        domain: domainFilter === "all" ? "" : domainFilter,
+                        project: projectFilter === "all" ? "" : projectFilter,
+                      });
+                      setPresetDraft("");
+                    }}
+                  >
+                    Save preset
+                  </button>
+                </div>
+                {reportPresets.length ? (
+                  <div className="section-list">
+                    {reportPresets.map((preset) => (
+                      <div key={preset.id} className="list-item">
+                        <button className="list-item-button list-item-button-inline" type="button" onClick={() => applySavedPreset(preset)}>
+                          <span>
+                            <strong>{preset.label}</strong>
+                            <span className="tiny-text">
+                              {preset.fromDate} to {preset.toDate}
+                              {preset.domain ? ` - ${preset.domain}` : ""}
+                              {preset.project ? ` - ${preset.project}` : ""}
+                            </span>
+                          </span>
+                        </button>
+                        <button className="small-button danger-button" type="button" onClick={() => onDeleteReportPreset(preset.id)}>
+                          Delete
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="muted">No saved report presets yet.</p>
+                )}
+              </div>
             </div>
-          </div>
-        </aside>
+          </details>
+        </section>
       </div>
     </div>
   );

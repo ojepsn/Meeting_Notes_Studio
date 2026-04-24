@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ActivityRecord, CaptureMode, DesktopAppSnapshot, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, CaptureMode, DesktopAppSnapshot, TaskRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCaptureMode } from "@notesmith/domain";
 import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
 import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
@@ -13,8 +13,9 @@ import {
   upsertTemplate,
   upsertTodo,
 } from "../lib/db/repository";
+import { normalizeTaskRecord, taskToTodoRecord, todoToTaskRecord } from "../lib/tasks/model";
 import { removePersistedAttachment } from "../lib/files/attachmentStore";
-import { findSessionIdForActivity, upsertEntityLink } from "../lib/links/entityLinks";
+import { findSessionIdForActivity, findSessionIdForTodo, upsertEntityLink } from "../lib/links/entityLinks";
 import { loadLatestLocalSnapshotBackup } from "../lib/storage/desktopStorage";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 
@@ -33,6 +34,7 @@ const ROLLED_TODO_MAX_PER_ROW = 2;
 const OTHER_STRUCTURE_VALUE = "Other";
 type Snapshot = DesktopAppSnapshot;
 type Todo = TodoRecord;
+type Task = TaskRecord;
 type Activity = ActivityRecord;
 type TimeLog = TimeLogRecord;
 
@@ -185,7 +187,7 @@ const parseScheduledText = (value: string) => {
   const meetMatch = trimmed.match(/^meet\s+(.+)$/i);
   if (meetMatch?.[1]?.trim()) return { kind: "meeting" as const, description: meetMatch[1].trim() };
   const activityMatch = trimmed.match(/^act\s+(.+)$/i);
-  if (activityMatch?.[1]?.trim()) return { kind: "activity" as const, description: activityMatch[1].trim() };
+  if (activityMatch?.[1]?.trim()) return { kind: "todo" as const, description: activityMatch[1].trim() };
   const todoMatch = trimmed.match(/^td\s+(.+)$/i);
   if (todoMatch?.[1]?.trim()) return { kind: "todo" as const, description: todoMatch[1].trim() };
   return trimmed ? { kind: "todo" as const, description: trimmed } : null;
@@ -356,6 +358,21 @@ const buildLinkedMeetingSession = (
   };
 };
 
+const buildLinkedTaskSession = (todo: DesktopAppSnapshot["todos"][number]) => {
+  const session = createSessionRecord("personal-note", "quick-note");
+  const taskDate = todo.doOn || todo.dueDate || session.date;
+  return {
+    ...session,
+    title: todo.description,
+    isPrivate: todo.isPrivate,
+    project: todo.project,
+    domain: todo.domain,
+    activity: todo.activity,
+    date: taskDate,
+    updatedAt: new Date().toISOString(),
+  };
+};
+
 const syncLinkedSessionForMeeting = (
   snapshot: DesktopAppSnapshot,
   activity: DesktopAppSnapshot["activities"][number],
@@ -374,6 +391,33 @@ const syncLinkedSessionForMeeting = (
             date: activity.doOn || session.date,
             startTime: activity.startTime || session.startTime,
             endTime: activity.endTime || session.endTime,
+            updatedAt: new Date().toISOString(),
+          }
+        : session,
+    ),
+  };
+};
+
+const syncLinkedSessionForTodo = (
+  snapshot: DesktopAppSnapshot,
+  todo: DesktopAppSnapshot["todos"][number],
+) => {
+  const linkedSessionId = findSessionIdForTodo(snapshot.entityLinks, todo.id);
+  if (!linkedSessionId) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    sessions: snapshot.sessions.map((session) =>
+      session.id === linkedSessionId
+        ? {
+            ...session,
+            title: todo.description || session.title,
+            isPrivate: todo.isPrivate,
+            date: todo.doOn || todo.dueDate || session.date,
+            project: todo.project,
+            domain: todo.domain,
+            activity: todo.activity,
             updatedAt: new Date().toISOString(),
           }
         : session,
@@ -510,7 +554,7 @@ interface DesktopState {
     date: string,
     startSlot: number,
     value: string,
-    options?: { activityId?: string; parentActivityId?: string; kind?: "todo" | "activity" | "meeting"; endSlot?: number },
+    options?: { activityId?: string; parentActivityId?: string; kind?: "todo" | "meeting"; endSlot?: number },
   ) => Promise<string | null>;
   rollForwardOverdueTodos: () => Promise<void>;
   moveCalendarItem: (id: string, date: string, startSlot: number) => Promise<void>;
@@ -525,6 +569,7 @@ interface DesktopState {
     },
   ) => Promise<string | null>;
   ensureSessionForActivity: (activityId: string) => Promise<string | null>;
+  ensureSessionForTodo: (todoId: string) => Promise<string | null>;
   saveSettings: (settings: DesktopAppSnapshot["settings"]) => Promise<void>;
   renameDomainValue: (previousValue: string, nextValue: string) => Promise<void>;
   renameProjectValue: (previousValue: string, nextValue: string) => Promise<void>;
@@ -735,21 +780,22 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   saveTodo: async (todo) => {
     const snapshot = get().snapshot;
     if (!snapshot) return;
-    const normalizedTodo = {
-      ...todo,
+    const normalizedTask = normalizeTaskRecord({
+      ...todoToTaskRecord(todo),
       ...applyActivityInheritance(snapshot, {
         domain: todo.domain,
         project: todo.project,
         activity: todo.activity,
         activityId: todo.activityId,
       }),
-    };
+    } as Task);
     const nextSnapshot = {
       ...snapshot,
-      todos: upsertTodo(snapshot.todos, normalizedTodo),
+      todos: upsertTodo(snapshot.todos, taskToTodoRecord(normalizedTask)),
     };
-    set({ snapshot: nextSnapshot });
-    scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+    const syncedSnapshot = syncLinkedSessionForTodo(nextSnapshot, taskToTodoRecord(normalizedTask));
+    set({ snapshot: syncedSnapshot });
+    scheduleSnapshotPersist(get().repository, syncedSnapshot, set);
   },
   addTodo: async (description, options) => {
     const snapshot = get().snapshot;
@@ -765,7 +811,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       project: options?.project || "",
       activity: options?.activityLabel || "",
     });
-    const nextTodo = {
+    const nextTask = normalizeTaskRecord({
       id: todoId,
       description: description.trim(),
       isDone: false,
@@ -780,10 +826,10 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       detailsHtml: "",
       createdAt,
       sessionIds: toSessionIds(get().activeSessionId),
-    };
+    });
     const nextSnapshot = {
       ...snapshot,
-      todos: [nextTodo, ...snapshot.todos],
+      todos: [taskToTodoRecord(nextTask), ...snapshot.todos],
       calendarItems: upsertCalendarItem(snapshot.calendarItems, {
         id: calendarItemId,
         targetType: "todo",
@@ -807,6 +853,13 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       todos: snapshot.todos.filter((todo) => todo.id !== id),
       timelogs: nextTimeLogs,
       calendarItems: snapshot.calendarItems.filter((item) => !(item.targetType === "todo" && item.targetId === id)),
+      entityLinks: snapshot.entityLinks.filter(
+        (entry) =>
+          !(
+            (entry.fromType === "todo" && entry.fromId === id) ||
+            (entry.toType === "todo" && entry.toId === id)
+          ),
+      ),
     };
     set({ snapshot: nextSnapshot });
     await flushSnapshotPersist(get().repository, nextSnapshot, set);
@@ -979,7 +1032,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   createCalendarEntryFromText: async (date, startSlot, value, options) => {
     const snapshot = get().snapshot;
     const parsed = options?.kind
-      ? { kind: options.kind, description: value.trim() || (options.kind === "meeting" ? "New meeting" : options.kind === "activity" ? "New activity" : "New todo") }
+      ? { kind: options.kind, description: value.trim() || (options.kind === "meeting" ? "New meeting" : "New task") }
       : parseScheduledText(value);
     if (!snapshot || !parsed) return null;
 
@@ -989,7 +1042,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
 
     let createdCalendarItemId: string | null = null;
 
-    if (parsed.kind === "todo") {
+    if (parsed.kind !== "meeting") {
       const inherited = applyActivityInheritance(snapshot, {
         activityId: options?.activityId || "",
         domain: "",
@@ -1012,15 +1065,15 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         createdAt,
         sessionIds: toSessionIds(get().activeSessionId),
       };
-      const normalizedTodo = {
-        ...todo,
+      const normalizedTodo = taskToTodoRecord(normalizeTaskRecord({
+        ...todoToTaskRecord(todo),
         ...applyActivityInheritance(snapshot, {
           activityId: todo.activityId,
           domain: todo.domain,
           project: todo.project,
           activity: todo.activity,
         }),
-      };
+      }));
       createdCalendarItemId = crypto.randomUUID();
       nextSnapshot = {
         ...snapshot,
@@ -1037,13 +1090,13 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         }),
       };
     } else {
-      const isMeeting = parsed.kind === "meeting";
-      const durationSlots = isMeeting
-        ? Math.max(1, (typeof options?.endSlot === "number" ? clampSlotIndex(options.endSlot) : normalizedSlot + DEFAULT_MEETING_DURATION_SLOTS) - normalizedSlot)
-        : 1;
+      const durationSlots = Math.max(
+        1,
+        (typeof options?.endSlot === "number" ? clampSlotIndex(options.endSlot) : normalizedSlot + DEFAULT_MEETING_DURATION_SLOTS) - normalizedSlot,
+      );
       const activity: DesktopAppSnapshot["activities"][number] = normalizeActivityStructure({
         id: crypto.randomUUID(),
-        type: isMeeting ? "meeting" : "task",
+        type: "meeting",
         parentActivityId: options?.parentActivityId || options?.activityId || "",
         description: parsed.description,
         isDone: false,
@@ -1054,8 +1107,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         activity: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.description || "",
         doOn: date,
         dueDate: "",
-        startTime: isMeeting ? slotToTime(normalizedSlot) : "",
-        endTime: isMeeting ? slotToTime(normalizedSlot + durationSlots) : "",
+        startTime: slotToTime(normalizedSlot),
+        endTime: slotToTime(normalizedSlot + durationSlots),
         detailsHtml: "",
         timeRequiredMinutes: 0,
         actualTimeSpentMinutes: 0,
@@ -1273,6 +1326,33 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         id: crypto.randomUUID(),
         fromType: "activity",
         fromId: activity.id,
+        toType: "session",
+        toId: linkedSession.id,
+        relation: "has_session",
+        createdAt: new Date().toISOString(),
+      }),
+    };
+    set({ snapshot: nextSnapshot, activeSessionId: linkedSession.id });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    return linkedSession.id;
+  },
+  ensureSessionForTodo: async (todoId) => {
+    const snapshot = get().snapshot;
+    if (!snapshot) return null;
+    const todo = snapshot.todos.find((entry) => entry.id === todoId);
+    if (!todo) return null;
+    const existingSessionId = findSessionIdForTodo(snapshot.entityLinks, todoId);
+    if (existingSessionId) {
+      return existingSessionId;
+    }
+    const linkedSession = buildLinkedTaskSession(todo);
+    const nextSnapshot = {
+      ...snapshot,
+      sessions: [linkedSession, ...snapshot.sessions],
+      entityLinks: upsertEntityLink(snapshot.entityLinks, {
+        id: crypto.randomUUID(),
+        fromType: "todo",
+        fromId: todo.id,
         toType: "session",
         toId: linkedSession.id,
         relation: "has_session",

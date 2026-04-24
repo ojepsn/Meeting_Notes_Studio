@@ -163,8 +163,8 @@ const normalizeCalendarItemRecord = (item: CalendarItemRecord): CalendarItemReco
 
 const normalizeEntityLinkRecord = (link: EntityLinkRecord): EntityLinkRecord => ({
   ...link,
-  fromType: link.fromType === "session" ? "session" : "activity",
-  toType: link.toType === "activity" ? "activity" : "session",
+  fromType: link.fromType === "session" ? "session" : link.fromType === "todo" ? "todo" : "activity",
+  toType: link.toType === "activity" ? "activity" : link.toType === "todo" ? "todo" : "session",
   relation: "has_session",
 });
 

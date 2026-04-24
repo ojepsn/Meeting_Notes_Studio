@@ -69,6 +69,12 @@ export const dayColumnWidthForView = (daysInView: typeof DAYS[number]) => {
   }
 };
 
+const slotToDateTime = (date: string, slot: number) => {
+  const next = new Date(`${date}T00:00:00`);
+  next.setMinutes(slot * MINUTES_PER_SLOT);
+  return next;
+};
+
 export const layoutCalendarItems = <T extends {
   date: string;
   startSlot: number;
@@ -152,19 +158,19 @@ interface CalendarWorkspaceProps {
   settings: LocalAppSettings;
   structureOptions: StructureOptions;
   linkedSessionStateByActivity: Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>;
+  linkedSessionStateByTodo: Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>;
   onSaveSettings: (settings: LocalAppSettings) => void;
   onCreateFromText: (
     date: string,
     startSlot: number,
     value: string,
-    options?: { activityId?: string; parentActivityId?: string; kind?: "todo" | "activity" | "meeting"; endSlot?: number },
+    options?: { activityId?: string; parentActivityId?: string; kind?: "todo" | "meeting"; endSlot?: number },
   ) => Promise<string | null> | string | null | void;
   onMoveItem: (id: string, date: string, startSlot: number) => void;
   onSaveTodo: (todo: TodoRecord) => void;
   onDeleteTodo: (id: string) => void;
   onSaveActivity: (activity: ActivityRecord) => void;
   onDeleteActivity: (id: string) => void;
-  onConvertTodoToActivity: (todo: TodoRecord, options: { date: string; startTime: string; endTime: string }) => void;
   onConvertTodoToMeeting: (todo: TodoRecord, options: { date: string; startTime: string; endTime: string }) => void;
   onUpdateCalendarItem: (id: string, updates: { date: string; startSlot: number; durationSlots: number }) => void;
   onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
@@ -176,6 +182,7 @@ interface CalendarWorkspaceProps {
   onOpenSession: (sessionId: string, calendarItemId?: string) => void;
   highlightedItemId?: string | null;
   onCreateLinkedMeetingSession: (activityId: string) => void;
+  onCreateLinkedTaskSession: (todoId: string) => void;
   onPreviewSessionOutput: (sessionId: string) => void;
   onFullScreenChange?: (isFullScreen: boolean) => void;
 }
@@ -188,6 +195,7 @@ export const CalendarWorkspace = ({
   settings,
   structureOptions,
   linkedSessionStateByActivity,
+  linkedSessionStateByTodo,
   onSaveSettings,
   onCreateFromText,
   onMoveItem,
@@ -195,7 +203,6 @@ export const CalendarWorkspace = ({
   onDeleteTodo,
   onSaveActivity,
   onDeleteActivity,
-  onConvertTodoToActivity,
   onConvertTodoToMeeting,
   onUpdateCalendarItem,
   onStartTracking,
@@ -207,6 +214,7 @@ export const CalendarWorkspace = ({
   onOpenSession,
   highlightedItemId,
   onCreateLinkedMeetingSession,
+  onCreateLinkedTaskSession,
   onPreviewSessionOutput,
   onFullScreenChange,
 }: CalendarWorkspaceProps) => {
@@ -227,7 +235,7 @@ export const CalendarWorkspace = ({
   const [draftText, setDraftText] = useState("");
   const [creationContextActivityId, setCreationContextActivityId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "todo" | "activity" | "meeting">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "task" | "meeting">("all");
   const [visibilityFilter, setVisibilityFilter] = useState<"all" | "public" | "private">("all");
   const [hideCompletedTodos, setHideCompletedTodos] = useState(false);
   const [inlineTodoEdit, setInlineTodoEdit] = useState<{ itemId: string; todoId: string; value: string } | null>(null);
@@ -308,11 +316,11 @@ export const CalendarWorkspace = ({
         if (item.targetType === "todo") {
           const todo = todoMap.get(item.targetId);
           if (!todo) return null;
-          return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "todo" as const, targetId: item.targetId, title: todo.description, label: "Todo", isMeeting: false, isPrivate: todo.isPrivate, isDone: todo.isDone, lane: 0, laneCount: 1 };
+          return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "todo" as const, targetId: item.targetId, title: todo.description, label: "Task", isMeeting: false, isPrivate: todo.isPrivate, isDone: todo.isDone, lane: 0, laneCount: 1 };
         }
         const activity = activityMap.get(item.targetId);
         if (!activity) return null;
-        return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "activity" as const, targetId: item.targetId, title: activity.description, label: activity.type === "meeting" ? "Meeting" : "Activity", isMeeting: activity.type === "meeting", isPrivate: activity.isPrivate, isDone: activity.isDone, lane: 0, laneCount: 1 };
+        return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "activity" as const, targetId: item.targetId, title: activity.description, label: activity.type === "meeting" ? "Meeting" : "Task", isMeeting: activity.type === "meeting", isPrivate: activity.isPrivate, isDone: activity.isDone, lane: 0, laneCount: 1 };
       })
       .filter((item): item is Item => item !== null)
       .sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.title.localeCompare(right.title));
@@ -333,8 +341,7 @@ export const CalendarWorkspace = ({
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return layoutCalendarItems(items.filter((item) => {
-      if (typeFilter === "todo" && item.targetType !== "todo") return false;
-      if (typeFilter === "activity" && (item.targetType !== "activity" || item.isMeeting)) return false;
+      if (typeFilter === "task" && item.isMeeting) return false;
       if (typeFilter === "meeting" && !item.isMeeting) return false;
       if (visibilityFilter === "private" && !item.isPrivate) return false;
       if (visibilityFilter === "public" && item.isPrivate) return false;
@@ -878,18 +885,6 @@ export const CalendarWorkspace = ({
     });
   };
 
-  const convertEditorTodoToActivity = () => {
-    if (!editorDraft || editorDraft.targetType !== "todo") return;
-    const todo = todos.find((entry) => entry.id === editorDraft.targetId);
-    if (!todo) return;
-    const startTime = editorDraft.startTime || "09:00";
-    onConvertTodoToActivity(todo, {
-      date: editorDraft.doOn || today,
-      startTime,
-      endTime: editorDraft.endTime || slotToTime(timeToSlot(startTime) + DEFAULT_MEETING_DURATION_SLOTS),
-    });
-  };
-
   const completedTodoCalendarItemIds = useMemo(
     () => items.filter((item) => item.targetType === "todo" && item.isDone).map((item) => item.id),
     [items],
@@ -976,7 +971,7 @@ export const CalendarWorkspace = ({
               <div className="field"><label htmlFor="calendar-jump-date">Jump</label><DateInput id="calendar-jump-date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} /></div>
               <button className="shell-button" type="button" onClick={() => jumpToCalendarDate(jumpDate || today)}>Go</button>
               <div className="field field-wide"><label htmlFor="calendar-search">Search</label><input id="calendar-search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search title" /></div>
-              <div className="field"><label htmlFor="calendar-type-filter">Type</label><select id="calendar-type-filter" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | "todo" | "activity" | "meeting")}><option value="all">All</option><option value="todo">Todos</option><option value="activity">Activities</option><option value="meeting">Meetings</option></select></div>
+              <div className="field"><label htmlFor="calendar-type-filter">Type</label><select id="calendar-type-filter" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | "task" | "meeting")}><option value="all">All</option><option value="task">Tasks</option><option value="meeting">Meetings</option></select></div>
               <div className="field"><label htmlFor="calendar-visibility-filter">Private</label><select id="calendar-visibility-filter" value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value as "all" | "public" | "private")}><option value="all">All</option><option value="public">Public</option><option value="private">Private</option></select></div>
               <div className="field calendar-context-field">
                 <label htmlFor="calendar-creation-context">Attach new entries</label>
@@ -1035,7 +1030,7 @@ export const CalendarWorkspace = ({
                     if (event.key === "ArrowDown") { event.preventDefault(); moveDraftCell(0, 1); }
                     if (event.key === "ArrowUp") { event.preventDefault(); moveDraftCell(0, -1); }
                     if (event.key === "Tab") { event.preventDefault(); moveDraftCell(event.shiftKey ? -1 : 1, 0); }
-                  }} placeholder="Type to add todo, act..., td..., or meet..." /></div> : null}
+                  }} placeholder="Type to add task or use double-click for meeting" /></div> : null}
                   {dayItems.map((item) => {
                     const preview = resizeState?.itemId === item.id ? resizeState : null;
                     const startSlot = preview?.startSlot ?? item.startSlot;
@@ -1049,9 +1044,13 @@ export const CalendarWorkspace = ({
                     );
                     const runningLog = getRunningTimeLog(timeLogsByTarget.get(`${item.targetType}:${item.targetId}`) || []);
                     const linkedSessionState =
-                      item.isMeeting && item.targetType === "activity" ? linkedSessionStateByActivity[item.targetId] : undefined;
+                      item.targetType === "activity"
+                        ? linkedSessionStateByActivity[item.targetId]
+                        : linkedSessionStateByTodo[item.targetId];
                     const runningLabel = runningLog ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now)) : "";
                     const isSelected = selectedItemIds.includes(item.id) || selectedItemId === item.id;
+                    const isPastCalendarItem =
+                      slotToDateTime(item.date, startSlot + Math.max(1, durationSlots)) < now;
                     const sizeClass = [
                       visualHeight <= 22 ? "calendar-item-block-tiny" : visualHeight <= 54 ? "calendar-item-block-compact" : "",
                       item.targetType === "todo" && durationSlots <= 1 ? "calendar-item-block-single-row-todo" : "",
@@ -1060,7 +1059,7 @@ export const CalendarWorkspace = ({
                       item.isMeeting && durationSlots <= 3 ? "calendar-item-block-micro-meeting" : "",
                     ].filter(Boolean).map((className) => ` ${className}`).join("");
                     const inlineTodoEditForItem = inlineTodoEdit?.itemId === item.id ? inlineTodoEdit : null;
-                    return <div key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${item.targetType === "todo" && item.isDone ? " calendar-item-block-completed-todo" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${inlineTodoEditForItem ? " calendar-item-block-inline-editing" : ""}${sizeClass}`} role="button" tabIndex={0} style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
+                    return <div key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${item.targetType === "todo" && item.isDone ? " calendar-item-block-completed-todo" : ""}${isPastCalendarItem ? " calendar-item-block-past" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${inlineTodoEditForItem ? " calendar-item-block-inline-editing" : ""}${sizeClass}`} role="button" tabIndex={0} style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
                       const target = event.target as HTMLElement;
                       if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle") || target.closest(".calendar-item-title-input")) return;
                       event.preventDefault();
@@ -1069,7 +1068,7 @@ export const CalendarWorkspace = ({
                     }} onClick={(event) => { if (suppressClickItemIdRef.current === item.id) return; selectCalendarItem(item.id, event.metaKey || event.ctrlKey || event.shiftKey); }} onDoubleClick={() => { if (item.targetType === "todo") { onOpenTodoDetail(item.targetId); return; } onOpenActivityDetail(item.targetId); }}>
                       {item.isMeeting ? <span className="calendar-resize-handle calendar-resize-handle-start" onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "start", date: item.date, startSlot, durationSlots }); }} /> : null}
                       <span className="calendar-item-kicker">
-                        {item.isMeeting ? "Meeting" : item.targetType === "todo" ? "Todo" : "Activity"}
+                        {item.isMeeting ? "Meeting" : "Task"}
                         {item.isPrivate ? " • Private" : ""}
                       </span>
                       {inlineTodoEditForItem ? (
@@ -1099,9 +1098,11 @@ export const CalendarWorkspace = ({
                         <span className={`calendar-item-link-state${linkedSessionState.hasOutput ? " calendar-item-link-state-output" : ""}`}>
                           {linkedSessionState.hasOutput ? "Output ready" : "Session linked"}
                         </span>
-                      ) : item.isMeeting ? (
-                        <span className="calendar-item-link-state calendar-item-link-state-empty">No session</span>
-                      ) : null}
+                      ) : (
+                        <span className="calendar-item-link-state calendar-item-link-state-empty">
+                          {item.targetType === "todo" ? "No note" : "No session"}
+                        </span>
+                      )}
                       {item.isMeeting ? (
                         <div className="calendar-item-launcher-row">
                           {linkedSessionState?.sessionId ? (
@@ -1161,6 +1162,65 @@ export const CalendarWorkspace = ({
                           )}
                         </div>
                       ) : null}
+                      {!item.isMeeting && item.targetType === "todo" ? (
+                        <div className="calendar-item-launcher-row">
+                          {linkedSessionState?.sessionId ? (
+                            <>
+                              <span
+                                className="calendar-item-inline-action calendar-item-inline-action-secondary"
+                                role="button"
+                                tabIndex={-1}
+                                onMouseDown={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                }}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  onOpenSession(linkedSessionState.sessionId!, item.id);
+                                }}
+                              >
+                                Open note
+                              </span>
+                              {linkedSessionState.hasOutput ? (
+                                <span
+                                  className="calendar-item-inline-action calendar-item-inline-action-secondary"
+                                  role="button"
+                                  tabIndex={-1}
+                                  onMouseDown={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                  }}
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    onPreviewSessionOutput(linkedSessionState.sessionId!);
+                                  }}
+                                >
+                                  Output
+                                </span>
+                              ) : null}
+                            </>
+                          ) : (
+                            <span
+                              className="calendar-item-inline-action calendar-item-inline-action-secondary"
+                              role="button"
+                              tabIndex={-1}
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                              }}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                onCreateLinkedTaskSession(item.targetId);
+                              }}
+                            >
+                              Create note
+                            </span>
+                          )}
+                        </div>
+                      ) : null}
                       <span
                         className={`calendar-item-inline-action${runningLog ? " calendar-item-inline-action-active" : ""}`}
                         role="button"
@@ -1195,9 +1255,9 @@ export const CalendarWorkspace = ({
             <div className={`stack calendar-editor-stack${detailsPaneWidth <= 340 ? " calendar-editor-stack-compact" : ""}`}>
               <div className="card-header">
                 <div>
-                  <h3>{editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity"}</h3>
+                  <h3>{editorDraft.isMeeting ? "Meeting" : "Task"}</h3>
                   <div className="calendar-editor-meta">
-                    <span className="status-chip">{editorDraft.isMeeting ? "Meeting" : editorDraft.targetType === "todo" ? "Todo" : "Activity"}</span>
+                    <span className="status-chip">{editorDraft.isMeeting ? "Meeting" : "Task"}</span>
                     {editorDraft.project ? <span className="status-chip">{editorDraft.project}</span> : null}
                     {editorDraft.domain ? <span className="status-chip">{editorDraft.domain}</span> : null}
                   </div>
@@ -1344,13 +1404,71 @@ export const CalendarWorkspace = ({
                   ) : null}
                 </>
               ) : null}
+              {editorDraft.targetType === "todo" ? (
+                <div className="field">
+                  <label>Task note</label>
+                  <div className="calendar-linked-session-card">
+                    <div className="calendar-linked-session-status">
+                      {linkedSessionStateByTodo[editorDraft.targetId]?.sessionId ? (
+                        <>
+                          <strong>{linkedSessionStateByTodo[editorDraft.targetId]?.sessionTitle || "Linked task note"}</strong>
+                          <span>
+                            {linkedSessionStateByTodo[editorDraft.targetId]?.hasOutput ? "Output available" : "No output yet"}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <strong>No linked task note</strong>
+                          <span>Create one when this task should open as a personal note session.</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="calendar-editor-actions">
+                      {linkedSessionStateByTodo[editorDraft.targetId]?.sessionId ? (
+                        <>
+                          <button
+                            className="shell-button"
+                            type="button"
+                            onClick={() => {
+                              const sessionId = linkedSessionStateByTodo[editorDraft.targetId]?.sessionId;
+                              if (sessionId) onOpenSession(sessionId);
+                            }}
+                          >
+                            Open linked task note
+                          </button>
+                          {linkedSessionStateByTodo[editorDraft.targetId]?.hasOutput ? (
+                            <button
+                              className="shell-button"
+                              type="button"
+                              onClick={() => {
+                                const sessionId = linkedSessionStateByTodo[editorDraft.targetId]?.sessionId;
+                                if (sessionId) onPreviewSessionOutput(sessionId);
+                              }}
+                            >
+                              Open note output
+                            </button>
+                          ) : null}
+                        </>
+                      ) : (
+                        <button
+                          className="shell-button"
+                          type="button"
+                          onClick={() => onCreateLinkedTaskSession(editorDraft.targetId)}
+                        >
+                          Create linked task note
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               <details className="workspace-disclosure calendar-inspector-disclosure calendar-structure-disclosure">
-                <summary>{editorDraft.isMeeting ? "Structure and advanced details" : "More details"}</summary>
+                <summary>{editorDraft.isMeeting ? "Structure and advanced details" : "Task details"}</summary>
                 <div className="workspace-disclosure-body stack">
               <div className="metadata-triplet-grid">
                 {!editorDraft.isMeeting ? (
                   <div className="field metadata-subfield">
-                    <label htmlFor="calendar-edit-link">Activity link</label>
+                    <label htmlFor="calendar-edit-link">Linked activity</label>
                     <select
                       id="calendar-edit-link"
                       value={editorDraft.activityId}
@@ -1459,13 +1577,10 @@ export const CalendarWorkspace = ({
                   type="button"
                   onClick={() => (editorDraft.targetType === "todo" ? onOpenTodoWorkspace() : onOpenActivityWorkspace(editorDraft.targetId))}
                 >
-                  Open full {editorDraft.targetType === "todo" ? "todo" : "activity"}
+                  Open full {editorDraft.isMeeting ? "meeting" : "task"}
                 </button>
                 {editorDraft.targetType === "todo" ? (
                   <>
-                    <button className="shell-button" type="button" onClick={convertEditorTodoToActivity}>
-                      Convert to activity
-                    </button>
                     <button className="shell-button" type="button" onClick={convertEditorTodoToMeeting}>
                       Convert to meeting
                     </button>

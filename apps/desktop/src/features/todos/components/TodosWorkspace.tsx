@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, SyntheticEvent } from "react";
-import type { ActivityRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, TaskRecord, TimeLogRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
@@ -14,7 +14,7 @@ type VisibleTodoColumnKey = Exclude<TodoSortKey, "createdAt">;
 type TodoColumnWidths = Record<VisibleTodoColumnKey, number>;
 
 interface TodosWorkspaceProps {
-  todos: TodoRecord[];
+  todos: TaskRecord[];
   activities: ActivityRecord[];
   timeLogs: TimeLogRecord[];
   structureOptions: StructureOptions;
@@ -22,11 +22,11 @@ interface TodosWorkspaceProps {
   requestedDomain?: string | null;
   requestedProject?: string | null;
   onEditorClose?: () => void;
-  onToggle: (todo: TodoRecord) => void;
+  onToggle: (todo: TaskRecord) => void;
   onAdd: (description: string, options?: { activityId?: string }) => void;
-  onSave: (todo: TodoRecord) => void;
+  onSave: (todo: TaskRecord) => void;
   onDelete: (id: string) => void;
-  onConvertToActivity: (todo: TodoRecord) => void;
+  onConvertToActivity: (todo: TaskRecord) => void;
   onSaveTimeLog: (timeLog: TimeLogRecord) => void;
   onDeleteTimeLog: (id: string) => void;
   onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
@@ -34,7 +34,7 @@ interface TodosWorkspaceProps {
   onOpenActivityDetail?: (activityId: string) => void;
 }
 
-const createBlankTodoDraft = (description = ""): TodoRecord => ({
+const createBlankTodoDraft = (description = ""): TaskRecord => ({
   id: "",
   description,
   isDone: false,
@@ -159,7 +159,7 @@ export const TodosWorkspace = ({
   const [visibilityFilter, setVisibilityFilter] = useState<TodoVisibilityFilter>("open");
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [editingDraft, setEditingDraft] = useState<TodoRecord>(createBlankTodoDraft());
+  const [editingDraft, setEditingDraft] = useState<TaskRecord>(createBlankTodoDraft());
   const [editingTimeLogId, setEditingTimeLogId] = useState<string | null>(null);
   const [timeLogDraft, setTimeLogDraft] = useState<TimeLogRecord | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -199,7 +199,7 @@ export const TodosWorkspace = ({
     return () => window.clearInterval(intervalId);
   }, [runningTodos.length]);
 
-  const getTodoColumnValue = (todo: TodoRecord, key: TodoSortKey) => {
+  const getTodoColumnValue = (todo: TaskRecord, key: TodoSortKey) => {
     switch (key) {
       case "createdAt":
         return todo.createdAt;
@@ -233,7 +233,7 @@ export const TodosWorkspace = ({
       }),
     );
 
-    const valueForSort = (todo: TodoRecord) => {
+    const valueForSort = (todo: TaskRecord) => {
       switch (sortKey) {
         case "createdAt":
           return todo.createdAt || "";
@@ -396,7 +396,7 @@ export const TodosWorkspace = ({
     event.stopPropagation();
   };
 
-  const saveTodoPatch = (todo: TodoRecord, patch: Partial<TodoRecord>) => {
+  const saveTodoPatch = (todo: TaskRecord, patch: Partial<TaskRecord>) => {
     onSave({ ...todo, ...patch });
   };
 
@@ -429,7 +429,7 @@ export const TodosWorkspace = ({
   } as CSSProperties;
 
   const todoColumns: { key: VisibleTodoColumnKey; label: string; placeholder: string }[] = [
-    { key: "description", label: "Todo", placeholder: "Filter todo" },
+    { key: "description", label: "Task", placeholder: "Filter task" },
     { key: "domain", label: "Domain", placeholder: "Filter domain" },
     { key: "project", label: "Project", placeholder: "Filter project" },
     { key: "activity", label: "Activity", placeholder: "Filter activity" },
@@ -441,7 +441,7 @@ export const TodosWorkspace = ({
     <div className="card todos-workspace todos-workspace-minimal todos-hub-card">
       <div className="card-header session-editor-header-minimal">
         <div>
-          <h2>Todos</h2>
+          <h2>Tasks</h2>
           <p className="muted">Execution happens here. Start work fast, stay in context, and correct time afterward when needed.</p>
         </div>
       </div>
@@ -454,7 +454,7 @@ export const TodosWorkspace = ({
         }}
       >
         <div className="field field-wide">
-          <label htmlFor="todos-workspace-draft">New todo</label>
+          <label htmlFor="todos-workspace-draft">New task</label>
           <input
             id="todos-workspace-draft"
             value={draft}
@@ -483,14 +483,14 @@ export const TodosWorkspace = ({
               <span>Show</span>
               <select value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value as TodoVisibilityFilter)}>
                 <option value="open">Open only</option>
-                <option value="all">All todos</option>
+                <option value="all">All tasks</option>
                 <option value="done">Done only</option>
               </select>
             </label>
             <button className="small-button danger-button" type="button" onClick={deleteSelectedTodo} disabled={!selectedTodoId}>
               Delete selected
             </button>
-            <span className="muted">Click a row to select. Double-click to open the full todo card.</span>
+            <span className="muted">Click a row to select. Double-click to open the full task card.</span>
           </div>
 
           {runningTodos.length ? (
@@ -596,13 +596,13 @@ export const TodosWorkspace = ({
                             <div className="todos-dense-title-copy">
                               <input
                                 className="todos-inline-title-input"
-                                aria-label="Todo title"
+                                aria-label="Task title"
                                 value={todo.description}
                                 onClick={stopTableEditPropagation}
                                 onDoubleClick={stopTableEditPropagation}
                                 onKeyDown={stopTableEditPropagation}
                                 onChange={(event) => saveTodoPatch(todo, { description: event.target.value })}
-                                placeholder="Untitled todo"
+                                placeholder="Untitled task"
                               />
                               <span>{running ? `Running • ${elapsedLabel}` : totalMinutes ? formatTrackedMinutes(totalMinutes) : "No time logged"}</span>
                             </div>
@@ -611,7 +611,7 @@ export const TodosWorkspace = ({
                         <td>
                           <input
                             className="todos-inline-cell-input"
-                            aria-label="Todo domain"
+                            aria-label="Task domain"
                             value={todo.domain}
                             onClick={stopTableEditPropagation}
                             onDoubleClick={stopTableEditPropagation}
@@ -623,7 +623,7 @@ export const TodosWorkspace = ({
                         <td>
                           <input
                             className="todos-inline-cell-input"
-                            aria-label="Todo project"
+                            aria-label="Task project"
                             value={todo.project}
                             onClick={stopTableEditPropagation}
                             onDoubleClick={stopTableEditPropagation}
@@ -635,7 +635,7 @@ export const TodosWorkspace = ({
                         <td>
                           <input
                             className="todos-inline-cell-input"
-                            aria-label="Todo activity"
+                            aria-label="Task activity"
                             value={activityLabel}
                             onClick={stopTableEditPropagation}
                             onDoubleClick={stopTableEditPropagation}
@@ -648,7 +648,7 @@ export const TodosWorkspace = ({
                           <DateInput
                             id={`todo-dense-due-${todo.id}`}
                             className="todos-inline-date-input"
-                            aria-label="Todo due date"
+                            aria-label="Task due date"
                             value={dueDateLabel}
                             onClick={stopTableEditPropagation}
                             onDoubleClick={stopTableEditPropagation}
@@ -660,7 +660,7 @@ export const TodosWorkspace = ({
                           <div className="todos-dense-details-cell">
                             <input
                               className="todos-inline-cell-input"
-                              aria-label="Todo details"
+                              aria-label="Task details"
                               value={detailsText}
                               onClick={stopTableEditPropagation}
                               onDoubleClick={stopTableEditPropagation}
@@ -701,7 +701,7 @@ export const TodosWorkspace = ({
                   <tr>
                     <td colSpan={todoColumns.length}>
                       <div className="empty-state-card compact-empty-state">
-                        <h3>No todos match the current filters</h3>
+                        <h3>No tasks match the current filters</h3>
                         <p>Clear one or more column filters, or add a new focused next action above.</p>
                       </div>
                     </td>
@@ -768,7 +768,7 @@ export const TodosWorkspace = ({
               })
             ) : (
               <div className="empty-state-card compact-empty-state">
-                <h3>No open todos</h3>
+                <h3>No open tasks</h3>
                 <p>Capture the next action here, or type `td` followed by text in any input across the app.</p>
               </div>
             )}
@@ -797,7 +797,7 @@ export const TodosWorkspace = ({
             <div className="stack">
               <div className="card-header activities-detail-header">
                 <div>
-                  <h3>{editingDraft.description || "Todo"}</h3>
+                  <h3>{editingDraft.description || "Task"}</h3>
                   <div className="calendar-editor-meta">
                     {currentActivity ? <span className="status-chip">{currentActivity.description}</span> : <span className="status-chip">Unassigned</span>}
                     {editingDraft.project ? <span className="status-chip">{editingDraft.project}</span> : null}
@@ -824,7 +824,7 @@ export const TodosWorkspace = ({
 
               <div className="activities-detail-grid">
                 <div className="field field-wide">
-                  <label htmlFor="todo-edit-description">Todo</label>
+                  <label htmlFor="todo-edit-description">Task</label>
                   <input id="todo-edit-description" value={editingDraft.description} onChange={(event) => setEditingDraft({ ...editingDraft, description: event.target.value })} />
                 </div>
 
@@ -918,7 +918,7 @@ export const TodosWorkspace = ({
                 <div className="prompt-actions-row">
                   <div className="prompt-actions-copy">
                     <strong>Linked activity</strong>
-                    <span className="muted">Keep this todo inside its parent work stream, or jump there for broader planning.</span>
+                    <span className="muted">Keep this task inside its parent work stream, or jump there for broader planning.</span>
                   </div>
                   {onOpenActivityDetail ? (
                     <button className="small-button" type="button" onClick={() => onOpenActivityDetail(currentActivity.id)}>

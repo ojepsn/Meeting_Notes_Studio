@@ -9,10 +9,28 @@ export const findSessionIdForActivity = (links: EntityLinkRecord[], activityId: 
       && link.relation === "has_session",
   )?.toId ?? null;
 
+export const findSessionIdForTodo = (links: EntityLinkRecord[], todoId: string) =>
+  links.find(
+    (link) =>
+      link.fromType === "todo"
+      && link.fromId === todoId
+      && link.toType === "session"
+      && link.relation === "has_session",
+  )?.toId ?? null;
+
 export const findActivityIdForSession = (links: EntityLinkRecord[], sessionId: string) =>
   links.find(
     (link) =>
       link.fromType === "activity"
+      && link.toType === "session"
+      && link.toId === sessionId
+      && link.relation === "has_session",
+  )?.fromId ?? null;
+
+export const findTodoIdForSession = (links: EntityLinkRecord[], sessionId: string) =>
+  links.find(
+    (link) =>
+      link.fromType === "todo"
       && link.toType === "session"
       && link.toId === sessionId
       && link.relation === "has_session",

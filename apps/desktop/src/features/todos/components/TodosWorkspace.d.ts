@@ -1,7 +1,7 @@
-import type { ActivityRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, TaskRecord, TimeLogRecord } from "@notesmith/domain";
 import { type StructureOptions } from "../../../lib/structure/options";
 interface TodosWorkspaceProps {
-    todos: TodoRecord[];
+    todos: TaskRecord[];
     activities: ActivityRecord[];
     timeLogs: TimeLogRecord[];
     structureOptions: StructureOptions;
@@ -9,13 +9,13 @@ interface TodosWorkspaceProps {
     requestedDomain?: string | null;
     requestedProject?: string | null;
     onEditorClose?: () => void;
-    onToggle: (todo: TodoRecord) => void;
+    onToggle: (todo: TaskRecord) => void;
     onAdd: (description: string, options?: {
         activityId?: string;
     }) => void;
-    onSave: (todo: TodoRecord) => void;
+    onSave: (todo: TaskRecord) => void;
     onDelete: (id: string) => void;
-    onConvertToActivity: (todo: TodoRecord) => void;
+    onConvertToActivity: (todo: TaskRecord) => void;
     onSaveTimeLog: (timeLog: TimeLogRecord) => void;
     onDeleteTimeLog: (id: string) => void;
     onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;

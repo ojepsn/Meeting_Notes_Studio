@@ -83,6 +83,8 @@ export interface TodoRecord {
   sessionIds: string[];
 }
 
+export type TaskRecord = TodoRecord;
+
 export interface ActivityRecord {
   id: string;
   type: "task" | "meeting";
@@ -131,9 +133,9 @@ export interface CalendarItemRecord {
 
 export interface EntityLinkRecord {
   id: string;
-  fromType: "activity" | "session";
+  fromType: "activity" | "todo" | "session";
   fromId: string;
-  toType: "activity" | "session";
+  toType: "activity" | "todo" | "session";
   toId: string;
   relation: "has_session";
   createdAt: string;

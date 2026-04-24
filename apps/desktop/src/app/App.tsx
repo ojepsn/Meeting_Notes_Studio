@@ -74,7 +74,7 @@ import {
   type DesktopStorageInfo,
 } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW, type MetadataReviewState } from "../lib/metadata/review";
-import { findActivityIdForSession, findSessionIdForActivity } from "../lib/links/entityLinks";
+import { findActivityIdForSession, findSessionIdForActivity, findSessionIdForTodo } from "../lib/links/entityLinks";
 import { polishNonAiNotesText } from "../lib/output/manualPolish";
 import { acceptRuleSuggestion, collectRuleSuggestionObservations, ignoreRuleSuggestion, mergeRuleSuggestionObservations } from "../lib/output/ruleSuggestions";
 import { buildStructureOptions, createEmptyStructureOptions } from "../lib/structure/options";
@@ -131,18 +131,18 @@ const isStructuredHeading = (line: string) => {
 };
 
 const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: string; available: boolean }> = [
-  { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
-  { id: "todos", label: "Todos", description: "Focused follow-up management", available: true },
-  { id: "activities", label: "Activities", description: "Tracked work with time and scheduling", available: true },
   { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: true },
+  { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
+  { id: "todos", label: "Tasks", description: "Focused follow-up management", available: true },
+  { id: "activities", label: "Activities", description: "Tracked work with time and scheduling", available: true },
   { id: "time", label: "Timelogs", description: "Active timers, dense logs, and reporting", available: true },
   { id: "structure", label: "Structure", description: "Domains and projects as operational views", available: true },
   { id: "assistant", label: "Assistant", description: "Agentic chat with NoteSmith data", available: true },
   { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
 ];
 
-const PRIMARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(0, 1);
-const SECONDARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(2);
+const PRIMARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(0, 2);
+const SECONDARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(3);
 
 const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
   recordAIRequestHistory(event);
@@ -248,6 +248,7 @@ export const App = () => {
     updateCalendarItem,
     convertTodoToActivity,
     ensureSessionForActivity,
+    ensureSessionForTodo,
     saveSettings,
     renameDomainValue,
     renameProjectValue,
@@ -858,6 +859,24 @@ export const App = () => {
       ) as Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>,
     [snapshot],
   );
+  const linkedSessionStateByTodo = useMemo(
+    () =>
+      Object.fromEntries(
+        (snapshot?.todos ?? []).map((todo) => {
+          const sessionId = snapshot ? findSessionIdForTodo(snapshot.entityLinks, todo.id) : null;
+          const session = sessionId ? snapshot?.sessions.find((entry) => entry.id === sessionId) ?? null : null;
+          return [
+            todo.id,
+            {
+              sessionId,
+              hasOutput: Boolean(session?.output.trim()),
+              sessionTitle: session?.title ?? "",
+            },
+          ];
+        }),
+      ) as Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>,
+    [snapshot],
+  );
   const calendarPreviewSession = useMemo(
     () =>
       calendarOutputPreviewSessionId
@@ -1041,7 +1060,7 @@ export const App = () => {
       });
       target.value = "";
       target.dispatchEvent(new Event("input", { bubbles: true }));
-      setStatusNote(`Added to-do: ${todoDescription}`);
+      setStatusNote(`Added task: ${todoDescription}`);
       return;
     }
 
@@ -2323,7 +2342,7 @@ export const App = () => {
       workspace: "todos",
       todoId,
       returnWorkspace,
-      status: "Opened linked todo.",
+      status: "Opened linked task.",
     });
   const returnFromLinkedDetail = () => {
     if (!requestedActivityId && !requestedTodoId && !linkedDetailReturnWorkspace) {
@@ -2415,8 +2434,8 @@ export const App = () => {
       },
       {
         id: "todos",
-        label: "Open To-dos",
-        description: "See personal follow-ups captured from notes.",
+        label: "Open Tasks",
+        description: "See personal work items and follow-ups captured from notes.",
         keywords: ["todo tasks follow up"],
         action: () => setActiveWorkspace("todos"),
       },
@@ -2430,7 +2449,7 @@ export const App = () => {
       {
         id: "calendar",
         label: "Open Calendar",
-        description: "Schedule todos, activities, and meetings across time.",
+        description: "Schedule tasks and meetings across time.",
         keywords: ["calendar schedule plan meeting"],
         action: () => setActiveWorkspace("calendar"),
       },
@@ -2974,7 +2993,7 @@ export const App = () => {
             </div>
             <div className="stack">
               <button className="small-button" type="button" onClick={() => setActiveWorkspace("todos")}>
-                Open Todos workspace
+                Open Tasks workspace
               </button>
               <button className="small-button" type="button" onClick={() => setOpenPanel("backup")}>
                 Open Back-up
@@ -3263,6 +3282,7 @@ export const App = () => {
                 settings={snapshot.settings}
                 structureOptions={structureOptions}
                 linkedSessionStateByActivity={linkedSessionStateByActivity}
+                linkedSessionStateByTodo={linkedSessionStateByTodo}
                 onSaveSettings={(settings) => void saveSettings(settings)}
                 onCreateFromText={(date, startSlot, value, options) => createCalendarEntryFromText(date, startSlot, value, options)}
                 onMoveItem={(id, date, startSlot) => void moveCalendarItem(id, date, startSlot)}
@@ -3270,14 +3290,6 @@ export const App = () => {
                 onDeleteTodo={(id) => void deleteTodo(id)}
                 onSaveActivity={(activity) => void saveActivity(activity)}
                 onDeleteActivity={(id) => void deleteActivity(id)}
-                onConvertTodoToActivity={(todo, options) =>
-                  void convertTodoToActivity(todo, {
-                    type: "task",
-                    date: options.date,
-                    startTime: options.startTime,
-                    endTime: options.endTime,
-                  })
-                }
                 onConvertTodoToMeeting={(todo, options) =>
                   void convertTodoToActivity(todo, {
                     type: "meeting",
@@ -3296,9 +3308,10 @@ export const App = () => {
                 onOpenSession={(sessionId, openedCalendarItemId) => {
                   const calendarItemId = openedCalendarItemId ??
                     snapshot.calendarItems.find((item) => {
-                      if (item.targetType !== "activity") return false;
-                      const activitySessionId = linkedSessionStateByActivity[item.targetId]?.sessionId;
-                      return activitySessionId === sessionId;
+                      if (item.targetType === "activity") {
+                        return linkedSessionStateByActivity[item.targetId]?.sessionId === sessionId;
+                      }
+                      return linkedSessionStateByTodo[item.targetId]?.sessionId === sessionId;
                     })?.id ?? null;
                   openSessionFromLink(sessionId, "calendar", calendarItemId);
                 }}
@@ -3307,6 +3320,13 @@ export const App = () => {
                   void ensureSessionForActivity(activityId).then((sessionId) => {
                     if (sessionId) {
                       setStatusNote("Created linked meeting session.");
+                    }
+                  })
+                }
+                onCreateLinkedTaskSession={(todoId) =>
+                  void ensureSessionForTodo(todoId).then((sessionId) => {
+                    if (sessionId) {
+                      setStatusNote("Created linked task note.");
                     }
                   })
                 }
@@ -3409,7 +3429,7 @@ export const App = () => {
                     workspace: "todos",
                     todoDomain: domain || null,
                     returnWorkspace: "structure",
-                    status: domain ? `Opened Todos filtered to ${domain}.` : "Opened Todos.",
+                    status: domain ? `Opened Tasks filtered to ${domain}.` : "Opened Tasks.",
                   })
                 }
                 onOpenTodosForProject={(project) =>
@@ -3417,7 +3437,7 @@ export const App = () => {
                     workspace: "todos",
                     todoProject: project || null,
                     returnWorkspace: "structure",
-                    status: project ? `Opened Todos filtered to ${project}.` : "Opened Todos.",
+                    status: project ? `Opened Tasks filtered to ${project}.` : "Opened Tasks.",
                   })
                 }
                 onOpenTimeForDomain={(domain) =>

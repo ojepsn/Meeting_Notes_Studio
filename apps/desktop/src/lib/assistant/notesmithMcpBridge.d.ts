@@ -8,9 +8,9 @@ export interface NoteSmithMcpToolDescriptor {
     riskLevel: "low";
 }
 export declare const NOTESMITH_MCP_TOOLS: NoteSmithMcpToolDescriptor[];
-export declare const invokeNoteSmithMcpTool: (snapshot: DesktopAppSnapshot, toolName: NoteSmithMcpToolName, args?: Record<string, unknown>) => {
+export declare const invokeNoteSmithMcpTool: (snapshot: DesktopAppSnapshot, toolName: NoteSmithMcpToolName, args?: Record<string, unknown>) => import("./notesmithDataTools").NoteSmithAssistantLinkedContext | {
     sources: import("./notesmithDataTools").NoteSmithAssistantSource[];
-} | import("./notesmithDataTools").NoteSmithAssistantLinkedContext | {
+} | {
     session: import("./notesmithDataTools").NoteSmithAssistantSource | null;
     linkedContext: import("./notesmithDataTools").NoteSmithAssistantLinkedContext;
     summary?: undefined;
