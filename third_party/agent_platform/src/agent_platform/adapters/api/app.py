@@ -96,7 +96,7 @@ def create_app(*, container: Container, settings: Settings) -> FastAPI:
         lifespan=lifespan,
     )
 
-    if not settings.server.local_only and settings.server.cors_origins:
+    if settings.server.cors_origins:
         cors_origins = list(settings.server.cors_origins)
         allow_credentials = True
         if "*" in cors_origins:

@@ -32,7 +32,9 @@ def main() -> None:
     # Harden defaults for local-only sidecar use
     settings.server.host = "127.0.0.1"
     settings.server.local_only = True
-    settings.server.cors_origins = []
+    # The desktop shell talks to the sidecar from a separate app/webview origin,
+    # so loopback-only sidecars still need permissive browser CORS.
+    settings.server.cors_origins = ["*"]
     settings.server.rate_limit_enabled = False
     # If port=0, OS picks one; print it so the parent (Tauri) can discover.
     port = settings.server.port
