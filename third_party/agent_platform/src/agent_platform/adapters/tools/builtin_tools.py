@@ -34,6 +34,28 @@ log = structlog.get_logger(__name__)
 _REDIRECT_STATUS = frozenset({301, 302, 303, 307, 308})
 _MAX_REGEX_PATTERN_CHARS = 512
 
+# Colloquial / abbreviated names -> IANA. Europe/Paris matches CET/CEST (DST) for
+# common "Central European Time" use; same instant as Berlin/Stockholm, etc.
+_TIMEZONE_ALIASES: dict[str, str] = {
+    "CET": "Europe/Paris",
+    "CEST": "Europe/Paris",
+    "MEZ": "Europe/Paris",
+    "MESZ": "Europe/Paris",
+}
+
+
+def _resolve_iana_timezone(name: str) -> tuple[tzinfo, str]:
+    """Return (tz, canonical IANA key used for ZoneInfo)."""
+    key = name.strip()
+    upper = key.upper()
+    if upper in ("UTC", "GMT"):
+        return timezone.utc, "UTC"
+    iana = _TIMEZONE_ALIASES.get(upper, key)
+    try:
+        return ZoneInfo(iana), iana
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError(f"unknown timezone: {name!r}") from exc
+
 
 class _SafeFilesystemTool:
     def __init__(self, *, root: Path) -> None:
@@ -546,16 +568,18 @@ class NowUtcTool(ToolPort):
     def __init__(self) -> None:
         self.descriptor = ToolDescriptor(
             name="now_utc",
-            description="Return the current date and time as ISO-8601 in a given IANA timezone.",
+            description="Return the current date and time as ISO-8601 in a given timezone.",
             tool_schema=ToolSchema(
                 name="now_utc",
-                description="Current time (ISO-8601). Default timezone is UTC.",
+                description="Current time (ISO-8601). Default timezone is UTC. "
+                "CET, CEST, and MEZ are accepted as Central European (maps to Europe/Paris).",
                 input_schema={
                     "type": "object",
                     "properties": {
                         "timezone": {
                             "type": "string",
-                            "description": "IANA timezone name, e.g. UTC or Europe/Stockholm.",
+                            "description": "IANA name (e.g. UTC, Europe/Stockholm) or "
+                            "CET/CEST for Central European (maps to Europe/Paris).",
                             "default": "UTC",
                         },
                     },
@@ -572,17 +596,11 @@ class NowUtcTool(ToolPort):
             tz_name = arguments.get("timezone", "UTC")
             if not isinstance(tz_name, str) or not tz_name.strip():
                 raise ValueError("argument 'timezone' must be a non-empty string")
-            key = tz_name.strip()
-            if key.upper() == "UTC" or key.upper() == "GMT":
-                tz: tzinfo = timezone.utc
-            else:
-                try:
-                    tz = ZoneInfo(key)
-                except ZoneInfoNotFoundError as exc:
-                    raise ValueError(f"unknown timezone: {tz_name!r}") from exc
+            tz, iana = _resolve_iana_timezone(tz_name)
             now = datetime.now(tz)
             payload = {
                 "timezone": tz_name.strip(),
+                "iana": iana,
                 "iso": now.isoformat(),
             }
             return ToolResult(

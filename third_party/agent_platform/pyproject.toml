@@ -28,6 +28,7 @@ dependencies = [
     "python-frontmatter>=1.1,<2",  # agentskills.io format parsing
     "dependency-injector>=4.41,<5",
     "structlog>=24.1,<25",
+    "tzdata",  # IANA time zone data; required on Windows for ZoneInfo
 ]
 
 [project.optional-dependencies]

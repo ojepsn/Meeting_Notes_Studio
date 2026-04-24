@@ -23,6 +23,12 @@ const richTextToPlainText = (value) => {
     const text = typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "";
     return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 };
+const sortParticipantsAlphabetically = (participantText) => String(participantText || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }))
+    .join(", ");
 const splitSourceIntoChunks = (sourceText, maxChunkChars = SOURCE_CHUNK_CHAR_LIMIT) => {
     const paragraphs = sourceText.split(/\n{2,}/).map((entry) => entry.trim()).filter(Boolean);
     const chunks = [];
@@ -124,6 +130,7 @@ const getDiscussionFormatInstruction = (session) => {
 };
 export const generateNotes = async ({ session, settings, template, attachments = [], onEvent, onDiagnostic, }) => {
     const promptProfile = resolvePromptProfile(settings.promptProfile);
+    const sortedParticipants = sortParticipantsAlphabetically(session.participantText);
     const selectedSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
     const activeSections = selectedSections.length ? selectedSections : [FALLBACK_SECTION];
     const manualNotes = richTextToPlainText(session.manualNotes);
@@ -179,7 +186,7 @@ export const generateNotes = async ({ session, settings, template, attachments =
             ? `Additional generation instructions from the user:\n${session.additionalInstructions.trim()}`
             : "",
     ];
-    const buildUserText = (sourceMaterial, sourceLabel = "Source material") => `Template: ${template.name}\nSections:\n${buildTemplateSectionPrompt({ ...template, sections: activeSections })}${template.promptInstructions?.trim() ? `\nTemplate-specific instructions:\n${template.promptInstructions.trim()}` : ""}\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${session.participantText}\nDomain: ${session.domain}\nProject: ${session.project}\nActivity: ${session.activity}\nTags: ${session.tagsText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}${includedImagesPrompt
+    const buildUserText = (sourceMaterial, sourceLabel = "Source material") => `Template: ${template.name}\nSections:\n${buildTemplateSectionPrompt({ ...template, sections: activeSections })}${template.promptInstructions?.trim() ? `\nTemplate-specific instructions:\n${template.promptInstructions.trim()}` : ""}\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${sortedParticipants}\nDomain: ${session.domain}\nProject: ${session.project}\nActivity: ${session.activity}\nTags: ${session.tagsText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}${includedImagesPrompt
         ? `\nIncluded images for polished output:\n${includedImagesPrompt}\nReference these images where appropriate and preserve their captions.`
         : ""}\n\n${sourceLabel}:\n${sourceMaterial}${extraPromptBlocks ? `\n\nAdditional prompt blocks:\n${extraPromptBlocks}` : ""}`;
     let sourceForFinalGeneration = sourceText;

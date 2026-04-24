@@ -47,7 +47,7 @@ export const buildAgentPlatformLaunchConfig = ({
     AGENT_PLATFORM_OBSERVABILITY__BACKEND: "null",
     AGENT_PLATFORM_SERVER__HOST: "127.0.0.1",
     AGENT_PLATFORM_SERVER__PORT: "0",
-    AGENT_PLATFORM_TOOLS__ENABLED_BUILTINS: '["now_utc","parse_json"]',
+    AGENT_PLATFORM_TOOLS__ENABLED_BUILTINS: '["now_utc","parse_json","web_search"]',
   };
 
   if (settings.apiKey.trim()) {

@@ -97,8 +97,9 @@ class ServerSettings(BaseSettings):
 class ToolSettings(BaseSettings):
     """Built-in tool configuration.
 
-    Web tools are opt-in so the default deployment remains air-gap friendly.
-    Filesystem tools are scoped to a safe root directory.
+    `web_fetch` is opt-in. `web_search` is enabled by default; remove it from
+    this list for air-gapped deployments. Filesystem tools are scoped to a
+    safe root directory.
     """
 
     enabled_builtins: list[str] = Field(
@@ -111,6 +112,7 @@ class ToolSettings(BaseSettings):
             "search_in_files",
             "now_utc",
             "parse_json",
+            "web_search",
         ]
     )
     fs_root: Path = Path("./workspace")

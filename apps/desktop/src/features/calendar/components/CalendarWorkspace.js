@@ -66,6 +66,33 @@ export const dayColumnWidthForView = (daysInView) => {
             return 280;
     }
 };
+export const layoutCalendarItems = (items) => {
+    const grouped = new Map();
+    items.forEach((item) => {
+        const existing = grouped.get(item.date) ?? [];
+        existing.push(item);
+        grouped.set(item.date, existing);
+    });
+    const result = [];
+    grouped.forEach((dayItems) => {
+        const lanesEnd = [];
+        dayItems.forEach((item) => {
+            const itemEnd = item.startSlot + Math.max(1, item.durationSlots);
+            let lane = lanesEnd.findIndex((laneEnd) => laneEnd <= item.startSlot);
+            if (lane === -1) {
+                lane = lanesEnd.length;
+                lanesEnd.push(itemEnd);
+            }
+            else {
+                lanesEnd[lane] = itemEnd;
+            }
+            const laneCount = dayItems.filter((candidate) => item.startSlot < candidate.startSlot + Math.max(1, candidate.durationSlots) &&
+                candidate.startSlot < itemEnd).length;
+            result.push({ ...item, lane, laneCount: Math.max(1, laneCount) });
+        });
+    });
+    return result.sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.lane - right.lane);
+};
 export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onPreviewSessionOutput, onFullScreenChange, }) => {
     const today = getLocalDateString();
     const initialIsFullScreen = true;
@@ -143,7 +170,7 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
     const items = useMemo(() => {
         const todoMap = new Map((Array.isArray(todos) ? todos : []).map((todo) => [todo.id, todo]));
         const activityMap = new Map((Array.isArray(activities) ? activities : []).map((activity) => [activity.id, activity]));
-        const base = (Array.isArray(calendarItems) ? calendarItems : [])
+        return (Array.isArray(calendarItems) ? calendarItems : [])
             .map((item) => {
             if (item.targetType === "todo") {
                 const todo = todoMap.get(item.targetId);
@@ -158,30 +185,6 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
         })
             .filter((item) => item !== null)
             .sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.title.localeCompare(right.title));
-        const grouped = new Map();
-        base.forEach((item) => {
-            const existing = grouped.get(item.date) ?? [];
-            existing.push(item);
-            grouped.set(item.date, existing);
-        });
-        const result = [];
-        grouped.forEach((dayItems) => {
-            const lanesEnd = [];
-            dayItems.forEach((item) => {
-                const itemEnd = item.startSlot + Math.max(1, item.durationSlots);
-                let lane = lanesEnd.findIndex((laneEnd) => laneEnd <= item.startSlot);
-                if (lane === -1) {
-                    lane = lanesEnd.length;
-                    lanesEnd.push(itemEnd);
-                }
-                else {
-                    lanesEnd[lane] = itemEnd;
-                }
-                const laneCount = dayItems.filter((candidate) => item.startSlot < candidate.startSlot + Math.max(1, candidate.durationSlots) && candidate.startSlot < itemEnd).length;
-                result.push({ ...item, lane, laneCount: Math.max(1, laneCount) });
-            });
-        });
-        return result.sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.lane - right.lane);
     }, [activities, calendarItems, todos]);
     const runningItemCount = useMemo(() => items.filter((item) => getRunningTimeLog(timeLogsByTarget.get(`${item.targetType}:${item.targetId}`) || [])).length, [items, timeLogsByTarget]);
     useEffect(() => {
@@ -192,7 +195,7 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
     }, [runningItemCount]);
     const filteredItems = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
-        return items.filter((item) => {
+        return layoutCalendarItems(items.filter((item) => {
             if (typeFilter === "todo" && item.targetType !== "todo")
                 return false;
             if (typeFilter === "activity" && (item.targetType !== "activity" || item.isMeeting))
@@ -208,7 +211,7 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
             if (!query)
                 return true;
             return `${item.title} ${item.label}`.toLowerCase().includes(query);
-        });
+        }));
     }, [hideCompletedTodos, items, searchQuery, typeFilter, visibilityFilter]);
     const itemsByDate = useMemo(() => {
         const grouped = new Map();

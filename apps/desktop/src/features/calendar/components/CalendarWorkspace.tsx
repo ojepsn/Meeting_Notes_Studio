@@ -69,6 +69,46 @@ export const dayColumnWidthForView = (daysInView: typeof DAYS[number]) => {
   }
 };
 
+export const layoutCalendarItems = <T extends {
+  date: string;
+  startSlot: number;
+  durationSlots: number;
+  title: string;
+  lane: number;
+  laneCount: number;
+}>(items: T[]) => {
+  const grouped = new Map<string, T[]>();
+  items.forEach((item) => {
+    const existing = grouped.get(item.date) ?? [];
+    existing.push(item);
+    grouped.set(item.date, existing);
+  });
+  const result: T[] = [];
+  grouped.forEach((dayItems) => {
+    const lanesEnd: number[] = [];
+    dayItems.forEach((item) => {
+      const itemEnd = item.startSlot + Math.max(1, item.durationSlots);
+      let lane = lanesEnd.findIndex((laneEnd) => laneEnd <= item.startSlot);
+      if (lane === -1) {
+        lane = lanesEnd.length;
+        lanesEnd.push(itemEnd);
+      } else {
+        lanesEnd[lane] = itemEnd;
+      }
+      const laneCount = dayItems.filter(
+        (candidate) =>
+          item.startSlot < candidate.startSlot + Math.max(1, candidate.durationSlots) &&
+          candidate.startSlot < itemEnd,
+      ).length;
+      result.push({ ...item, lane, laneCount: Math.max(1, laneCount) });
+    });
+  });
+  return result.sort(
+    (left, right) =>
+      left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.lane - right.lane,
+  );
+};
+
 type Item = {
   id: string;
   date: string;
@@ -263,7 +303,7 @@ export const CalendarWorkspace = ({
   const items = useMemo<Item[]>(() => {
     const todoMap = new Map((Array.isArray(todos) ? todos : []).map((todo) => [todo.id, todo]));
     const activityMap = new Map((Array.isArray(activities) ? activities : []).map((activity) => [activity.id, activity]));
-    const base = (Array.isArray(calendarItems) ? calendarItems : [])
+    return (Array.isArray(calendarItems) ? calendarItems : [])
       .map((item) => {
         if (item.targetType === "todo") {
           const todo = todoMap.get(item.targetId);
@@ -276,30 +316,6 @@ export const CalendarWorkspace = ({
       })
       .filter((item): item is Item => item !== null)
       .sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.title.localeCompare(right.title));
-
-    const grouped = new Map<string, Item[]>();
-    base.forEach((item) => {
-      const existing = grouped.get(item.date) ?? [];
-      existing.push(item);
-      grouped.set(item.date, existing);
-    });
-    const result: Item[] = [];
-    grouped.forEach((dayItems) => {
-      const lanesEnd: number[] = [];
-      dayItems.forEach((item) => {
-        const itemEnd = item.startSlot + Math.max(1, item.durationSlots);
-        let lane = lanesEnd.findIndex((laneEnd) => laneEnd <= item.startSlot);
-        if (lane === -1) {
-          lane = lanesEnd.length;
-          lanesEnd.push(itemEnd);
-        } else {
-          lanesEnd[lane] = itemEnd;
-        }
-        const laneCount = dayItems.filter((candidate) => item.startSlot < candidate.startSlot + Math.max(1, candidate.durationSlots) && candidate.startSlot < itemEnd).length;
-        result.push({ ...item, lane, laneCount: Math.max(1, laneCount) });
-      });
-    });
-    return result.sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.lane - right.lane);
   }, [activities, calendarItems, todos]);
 
   const runningItemCount = useMemo(
@@ -316,7 +332,7 @@ export const CalendarWorkspace = ({
 
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return items.filter((item) => {
+    return layoutCalendarItems(items.filter((item) => {
       if (typeFilter === "todo" && item.targetType !== "todo") return false;
       if (typeFilter === "activity" && (item.targetType !== "activity" || item.isMeeting)) return false;
       if (typeFilter === "meeting" && !item.isMeeting) return false;
@@ -325,7 +341,7 @@ export const CalendarWorkspace = ({
       if (hideCompletedTodos && item.targetType === "todo" && item.isDone) return false;
       if (!query) return true;
       return `${item.title} ${item.label}`.toLowerCase().includes(query);
-    });
+    }));
   }, [hideCompletedTodos, items, searchQuery, typeFilter, visibilityFilter]);
 
   const itemsByDate = useMemo(() => {

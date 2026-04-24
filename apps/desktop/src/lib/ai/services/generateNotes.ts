@@ -38,6 +38,14 @@ const richTextToPlainText = (value: string) => {
   return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 };
 
+const sortParticipantsAlphabetically = (participantText: string) =>
+  String(participantText || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }))
+    .join(", ");
+
 const splitSourceIntoChunks = (sourceText: string, maxChunkChars = SOURCE_CHUNK_CHAR_LIMIT) => {
   const paragraphs = sourceText.split(/\n{2,}/).map((entry) => entry.trim()).filter(Boolean);
   const chunks: string[] = [];
@@ -187,6 +195,7 @@ export const generateNotes = async ({
   onDiagnostic?: GenerationDiagnosticHandler;
 }) => {
   const promptProfile = resolvePromptProfile(settings.promptProfile);
+  const sortedParticipants = sortParticipantsAlphabetically(session.participantText);
   const selectedSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
   const activeSections = selectedSections.length ? selectedSections : [FALLBACK_SECTION];
   const manualNotes = richTextToPlainText(session.manualNotes);
@@ -258,7 +267,7 @@ export const generateNotes = async ({
 
   const buildUserText = (sourceMaterial: string, sourceLabel = "Source material") => `Template: ${template.name}\nSections:\n${buildTemplateSectionPrompt({ ...template, sections: activeSections })}${
     template.promptInstructions?.trim() ? `\nTemplate-specific instructions:\n${template.promptInstructions.trim()}` : ""
-  }\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${session.participantText}\nDomain: ${session.domain}\nProject: ${session.project}\nActivity: ${session.activity}\nTags: ${session.tagsText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}${
+  }\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${sortedParticipants}\nDomain: ${session.domain}\nProject: ${session.project}\nActivity: ${session.activity}\nTags: ${session.tagsText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}${
     includedImagesPrompt
       ? `\nIncluded images for polished output:\n${includedImagesPrompt}\nReference these images where appropriate and preserve their captions.`
       : ""

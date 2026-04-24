@@ -489,6 +489,9 @@ export const App = () => {
         }
     };
     const parsePeopleFromSession = (participantText) => parseTokenList(participantText);
+    const sortParticipantText = (participantText) => parsePeopleFromSession(participantText)
+        .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }))
+        .join(", ");
     const rankSavedValues = (sessions, savedValues, collectEntries) => {
         const savedLookup = new Map(savedValues
             .map((entry) => entry.trim())
@@ -821,7 +824,7 @@ export const App = () => {
         }
         return polishNonAiNotesText(richTextToPlainText(session.customFieldValues[agendaField.id] ?? ""), {
             abbreviations: snapshot?.settings.abbreviations ?? [],
-            sessionParticipants: session.participantText,
+            sessionParticipants: sortParticipantText(session.participantText),
             savedParticipants: snapshot?.settings.savedParticipants ?? [],
             preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
         });
@@ -836,7 +839,7 @@ export const App = () => {
         return [
             session.date.trim(),
             time,
-            session.participantText.trim() ? `People: ${session.participantText.trim()}` : "",
+            sortParticipantText(session.participantText) ? `People: ${sortParticipantText(session.participantText)}` : "",
             session.domain.trim() ? `Domain: ${session.domain.trim()}` : "",
             session.project.trim() ? `Project: ${session.project.trim()}` : "",
             session.activity.trim() ? `Activity: ${session.activity.trim()}` : "",
@@ -883,7 +886,7 @@ export const App = () => {
         }
         const manualPolishOptions = {
             abbreviations: snapshot?.settings.abbreviations ?? [],
-            sessionParticipants: session.participantText,
+            sessionParticipants: sortParticipantText(session.participantText),
             savedParticipants: snapshot?.settings.savedParticipants ?? [],
             preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
         };

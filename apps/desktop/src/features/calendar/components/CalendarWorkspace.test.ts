@@ -1,5 +1,6 @@
 import {
   addDays,
+  layoutCalendarItems,
   clampPane,
   clampSlot,
   dayColumnWidthForView,
@@ -44,5 +45,47 @@ describe("CalendarWorkspace helpers", () => {
     expect(getLocalDateString(new Date(2026, 3, 19, 9, 30))).toBe("2026-04-19");
     expect(initialCalendarScrollTop(new Date(2026, 3, 19, 9, 30), 16)).toBe(102 * 16);
     expect(initialCalendarScrollTop(new Date(2026, 3, 19, 0, 20), 16)).toBe(0);
+  });
+
+  it("reflows visible items when completed todos are hidden", () => {
+    const visible = layoutCalendarItems([
+      {
+        id: "todo-open",
+        date: "2026-04-24",
+        startSlot: 96,
+        durationSlots: 1,
+        targetType: "todo" as const,
+        targetId: "todo-open",
+        title: "Open todo",
+        label: "Todo",
+        isMeeting: false,
+        isPrivate: false,
+        isDone: false,
+        lane: 0,
+        laneCount: 1,
+      },
+      {
+        id: "activity-overlap",
+        date: "2026-04-24",
+        startSlot: 96,
+        durationSlots: 12,
+        targetType: "activity" as const,
+        targetId: "activity-overlap",
+        title: "Overlap activity",
+        label: "Activity",
+        isMeeting: false,
+        isPrivate: false,
+        isDone: false,
+        lane: 0,
+        laneCount: 1,
+      },
+    ]);
+
+    const openTodo = visible.find((item) => item.id === "todo-open");
+    const activity = visible.find((item) => item.id === "activity-overlap");
+    expect(openTodo?.lane).toBe(0);
+    expect(activity?.lane).toBe(1);
+    expect(openTodo?.laneCount).toBe(2);
+    expect(activity?.laneCount).toBe(2);
   });
 });

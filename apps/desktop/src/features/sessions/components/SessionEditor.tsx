@@ -41,6 +41,25 @@ const resolveAllowedRichTextFont = (value: string) => {
   return RICH_TEXT_FONT_OPTIONS.find((option) => normalizeFontFamily(option.value) === normalized)?.value ?? "";
 };
 
+const resolveToolbarFontFamily = (value: string) => {
+  const normalized = normalizeFontFamily(value);
+  if (!normalized) {
+    return "";
+  }
+  const exact = resolveAllowedRichTextFont(normalized);
+  if (exact) {
+    return exact;
+  }
+  const firstFamily = normalized.split(",")[0]?.trim();
+  if (!firstFamily) {
+    return "";
+  }
+  return (
+    RICH_TEXT_FONT_OPTIONS.find((option) => normalizeFontFamily(option.value).split(",")[0]?.trim() === firstFamily)?.value ??
+    ""
+  );
+};
+
 const normalizeRichTextHtml = (value: string) => {
   const wrapper = document.createElement("div");
   wrapper.innerHTML = value || "";
@@ -94,6 +113,68 @@ const RICH_TEXT_COMMANDS = [
   { id: "h5", label: "H5", type: "block", value: "H5" },
   { id: "h6", label: "H6", type: "block", value: "H6" },
 ] as const;
+
+type RichTextToolbarState = {
+  fontFamily: string;
+  block: "P" | "H1" | "H2" | "H3" | "H4" | "H5" | "H6";
+  bold: boolean;
+  italic: boolean;
+  unordered: boolean;
+  ordered: boolean;
+};
+
+const DEFAULT_RICH_TEXT_TOOLBAR_STATE: RichTextToolbarState = {
+  fontFamily: "",
+  block: "P",
+  bold: false,
+  italic: false,
+  unordered: false,
+  ordered: false,
+};
+
+const isSelectionInsideEditor = (editor: HTMLDivElement | null, selection: Selection | null) => {
+  if (!editor || !selection?.rangeCount) {
+    return false;
+  }
+  const anchorNode = selection.anchorNode;
+  const focusNode = selection.focusNode;
+  return Boolean(
+    anchorNode &&
+      focusNode &&
+      editor.contains(anchorNode.nodeType === Node.TEXT_NODE ? anchorNode.parentNode : anchorNode) &&
+      editor.contains(focusNode.nodeType === Node.TEXT_NODE ? focusNode.parentNode : focusNode),
+  );
+};
+
+const getSelectionContainerElement = (selection: Selection | null) => {
+  const node = selection?.anchorNode;
+  if (!node) {
+    return null;
+  }
+  return node.nodeType === Node.TEXT_NODE ? node.parentElement : node instanceof HTMLElement ? node : null;
+};
+
+const getToolbarStateFromEditor = (editorRef: { current: HTMLDivElement | null }): RichTextToolbarState => {
+  const editor = editorRef.current;
+  const selection = document.getSelection();
+  if (!isSelectionInsideEditor(editor, selection)) {
+    return DEFAULT_RICH_TEXT_TOOLBAR_STATE;
+  }
+
+  const selectionContainer = getSelectionContainerElement(selection);
+  const computedFont = selectionContainer ? window.getComputedStyle(selectionContainer).fontFamily : "";
+  const activeBlockElement = selectionContainer?.closest("h1, h2, h3, h4, h5, h6, p");
+  const blockTag = (activeBlockElement?.tagName ?? "P").toUpperCase() as RichTextToolbarState["block"];
+
+  return {
+    fontFamily: resolveToolbarFontFamily(computedFont),
+    block: ["H1", "H2", "H3", "H4", "H5", "H6"].includes(blockTag) ? blockTag : "P",
+    bold: document.queryCommandState("bold"),
+    italic: document.queryCommandState("italic"),
+    unordered: document.queryCommandState("insertUnorderedList"),
+    ordered: document.queryCommandState("insertOrderedList"),
+  };
+};
 
 interface GenerationLogEntry {
   id: string;
@@ -211,6 +292,8 @@ export const SessionEditor = ({
   const [contextOpen, setContextOpen] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(session.captureMode === "voice-note" || Boolean(session.liveTranscript.trim()));
   const [uploadedTranscriptOpen, setUploadedTranscriptOpen] = useState(Boolean(session.uploadedTranscript.trim()));
+  const [agendaToolbarState, setAgendaToolbarState] = useState<RichTextToolbarState>(DEFAULT_RICH_TEXT_TOOLBAR_STATE);
+  const [manualNotesToolbarState, setManualNotesToolbarState] = useState<RichTextToolbarState>(DEFAULT_RICH_TEXT_TOOLBAR_STATE);
 
   useEffect(() => {
     setDetailsOpen(session.captureMode === "meeting-note");
@@ -394,25 +477,62 @@ export const SessionEditor = ({
     applyRichTextFont(manualNotesEditorRef, updateManualNotes, fontFamily);
   };
 
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = document.getSelection();
+      if (isSelectionInsideEditor(agendaEditorRef.current, selection)) {
+        setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef));
+      }
+      if (isSelectionInsideEditor(manualNotesEditorRef.current, selection)) {
+        setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef));
+      }
+    };
+
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => document.removeEventListener("selectionchange", handleSelectionChange);
+  }, []);
+
   const renderRichTextToolbar = (
     idPrefix: string,
     buttonClassName: string,
     onCommand: (action: (typeof RICH_TEXT_COMMANDS)[number]) => void,
     onFontChange: (fontFamily: string) => void,
+    toolbarState: RichTextToolbarState,
   ) => (
     <div className="rich-text-toolbar">
       <label className="rich-text-font-control" htmlFor={`${idPrefix}-font`}>
         <span>Font</span>
-        <select id={`${idPrefix}-font`} defaultValue="" onChange={(event) => onFontChange(event.target.value)}>
+        <select id={`${idPrefix}-font`} value={toolbarState.fontFamily} onChange={(event) => onFontChange(event.target.value)}>
           {RICH_TEXT_FONT_OPTIONS.map((option) => (
-            <option key={option.label} value={option.value} style={option.value ? { fontFamily: option.value } : undefined}>
+            <option
+              key={option.label}
+              value={option.value}
+              style={option.value ? { fontFamily: option.value } : undefined}
+            >
               {option.label}
             </option>
           ))}
         </select>
       </label>
       {RICH_TEXT_COMMANDS.map((action) => (
-        <button key={action.id} className={`${buttonClassName} rich-text-command`} type="button" onClick={() => onCommand(action)}>
+        <button
+          key={action.id}
+          className={`${buttonClassName} rich-text-command`}
+          type="button"
+          data-active={
+            action.type === "command"
+              ? action.command === "bold"
+                ? toolbarState.bold
+                : action.command === "italic"
+                  ? toolbarState.italic
+                  : action.command === "insertUnorderedList"
+                    ? toolbarState.unordered
+                    : toolbarState.ordered
+              : toolbarState.block === action.value
+          }
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => onCommand(action)}
+        >
           {action.label}
         </button>
       ))}
@@ -548,7 +668,7 @@ export const SessionEditor = ({
                     <details className="field field-wide workspace-disclosure">
                       <summary>{agendaField.label}</summary>
                       <div className="workspace-disclosure-body">
-                        {renderRichTextToolbar("session-agenda-pwa", "shell-button", applyAgendaCommand, applyAgendaFont)}
+                        {renderRichTextToolbar("session-agenda-pwa", "shell-button", applyAgendaCommand, applyAgendaFont, agendaToolbarState)}
                         <div
                           id="session-agenda"
                           ref={agendaEditorRef}
@@ -557,7 +677,12 @@ export const SessionEditor = ({
                           suppressContentEditableWarning
                           data-placeholder="List the planned agenda, topics, or framing points for this meeting."
                           data-empty="true"
-                          onInput={(event) => updateAgenda((event.currentTarget as HTMLDivElement).innerHTML)}
+                          onInput={(event) => {
+                            updateAgenda((event.currentTarget as HTMLDivElement).innerHTML);
+                            setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef));
+                          }}
+                          onKeyUp={() => setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef))}
+                          onMouseUp={() => setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef))}
                         />
                       </div>
                     </details>
@@ -738,7 +863,7 @@ export const SessionEditor = ({
             <summary>Manual notes</summary>
             <div className="workspace-disclosure-body">
               <div className="field field-wide">
-                {renderRichTextToolbar("manual-notes-pwa", "shell-button", applyManualNotesCommand, applyManualNotesFont)}
+                {renderRichTextToolbar("manual-notes-pwa", "shell-button", applyManualNotesCommand, applyManualNotesFont, manualNotesToolbarState)}
                 <div
                   className="rich-text-surface manual-notes-rich-text-surface editor-textarea-primary"
                   id="manual-notes"
@@ -747,7 +872,12 @@ export const SessionEditor = ({
                   suppressContentEditableWarning
                   data-placeholder="Write your own notes here, which will be included in the Output"
                   data-empty="true"
-                  onInput={(event) => updateManualNotes((event.currentTarget as HTMLDivElement).innerHTML)}
+                  onInput={(event) => {
+                    updateManualNotes((event.currentTarget as HTMLDivElement).innerHTML);
+                    setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef));
+                  }}
+                  onKeyUp={() => setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef))}
+                  onMouseUp={() => setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef))}
                 />
               </div>
             </div>
@@ -834,7 +964,7 @@ export const SessionEditor = ({
               <details className="field field-wide workspace-disclosure">
                 <summary>{agendaField.label}</summary>
                 <div className="workspace-disclosure-body">
-                  {renderRichTextToolbar("session-agenda", "small-button", applyAgendaCommand, applyAgendaFont)}
+                  {renderRichTextToolbar("session-agenda", "small-button", applyAgendaCommand, applyAgendaFont, agendaToolbarState)}
                   <div
                     id="session-agenda"
                     ref={agendaEditorRef}
@@ -843,7 +973,12 @@ export const SessionEditor = ({
                     suppressContentEditableWarning
                     data-placeholder="List the planned agenda, topics, or framing points for this meeting."
                     data-empty="true"
-                    onInput={(event) => updateAgenda((event.currentTarget as HTMLDivElement).innerHTML)}
+                    onInput={(event) => {
+                      updateAgenda((event.currentTarget as HTMLDivElement).innerHTML);
+                      setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef));
+                    }}
+                    onKeyUp={() => setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef))}
+                    onMouseUp={() => setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef))}
                   />
                 </div>
               </details>
@@ -924,7 +1059,7 @@ export const SessionEditor = ({
 
         <div className="field field-wide">
           <label htmlFor="manual-notes">{modeMeta.primaryFieldLabel}</label>
-          {renderRichTextToolbar("manual-notes", "small-button", applyManualNotesCommand, applyManualNotesFont)}
+          {renderRichTextToolbar("manual-notes", "small-button", applyManualNotesCommand, applyManualNotesFont, manualNotesToolbarState)}
           <div
             className={`rich-text-surface manual-notes-rich-text-surface${isMinimal ? " editor-textarea-primary" : ""}`}
             id="manual-notes"
@@ -933,7 +1068,12 @@ export const SessionEditor = ({
             suppressContentEditableWarning
             data-placeholder={modeMeta.primaryFieldPlaceholder}
             data-empty="true"
-            onInput={(event) => updateManualNotes((event.currentTarget as HTMLDivElement).innerHTML)}
+            onInput={(event) => {
+              updateManualNotes((event.currentTarget as HTMLDivElement).innerHTML);
+              setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef));
+            }}
+            onKeyUp={() => setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef))}
+            onMouseUp={() => setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef))}
           />
         </div>
 

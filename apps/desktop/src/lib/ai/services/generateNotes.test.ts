@@ -137,4 +137,19 @@ describe("generateNotes", () => {
       }),
     ).rejects.toThrow(/unusably short generation/);
   });
+
+  it("passes participants to output generation in alphabetical order", async () => {
+    executeAITextOperationMock.mockResolvedValue(
+      "Final synthesized meeting minutes with flowing discussion text, clear outcomes, decisions, and action items.",
+    );
+
+    await generateNotes({
+      session: createSession({ participantText: "Marcus, anna, Ola" }),
+      settings,
+      template,
+    });
+
+    const finalCall = executeAITextOperationMock.mock.calls.at(-1)?.[0];
+    expect(finalCall?.userText).toContain("Participants: anna, Marcus, Ola");
+  });
 });

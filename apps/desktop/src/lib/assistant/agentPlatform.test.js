@@ -15,6 +15,7 @@ describe("agentPlatform", () => {
         });
         expect(config.env.AGENT_PLATFORM_LLM__OPENAI_API_KEY).toBe("sk-test-secret");
         expect(config.redactedEnv.AGENT_PLATFORM_LLM__OPENAI_API_KEY).toBe("[redacted]");
+        expect(config.env.AGENT_PLATFORM_TOOLS__ENABLED_BUILTINS).toContain('"web_search"');
         expect(config.notesmithMcp).toEqual({ command: "notesmith-mcp", args: ["--stdio"] });
         expect(config.transport).toBe("local-sidecar-http-sse");
     });
