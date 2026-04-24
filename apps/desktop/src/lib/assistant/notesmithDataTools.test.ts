@@ -146,6 +146,8 @@ const buildSnapshot = (): DesktopAppSnapshot => ({
     calendarDetailsPaneWidth: 320,
     calendarScrollTop: 0,
     calendarScrollLeft: 0,
+    baselineWorkEnabled: false,
+    baselineWorkActivityId: "",
     apiKey: "",
     textModel: "gpt-5.4-mini",
     transcriptionModel: "gpt-4o-mini-transcribe",

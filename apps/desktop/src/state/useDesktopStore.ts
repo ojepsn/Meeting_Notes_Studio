@@ -32,6 +32,7 @@ const ROLLED_TODO_START_SLOT = 8 * SLOTS_PER_HOUR;
 const ROLLED_TODO_EARLY_MORNING_ROWS = 24;
 const ROLLED_TODO_MAX_PER_ROW = 2;
 const OTHER_STRUCTURE_VALUE = "Other";
+const BASELINE_WORK_ACTIVITY_LABEL = "Other";
 type Snapshot = DesktopAppSnapshot;
 type Todo = TodoRecord;
 type Task = TaskRecord;
@@ -223,6 +224,99 @@ const closeOpenTimeLogs = (timeLogs: TimeLog[], now = new Date()) => {
     };
   });
   return { nextTimeLogs, changed };
+};
+
+const isOpenTimeLog = (entry: TimeLog) => entry.startTime === entry.endTime;
+
+const ensureBaselineWorkActivity = (snapshot: Snapshot) => {
+  const configuredActivity = snapshot.settings.baselineWorkActivityId
+    ? snapshot.activities.find((activity) => activity.id === snapshot.settings.baselineWorkActivityId)
+    : null;
+  if (configuredActivity) {
+    return { snapshot, activity: configuredActivity };
+  }
+
+  const existingActivity = snapshot.activities.find(
+    (activity) =>
+      activity.type === "task"
+      && activity.description === BASELINE_WORK_ACTIVITY_LABEL
+      && activity.domain === OTHER_STRUCTURE_VALUE
+      && activity.project === OTHER_STRUCTURE_VALUE
+      && activity.activity === OTHER_STRUCTURE_VALUE,
+  );
+  if (existingActivity) {
+    return {
+      snapshot: {
+        ...snapshot,
+        settings: {
+          ...snapshot.settings,
+          baselineWorkActivityId: existingActivity.id,
+        },
+      },
+      activity: existingActivity,
+    };
+  }
+
+  const createdAt = new Date().toISOString();
+  const activity: Activity = normalizeActivityStructure({
+    id: crypto.randomUUID(),
+    type: "task",
+    parentActivityId: "",
+    description: BASELINE_WORK_ACTIVITY_LABEL,
+    isDone: false,
+    isPrivate: false,
+    comments: "",
+    domain: OTHER_STRUCTURE_VALUE,
+    project: OTHER_STRUCTURE_VALUE,
+    activity: OTHER_STRUCTURE_VALUE,
+    doOn: "",
+    dueDate: "",
+    startTime: "",
+    endTime: "",
+    detailsHtml: "",
+    timeRequiredMinutes: 0,
+    actualTimeSpentMinutes: 0,
+    createdAt,
+    sessionIds: [],
+  });
+  return {
+    snapshot: {
+      ...snapshot,
+      activities: [activity, ...snapshot.activities],
+      settings: {
+        ...snapshot.settings,
+        baselineWorkActivityId: activity.id,
+      },
+    },
+    activity,
+  };
+};
+
+const ensureBaselineWorkRunningIfNeeded = (snapshot: Snapshot, now = new Date()) => {
+  if (!snapshot.settings.baselineWorkEnabled) {
+    return snapshot;
+  }
+  const { snapshot: snapshotWithActivity, activity } = ensureBaselineWorkActivity(snapshot);
+  const openLogs = snapshotWithActivity.timelogs.filter(isOpenTimeLog);
+  const baselineIsRunning = openLogs.some(
+    (entry) => entry.targetType === "activity" && entry.targetId === activity.id,
+  );
+  const hasSpecificOpenLog = openLogs.some(
+    (entry) => !(entry.targetType === "activity" && entry.targetId === activity.id),
+  );
+  if (baselineIsRunning || hasSpecificOpenLog) {
+    return snapshotWithActivity;
+  }
+  const baselineLog = buildTimeLog("activity", activity.id, {
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    date: formatLocalDate(now),
+  });
+  return {
+    ...snapshotWithActivity,
+    timelogs: [baselineLog, ...snapshotWithActivity.timelogs],
+    activities: recalculateActivitiesWithTimeLogs(snapshotWithActivity.activities, [baselineLog, ...snapshotWithActivity.timelogs]),
+  };
 };
 
 const richTextToPlainText = (value: string) => {
@@ -570,6 +664,8 @@ interface DesktopState {
   deleteTimeLog: (id: string) => Promise<void>;
   startTimeTracking: (targetType: TimeLog["targetType"], targetId: string) => Promise<void>;
   stopTimeTracking: (targetType: TimeLog["targetType"], targetId: string) => Promise<void>;
+  startWorkBaseline: () => Promise<void>;
+  stopWorkBaseline: () => Promise<void>;
   createCalendarEntryFromText: (
     date: string,
     startSlot: number,
@@ -1043,8 +1139,76 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       updatedAt: now.toISOString(),
     };
     const nextTimeLogs = upsertTimeLog(snapshot.timelogs, nextTimeLog);
+    let nextSnapshot: DesktopAppSnapshot = {
+      ...snapshot,
+      timelogs: nextTimeLogs,
+      activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
+    };
+    const baselineActivityId = snapshot.settings.baselineWorkActivityId;
+    const stoppedBaseline =
+      targetType === "activity" &&
+      Boolean(baselineActivityId) &&
+      targetId === baselineActivityId;
+    if (stoppedBaseline) {
+      nextSnapshot = {
+        ...nextSnapshot,
+        settings: {
+          ...nextSnapshot.settings,
+          baselineWorkEnabled: false,
+        },
+      };
+    } else {
+      nextSnapshot = ensureBaselineWorkRunningIfNeeded(nextSnapshot, now);
+    }
+    set({ snapshot: nextSnapshot });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
+  },
+  startWorkBaseline: async () => {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const now = new Date();
+    const enabledSnapshot: DesktopAppSnapshot = {
+      ...snapshot,
+      settings: {
+        ...snapshot.settings,
+        baselineWorkEnabled: true,
+      },
+    };
+    const nextSnapshot = ensureBaselineWorkRunningIfNeeded(enabledSnapshot, now);
+    set({ snapshot: nextSnapshot });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
+  },
+  stopWorkBaseline: async () => {
+    const snapshot = get().snapshot;
+    if (!snapshot) return;
+    const now = new Date();
+    const baselineActivityId = snapshot.settings.baselineWorkActivityId;
+    const nextSettings = {
+      ...snapshot.settings,
+      baselineWorkEnabled: false,
+    };
+    const openBaselineLog = baselineActivityId
+      ? snapshot.timelogs.find(
+          (entry) =>
+            entry.targetType === "activity" &&
+            entry.targetId === baselineActivityId &&
+            isOpenTimeLog(entry),
+        )
+      : null;
+    let nextTimeLogs = snapshot.timelogs;
+    if (openBaselineLog) {
+      const nextEndTime = formatLocalTime(now);
+      const nextDate = openBaselineLog.date || formatLocalDate(now);
+      nextTimeLogs = upsertTimeLog(snapshot.timelogs, {
+        ...openBaselineLog,
+        endTime: nextEndTime,
+        durationMinutes: calculateDurationMinutes(nextDate, openBaselineLog.startTime, nextEndTime),
+        updatedAt: now.toISOString(),
+      });
+    }
     const nextSnapshot = {
       ...snapshot,
+      settings: nextSettings,
       timelogs: nextTimeLogs,
       activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
     };

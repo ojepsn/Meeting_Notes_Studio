@@ -222,6 +222,8 @@ export interface LocalAppSettings {
   calendarDetailsPaneWidth: number;
   calendarScrollTop: number;
   calendarScrollLeft: number;
+  baselineWorkEnabled: boolean;
+  baselineWorkActivityId: string;
   apiKey: string;
   textModel: string;
   transcriptionModel: string;

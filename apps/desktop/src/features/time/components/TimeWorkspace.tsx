@@ -11,10 +11,15 @@ type TimeWorkspaceProps = {
   requestedDomain?: string | null;
   requestedProject?: string | null;
   reportPresets: TimeReportPreset[];
+  isBaselineWorkEnabled: boolean;
+  isBaselineWorkRunning: boolean;
+  hasSpecificRunningTimeLog: boolean;
   onSaveTimeLog: (timeLog: TimeLogRecord) => void;
   onDeleteTimeLog: (id: string) => void;
   onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
   onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
+  onStartWorkBaseline: () => void;
+  onStopWorkBaseline: () => void;
   onOpenTodoDetail: (todoId: string) => void;
   onOpenActivityDetail: (activityId: string) => void;
   onSaveReportPreset: (preset: Omit<TimeReportPreset, "id">) => void;
@@ -90,10 +95,15 @@ export const TimeWorkspace = ({
   requestedDomain,
   requestedProject,
   reportPresets,
+  isBaselineWorkEnabled,
+  isBaselineWorkRunning,
+  hasSpecificRunningTimeLog,
   onSaveTimeLog,
   onDeleteTimeLog,
   onStartTracking,
   onStopTracking,
+  onStartWorkBaseline,
+  onStopWorkBaseline,
   onOpenTodoDetail,
   onOpenActivityDetail,
   onSaveReportPreset,
@@ -477,6 +487,47 @@ export const TimeWorkspace = ({
       </div>
       <div className="time-workspace-layout time-workspace-layout-minimal">
         <section className="time-workspace-main time-workspace-main-full">
+          <div className="sidebar-card timelog-active-card">
+            <div className="card-header">
+              <div>
+                <h3>Work mode</h3>
+                <p className="muted">Keeps a baseline Other / Other / Other timelog running whenever no specific timelog is active.</p>
+              </div>
+              <span className="status-chip">
+                {isBaselineWorkEnabled
+                  ? isBaselineWorkRunning
+                    ? "Running"
+                    : hasSpecificRunningTimeLog
+                      ? "Paused"
+                      : "Ready"
+                  : "Off"}
+              </span>
+            </div>
+            <div className="timelog-active-row">
+              <div className="timelog-active-copy">
+                <strong>{isBaselineWorkEnabled ? "Baseline work capture is enabled" : "Baseline work capture is off"}</strong>
+                <span className="tiny-text">
+                  {isBaselineWorkEnabled
+                    ? isBaselineWorkRunning
+                      ? "General work time is being logged to Other until a more specific timelog takes over."
+                      : hasSpecificRunningTimeLog
+                        ? "A specific timelog is active, so baseline work capture is paused and will resume automatically."
+                        : "Baseline work capture is armed and will run when no specific timelog is active."
+                    : "Click Start work to begin continuous baseline capture."}
+                </span>
+              </div>
+              <div className="timelog-active-actions">
+                <button
+                  className={isBaselineWorkEnabled ? "primary-button" : "shell-button"}
+                  type="button"
+                  onClick={isBaselineWorkEnabled ? onStopWorkBaseline : onStartWorkBaseline}
+                >
+                  {isBaselineWorkEnabled ? "Stop work" : "Start work"}
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="sidebar-card timelog-active-card">
             <div className="card-header">
               <div>

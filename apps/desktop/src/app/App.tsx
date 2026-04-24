@@ -242,6 +242,8 @@ export const App = () => {
     deleteTimeLog,
     startTimeTracking,
     stopTimeTracking,
+    startWorkBaseline,
+    stopWorkBaseline,
     createCalendarEntryFromText,
     rollForwardOverdueTodos,
     moveCalendarItem,
@@ -884,6 +886,25 @@ export const App = () => {
         : null,
     [calendarOutputPreviewSessionId, snapshot],
   );
+  const openTimeLogs = useMemo(
+    () => snapshot?.timelogs.filter((entry) => entry.startTime === entry.endTime) ?? [],
+    [snapshot],
+  );
+  const baselineWorkActivityId = snapshot?.settings.baselineWorkActivityId ?? "";
+  const isBaselineWorkEnabled = Boolean(snapshot?.settings.baselineWorkEnabled);
+  const isBaselineWorkRunning = openTimeLogs.some(
+    (entry) => entry.targetType === "activity" && entry.targetId === baselineWorkActivityId,
+  );
+  const hasSpecificRunningTimeLog = openTimeLogs.some(
+    (entry) => !(entry.targetType === "activity" && entry.targetId === baselineWorkActivityId),
+  );
+  const baselineWorkStatusLabel = !isBaselineWorkEnabled
+    ? "Work mode off"
+    : isBaselineWorkRunning
+      ? "Work mode running"
+      : hasSpecificRunningTimeLog
+        ? "Work mode paused"
+        : "Work mode ready";
   const activeAudioAttachment = useMemo(
     () => activeAttachments.find((attachment) => attachment.kind === "audio") ?? null,
     [activeAttachments],
@@ -3112,6 +3133,7 @@ export const App = () => {
                 <div className="topbar-status-strip">
                   <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
                   <span className="status-chip">{desktopVersion ? `v${desktopVersion}` : "Desktop"}</span>
+                  <span className="status-chip">{baselineWorkStatusLabel}</span>
                   {activeWorkspace !== "calendar" ? <span className="status-chip">{aiActivityLabel}</span> : null}
                   {activeWorkspace !== "calendar" ? (
                     <>
@@ -3161,6 +3183,13 @@ export const App = () => {
                   </button>
                   <button className="shell-button" type="button" onClick={() => void (availableUpdateVersion ? handleInstallUpdate() : handleCheckForUpdates())}>
                     {availableUpdateVersion ? `Install ${availableUpdateVersion}` : "Check updates"}
+                  </button>
+                  <button
+                    className={isBaselineWorkEnabled ? "primary-button" : "shell-button"}
+                    type="button"
+                    onClick={() => void (isBaselineWorkEnabled ? stopWorkBaseline() : startWorkBaseline())}
+                  >
+                    {isBaselineWorkEnabled ? "Stop work" : "Start work"}
                   </button>
                   <button className="shell-button" type="button" onClick={() => openSettingsSection("ai")}>
                     Settings
@@ -3341,10 +3370,15 @@ export const App = () => {
                 requestedDomain={requestedTimeDomain}
                 requestedProject={requestedTimeProject}
                 reportPresets={snapshot.settings.timeReportPresets}
+                isBaselineWorkEnabled={isBaselineWorkEnabled}
+                isBaselineWorkRunning={isBaselineWorkRunning}
+                hasSpecificRunningTimeLog={hasSpecificRunningTimeLog}
                 onSaveTimeLog={(timeLog) => void saveTimeLog(timeLog)}
                 onDeleteTimeLog={(id) => void deleteTimeLog(id)}
                 onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
+                onStartWorkBaseline={() => void startWorkBaseline()}
+                onStopWorkBaseline={() => void stopWorkBaseline()}
                 onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "time")}
                 onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "time")}
                 onSaveReportPreset={(preset) =>

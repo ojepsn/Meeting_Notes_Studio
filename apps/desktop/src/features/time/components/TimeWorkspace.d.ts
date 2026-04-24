@@ -6,10 +6,15 @@ type TimeWorkspaceProps = {
     requestedDomain?: string | null;
     requestedProject?: string | null;
     reportPresets: TimeReportPreset[];
+    isBaselineWorkEnabled: boolean;
+    isBaselineWorkRunning: boolean;
+    hasSpecificRunningTimeLog: boolean;
     onSaveTimeLog: (timeLog: TimeLogRecord) => void;
     onDeleteTimeLog: (id: string) => void;
     onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
     onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
+    onStartWorkBaseline: () => void;
+    onStopWorkBaseline: () => void;
     onOpenTodoDetail: (todoId: string) => void;
     onOpenActivityDetail: (activityId: string) => void;
     onSaveReportPreset: (preset: Omit<TimeReportPreset, "id">) => void;
@@ -28,5 +33,5 @@ export declare const getPresetRange: (preset: Exclude<DatePreset, "custom">, now
 export declare const calculateDurationMinutes: (date: string, startTime: string, endTime: string) => number;
 export declare const buildExportFilename: (kind: "csv" | "md", now?: Date) => string;
 export declare const buildJsonExportFilename: (now?: Date) => string;
-export declare const TimeWorkspace: ({ todos, activities, timeLogs, requestedDomain, requestedProject, reportPresets, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenTodoDetail, onOpenActivityDetail, onSaveReportPreset, onDeleteReportPreset, }: TimeWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const TimeWorkspace: ({ todos, activities, timeLogs, requestedDomain, requestedProject, reportPresets, isBaselineWorkEnabled, isBaselineWorkRunning, hasSpecificRunningTimeLog, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onStartWorkBaseline, onStopWorkBaseline, onOpenTodoDetail, onOpenActivityDetail, onSaveReportPreset, onDeleteReportPreset, }: TimeWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

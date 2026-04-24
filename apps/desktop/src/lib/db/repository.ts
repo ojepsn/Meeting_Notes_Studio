@@ -190,6 +190,8 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   calendarDetailsPaneWidth: 320,
   calendarScrollTop: 0,
   calendarScrollLeft: 0,
+  baselineWorkEnabled: false,
+  baselineWorkActivityId: "",
   apiKey: "",
   textModel: "gpt-5.4-mini",
   transcriptionModel: "gpt-4o-mini-transcribe",
@@ -324,6 +326,9 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
   calendarScrollLeft: Number.isFinite(Number(settings.calendarScrollLeft))
     ? Math.max(0, Math.round(Number(settings.calendarScrollLeft)))
     : 0,
+  baselineWorkEnabled: Boolean(settings.baselineWorkEnabled),
+  baselineWorkActivityId:
+    typeof settings.baselineWorkActivityId === "string" ? settings.baselineWorkActivityId.trim() : "",
   textModel: normalizeTextModelId(settings.textModel),
   transcriptionModel: normalizeTranscriptionModelId(settings.transcriptionModel),
   savedParticipants: Array.isArray(settings.savedParticipants)

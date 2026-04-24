@@ -18,6 +18,8 @@ const settings: LocalAppSettings = {
   calendarDetailsPaneWidth: 320,
   calendarScrollTop: 0,
   calendarScrollLeft: 0,
+  baselineWorkEnabled: false,
+  baselineWorkActivityId: "",
   apiKey: "test-key",
   textModel: "gpt-5-mini",
   transcriptionModel: "gpt-4o-mini-transcribe",

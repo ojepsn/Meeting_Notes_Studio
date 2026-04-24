@@ -55,6 +55,8 @@ interface DesktopState {
     deleteTimeLog: (id: string) => Promise<void>;
     startTimeTracking: (targetType: TimeLog["targetType"], targetId: string) => Promise<void>;
     stopTimeTracking: (targetType: TimeLog["targetType"], targetId: string) => Promise<void>;
+    startWorkBaseline: () => Promise<void>;
+    stopWorkBaseline: () => Promise<void>;
     createCalendarEntryFromText: (date: string, startSlot: number, value: string, options?: {
         activityId?: string;
         parentActivityId?: string;
