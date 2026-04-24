@@ -103,6 +103,23 @@ struct AgentSidecarState {
     process: Mutex<Option<AgentSidecarProcess>>,
 }
 
+impl AgentSidecarState {
+    fn stop_running_process(&self) {
+        if let Ok(mut process_guard) = self.process.lock() {
+            if let Some(mut process) = process_guard.take() {
+                let _ = process.child.kill();
+                let _ = process.child.wait();
+            }
+        }
+    }
+}
+
+impl Drop for AgentSidecarState {
+    fn drop(&mut self) {
+        self.stop_running_process();
+    }
+}
+
 fn candidate_database_paths(app_config_dir: &Path, app_data_dir: &Path) -> Vec<PathBuf> {
     vec![
         app_config_dir.join("notesmith.db"),
@@ -872,16 +889,7 @@ fn start_agent_sidecar(
 
 #[tauri::command]
 fn stop_agent_sidecar(state: tauri::State<AgentSidecarState>) -> Result<(), String> {
-    let mut process_guard = state
-        .process
-        .lock()
-        .map_err(|_| "Could not lock the Assistant runtime state.".to_string())?;
-
-    if let Some(mut process) = process_guard.take() {
-        let _ = process.child.kill();
-        let _ = process.child.wait();
-    }
-
+    state.stop_running_process();
     Ok(())
 }
 
