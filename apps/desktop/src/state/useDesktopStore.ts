@@ -205,6 +205,26 @@ const computeTrackedMinutes = (timeLogs: TimeLog[], targetType: TimeLog["targetT
     .filter((entry) => entry.targetType === targetType && entry.targetId === targetId)
     .reduce((sum, entry) => sum + (Number.isFinite(entry.durationMinutes) ? entry.durationMinutes : 0), 0);
 
+const closeOpenTimeLogs = (timeLogs: TimeLog[], now = new Date()) => {
+  const nextEndTime = formatLocalTime(now);
+  const updatedAt = now.toISOString();
+  let changed = false;
+  const nextTimeLogs = timeLogs.map((entry) => {
+    if (entry.startTime !== entry.endTime) {
+      return entry;
+    }
+    const nextDate = entry.date || formatLocalDate(now);
+    changed = true;
+    return {
+      ...entry,
+      endTime: nextEndTime,
+      durationMinutes: calculateDurationMinutes(nextDate, entry.startTime, nextEndTime),
+      updatedAt,
+    };
+  });
+  return { nextTimeLogs, changed };
+};
+
 const richTextToPlainText = (value: string) => {
   if (!value) return "";
   const wrapper = document.createElement("div");
@@ -992,8 +1012,10 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     if (activeOpenLog) {
       return;
     }
+    const now = new Date();
+    const { nextTimeLogs: closedTimeLogs } = closeOpenTimeLogs(snapshot.timelogs, now);
     const nextTimeLog = buildTimeLog(targetType, targetId);
-    const nextTimeLogs = [nextTimeLog, ...snapshot.timelogs];
+    const nextTimeLogs = [nextTimeLog, ...closedTimeLogs];
     const nextSnapshot = {
       ...snapshot,
       timelogs: nextTimeLogs,
