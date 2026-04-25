@@ -60,7 +60,21 @@ jobs:
         run: node ./scripts/prepare-agent-sidecar.mjs
 
       - name: Build signed desktop release
-        run: npm run desktop:tauri:build
+        shell: pwsh
+        run: |
+          $attempts = 3
+          for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+            Write-Host "Desktop build attempt $attempt of $attempts"
+            npm run desktop:tauri:build
+            if ($LASTEXITCODE -eq 0) {
+              exit 0
+            }
+            if ($attempt -lt $attempts) {
+              Write-Warning "Desktop build failed. Waiting 20 seconds before retrying."
+              Start-Sleep -Seconds 20
+            }
+          }
+          throw "Desktop build failed after $attempts attempts."
 
       - name: Prepare release assets
         run: node ./scripts/prepare-desktop-release.mjs
