@@ -14,8 +14,6 @@ type StructureWorkspaceProps = {
   onAddActivityToProject: (description: string, project: string, domain: string, type: ActivityRecord["type"]) => void;
   onRenameProject: (previousValue: string, nextValue: string) => void;
   onAssignProjectDomain: (project: string, domain: string) => void;
-  onOpenActivitiesForDomain: (domain: string) => void;
-  onOpenActivitiesForProject: (project: string) => void;
   onOpenTodosForDomain: (domain: string) => void;
   onOpenTodosForProject: (project: string) => void;
   onOpenTimeForDomain: (domain: string) => void;
@@ -56,8 +54,6 @@ export const StructureWorkspace = ({
   onAddActivityToProject,
   onRenameProject,
   onAssignProjectDomain,
-  onOpenActivitiesForDomain,
-  onOpenActivitiesForProject,
   onOpenTodosForDomain,
   onOpenTodosForProject,
   onOpenTimeForDomain,
@@ -261,7 +257,7 @@ export const StructureWorkspace = ({
       <div className="card-header session-editor-header-minimal">
         <div>
           <h2>Structure</h2>
-          <p className="muted">Create and organize domains, projects, and project-owned activities here. Use Activities as the operational work hub once something exists.</p>
+          <p className="muted">Create and organize domains, projects, and project-owned activities here. Structure is now the home for this layer of the app.</p>
         </div>
       </div>
 
@@ -299,7 +295,7 @@ export const StructureWorkspace = ({
           <div className="card-header">
             <div>
               <h3>New project</h3>
-              <p className="muted">Projects can be set up here, then reused quickly in Notes, Calendar, Activities, and Todos.</p>
+              <p className="muted">Projects can be set up here, then reused quickly in Notes, Calendar, Tasks, and Timelogs.</p>
             </div>
           </div>
           <div className="todos-workspace-input-row">
@@ -343,7 +339,7 @@ export const StructureWorkspace = ({
               <h3>
                 {focus.kind === "domain" ? "Domain focus" : "Project focus"}: {focus.label}
               </h3>
-              <p className="muted">Inspect the linked work here before drilling further into Activities, Todos, or Time.</p>
+              <p className="muted">Inspect the linked work here before drilling further into Tasks or Time.</p>
             </div>
             <div className="page-actions">
               <span className="status-chip">{focusedActivities.length} activities</span>
@@ -452,8 +448,8 @@ export const StructureWorkspace = ({
                         ) : (
                           <>
                             <strong>{row.label}</strong>
-                            <div className="tiny-text">
-                              {row.activities} activities - {row.todos} todos - {formatMinutes(row.minutes)}
+                          <div className="tiny-text">
+                              {row.activities} activities - {row.todos} tasks - {formatMinutes(row.minutes)}
                             </div>
                           </>
                         )}
@@ -472,14 +468,11 @@ export const StructureWorkspace = ({
                               Edit
                             </button>
                           ) : null}
-                          <button className="small-button" type="button" onClick={() => onOpenActivitiesForDomain(domain)}>
-                            Activities
-                          </button>
                           <button className="small-button" type="button" onClick={() => setFocus({ kind: "domain", label: row.label })}>
                             Inspect
                           </button>
                           <button className="small-button" type="button" onClick={() => onOpenTodosForDomain(domain)}>
-                            Todos
+                            Tasks
                           </button>
                           <button className="small-button" type="button" onClick={() => onOpenTimeForDomain(domain)}>
                             Time
@@ -507,7 +500,7 @@ export const StructureWorkspace = ({
                       ) : null}
                       {row.preview.todos.length ? (
                         <div className="structure-preview-group">
-                          <span className="tiny-text">Todos</span>
+                          <span className="tiny-text">Tasks</span>
                           <div className="structure-preview-chips">
                             {row.preview.todos.map((todo) => (
                               <button
@@ -535,7 +528,7 @@ export const StructureWorkspace = ({
             <div className="card-header">
               <div>
                 <h3>Projects</h3>
-                <p className="muted">This is the authoritative place to create activities inside projects, then open them in Activities for execution.</p>
+                <p className="muted">This is the authoritative place to create activities inside projects and connect them to the rest of the app.</p>
               </div>
             </div>
             <div className="time-log-table">
@@ -600,7 +593,7 @@ export const StructureWorkspace = ({
                           <>
                             <strong>{row.label}</strong>
                             <div className="tiny-text">
-                              {row.domain || "No domain"} - {row.activities} activities - {row.todos} todos - {formatMinutes(row.minutes)}
+                              {row.domain || "No domain"} - {row.activities} activities - {row.todos} tasks - {formatMinutes(row.minutes)}
                             </div>
                           </>
                         )}
@@ -633,14 +626,11 @@ export const StructureWorkspace = ({
                               Edit
                             </button>
                           ) : null}
-                          <button className="small-button" type="button" onClick={() => onOpenActivitiesForProject(project)}>
-                            Activities
-                          </button>
                           <button className="small-button" type="button" onClick={() => setFocus({ kind: "project", label: row.label })}>
                             Inspect
                           </button>
                           <button className="small-button" type="button" onClick={() => onOpenTodosForProject(project)}>
-                            Todos
+                            Tasks
                           </button>
                           <button className="small-button" type="button" onClick={() => onOpenTimeForProject(project)}>
                             Time
@@ -701,7 +691,7 @@ export const StructureWorkspace = ({
                       ) : null}
                       {row.preview.todos.length ? (
                         <div className="structure-preview-group">
-                          <span className="tiny-text">Todos</span>
+                          <span className="tiny-text">Tasks</span>
                           <div className="structure-preview-chips">
                             {row.preview.todos.map((todo) => (
                               <button

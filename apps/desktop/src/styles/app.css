@@ -2413,7 +2413,8 @@ select {
       var(--todo-col-project, 140px) +
       var(--todo-col-activity, 140px) +
       var(--todo-col-dueDate, 130px) +
-      var(--todo-col-details, 220px)
+      var(--todo-col-details, 220px) +
+      136px
     );
   border-collapse: separate;
   border-spacing: 0;
@@ -2468,6 +2469,11 @@ select {
 .todos-dense-table th:nth-child(6),
 .todos-dense-table td:nth-child(6) {
   width: var(--todo-col-details, 220px);
+}
+
+.todos-dense-table th:nth-child(7),
+.todos-dense-table td:nth-child(7) {
+  width: 136px;
 }
 
 .todos-dense-table tbody tr {
@@ -2554,7 +2560,8 @@ select {
 }
 
 .todos-dense-title-cell,
-.todos-dense-details-cell {
+.todos-dense-details-cell,
+.todos-dense-actions-cell {
   display: flex;
   align-items: center;
   gap: 0.45rem;
@@ -2645,6 +2652,19 @@ select {
   min-height: 28px;
   padding: 0.3rem 0.55rem;
   font-size: 0.76rem;
+}
+
+.todos-dense-actions-cell {
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+}
+
+.todos-dense-actions-cell .small-button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.76rem;
+  white-space: nowrap;
 }
 
 .todos-detail-modal {
@@ -5729,8 +5749,8 @@ select {
   min-height: 2.35rem;
 }
 
-.time-log-editor-row {
-  grid-template-columns: minmax(180px, 1.4fr) 120px 88px 88px auto minmax(120px, 0.9fr) auto;
+.time-log-editor-table {
+  min-width: max-content;
 }
 
 .time-log-editor-row .status-chip {

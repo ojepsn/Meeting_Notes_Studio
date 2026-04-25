@@ -542,6 +542,11 @@ export const TodosWorkspace = ({
                       />
                     </th>
                   ))}
+                  <th scope="col">
+                    <div className="todos-header-cell">
+                      <span className="todos-sort-button">Actions</span>
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -657,6 +662,10 @@ export const TodosWorkspace = ({
                               onChange={(event) => saveTodoPatch(todo, { detailsHtml: textToDetailsHtml(event.target.value) })}
                               placeholder="No details"
                             />
+                          </div>
+                        </td>
+                        <td>
+                          <div className="todos-dense-actions-cell">
                             <button
                               className={`small-button${running ? " primary-button" : ""}`}
                               type="button"
@@ -688,7 +697,7 @@ export const TodosWorkspace = ({
                   })
                 ) : (
                   <tr>
-                    <td colSpan={todoColumns.length}>
+                    <td colSpan={todoColumns.length + 1}>
                       <div className="empty-state-card compact-empty-state">
                         <h3>No tasks match the current filters</h3>
                         <p>Clear one or more column filters, or add a new focused next action above.</p>

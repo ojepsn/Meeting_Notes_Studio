@@ -4,7 +4,6 @@ import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
 import { OutputWorkspace } from "../features/output/components/OutputWorkspace";
-import { ActivitiesWorkspace } from "../features/activities/components/ActivitiesWorkspace";
 import { CalendarWorkspace } from "../features/calendar/components/CalendarWorkspace";
 import { TodosRailCard } from "../features/todos/components/TodosRailCard";
 import { TodosWorkspace } from "../features/todos/components/TodosWorkspace";
@@ -81,7 +80,7 @@ import { buildStructureOptions, createEmptyStructureOptions } from "../lib/struc
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
 
-type AppWorkspace = "notes" | "todos" | "activities" | "calendar" | "time" | "structure" | "assistant" | "files";
+type AppWorkspace = "notes" | "todos" | "calendar" | "time" | "structure" | "assistant" | "files";
 type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | "instructions" | null;
 type CommandAction = {
   id: string;
@@ -134,7 +133,6 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
   { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: true },
   { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
   { id: "todos", label: "Tasks", description: "Focused follow-up management", available: true },
-  { id: "activities", label: "Activities", description: "Tracked work with time and scheduling", available: true },
   { id: "time", label: "Timelogs", description: "Active timers, dense logs, and reporting", available: true },
   { id: "structure", label: "Structure", description: "Domains and projects as operational views", available: true },
   { id: "assistant", label: "Assistant", description: "Agentic chat with NoteSmith data", available: true },
@@ -266,10 +264,7 @@ export const App = () => {
   const [selectedOutputVersionId, setSelectedOutputVersionId] = useState<string | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
   const [notesCapturePaneWidth, setNotesCapturePaneWidth] = useState(640);
-  const [requestedActivityId, setRequestedActivityId] = useState<string | null>(null);
   const [requestedTodoId, setRequestedTodoId] = useState<string | null>(null);
-  const [requestedActivityDomain, setRequestedActivityDomain] = useState<string | null>(null);
-  const [requestedActivityProject, setRequestedActivityProject] = useState<string | null>(null);
   const [requestedTodoDomain, setRequestedTodoDomain] = useState<string | null>(null);
   const [requestedTodoProject, setRequestedTodoProject] = useState<string | null>(null);
   const [requestedTimeDomain, setRequestedTimeDomain] = useState<string | null>(null);
@@ -1324,6 +1319,16 @@ export const App = () => {
     );
   };
 
+  const loadPersistedAudioFileForSession = async (sessionId: string) => {
+    const latestSnapshot = await repository.loadSnapshot();
+    const persistedAudioAttachment =
+      latestSnapshot.attachments.find((entry) => entry.sessionId === sessionId && entry.kind === "audio") ?? null;
+    if (!persistedAudioAttachment) {
+      return null;
+    }
+    return loadPersistedAttachmentFile(persistedAudioAttachment);
+  };
+
   const outputActionConfig = (() => {
     const isManualPolishMode = activeSession?.transcribeOnly === true;
     return {
@@ -2185,12 +2190,31 @@ export const App = () => {
   }) => {
     setIsTranscribingAudio(true);
     try {
-      const transcriptText = await transcribeAudio({
-        file,
-        settings: snapshot.settings,
-        onEvent: createAIRuntimeHandler(),
-      });
-      const targetSession = snapshot.sessions.find((session) => session.id === sessionId);
+      let transcriptText: string;
+      try {
+        transcriptText = await transcribeAudio({
+          file,
+          settings: snapshot.settings,
+          onEvent: createAIRuntimeHandler(),
+        });
+      } catch (initialError) {
+        const persistedAudioFile = await loadPersistedAudioFileForSession(sessionId);
+        if (!persistedAudioFile) {
+          throw initialError;
+        }
+        appendGenerationLog(
+          "Audio transcription retrying from the saved desktop attachment.",
+          "warning",
+          initialError instanceof Error ? initialError.message : String(initialError),
+        );
+        transcriptText = await transcribeAudio({
+          file: persistedAudioFile,
+          settings: snapshot.settings,
+          onEvent: createAIRuntimeHandler(),
+        });
+      }
+      const latestSnapshot = await repository.loadSnapshot();
+      const targetSession = latestSnapshot.sessions.find((session) => session.id === sessionId);
       if (!targetSession) {
         throw new Error("The session could not be found after recording.");
       }
@@ -2256,10 +2280,7 @@ export const App = () => {
   };
 
   const handleWorkspaceSelection = (workspaceId: AppWorkspace, available: boolean) => {
-    setRequestedActivityId(null);
     setRequestedTodoId(null);
-    setRequestedActivityDomain(null);
-    setRequestedActivityProject(null);
     setRequestedTodoDomain(null);
     setRequestedTodoProject(null);
     setRequestedTimeDomain(null);
@@ -2271,10 +2292,7 @@ export const App = () => {
     }
   };
   const clearRequestedFilters = () => {
-    setRequestedActivityId(null);
     setRequestedTodoId(null);
-    setRequestedActivityDomain(null);
-    setRequestedActivityProject(null);
     setRequestedTodoDomain(null);
     setRequestedTodoProject(null);
     setRequestedTimeDomain(null);
@@ -2282,10 +2300,7 @@ export const App = () => {
   };
   const openLinkedDestination = ({
     workspace,
-    activityId = null,
     todoId = null,
-    activityDomain = null,
-    activityProject = null,
     todoDomain = null,
     todoProject = null,
     timeDomain = null,
@@ -2294,10 +2309,7 @@ export const App = () => {
     status,
   }: {
     workspace: AppWorkspace;
-    activityId?: string | null;
     todoId?: string | null;
-    activityDomain?: string | null;
-    activityProject?: string | null;
     todoDomain?: string | null;
     todoProject?: string | null;
     timeDomain?: string | null;
@@ -2306,10 +2318,7 @@ export const App = () => {
     status?: string;
   }) => {
     clearRequestedFilters();
-    setRequestedActivityId(activityId);
     setRequestedTodoId(todoId);
-    setRequestedActivityDomain(activityDomain);
-    setRequestedActivityProject(activityProject);
     setRequestedTodoDomain(todoDomain);
     setRequestedTodoProject(todoProject);
     setRequestedTimeDomain(timeDomain);
@@ -2352,12 +2361,13 @@ export const App = () => {
       status: returnWorkspace === "calendar" ? "Opened linked session from Calendar. Return to Calendar when you are done." : "Opened linked session.",
     });
   const openActivityFromLink = (activityId: string, returnWorkspace: AppWorkspace | null = null) =>
-    openLinkedDestination({
-      workspace: "activities",
-      activityId,
-      returnWorkspace,
-      status: "Opened linked activity.",
-    });
+    (() => {
+      const linkedActivity = snapshot?.activities.find((entry) => entry.id === activityId) ?? null;
+      clearRequestedFilters();
+      setLinkedDetailReturnWorkspace(returnWorkspace);
+      setActiveWorkspace("structure");
+      setStatusNote(linkedActivity ? `Opened ${linkedActivity.description} in Structure.` : "Opened linked activity in Structure.");
+    })();
   const openTodoDetailFromLink = (todoId: string, returnWorkspace: AppWorkspace | null = null) =>
     openLinkedDestination({
       workspace: "todos",
@@ -2366,14 +2376,11 @@ export const App = () => {
       status: "Opened linked task.",
     });
   const returnFromLinkedDetail = () => {
-    if (!requestedActivityId && !requestedTodoId && !linkedDetailReturnWorkspace) {
+    if (!requestedTodoId && !linkedDetailReturnWorkspace) {
       return;
     }
     const nextWorkspace = linkedDetailReturnWorkspace ?? "calendar";
-    setRequestedActivityId(null);
     setRequestedTodoId(null);
-    setRequestedActivityDomain(null);
-    setRequestedActivityProject(null);
     setRequestedTodoDomain(null);
     setRequestedTodoProject(null);
     setRequestedTimeDomain(null);
@@ -2459,13 +2466,6 @@ export const App = () => {
         description: "See personal work items and follow-ups captured from notes.",
         keywords: ["todo tasks follow up"],
         action: () => setActiveWorkspace("todos"),
-      },
-      {
-        id: "activities",
-        label: "Open Activities",
-        description: "See tracked work and time-based activities.",
-        keywords: ["activities work tracked time"],
-        action: () => setActiveWorkspace("activities"),
       },
       {
         id: "calendar",
@@ -3270,38 +3270,6 @@ export const App = () => {
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
                 onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "todos")}
               />
-            ) : activeWorkspace === "activities" ? (
-              <ActivitiesWorkspace
-                activities={snapshot.activities}
-                todos={snapshot.todos}
-                timeLogs={snapshot.timelogs}
-                structureOptions={structureOptions}
-                linkedSessionStateByActivity={linkedSessionStateByActivity}
-                requestedActivityId={requestedActivityId}
-                requestedDomain={requestedActivityDomain}
-                requestedProject={requestedActivityProject}
-                onEditorClose={returnFromLinkedDetail}
-                onToggle={(activity) => void saveActivity(activity)}
-                onAdd={(description, type) => void addActivity(description, type)}
-                onAddChildTodo={(description, activityId) => void addTodo(description, { activityId })}
-                onAddChildMeeting={(description, activityId) => void addActivity(description, "meeting", { parentActivityId: activityId })}
-                onSave={(activity) => void saveActivity(activity)}
-                onDelete={(id) => void deleteActivity(id)}
-                onCreateLinkedMeetingSession={(activityId) =>
-                  void ensureSessionForActivity(activityId).then((sessionId) => {
-                    if (sessionId) {
-                      openSessionFromLink(sessionId, "activities");
-                    }
-                  })
-                }
-                onOpenSession={(sessionId) => openSessionFromLink(sessionId, "activities")}
-                onPreviewSessionOutput={openCalendarOutputPreview}
-                onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "activities")}
-                onSaveTimeLog={(timeLog) => void saveTimeLog(timeLog)}
-                onDeleteTimeLog={(id) => void deleteTimeLog(id)}
-                onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
-                onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
-              />
             ) : activeWorkspace === "calendar" ? (
               <CalendarWorkspace
                 todos={snapshot.todos}
@@ -3442,22 +3410,6 @@ export const App = () => {
                       : snapshot.settings.projectLinks.filter((entry) => entry.project !== project.trim()),
                   })
                 }
-                onOpenActivitiesForDomain={(domain) => {
-                  openLinkedDestination({
-                    workspace: "activities",
-                    activityDomain: domain || null,
-                    returnWorkspace: "structure",
-                    status: domain ? `Opened Activities filtered to ${domain}.` : "Opened Activities.",
-                  });
-                }}
-                onOpenActivitiesForProject={(project) => {
-                  openLinkedDestination({
-                    workspace: "activities",
-                    activityProject: project || null,
-                    returnWorkspace: "structure",
-                    status: project ? `Opened Activities filtered to ${project}.` : "Opened Activities.",
-                  });
-                }}
                 onOpenTodosForDomain={(domain) =>
                   openLinkedDestination({
                     workspace: "todos",
@@ -3510,7 +3462,7 @@ export const App = () => {
                 {linkedDetailReturnWorkspace ? (
                   <div className="notes-pwa-toolbar">
                     <button className="shell-button" type="button" onClick={returnFromLinkedDetail}>
-                      Back to {linkedDetailReturnWorkspace === "calendar" ? "Calendar" : linkedDetailReturnWorkspace === "activities" ? "Activities" : linkedDetailReturnWorkspace === "time" ? "Time" : linkedDetailReturnWorkspace === "structure" ? "Structure" : "previous workspace"}
+                      Back to {linkedDetailReturnWorkspace === "calendar" ? "Calendar" : linkedDetailReturnWorkspace === "time" ? "Time" : linkedDetailReturnWorkspace === "structure" ? "Structure" : "previous workspace"}
                     </button>
                     {activeLinkedActivity ? (
                       <button className="shell-button" type="button" onClick={() => openActivityFromLink(activeLinkedActivity.id, "notes")}>
@@ -3647,7 +3599,7 @@ export const App = () => {
               <div>
                 <h3>Notes status</h3>
               </div>
-              {activeWorkspace === "activities" || activeWorkspace === "calendar" ? (
+              {activeWorkspace === "calendar" ? (
                 <div className="sidebar-actions">
                   <button className="primary-button" type="button" onClick={() => setActiveWorkspace("notes")}>
                     Back to Notes
@@ -3666,12 +3618,6 @@ export const App = () => {
                 <h3>Status</h3>
               </div>
               <span className={`status-chip status-chip-${saveState}`}>{saveStatusLabel}</span>
-              {activeWorkspace === "activities" ? (
-                <>
-                  <span className="status-chip">{snapshot.activities.filter((activity) => !activity.isDone).length} open activities</span>
-                  <span className="status-chip">{snapshot.activities.filter((activity) => activity.isDone).length} completed</span>
-                </>
-              ) : null}
               {updateStatusNote ? <span className="tiny-text topbar-status-note">{updateStatusNote}</span> : null}
             </div>
 
