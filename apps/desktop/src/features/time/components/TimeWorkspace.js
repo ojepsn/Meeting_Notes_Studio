@@ -3,6 +3,24 @@ import { useEffect, useMemo, useState } from "react";
 import { DateInput } from "../../../components/DateInput";
 import { saveTextFile } from "../../../lib/storage/desktopStorage";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
+const defaultTimeLogColumnWidths = {
+    source: 360,
+    date: 150,
+    start: 110,
+    stop: 110,
+    duration: 120,
+    comment: 250,
+    actions: 150,
+};
+const minTimeLogColumnWidths = {
+    source: 220,
+    date: 150,
+    start: 104,
+    stop: 104,
+    duration: 96,
+    comment: 180,
+    actions: 132,
+};
 export const formatMinutes = (minutes) => {
     if (!minutes)
         return "0m";
@@ -64,6 +82,7 @@ export const TimeWorkspace = ({ todos, activities, timeLogs, requestedDomain, re
     const [searchQuery, setSearchQuery] = useState("");
     const [presetDraft, setPresetDraft] = useState("");
     const [now, setNow] = useState(() => new Date());
+    const [timeLogColumnWidths, setTimeLogColumnWidths] = useState(defaultTimeLogColumnWidths);
     useEffect(() => {
         if (requestedProject !== undefined && requestedProject !== null)
             setProjectFilter(requestedProject || "all");
@@ -92,7 +111,13 @@ export const TimeWorkspace = ({ todos, activities, timeLogs, requestedDomain, re
             contextLabel: activity?.project || activity?.domain || (activity?.type === "meeting" ? "Meeting" : "Activity"),
         };
     })
-        .sort((left, right) => `${right.date} ${right.startTime}`.localeCompare(`${left.date} ${left.startTime}`)), [activityLookup, timeLogs, todoLookup]);
+        .sort((left, right) => {
+        const leftRunning = left.startTime === left.endTime;
+        const rightRunning = right.startTime === right.endTime;
+        if (leftRunning !== rightRunning)
+            return leftRunning ? -1 : 1;
+        return `${right.date} ${right.startTime}`.localeCompare(`${left.date} ${left.startTime}`);
+    }), [activityLookup, timeLogs, todoLookup]);
     const projectOptions = useMemo(() => Array.from(new Set(enrichedLogs.map((log) => {
         const todo = log.targetType === "todo" ? todoLookup[log.targetId] : null;
         const activity = log.targetType === "activity" ? activityLookup[log.targetId] : todo?.activityId ? activityLookup[todo.activityId] : null;
@@ -290,6 +315,42 @@ export const TimeWorkspace = ({ todos, activities, timeLogs, requestedDomain, re
         setDomainFilter(preset.domain || "all");
         setProjectFilter(preset.project || "all");
     };
+    const startTimeLogColumnResize = (key, event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const startX = event.clientX;
+        const startWidth = timeLogColumnWidths[key];
+        const handlePointerMove = (moveEvent) => {
+            const nextWidth = Math.max(minTimeLogColumnWidths[key], startWidth + moveEvent.clientX - startX);
+            setTimeLogColumnWidths((current) => ({ ...current, [key]: nextWidth }));
+        };
+        const handlePointerUp = () => {
+            window.removeEventListener("mousemove", handlePointerMove);
+            window.removeEventListener("mouseup", handlePointerUp);
+            document.body.classList.remove("timelog-column-resizing");
+        };
+        document.body.classList.add("timelog-column-resizing");
+        window.addEventListener("mousemove", handlePointerMove);
+        window.addEventListener("mouseup", handlePointerUp);
+    };
+    const timeLogTableStyle = {
+        "--timelog-col-source": `${timeLogColumnWidths.source}px`,
+        "--timelog-col-date": `${timeLogColumnWidths.date}px`,
+        "--timelog-col-start": `${timeLogColumnWidths.start}px`,
+        "--timelog-col-stop": `${timeLogColumnWidths.stop}px`,
+        "--timelog-col-duration": `${timeLogColumnWidths.duration}px`,
+        "--timelog-col-comment": `${timeLogColumnWidths.comment}px`,
+        "--timelog-col-actions": `${timeLogColumnWidths.actions}px`,
+    };
+    const timeLogColumns = [
+        { key: "source", label: "Source", resizable: true },
+        { key: "date", label: "Date", resizable: true },
+        { key: "start", label: "Start", resizable: true },
+        { key: "stop", label: "Stop", resizable: true },
+        { key: "duration", label: "Duration", resizable: true },
+        { key: "comment", label: "Comment", resizable: true },
+        { key: "actions", label: "Actions", align: "right" },
+    ];
     return (_jsxs("div", { className: "card todos-workspace todos-workspace-minimal time-workspace-card", children: [_jsxs("div", { className: "card-header session-editor-header-minimal", children: [_jsx("div", { children: _jsx("h2", { children: "Timelogs" }) }), _jsxs("div", { className: "page-actions time-export-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => void exportCsv(), children: "CSV" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void exportMarkdown(), children: "Markdown" }), _jsx("button", { className: "small-button", type: "button", onClick: () => void exportJson(), children: "JSON" })] })] }), _jsx("div", { className: "time-filter-stack", children: _jsxs("details", { className: "workspace-disclosure time-disclosure-card", children: [_jsx("summary", { children: "Timelogs" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsxs("div", { className: "time-preset-row", children: [_jsxs("div", { className: "capture-density-toggle", children: [_jsx("button", { className: "segment-button", "data-active": datePreset === "today", type: "button", onClick: () => applyPreset("today"), children: "Today" }), _jsx("button", { className: "segment-button", "data-active": datePreset === "this-week", type: "button", onClick: () => applyPreset("this-week"), children: "This week" }), _jsx("button", { className: "segment-button", "data-active": datePreset === "this-month", type: "button", onClick: () => applyPreset("this-month"), children: "This month" }), _jsx("button", { className: "segment-button", "data-active": datePreset === "custom", type: "button", onClick: () => setDatePreset("custom"), children: "Custom" })] }), _jsxs("div", { className: "time-comparison-inline", children: [_jsx("span", { className: "tiny-text", children: "Current" }), _jsx("strong", { children: formatMinutes(currentTotalMinutes) }), comparisonRange ? (_jsxs(_Fragment, { children: [_jsx("span", { className: "tiny-text", children: "Previous" }), _jsx("strong", { children: formatMinutes(comparisonTotalMinutes) }), _jsxs("span", { className: `tiny-text ${comparisonDeltaMinutes >= 0 ? "time-delta-positive" : "time-delta-negative"}`, children: [comparisonDeltaMinutes >= 0 ? "+" : "", formatMinutes(comparisonDeltaMinutes), comparisonDeltaPercent !== null ? ` (${comparisonDeltaPercent >= 0 ? "+" : ""}${comparisonDeltaPercent}%)` : ""] })] })) : null] })] }), _jsxs("div", { className: "time-filter-grid-compact", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "time-filter-from", children: "From" }), _jsx(DateInput, { id: "time-filter-from", value: fromDate, onChange: (event) => { setDatePreset("custom"); setFromDate(event.target.value); } })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "time-filter-to", children: "To" }), _jsx(DateInput, { id: "time-filter-to", value: toDate, onChange: (event) => { setDatePreset("custom"); setToDate(event.target.value); } })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "time-filter-project", children: "Project" }), _jsxs("select", { id: "time-filter-project", value: projectFilter, onChange: (event) => setProjectFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), projectOptions.map((option) => _jsx("option", { value: option, children: option }, option))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "time-filter-domain", children: "Domain" }), _jsxs("select", { id: "time-filter-domain", value: domainFilter, onChange: (event) => setDomainFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), domainOptions.map((option) => _jsx("option", { value: option, children: option }, option))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "time-filter-activity", children: "Activity" }), _jsxs("select", { id: "time-filter-activity", value: activityFilter, onChange: (event) => setActivityFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), activityOptions.map((option) => _jsx("option", { value: option, children: option }, option))] })] })] })] })] }) }), _jsx("div", { className: "time-workspace-layout time-workspace-layout-minimal", children: _jsxs("section", { className: "time-workspace-main time-workspace-main-full", children: [_jsxs("div", { className: "sidebar-card timelog-active-card", children: [_jsxs("div", { className: "card-header", children: [_jsxs("div", { children: [_jsx("h3", { children: "Work mode" }), _jsx("p", { className: "muted", children: "Keeps a baseline Other / Other / Other timelog running whenever no specific timelog is active." })] }), _jsx("span", { className: "status-chip", children: isBaselineWorkEnabled
                                                 ? isBaselineWorkRunning
                                                     ? "Running"
@@ -302,7 +363,7 @@ export const TimeWorkspace = ({ todos, activities, timeLogs, requestedDomain, re
                                                             : hasSpecificRunningTimeLog
                                                                 ? "A specific timelog is active, so baseline work capture is paused and will resume automatically."
                                                                 : "Baseline work capture is armed and will run when no specific timelog is active."
-                                                        : "Click Start work to begin continuous baseline capture." })] }), _jsx("div", { className: "timelog-active-actions", children: _jsx("button", { className: isBaselineWorkEnabled ? "primary-button" : "shell-button", type: "button", onClick: isBaselineWorkEnabled ? onStopWorkBaseline : onStartWorkBaseline, children: isBaselineWorkEnabled ? "Stop work" : "Start work" }) })] })] }), _jsxs("div", { className: "sidebar-card timelog-active-card", children: [_jsx("div", { className: "card-header", children: _jsxs("div", { children: [_jsx("h3", { children: "Active time log" }), _jsx("p", { className: "muted", children: "The running log stays pinned here so it is always easy to stop or correct." })] }) }), activeLog ? (_jsxs("div", { className: "timelog-active-row", children: [_jsxs("div", { className: "timelog-active-copy", children: [_jsx("strong", { children: activeLog.title }), _jsx("span", { className: "tiny-text", children: activeLog.contextLabel }), _jsxs("span", { className: "status-chip", children: ["Running \u2022 ", formatTrackedMinutes(calculateLiveDurationMinutes(activeLog, now))] })] }), _jsxs("div", { className: "timelog-active-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: () => onStopTracking(activeLog.targetType, activeLog.targetId), children: "Stop" }), _jsx("button", { className: "small-button", type: "button", onClick: () => (activeLog.targetType === "todo" ? onOpenTodoDetail(activeLog.targetId) : onOpenActivityDetail(activeLog.targetId)), children: "Open source" })] })] })) : (_jsxs("div", { className: "timelog-active-empty", children: [_jsx("strong", { children: "No active time log" }), _jsx("span", { className: "muted", children: "Start a timer from Todos, Activities, Calendar, or this workspace." })] }))] }), _jsxs("div", { className: "sidebar-card time-logs-primary-card", children: [_jsxs("div", { className: "card-header", children: [_jsxs("div", { children: [_jsx("h3", { children: "All time logs" }), _jsx("p", { className: "muted", children: "Most recent first. Edit date, start, stop, and comment inline." })] }), _jsxs("span", { className: "status-chip", children: [filteredLogs.length, " visible"] })] }), _jsxs("div", { className: "time-log-editor-scroll-area", children: [_jsxs("div", { className: "time-log-sticky-controls", children: [_jsx("div", { className: "time-log-toolbar", children: _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "time-log-search", children: "Search" }), _jsx("input", { id: "time-log-search", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "Filter by title or comment" })] }) }), _jsxs("div", { className: "time-log-editor-header", "aria-hidden": "true", children: [_jsx("span", { children: "Source" }), _jsx("span", { children: "Date" }), _jsx("span", { children: "Start" }), _jsx("span", { children: "Stop" }), _jsx("span", { children: "Duration" }), _jsx("span", { children: "Comment" }), _jsx("span", { children: "Actions" })] })] }), _jsx("div", { className: "time-log-editor-table", children: filteredLogs.length ? filteredLogs.map((log) => {
+                                                        : "Click Start work to begin continuous baseline capture." })] }), _jsx("div", { className: "timelog-active-actions", children: _jsx("button", { className: isBaselineWorkEnabled ? "primary-button" : "shell-button", type: "button", onClick: isBaselineWorkEnabled ? onStopWorkBaseline : onStartWorkBaseline, children: isBaselineWorkEnabled ? "Stop work" : "Start work" }) })] })] }), _jsxs("div", { className: "sidebar-card timelog-active-card", children: [_jsx("div", { className: "card-header", children: _jsxs("div", { children: [_jsx("h3", { children: "Active time log" }), _jsx("p", { className: "muted", children: "The running log stays pinned here so it is always easy to stop or correct." })] }) }), activeLog ? (_jsxs("div", { className: "timelog-active-row", children: [_jsxs("div", { className: "timelog-active-copy", children: [_jsx("strong", { children: activeLog.title }), _jsx("span", { className: "tiny-text", children: activeLog.contextLabel }), _jsxs("span", { className: "status-chip", children: ["Running \u2022 ", formatTrackedMinutes(calculateLiveDurationMinutes(activeLog, now))] })] }), _jsxs("div", { className: "timelog-active-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: () => onStopTracking(activeLog.targetType, activeLog.targetId), children: "Stop" }), _jsx("button", { className: "small-button", type: "button", onClick: () => (activeLog.targetType === "todo" ? onOpenTodoDetail(activeLog.targetId) : onOpenActivityDetail(activeLog.targetId)), children: "Open source" })] })] })) : (_jsxs("div", { className: "timelog-active-empty", children: [_jsx("strong", { children: "No active time log" }), _jsx("span", { className: "muted", children: "Start a timer from Todos, Activities, Calendar, or this workspace." })] }))] }), _jsxs("div", { className: "sidebar-card time-logs-primary-card", children: [_jsxs("div", { className: "card-header", children: [_jsxs("div", { children: [_jsx("h3", { children: "All time logs" }), _jsx("p", { className: "muted", children: "Most recent first. Edit date, start, stop, and comment inline." })] }), _jsxs("span", { className: "status-chip", children: [filteredLogs.length, " visible"] })] }), _jsxs("div", { className: "time-log-editor-scroll-area", style: timeLogTableStyle, children: [_jsxs("div", { className: "time-log-sticky-controls", children: [_jsx("div", { className: "time-log-toolbar", children: _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "time-log-search", children: "Search" }), _jsx("input", { id: "time-log-search", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "Filter by title or comment" })] }) }), _jsx("div", { className: "time-log-editor-header", "aria-hidden": "true", children: timeLogColumns.map((column) => (_jsxs("span", { className: `time-log-header-cell${column.align === "right" ? " time-log-header-cell-right" : ""}`, children: [_jsx("span", { children: column.label }), column.resizable ? (_jsx("button", { className: "time-log-column-resize-handle", type: "button", "aria-label": `Resize ${column.label} column`, onMouseDown: (event) => startTimeLogColumnResize(column.key, event) })) : null] }, column.key))) })] }), _jsx("div", { className: "time-log-editor-table", children: filteredLogs.length ? filteredLogs.map((log) => {
                                                 const running = log.startTime === log.endTime;
                                                 const displayedMinutes = running ? calculateLiveDurationMinutes(log, now) : log.durationMinutes;
                                                 return (_jsxs("div", { className: `time-log-editor-row${running ? " time-log-editor-row-active" : ""}`, children: [_jsxs("button", { type: "button", className: "time-log-source-button", onClick: () => (log.targetType === "todo" ? onOpenTodoDetail(log.targetId) : onOpenActivityDetail(log.targetId)), children: [_jsx("strong", { children: log.title }), _jsx("span", { className: "tiny-text", children: log.contextLabel })] }), _jsx(DateInput, { value: log.date, onChange: (event) => onSaveTimeLog({

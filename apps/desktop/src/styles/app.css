@@ -2654,7 +2654,7 @@ select {
   overflow: auto;
   border: 1px solid var(--app-border);
   border-radius: 28px;
-  background: var(--app-surface);
+  background: var(--app-surface-strong);
   box-shadow: 0 28px 90px color-mix(in srgb, var(--app-shadow) 40%, transparent 60%);
   padding: 1.2rem;
 }
@@ -5348,6 +5348,13 @@ select {
   max-height: min(60vh, 980px);
   overflow: auto;
   padding-right: 0.1rem;
+  --timelog-col-source: 360px;
+  --timelog-col-date: 150px;
+  --timelog-col-start: 110px;
+  --timelog-col-stop: 110px;
+  --timelog-col-duration: 120px;
+  --timelog-col-comment: 250px;
+  --timelog-col-actions: 150px;
 }
 
 .time-log-sticky-controls {
@@ -5364,7 +5371,14 @@ select {
 
 .time-log-editor-header {
   display: grid;
-  grid-template-columns: minmax(180px, 1.4fr) 120px 88px 88px auto minmax(120px, 0.9fr) auto;
+  grid-template-columns:
+    minmax(220px, var(--timelog-col-source))
+    minmax(150px, var(--timelog-col-date))
+    minmax(104px, var(--timelog-col-start))
+    minmax(104px, var(--timelog-col-stop))
+    minmax(96px, var(--timelog-col-duration))
+    minmax(180px, var(--timelog-col-comment))
+    minmax(132px, var(--timelog-col-actions));
   gap: 0.4rem;
   align-items: center;
   border: 1px solid var(--app-border);
@@ -5377,21 +5391,37 @@ select {
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  min-width: max-content;
 }
 
-.time-log-editor-header span:last-child {
-  text-align: right;
+.time-log-header-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.time-log-header-cell-right {
+  justify-content: flex-end;
 }
 
 .time-log-editor-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.4fr) 120px 88px 88px auto minmax(160px, 1fr) auto;
+  grid-template-columns:
+    minmax(220px, var(--timelog-col-source))
+    minmax(150px, var(--timelog-col-date))
+    minmax(104px, var(--timelog-col-start))
+    minmax(104px, var(--timelog-col-stop))
+    minmax(96px, var(--timelog-col-duration))
+    minmax(180px, var(--timelog-col-comment))
+    minmax(132px, var(--timelog-col-actions));
   gap: 0.4rem;
   align-items: center;
   border: 1px solid var(--app-border);
   border-radius: 14px;
   background: var(--app-surface-soft);
   padding: 0.45rem 0.55rem;
+  min-width: max-content;
 }
 
 .time-log-editor-row-active {
@@ -5400,8 +5430,12 @@ select {
 }
 
 .time-log-editor-row input {
-  min-height: 2.2rem;
-  padding: 0.45rem 0.55rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 2rem;
+  padding: 0.34rem 0.5rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
 }
 
 .time-log-source-button {
@@ -5411,8 +5445,8 @@ select {
   text-align: left;
   padding: 0;
   display: flex;
-  flex-direction: column;
-  gap: 0.08rem;
+  align-items: baseline;
+  gap: 0.35rem;
   min-width: 0;
   cursor: pointer;
 }
@@ -5424,10 +5458,69 @@ select {
   white-space: nowrap;
 }
 
+.time-log-source-button strong {
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.time-log-source-button .tiny-text {
+  flex: 1 1 auto;
+  font-size: 0.76rem;
+}
+
+.time-log-editor-row .status-chip {
+  justify-self: start;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  font-size: 0.76rem;
+  padding: 0.26rem 0.5rem;
+}
+
 .time-log-inline-actions {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.time-log-inline-actions .small-button {
+  min-height: 2rem;
+  padding: 0.34rem 0.58rem;
+  white-space: nowrap;
+}
+
+.time-log-column-resize-handle {
+  position: absolute;
+  top: -0.3rem;
+  right: -0.5rem;
+  bottom: -0.3rem;
+  width: 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: col-resize;
+}
+
+.time-log-column-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0.2rem;
+  right: 4px;
+  bottom: 0.2rem;
+  width: 1px;
+  background: color-mix(in srgb, var(--app-border) 78%, transparent 22%);
+}
+
+.time-log-column-resize-handle:hover::after,
+.timelog-column-resizing .time-log-column-resize-handle::after {
+  width: 2px;
+  background: var(--app-accent-border);
+}
+
+.timelog-column-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .list-item-button {

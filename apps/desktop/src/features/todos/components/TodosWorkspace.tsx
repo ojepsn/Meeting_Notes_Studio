@@ -165,11 +165,6 @@ export const TodosWorkspace = ({
   const [now, setNow] = useState(() => new Date());
   const detailsEditorRef = useRef<HTMLDivElement | null>(null);
 
-  const activityOptions = useMemo(
-    () => activities.filter((entry) => !entry.parentActivityId).sort((left, right) => left.description.localeCompare(right.description)),
-    [activities],
-  );
-
   const activityLookup = useMemo(
     () => Object.fromEntries(activities.map((activity) => [activity.id, activity])) as Record<string, ActivityRecord>,
     [activities],
@@ -325,12 +320,6 @@ export const TodosWorkspace = ({
   const currentActivity = editingDraft.activityId ? activityLookup[editingDraft.activityId] : null;
   const editorProjectOptions = getProjectsForDomain(structureOptions, editingDraft.domain);
   const editorActivityOptions = getActivitiesForSelection(structureOptions, editingDraft.domain, editingDraft.project);
-  const linkedActivityOptions = activityOptions.filter((activity) => {
-    if (activity.id === editingDraft.activityId) return true;
-    if (editingDraft.domain && activity.domain && activity.domain !== editingDraft.domain) return false;
-    if (editingDraft.project && activity.project && activity.project !== editingDraft.project) return false;
-    return true;
-  });
 
   const handleDraftDomainChange = (domain: string) => {
     const nextProjects = getProjectsForDomain(structureOptions, domain);
@@ -826,31 +815,6 @@ export const TodosWorkspace = ({
                 <div className="field field-wide">
                   <label htmlFor="todo-edit-description">Task</label>
                   <input id="todo-edit-description" value={editingDraft.description} onChange={(event) => setEditingDraft({ ...editingDraft, description: event.target.value })} />
-                </div>
-
-                <div className="field">
-                  <label htmlFor="todo-edit-linked-activity">Activity</label>
-                  <select
-                    id="todo-edit-linked-activity"
-                    value={editingDraft.activityId}
-                    onChange={(event) => {
-                      const nextActivity = activityLookup[event.target.value];
-                      setEditingDraft({
-                        ...editingDraft,
-                        activityId: event.target.value,
-                        domain: nextActivity?.domain || editingDraft.domain,
-                        project: nextActivity?.project || editingDraft.project,
-                        activity: nextActivity?.description || editingDraft.activity,
-                      });
-                    }}
-                  >
-                    <option value="">Unassigned</option>
-                    {linkedActivityOptions.map((activity) => (
-                      <option key={activity.id} value={activity.id}>
-                        {activity.description}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div className="field">

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { ActivityRecord, TimeLogRecord, TimeReportPreset, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { saveTextFile } from "../../../lib/storage/desktopStorage";
@@ -28,6 +29,28 @@ type TimeWorkspaceProps = {
 
 type EditableTimeLogRecord = TimeLogRecord & { title: string; contextLabel: string };
 type DatePreset = "today" | "this-week" | "this-month" | "custom";
+type TimeLogColumnKey = "source" | "date" | "start" | "stop" | "duration" | "comment" | "actions";
+type TimeLogColumnWidths = Record<TimeLogColumnKey, number>;
+
+const defaultTimeLogColumnWidths: TimeLogColumnWidths = {
+  source: 360,
+  date: 150,
+  start: 110,
+  stop: 110,
+  duration: 120,
+  comment: 250,
+  actions: 150,
+};
+
+const minTimeLogColumnWidths: TimeLogColumnWidths = {
+  source: 220,
+  date: 150,
+  start: 104,
+  stop: 104,
+  duration: 96,
+  comment: 180,
+  actions: 132,
+};
 
 export const formatMinutes = (minutes: number) => {
   if (!minutes) return "0m";
@@ -119,6 +142,7 @@ export const TimeWorkspace = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [presetDraft, setPresetDraft] = useState("");
   const [now, setNow] = useState(() => new Date());
+  const [timeLogColumnWidths, setTimeLogColumnWidths] = useState<TimeLogColumnWidths>(defaultTimeLogColumnWidths);
 
   useEffect(() => {
     if (requestedProject !== undefined && requestedProject !== null) setProjectFilter(requestedProject || "all");
@@ -153,7 +177,12 @@ export const TimeWorkspace = ({
             contextLabel: activity?.project || activity?.domain || (activity?.type === "meeting" ? "Meeting" : "Activity"),
           };
         })
-        .sort((left, right) => `${right.date} ${right.startTime}`.localeCompare(`${left.date} ${left.startTime}`)),
+        .sort((left, right) => {
+          const leftRunning = left.startTime === left.endTime;
+          const rightRunning = right.startTime === right.endTime;
+          if (leftRunning !== rightRunning) return leftRunning ? -1 : 1;
+          return `${right.date} ${right.startTime}`.localeCompare(`${left.date} ${left.startTime}`);
+        }),
     [activityLookup, timeLogs, todoLookup],
   );
 
@@ -409,6 +438,45 @@ export const TimeWorkspace = ({
     setProjectFilter(preset.project || "all");
   };
 
+  const startTimeLogColumnResize = (key: TimeLogColumnKey, event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = timeLogColumnWidths[key];
+    const handlePointerMove = (moveEvent: MouseEvent) => {
+      const nextWidth = Math.max(minTimeLogColumnWidths[key], startWidth + moveEvent.clientX - startX);
+      setTimeLogColumnWidths((current) => ({ ...current, [key]: nextWidth }));
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mouseup", handlePointerUp);
+      document.body.classList.remove("timelog-column-resizing");
+    };
+    document.body.classList.add("timelog-column-resizing");
+    window.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("mouseup", handlePointerUp);
+  };
+
+  const timeLogTableStyle = {
+    "--timelog-col-source": `${timeLogColumnWidths.source}px`,
+    "--timelog-col-date": `${timeLogColumnWidths.date}px`,
+    "--timelog-col-start": `${timeLogColumnWidths.start}px`,
+    "--timelog-col-stop": `${timeLogColumnWidths.stop}px`,
+    "--timelog-col-duration": `${timeLogColumnWidths.duration}px`,
+    "--timelog-col-comment": `${timeLogColumnWidths.comment}px`,
+    "--timelog-col-actions": `${timeLogColumnWidths.actions}px`,
+  } as CSSProperties;
+
+  const timeLogColumns: { key: TimeLogColumnKey; label: string; resizable?: boolean; align?: "right" }[] = [
+    { key: "source", label: "Source", resizable: true },
+    { key: "date", label: "Date", resizable: true },
+    { key: "start", label: "Start", resizable: true },
+    { key: "stop", label: "Stop", resizable: true },
+    { key: "duration", label: "Duration", resizable: true },
+    { key: "comment", label: "Comment", resizable: true },
+    { key: "actions", label: "Actions", align: "right" },
+  ];
+
   return (
     <div className="card todos-workspace todos-workspace-minimal time-workspace-card">
       <div className="card-header session-editor-header-minimal">
@@ -573,28 +641,34 @@ export const TimeWorkspace = ({
               </div>
               <span className="status-chip">{filteredLogs.length} visible</span>
             </div>
-            <div className="time-log-editor-scroll-area">
-            <div className="time-log-sticky-controls">
-            <div className="time-log-toolbar">
-              <div className="field field-wide">
-                <label htmlFor="time-log-search">Search</label>
-                <input
-                  id="time-log-search"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Filter by title or comment"
-                />
-              </div>
-            </div>
-              <div className="time-log-editor-header" aria-hidden="true">
-                <span>Source</span>
-                <span>Date</span>
-                <span>Start</span>
-                <span>Stop</span>
-                <span>Duration</span>
-                <span>Comment</span>
-                <span>Actions</span>
-              </div>
+            <div className="time-log-editor-scroll-area" style={timeLogTableStyle}>
+              <div className="time-log-sticky-controls">
+                <div className="time-log-toolbar">
+                  <div className="field field-wide">
+                    <label htmlFor="time-log-search">Search</label>
+                    <input
+                      id="time-log-search"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Filter by title or comment"
+                    />
+                  </div>
+                </div>
+                <div className="time-log-editor-header" aria-hidden="true">
+                  {timeLogColumns.map((column) => (
+                    <span key={column.key} className={`time-log-header-cell${column.align === "right" ? " time-log-header-cell-right" : ""}`}>
+                      <span>{column.label}</span>
+                      {column.resizable ? (
+                        <button
+                          className="time-log-column-resize-handle"
+                          type="button"
+                          aria-label={`Resize ${column.label} column`}
+                          onMouseDown={(event) => startTimeLogColumnResize(column.key, event)}
+                        />
+                      ) : null}
+                    </span>
+                  ))}
+                </div>
               </div>
               <div className="time-log-editor-table">
               {filteredLogs.length ? filteredLogs.map((log) => {
