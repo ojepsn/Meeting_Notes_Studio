@@ -1544,8 +1544,14 @@ export const App = () => {
             file: selection.file,
             persistedPath,
         });
-        setStatusNote("Uploaded audio into the desktop session. You can transcribe it into the live transcript next.");
-        setRecordingStatusNote("Audio file attached to the current session.");
+        setStatusNote("Uploaded audio into the desktop session. Transcribing it into the transcript field now...");
+        setRecordingStatusNote("Audio file attached to the current session. Transcribing now...");
+        await transcribeAudioIntoSession({
+            sessionId: activeSession.id,
+            file: selection.file,
+            transcriptTarget: "uploadedTranscript",
+            statusPrefix: "Uploaded audio into the desktop session.",
+        });
     };
     const handleStartRecording = async (modeOverride) => {
         if (!activeSession) {
@@ -1709,7 +1715,7 @@ export const App = () => {
         ]);
         setStatusNote("Added image to the session. You can caption it and choose whether it should appear in the polished output.");
     };
-    const transcribeAudioIntoSession = async ({ sessionId, file, statusPrefix, }) => {
+    const transcribeAudioIntoSession = async ({ sessionId, file, statusPrefix, transcriptTarget = "liveTranscript", }) => {
         setIsTranscribingAudio(true);
         try {
             let transcriptText;
@@ -1737,11 +1743,17 @@ export const App = () => {
             if (!targetSession) {
                 throw new Error("The session could not be found after recording.");
             }
-            const nextTranscript = [targetSession.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n");
-            await saveSession({ ...targetSession, liveTranscript: nextTranscript });
+            const currentTranscript = transcriptTarget === "uploadedTranscript" ? targetSession.uploadedTranscript : targetSession.liveTranscript;
+            const nextTranscript = [currentTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n");
+            await saveSession({
+                ...targetSession,
+                ...(transcriptTarget === "uploadedTranscript"
+                    ? { uploadedTranscript: nextTranscript }
+                    : { liveTranscript: nextTranscript }),
+            });
             setStatusNote(statusPrefix
-                ? `${statusPrefix} The transcript was added to the live transcript field.`
-                : "Audio transcription complete and added to the live transcript field.");
+                ? `${statusPrefix} The transcript was added to the ${transcriptTarget === "uploadedTranscript" ? "transcript" : "live transcript"} field.`
+                : `Audio transcription complete and added to the ${transcriptTarget === "uploadedTranscript" ? "transcript" : "live transcript"} field.`);
             setRecordingStatusNote("Transcript added to the session.");
         }
         catch (error) {
@@ -1759,7 +1771,11 @@ export const App = () => {
             setStatusNote("Record or upload audio for this session first, then transcribe it.");
             return;
         }
-        await transcribeAudioIntoSession({ sessionId: activeSession.id, file });
+        await transcribeAudioIntoSession({
+            sessionId: activeSession.id,
+            file,
+            transcriptTarget: activeSession.captureMode === "voice-note" ? "liveTranscript" : "uploadedTranscript",
+        });
     };
     const handleRemoveAttachment = async (attachmentId) => {
         const attachment = snapshot.attachments.find((entry) => entry.id === attachmentId);
