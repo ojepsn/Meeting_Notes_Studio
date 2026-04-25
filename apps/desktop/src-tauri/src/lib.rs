@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{mpsc, Arc, Mutex};
@@ -813,13 +814,48 @@ fn sqlite_url_for_path(path: &Path) -> String {
     format!("sqlite+aiosqlite:///{}", path.to_string_lossy().replace('\\', "/"))
 }
 
+fn pick_available_loopback_port() -> Result<u16, String> {
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .map_err(|error| format!("Could not reserve a local port for the Assistant runtime: {error}"))?;
+    listener
+        .local_addr()
+        .map(|address| address.port())
+        .map_err(|error| format!("Could not read the reserved Assistant runtime port: {error}"))
+}
+
+fn sidecar_health_ready(host: &str, port: u16) -> bool {
+    let Ok(mut stream) = TcpStream::connect((host, port)) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
+    let request = format!(
+        "GET /healthz HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n"
+    );
+    if stream.write_all(request.as_bytes()).is_err() {
+        return false;
+    }
+
+    let mut response = String::new();
+    if stream.read_to_string(&mut response).is_err() {
+        return false;
+    }
+
+    response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200")
+}
+
 fn prepare_agent_sidecar_env(
     app: &tauri::AppHandle,
     mut env: HashMap<String, String>,
-) -> Result<HashMap<String, String>, String> {
+) -> Result<(HashMap<String, String>, u16), String> {
     let storage = prepare_storage(app)?;
     let agent_data_dir = PathBuf::from(storage.app_data_dir).join("agent-platform");
     fs::create_dir_all(&agent_data_dir).map_err(|error| error.to_string())?;
+    let requested_port = env
+        .get("AGENT_PLATFORM_SERVER__PORT")
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port > 0)
+        .unwrap_or(pick_available_loopback_port()?);
 
     env.insert(
         "AGENT_PLATFORM_DATA_DIR".to_string(),
@@ -833,8 +869,12 @@ fn prepare_agent_sidecar_env(
         "AGENT_PLATFORM_WORKFLOW__CHECKPOINT_DB_URL".to_string(),
         sqlite_url_for_path(&agent_data_dir.join("checkpoints.db")),
     );
+    env.insert(
+        "AGENT_PLATFORM_SERVER__PORT".to_string(),
+        requested_port.to_string(),
+    );
 
-    Ok(env)
+    Ok((env, requested_port))
 }
 
 #[tauri::command]
@@ -860,7 +900,7 @@ fn start_agent_sidecar(
     terminate_stale_agent_sidecars();
 
     let sidecar_command = resolve_agent_sidecar_command(&app);
-    let sidecar_env = prepare_agent_sidecar_env(&app, env)?;
+    let (sidecar_env, sidecar_port) = prepare_agent_sidecar_env(&app, env)?;
     let mut command = Command::new(&sidecar_command);
     command
         .envs(sidecar_env)
@@ -886,23 +926,76 @@ fn start_agent_sidecar(
         drain_sidecar_stderr(stderr, Arc::clone(&recent_logs));
     }
 
-    let ready = match ready_rx.recv_timeout(Duration::from_secs(60)) {
-        Ok(ready) => ready,
-        Err(_) => {
-            let exit_status = child.try_wait().ok().flatten();
-            let _ = child.kill();
-            let _ = child.wait();
-            let log_output = read_recent_sidecar_logs(&recent_logs);
-            return Err(
-                format!(
-                    "agent-sidecar did not emit a ready event within 60 seconds.{} Recent output:\n{}",
+    let startup_deadline = std::time::Instant::now() + Duration::from_secs(60);
+    let ready = loop {
+        match ready_rx.recv_timeout(Duration::from_millis(250)) {
+            Ok(ready) => break ready,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if sidecar_health_ready("127.0.0.1", sidecar_port) {
+                    break AgentSidecarReady {
+                        host: "127.0.0.1".to_string(),
+                        port: sidecar_port,
+                        base_url: format!("http://127.0.0.1:{sidecar_port}"),
+                    };
+                }
+
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        let log_output = read_recent_sidecar_logs(&recent_logs);
+                        return Err(format!(
+                            "agent-sidecar exited before becoming ready (status {status}). Recent output:\n{}",
+                            log_output
+                        ));
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        let log_output = read_recent_sidecar_logs(&recent_logs);
+                        return Err(format!(
+                            "Could not check the Assistant runtime startup state: {error}. Recent output:\n{}",
+                            log_output
+                        ));
+                    }
+                }
+
+                if std::time::Instant::now() >= startup_deadline {
+                    let exit_status = child.try_wait().ok().flatten();
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let log_output = read_recent_sidecar_logs(&recent_logs);
+                    return Err(format!(
+                        "agent-sidecar did not become ready within 60 seconds.{} Recent output:\n{}",
+                        match exit_status {
+                            Some(status) => format!(" The process exited early with status {status}."),
+                            None => format!(
+                                " The process was still running, and NoteSmith could not confirm readiness on http://127.0.0.1:{sidecar_port}/healthz."
+                            ),
+                        },
+                        log_output
+                    ));
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                if sidecar_health_ready("127.0.0.1", sidecar_port) {
+                    break AgentSidecarReady {
+                        host: "127.0.0.1".to_string(),
+                        port: sidecar_port,
+                        base_url: format!("http://127.0.0.1:{sidecar_port}"),
+                    };
+                }
+
+                let exit_status = child.try_wait().ok().flatten();
+                let _ = child.kill();
+                let _ = child.wait();
+                let log_output = read_recent_sidecar_logs(&recent_logs);
+                return Err(format!(
+                    "agent-sidecar closed its ready channel before NoteSmith could confirm startup.{} Recent output:\n{}",
                     match exit_status {
-                        Some(status) => format!(" The process exited early with status {status}."),
-                        None => " The process was still running when NoteSmith timed out.".to_string(),
+                        Some(status) => format!(" The process exited with status {status}."),
+                        None => String::new(),
                     },
                     log_output
-                ),
-            );
+                ));
+            }
         }
     };
 
