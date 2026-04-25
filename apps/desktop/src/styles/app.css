@@ -4339,6 +4339,28 @@ select {
   display: none;
 }
 
+.calendar-item-block-single-row-todo .calendar-item-launcher-row {
+  display: inline-flex;
+  gap: 0.08rem;
+  align-items: center;
+  margin-top: 0.02rem;
+}
+
+.calendar-item-block-single-row-todo .calendar-item-inline-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0;
+  padding: 0.01rem 0.2rem;
+  font-size: 0.48rem;
+  line-height: 1;
+}
+
+.calendar-item-block-single-row-todo.calendar-item-block-tiny .calendar-item-inline-action,
+.calendar-item-block-single-row-todo.calendar-item-block-compact .calendar-item-inline-action {
+  display: inline-flex;
+}
+
 .calendar-item-block-activity {
   border-style: dashed;
   background:
@@ -5424,6 +5446,11 @@ select {
   min-width: max-content;
 }
 
+.time-log-editor-header > *,
+.time-log-editor-row > * {
+  min-width: 0;
+}
+
 .time-log-editor-row-active {
   border-color: var(--app-accent-border);
   background: color-mix(in srgb, var(--app-accent-soft) 18%, var(--app-surface-soft) 82%);
@@ -5448,6 +5475,7 @@ select {
   align-items: baseline;
   gap: 0.35rem;
   min-width: 0;
+  width: 100%;
   cursor: pointer;
 }
 
@@ -5482,6 +5510,7 @@ select {
   align-items: center;
   gap: 0.35rem;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .time-log-inline-actions .small-button {

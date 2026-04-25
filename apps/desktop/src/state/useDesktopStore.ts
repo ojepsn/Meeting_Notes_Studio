@@ -201,13 +201,21 @@ const calculateDurationMinutes = (date: string, startTime: string, endTime: stri
   return Number.isFinite(minutes) ? Math.max(0, minutes) : 0;
 };
 
+const getClosingTime = (date: string, startTime: string, now = new Date()) => {
+  const nextEndTime = formatLocalTime(now);
+  if (nextEndTime !== startTime) return nextEndTime;
+  const start = new Date(`${date}T${startTime}:00`);
+  if (Number.isNaN(start.getTime())) return nextEndTime;
+  start.setMinutes(start.getMinutes() + 1);
+  return formatLocalTime(start);
+};
+
 const computeTrackedMinutes = (timeLogs: TimeLog[], targetType: TimeLog["targetType"], targetId: string) =>
   timeLogs
     .filter((entry) => entry.targetType === targetType && entry.targetId === targetId)
     .reduce((sum, entry) => sum + (Number.isFinite(entry.durationMinutes) ? entry.durationMinutes : 0), 0);
 
 const closeOpenTimeLogs = (timeLogs: TimeLog[], now = new Date()) => {
-  const nextEndTime = formatLocalTime(now);
   const updatedAt = now.toISOString();
   let changed = false;
   const nextTimeLogs = timeLogs.map((entry) => {
@@ -215,6 +223,7 @@ const closeOpenTimeLogs = (timeLogs: TimeLog[], now = new Date()) => {
       return entry;
     }
     const nextDate = entry.date || formatLocalDate(now);
+    const nextEndTime = getClosingTime(nextDate, entry.startTime, now);
     changed = true;
     return {
       ...entry,
@@ -1130,8 +1139,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       return;
     }
     const now = new Date();
-    const nextEndTime = formatLocalTime(now);
     const nextDate = activeOpenLog.date || formatLocalDate(now);
+    const nextEndTime = getClosingTime(nextDate, activeOpenLog.startTime, now);
     const nextTimeLog = {
       ...activeOpenLog,
       endTime: nextEndTime,
@@ -1197,8 +1206,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       : null;
     let nextTimeLogs = snapshot.timelogs;
     if (openBaselineLog) {
-      const nextEndTime = formatLocalTime(now);
       const nextDate = openBaselineLog.date || formatLocalDate(now);
+      const nextEndTime = getClosingTime(nextDate, openBaselineLog.startTime, now);
       nextTimeLogs = upsertTimeLog(snapshot.timelogs, {
         ...openBaselineLog,
         endTime: nextEndTime,

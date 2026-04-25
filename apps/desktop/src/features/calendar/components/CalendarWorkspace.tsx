@@ -1059,6 +1059,7 @@ export const CalendarWorkspace = ({
                       item.isMeeting && durationSlots <= 3 ? "calendar-item-block-micro-meeting" : "",
                     ].filter(Boolean).map((className) => ` ${className}`).join("");
                     const inlineTodoEditForItem = inlineTodoEdit?.itemId === item.id ? inlineTodoEdit : null;
+                    const isSingleRowTodo = item.targetType === "todo" && durationSlots <= 1;
                     return <div key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${item.targetType === "todo" && item.isDone ? " calendar-item-block-completed-todo" : ""}${isPastCalendarItem ? " calendar-item-block-past" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${inlineTodoEditForItem ? " calendar-item-block-inline-editing" : ""}${sizeClass}`} role="button" tabIndex={0} style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
                       const target = event.target as HTMLElement;
                       if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle") || target.closest(".calendar-item-title-input")) return;
@@ -1123,7 +1124,7 @@ export const CalendarWorkspace = ({
                               >
                                 Open session
                               </span>
-                              {linkedSessionState.hasOutput ? (
+                              {linkedSessionState.hasOutput && !isSingleRowTodo ? (
                                 <span
                                   className="calendar-item-inline-action calendar-item-inline-action-secondary"
                                   role="button"
