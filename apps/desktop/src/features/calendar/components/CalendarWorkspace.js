@@ -867,7 +867,41 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
                                                             return; selectCalendarItem(item.id, event.metaKey || event.ctrlKey || event.shiftKey); }, onDoubleClick: () => { if (item.targetType === "todo") {
                                                             onOpenTodoDetail(item.targetId);
                                                             return;
-                                                        } onOpenActivityDetail(item.targetId); }, children: [item.isMeeting ? _jsx("span", { className: "calendar-resize-handle calendar-resize-handle-start", onMouseDown: (event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "start", date: item.date, startSlot, durationSlots }); } }) : null, _jsxs("span", { className: "calendar-item-kicker", children: [item.isMeeting ? "Meeting" : "Task", item.isPrivate ? " • Private" : ""] }), inlineTodoEditForItem ? (_jsx("input", { className: "calendar-item-title calendar-item-title-input", autoFocus: true, value: inlineTodoEditForItem.value, onChange: (event) => setInlineTodoEdit((current) => current ? { ...current, value: event.target.value } : current), onBlur: saveInlineTodoEdit, onMouseDown: (event) => event.stopPropagation(), onClick: (event) => event.stopPropagation(), onKeyDown: (event) => {
+                                                        } onOpenActivityDetail(item.targetId); }, children: [item.isMeeting ? _jsx("span", { className: "calendar-resize-handle calendar-resize-handle-start", onMouseDown: (event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "start", date: item.date, startSlot, durationSlots }); } }) : null, _jsxs("span", { className: "calendar-item-kicker", children: [item.isMeeting ? "Meeting" : "Task", item.isPrivate ? " • Private" : ""] }), isSingleRowTodo ? (_jsxs("div", { className: "calendar-item-single-row-header", children: [inlineTodoEditForItem ? (_jsx("input", { className: "calendar-item-title calendar-item-title-input", autoFocus: true, value: inlineTodoEditForItem.value, onChange: (event) => setInlineTodoEdit((current) => current ? { ...current, value: event.target.value } : current), onBlur: saveInlineTodoEdit, onMouseDown: (event) => event.stopPropagation(), onClick: (event) => event.stopPropagation(), onKeyDown: (event) => {
+                                                                            if (event.key === "Enter") {
+                                                                                event.preventDefault();
+                                                                                saveInlineTodoEdit();
+                                                                            }
+                                                                            else if (event.key === "Escape") {
+                                                                                event.preventDefault();
+                                                                                setInlineTodoEdit(null);
+                                                                            }
+                                                                        } })) : (_jsxs("strong", { className: "calendar-item-title", children: [slotToTime(startSlot), " ", item.title] })), _jsxs("span", { className: "calendar-item-single-row-actions", children: [_jsx("span", { className: `calendar-item-inline-action${runningLog ? " calendar-item-inline-action-active" : ""}`, role: "button", tabIndex: -1, onMouseDown: (event) => {
+                                                                                    event.preventDefault();
+                                                                                    event.stopPropagation();
+                                                                                }, onClick: (event) => {
+                                                                                    event.preventDefault();
+                                                                                    event.stopPropagation();
+                                                                                    if (runningLog) {
+                                                                                        onStopTracking(item.targetType, item.targetId);
+                                                                                        return;
+                                                                                    }
+                                                                                    onStartTracking(item.targetType, item.targetId);
+                                                                                }, children: runningLog ? "Stop" : "Start" }), linkedSessionState?.sessionId ? (_jsx("span", { className: "calendar-item-inline-action calendar-item-inline-action-secondary", role: "button", tabIndex: -1, onMouseDown: (event) => {
+                                                                                    event.preventDefault();
+                                                                                    event.stopPropagation();
+                                                                                }, onClick: (event) => {
+                                                                                    event.preventDefault();
+                                                                                    event.stopPropagation();
+                                                                                    onOpenSession(linkedSessionState.sessionId, item.id);
+                                                                                }, children: "Open session" })) : (_jsx("span", { className: "calendar-item-inline-action calendar-item-inline-action-secondary", role: "button", tabIndex: -1, onMouseDown: (event) => {
+                                                                                    event.preventDefault();
+                                                                                    event.stopPropagation();
+                                                                                }, onClick: (event) => {
+                                                                                    event.preventDefault();
+                                                                                    event.stopPropagation();
+                                                                                    onCreateLinkedTaskSession(item.targetId);
+                                                                                }, children: "Create session" }))] })] })) : null, !isSingleRowTodo ? (inlineTodoEditForItem ? (_jsx("input", { className: "calendar-item-title calendar-item-title-input", autoFocus: true, value: inlineTodoEditForItem.value, onChange: (event) => setInlineTodoEdit((current) => current ? { ...current, value: event.target.value } : current), onBlur: saveInlineTodoEdit, onMouseDown: (event) => event.stopPropagation(), onClick: (event) => event.stopPropagation(), onKeyDown: (event) => {
                                                                     if (event.key === "Enter") {
                                                                         event.preventDefault();
                                                                         saveInlineTodoEdit();
@@ -876,7 +910,7 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
                                                                         event.preventDefault();
                                                                         setInlineTodoEdit(null);
                                                                     }
-                                                                } })) : (_jsxs("strong", { className: "calendar-item-title", children: [slotToTime(startSlot), " ", item.title] })), _jsxs("span", { className: "calendar-item-meta", children: [item.isMeeting ? durationLabel(durationSlots) : item.label, runningLog ? ` • Running ${runningLabel}` : ""] }), linkedSessionState?.sessionId ? (_jsx("span", { className: `calendar-item-link-state${linkedSessionState.hasOutput ? " calendar-item-link-state-output" : ""}`, children: linkedSessionState.hasOutput ? "Output ready" : "Session linked" })) : (_jsx("span", { className: "calendar-item-link-state calendar-item-link-state-empty", children: item.targetType === "todo" ? "No note" : "No session" })), item.isMeeting ? (_jsx("div", { className: "calendar-item-launcher-row", children: linkedSessionState?.sessionId ? (_jsxs(_Fragment, { children: [_jsx("span", { className: "calendar-item-inline-action calendar-item-inline-action-secondary", role: "button", tabIndex: -1, onMouseDown: (event) => {
+                                                                } })) : (_jsxs("strong", { className: "calendar-item-title", children: [slotToTime(startSlot), " ", item.title] }))) : null, _jsxs("span", { className: "calendar-item-meta", children: [item.isMeeting ? durationLabel(durationSlots) : item.label, runningLog ? ` • Running ${runningLabel}` : ""] }), linkedSessionState?.sessionId ? (_jsx("span", { className: `calendar-item-link-state${linkedSessionState.hasOutput ? " calendar-item-link-state-output" : ""}`, children: linkedSessionState.hasOutput ? "Output ready" : "Session linked" })) : (_jsx("span", { className: "calendar-item-link-state calendar-item-link-state-empty", children: item.targetType === "todo" ? "No note" : "No session" })), item.isMeeting ? (_jsx("div", { className: "calendar-item-launcher-row", children: linkedSessionState?.sessionId ? (_jsxs(_Fragment, { children: [_jsx("span", { className: "calendar-item-inline-action calendar-item-inline-action-secondary", role: "button", tabIndex: -1, onMouseDown: (event) => {
                                                                                 event.preventDefault();
                                                                                 event.stopPropagation();
                                                                             }, onClick: (event) => {

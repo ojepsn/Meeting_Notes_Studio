@@ -4331,11 +4331,47 @@ select {
   min-height: calc(var(--calendar-slot-height) - 2px);
 }
 
+.calendar-item-single-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.18rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.calendar-item-single-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.08rem;
+  flex: 0 0 auto;
+}
+
 .calendar-item-block-single-row-todo .calendar-item-title {
   font-family: "Aptos Narrow", "Arial Narrow", "Segoe UI", sans-serif;
   font-size: var(--calendar-single-row-todo-font-size, 0.54rem);
   font-weight: 400;
   line-height: 0.86;
+}
+
+.calendar-item-block-single-row-todo > .calendar-item-title,
+.calendar-item-block-single-row-todo > .calendar-item-title-input,
+.calendar-item-block-single-row-todo > .calendar-item-meta,
+.calendar-item-block-single-row-todo > .calendar-item-link-state,
+.calendar-item-block-single-row-todo > .calendar-item-launcher-row,
+.calendar-item-block-single-row-todo > .calendar-item-inline-action {
+  display: none;
+}
+
+.calendar-item-block-single-row-todo .calendar-item-single-row-header .calendar-item-title,
+.calendar-item-block-single-row-todo .calendar-item-single-row-header .calendar-item-title-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .calendar-item-block-todo .calendar-item-inline-action {

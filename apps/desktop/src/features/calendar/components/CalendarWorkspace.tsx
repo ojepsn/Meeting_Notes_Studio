@@ -1072,7 +1072,90 @@ export const CalendarWorkspace = ({
                         {item.isMeeting ? "Meeting" : "Task"}
                         {item.isPrivate ? " • Private" : ""}
                       </span>
-                      {inlineTodoEditForItem ? (
+                      {isSingleRowTodo ? (
+                        <div className="calendar-item-single-row-header">
+                          {inlineTodoEditForItem ? (
+                            <input
+                              className="calendar-item-title calendar-item-title-input"
+                              autoFocus
+                              value={inlineTodoEditForItem.value}
+                              onChange={(event) => setInlineTodoEdit((current) => current ? { ...current, value: event.target.value } : current)}
+                              onBlur={saveInlineTodoEdit}
+                              onMouseDown={(event) => event.stopPropagation()}
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  saveInlineTodoEdit();
+                                } else if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  setInlineTodoEdit(null);
+                                }
+                              }}
+                            />
+                          ) : (
+                            <strong className="calendar-item-title">{slotToTime(startSlot)} {item.title}</strong>
+                          )}
+                          <span className="calendar-item-single-row-actions">
+                            <span
+                              className={`calendar-item-inline-action${runningLog ? " calendar-item-inline-action-active" : ""}`}
+                              role="button"
+                              tabIndex={-1}
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                              }}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                if (runningLog) {
+                                  onStopTracking(item.targetType, item.targetId);
+                                  return;
+                                }
+                                onStartTracking(item.targetType, item.targetId);
+                              }}
+                            >
+                              {runningLog ? "Stop" : "Start"}
+                            </span>
+                            {linkedSessionState?.sessionId ? (
+                              <span
+                                className="calendar-item-inline-action calendar-item-inline-action-secondary"
+                                role="button"
+                                tabIndex={-1}
+                                onMouseDown={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                }}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  onOpenSession(linkedSessionState.sessionId!, item.id);
+                                }}
+                              >
+                                Open session
+                              </span>
+                            ) : (
+                              <span
+                                className="calendar-item-inline-action calendar-item-inline-action-secondary"
+                                role="button"
+                                tabIndex={-1}
+                                onMouseDown={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                }}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  onCreateLinkedTaskSession(item.targetId);
+                                }}
+                              >
+                                Create session
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      ) : null}
+                      {!isSingleRowTodo ? (inlineTodoEditForItem ? (
                         <input
                           className="calendar-item-title calendar-item-title-input"
                           autoFocus
@@ -1093,7 +1176,7 @@ export const CalendarWorkspace = ({
                         />
                       ) : (
                         <strong className="calendar-item-title">{slotToTime(startSlot)} {item.title}</strong>
-                      )}
+                      )) : null}
                       <span className="calendar-item-meta">{item.isMeeting ? durationLabel(durationSlots) : item.label}{runningLog ? ` • Running ${runningLabel}` : ""}</span>
                       {linkedSessionState?.sessionId ? (
                         <span className={`calendar-item-link-state${linkedSessionState.hasOutput ? " calendar-item-link-state-output" : ""}`}>

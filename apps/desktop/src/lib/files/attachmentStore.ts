@@ -30,8 +30,13 @@ const getAudioMimeType = (filename: string) => {
   const extension = filename.split(".").pop()?.toLowerCase();
   if (extension === "mp3") return "audio/mpeg";
   if (extension === "m4a") return "audio/mp4";
+  if (extension === "mpeg" || extension === "mpga") return "audio/mpeg";
   if (extension === "wav") return "audio/wav";
   if (extension === "webm") return "audio/webm";
+  if (extension === "ogg" || extension === "oga") return "audio/ogg";
+  if (extension === "opus") return "audio/ogg";
+  if (extension === "flac") return "audio/flac";
+  if (extension === "aac") return "audio/aac";
   if (extension === "mp4") return "video/mp4";
   return "application/octet-stream";
 };
@@ -100,12 +105,12 @@ export const pickTranscriptFile = async (): Promise<SelectedAttachment | null> =
 export const pickAudioFile = async (): Promise<SelectedAttachment | null> => {
   if (isTauriRuntime()) {
     return pickFileInTauri({
-      filters: [{ name: "Audio files", extensions: ["mp3", "m4a", "wav", "webm", "mp4"] }],
+      filters: [{ name: "Audio files", extensions: ["mp3", "m4a", "wav", "webm", "mp4", "mpeg", "mpga", "ogg", "oga", "opus", "flac", "aac"] }],
       mimeTypeResolver: getAudioMimeType,
     });
   }
 
-  const file = await pickFileInBrowser(".mp3,.m4a,.wav,.webm,.mp4,audio/*,video/mp4");
+  const file = await pickFileInBrowser(".mp3,.m4a,.wav,.webm,.mp4,.mpeg,.mpga,.ogg,.oga,.opus,.flac,.aac,audio/*,video/mp4");
   return file ? { file } : null;
 };
 

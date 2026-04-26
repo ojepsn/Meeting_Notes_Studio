@@ -16,6 +16,7 @@ import { hydrateAITextCache, snapshotAITextCache } from "../lib/ai/cache";
 import { generateNotes } from "../lib/ai/services/generateNotes";
 import { getAIRequestHistory, hydrateAIRequestHistory, recordAIRequestHistory } from "../lib/ai/history";
 import { formatAIErrorMessage } from "../lib/ai/messages";
+import { AIRequestError } from "../lib/ai/client/openaiClient";
 import { getAIDiagnosticsItems, getAIMetricsSnapshot } from "../lib/ai/metrics";
 import { buildModelPricingStatus, buildTextModelOption, buildTranscriptionModelOption, createDefaultModelPricingSnapshot, fetchLatestModelPricingSnapshot, isPricingRefreshDue, msUntilNextPricingCheck, } from "../lib/ai/modelPricing";
 import { reviseOutput } from "../lib/ai/services/reviseOutput";
@@ -49,6 +50,36 @@ const splitStructuredOutput = (output) => output
     .map((block) => block.trim())
     .filter(Boolean)
     .flatMap((block) => block.split("\n").map((line) => line.trim()).filter(Boolean));
+const formatFileSize = (bytes) => {
+    if (bytes < 1024)
+        return `${bytes} B`;
+    if (bytes < 1024 * 1024)
+        return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+};
+const describeFileForLog = (file) => [
+    `file: ${file.name}`,
+    `mime: ${file.type || "(empty)"}`,
+    `size: ${file.size} bytes (${formatFileSize(file.size)})`,
+    `last modified: ${new Date(file.lastModified).toISOString()}`,
+].join("\n");
+const describeAIErrorForLog = (error) => {
+    if (error instanceof AIRequestError) {
+        return [
+            `error: ${error.message}`,
+            `code: ${error.code}`,
+            `retryable: ${String(error.retryable)}`,
+            typeof error.status === "number" ? `status: ${error.status}` : "",
+            error.cause instanceof Error ? `cause: ${error.cause.message}` : "",
+        ]
+            .filter(Boolean)
+            .join("\n");
+    }
+    if (error instanceof Error) {
+        return `error: ${error.message}`;
+    }
+    return `error: ${String(error)}`;
+};
 const isStructuredHeading = (line) => {
     if (!line || line.length > 80)
         return false;
@@ -718,7 +749,7 @@ export const App = () => {
                 appendGenerationLog(`OpenAI request succeeded: ${event.operation}`, "success", `request id: ${event.requestId}\nduration: ${event.durationMs} ms\nprompt: ${event.promptVersion ?? "default"}`);
             }
             else if (event.type === "request-failure") {
-                appendGenerationLog(`OpenAI request failed: ${event.operation}`, "error", `request id: ${event.requestId}\nduration: ${event.durationMs} ms\nprompt: ${event.promptVersion ?? "default"}\nerror: ${event.error instanceof Error ? event.error.message : String(event.error)}`);
+                appendGenerationLog(`OpenAI request failed: ${event.operation}`, "error", `request id: ${event.requestId}\nduration: ${event.durationMs} ms\nprompt: ${event.promptVersion ?? "default"}\n${describeAIErrorForLog(event.error)}`);
             }
             else if (event.type === "cache-hit") {
                 appendGenerationLog(`AI cache hit: ${event.operation}`, "success", `request id: ${event.requestId}\nprompt: ${event.promptVersion ?? "default"}`);
@@ -1718,6 +1749,7 @@ export const App = () => {
     const transcribeAudioIntoSession = async ({ sessionId, file, statusPrefix, transcriptTarget = "liveTranscript", }) => {
         setIsTranscribingAudio(true);
         try {
+            appendGenerationLog(`Audio transcription preparing: ${transcriptTarget === "uploadedTranscript" ? "transcript field" : "live transcript"}`, "info", describeFileForLog(file));
             let transcriptText;
             try {
                 transcriptText = await transcribeAudio({
@@ -1729,9 +1761,10 @@ export const App = () => {
             catch (initialError) {
                 const persistedAudioFile = await loadPersistedAudioFileForSession(sessionId);
                 if (!persistedAudioFile) {
+                    appendGenerationLog("Audio transcription failed before fallback file reload.", "error", `${describeFileForLog(file)}\n${describeAIErrorForLog(initialError)}`);
                     throw initialError;
                 }
-                appendGenerationLog("Audio transcription retrying from the saved desktop attachment.", "warning", initialError instanceof Error ? initialError.message : String(initialError));
+                appendGenerationLog("Audio transcription retrying from the saved desktop attachment.", "warning", `${describeAIErrorForLog(initialError)}\n\nReloaded attachment:\n${describeFileForLog(persistedAudioFile)}`);
                 transcriptText = await transcribeAudio({
                     file: persistedAudioFile,
                     settings: snapshot.settings,
@@ -1751,12 +1784,14 @@ export const App = () => {
                     ? { uploadedTranscript: nextTranscript }
                     : { liveTranscript: nextTranscript }),
             });
+            appendGenerationLog("Audio transcription saved to the session.", "success", `target: ${transcriptTarget}\ntranscript characters added: ${transcriptText.trim().length}\ncombined field characters: ${nextTranscript.length}`);
             setStatusNote(statusPrefix
                 ? `${statusPrefix} The transcript was added to the ${transcriptTarget === "uploadedTranscript" ? "transcript" : "live transcript"} field.`
                 : `Audio transcription complete and added to the ${transcriptTarget === "uploadedTranscript" ? "transcript" : "live transcript"} field.`);
             setRecordingStatusNote("Transcript added to the session.");
         }
         catch (error) {
+            appendGenerationLog("Audio transcription could not be completed.", "error", `${describeFileForLog(file)}\ntarget: ${transcriptTarget}\n${describeAIErrorForLog(error)}`);
             const message = formatAIErrorMessage(error, "Audio transcription failed.");
             setStatusNote(statusPrefix ? `${statusPrefix} ${message}` : message);
             setRecordingStatusNote("Audio was saved, but transcription needs another try.");
