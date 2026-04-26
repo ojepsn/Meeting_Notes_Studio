@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEffect, useMemo, useState } from "react";
 import { summarizeNoteSmithWorkspace, } from "../../../lib/assistant/notesmithDataTools";
+import { inferClarificationRoute, planAssistantQuery, } from "../../../lib/assistant/assistantQueryPlanner";
 import { buildAgentPlatformLaunchConfig, getAgentPlatformStoragePolicy } from "../../../lib/assistant/agentPlatform";
 import { checkAgentSidecarHealth, getAgentSidecarStatus, startAgentSidecar, stopAgentSidecar, } from "../../../lib/assistant/agentSidecar";
 import { createAgentPlatformSession, postAgentPlatformMessage, runAgentPlatformTurn, } from "../../../lib/assistant/agentPlatformHttp";
@@ -11,7 +12,32 @@ const createMessageId = () => {
     }
     return `assistant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 };
-export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
+const routeLabel = (route) => route === "timelogs"
+    ? "timelog"
+    : route === "sessions"
+        ? "session"
+        : route === "calendar"
+            ? "calendar"
+            : route === "todos"
+                ? "task"
+                : route === "activities"
+                    ? "structure"
+                    : "workspace";
+const summarizeTimelogGroups = (groups) => groups
+    .slice(0, 8)
+    .map((group) => `- ${group.title}: ${group.totalMinutes} minutes across ${group.entryCount} entr${group.entryCount === 1 ? "y" : "ies"}`)
+    .join("\n");
+const dedupeSources = (sources) => {
+    const seen = new Set();
+    return sources.filter((source) => {
+        const key = `${source.type}:${source.id}`;
+        if (seen.has(key))
+            return false;
+        seen.add(key);
+        return true;
+    });
+};
+export const AssistantWorkspace = ({ snapshot, onOpenSettings, onSaveSettings }) => {
     const [draft, setDraft] = useState("");
     const [includePrivate, setIncludePrivate] = useState(false);
     const [messages, setMessages] = useState([]);
@@ -22,6 +48,8 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
     const [isStartingRuntime, setIsStartingRuntime] = useState(false);
     const [isAskingAgent, setIsAskingAgent] = useState(false);
     const [agentSessionId, setAgentSessionId] = useState(null);
+    const [pendingClarification, setPendingClarification] = useState(null);
+    const assistantQueryMemories = snapshot.settings.assistantQueryMemories ?? [];
     const workspaceSummary = useMemo(() => summarizeNoteSmithWorkspace(snapshot, includePrivate), [snapshot, includePrivate]);
     const mcpTools = useMemo(() => listNoteSmithMcpTools(), []);
     const launchConfig = useMemo(() => buildAgentPlatformLaunchConfig({
@@ -77,24 +105,90 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
         setRuntimeError(null);
         setRuntimeStatus("Stopped");
     };
-    const collectMcpSources = (query) => [
-        "notesmith_search_sessions",
-        "notesmith_search_calendar",
-        "notesmith_search_todos",
-        "notesmith_search_activities",
-        "notesmith_search_timelogs",
-    ]
-        .flatMap((toolName) => {
-        const result = invokeNoteSmithMcpTool(snapshot, toolName, {
-            query,
-            includePrivate,
-            limit: 4,
+    const persistAssistantMemory = async (fingerprint, learnedFromQuestion, clarificationAnswer, route) => {
+        const now = new Date().toISOString();
+        const nextEntry = {
+            id: crypto.randomUUID(),
+            fingerprint,
+            learnedFromQuestion,
+            clarificationAnswer,
+            route,
+            createdAt: now,
+            updatedAt: now,
+        };
+        await onSaveSettings({
+            ...snapshot.settings,
+            assistantQueryMemories: [
+                nextEntry,
+                ...assistantQueryMemories.filter((entry) => entry.fingerprint !== fingerprint),
+            ].slice(0, 50),
         });
-        return "sources" in result ? result.sources : [];
-    })
-        .sort((left, right) => right.score - left.score)
-        .slice(0, 8);
-    const buildAgentPrompt = (query, sources) => {
+        return nextEntry;
+    };
+    const collectAssistantContext = (query, routeOverride) => {
+        const plan = planAssistantQuery(query, assistantQueryMemories, new Date());
+        const route = routeOverride ?? plan.route;
+        const effectivePlan = routeOverride && routeOverride !== "unknown"
+            ? { ...plan, route: routeOverride, shouldClarify: false, clarificationQuestion: null }
+            : plan;
+        const sections = [];
+        const sources = [];
+        if (route === "timelogs" && effectivePlan.dateRange) {
+            const timelogResult = invokeNoteSmithMcpTool(snapshot, "notesmith_get_timelogs_by_date_range", {
+                fromDate: effectivePlan.dateRange.fromDate,
+                toDate: effectivePlan.dateRange.toDate,
+                includePrivate,
+                limit: 12,
+            });
+            if (timelogResult.summary) {
+                const summary = timelogResult.summary;
+                sections.push([
+                    `Timelog summary for ${effectivePlan.dateRange.label}:`,
+                    `- Absolute date range: ${summary.fromDate} to ${summary.toDate}`,
+                    `- Total tracked time: ${summary.totalMinutes} minutes`,
+                    `- Total timelog entries: ${summary.totalEntries}`,
+                    summary.groups.length ? summarizeTimelogGroups(summary.groups) : "- No timelogs found in this range",
+                ].join("\n"));
+                sources.push(...summary.sources);
+            }
+        }
+        const routeTools = {
+            timelogs: ["notesmith_search_timelogs"],
+            sessions: ["notesmith_search_sessions"],
+            calendar: ["notesmith_search_calendar"],
+            todos: ["notesmith_search_todos"],
+            activities: ["notesmith_search_activities"],
+            workspace: ["notesmith_summarize_workspace"],
+        };
+        const fallbackTools = route !== "unknown"
+            ? routeTools[route]
+            : [
+                "notesmith_search_sessions",
+                "notesmith_search_calendar",
+                "notesmith_search_todos",
+                "notesmith_search_activities",
+                "notesmith_search_timelogs",
+            ];
+        fallbackTools.forEach((toolName) => {
+            const result = invokeNoteSmithMcpTool(snapshot, toolName, {
+                query,
+                includePrivate,
+                limit: 4,
+            });
+            if ("sources" in result) {
+                sources.push(...result.sources);
+            }
+            if ("summary" in result && toolName === "notesmith_summarize_workspace") {
+                sections.push(`Workspace summary:\n- ${result.summary.snippet}`);
+            }
+        });
+        return {
+            plan: effectivePlan,
+            sources: dedupeSources(sources).sort((left, right) => right.score - left.score).slice(0, 10),
+            contextText: sections.join("\n\n"),
+        };
+    };
+    const buildAgentPrompt = (query, sources, contextText, guidance) => {
         const sourceContext = sources.length
             ? sources
                 .map((source, index) => `[${index + 1}] ${source.type}: ${source.title}${source.date ? ` (${source.date})` : ""}\n${source.snippet}`)
@@ -103,27 +197,72 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
         return [
             "You are the NoteSmith Assistant inside the desktop app.",
             "Answer the user's question using the NoteSmith context below. The context was retrieved through the NoteSmith MCP bridge, which is the only allowed app-data boundary.",
+            guidance,
+            "Questions about time spent or work logged should rely on timelogs before any other source.",
             "If the context is insufficient, say what is missing instead of inventing facts.",
             "",
             `User question: ${query}`,
             "",
+            contextText ? `${contextText}\n` : "",
             "NoteSmith MCP context:",
             sourceContext,
         ].join("\n");
     };
     const submit = async () => {
-        const query = draft.trim();
-        if (!query || isAskingAgent)
+        const incomingQuery = draft.trim();
+        if (!incomingQuery || isAskingAgent)
             return;
         const createdAt = new Date().toISOString();
-        const sources = collectMcpSources(query);
-        const userMessage = { id: createMessageId(), role: "user", text: query, sources: [], createdAt };
+        const userMessage = { id: createMessageId(), role: "user", text: incomingQuery, sources: [], createdAt };
         const assistantMessageId = createMessageId();
-        const fallbackAnswer = sources.length
-            ? `MCP preview found ${sources.length} matching NoteSmith ${sources.length === 1 ? "record" : "records"} for "${query}". The local agent runtime is not running, so this is source preview only.\n\n${sources
+        let effectiveQuery = incomingQuery;
+        let learnedPrefix = "";
+        let routeOverride;
+        if (pendingClarification) {
+            const learnedRoute = inferClarificationRoute(incomingQuery);
+            if (learnedRoute === "unknown") {
+                setMessages((current) => [
+                    ...current,
+                    userMessage,
+                    {
+                        id: assistantMessageId,
+                        role: "assistant",
+                        text: "I’m still not sure which NoteSmith area you mean. Please answer with one of: timelogs, sessions, calendar, tasks, or structure/activity data.",
+                        sources: [],
+                        createdAt,
+                    },
+                ]);
+                setDraft("");
+                return;
+            }
+            await persistAssistantMemory(pendingClarification.fingerprint, pendingClarification.originalQuestion, incomingQuery, learnedRoute);
+            learnedPrefix = `Understood. I’ll treat questions like "${pendingClarification.originalQuestion}" as ${routeLabel(learnedRoute)} questions from now on.\n\n`;
+            routeOverride = learnedRoute;
+            effectiveQuery = pendingClarification.originalQuestion;
+            setPendingClarification(null);
+        }
+        const context = collectAssistantContext(effectiveQuery, routeOverride);
+        if (!pendingClarification && context.plan.shouldClarify && context.plan.clarificationQuestion) {
+            setPendingClarification({ originalQuestion: effectiveQuery, fingerprint: context.plan.fingerprint });
+            setMessages((current) => [
+                ...current,
+                userMessage,
+                {
+                    id: assistantMessageId,
+                    role: "assistant",
+                    text: context.plan.clarificationQuestion || "Please clarify which NoteSmith data area I should use.",
+                    sources: [],
+                    createdAt,
+                },
+            ]);
+            setDraft("");
+            return;
+        }
+        const fallbackAnswer = context.sources.length
+            ? `${learnedPrefix}I found ${context.sources.length} relevant NoteSmith ${context.sources.length === 1 ? "record" : "records"} for "${effectiveQuery}".${context.contextText ? `\n\n${context.contextText}` : ""}\n\n${context.sources
                 .map((source) => `- ${source.title}${source.date ? ` (${source.date})` : ""}: ${source.snippet}`)
                 .join("\n")}`
-            : `MCP preview did not find matching NoteSmith records for "${query}". The local agent runtime is not running, so no model answer was generated.`;
+            : `${learnedPrefix}I did not find matching NoteSmith records for "${effectiveQuery}".${context.contextText ? `\n\n${context.contextText}` : ""}`;
         setMessages((current) => [
             ...current,
             userMessage,
@@ -131,7 +270,7 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
                 id: assistantMessageId,
                 role: "assistant",
                 text: sidecarReady ? "Thinking with agent_platform..." : fallbackAnswer,
-                sources,
+                sources: context.sources,
                 createdAt,
             },
         ]);
@@ -146,7 +285,7 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
             if (!agentSessionId) {
                 setAgentSessionId(sessionId);
             }
-            const platformMessage = await postAgentPlatformMessage(sidecarReady.baseUrl, sessionId, buildAgentPrompt(query, sources));
+            const platformMessage = await postAgentPlatformMessage(sidecarReady.baseUrl, sessionId, buildAgentPrompt(effectiveQuery, context.sources, context.contextText, context.plan.guidance));
             let streamedText = "";
             const finalText = await runAgentPlatformTurn({
                 baseUrl: sidecarReady.baseUrl,
@@ -159,7 +298,7 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings }) => {
                 },
             });
             setMessages((current) => current.map((message) => message.id === assistantMessageId
-                ? { ...message, text: finalText || streamedText || "The agent completed without returning text." }
+                ? { ...message, text: `${learnedPrefix}${finalText || streamedText || "The agent completed without returning text."}` }
                 : message));
         }
         catch (error) {

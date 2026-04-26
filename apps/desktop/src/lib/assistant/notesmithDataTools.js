@@ -147,6 +147,23 @@ const timelogToSource = (entry, query, snapshot) => {
         },
     };
 };
+const isPrivateTimelogTarget = (entry, snapshot) => {
+    if (entry.targetType === "todo") {
+        return Boolean(snapshot.todos.find((todo) => todo.id === entry.targetId)?.isPrivate);
+    }
+    return Boolean(snapshot.activities.find((activity) => activity.id === entry.targetId)?.isPrivate);
+};
+const compareDates = (left, right) => left.localeCompare(right);
+const formatDurationLabel = (minutes) => {
+    const normalized = Math.max(0, Math.round(minutes));
+    const hours = Math.floor(normalized / 60);
+    const remaining = normalized % 60;
+    if (!hours)
+        return `${remaining}m`;
+    if (!remaining)
+        return `${hours}h`;
+    return `${hours}h ${remaining}m`;
+};
 const sourceTypeAllowed = (type, sourceTypes) => !sourceTypes?.length || sourceTypes.includes(type);
 export const searchNoteSmithData = (snapshot, { query, includePrivate = false, limit = DEFAULT_LIMIT, sourceTypes }) => {
     const sources = [];
@@ -173,6 +190,49 @@ export const searchNoteSmithData = (snapshot, { query, includePrivate = false, l
         sources.push(...snapshot.timelogs.map((entry) => timelogToSource(entry, query, snapshot)));
     }
     return sortSources(sources, limit);
+};
+export const getNoteSmithTimelogsByDateRange = (snapshot, { fromDate, toDate, includePrivate = false, limit = 12, }) => {
+    const filteredEntries = snapshot.timelogs
+        .filter((entry) => compareDates(entry.date, fromDate) >= 0 && compareDates(entry.date, toDate) <= 0)
+        .filter((entry) => includePrivate || !isPrivateTimelogTarget(entry, snapshot));
+    const groupsMap = new Map();
+    filteredEntries.forEach((entry) => {
+        const source = timelogToSource(entry, `${entry.date} ${entry.startTime} ${entry.endTime}`, snapshot);
+        const key = `${entry.targetType}:${entry.targetId}`;
+        const current = groupsMap.get(key);
+        if (current) {
+            current.totalMinutes += entry.durationMinutes;
+            current.entryCount += 1;
+            return;
+        }
+        groupsMap.set(key, {
+            targetType: entry.targetType,
+            targetId: entry.targetId,
+            title: source.title,
+            totalMinutes: entry.durationMinutes,
+            entryCount: 1,
+        });
+    });
+    const groups = Array.from(groupsMap.values()).sort((left, right) => right.totalMinutes - left.totalMinutes || left.title.localeCompare(right.title));
+    const sources = filteredEntries
+        .map((entry) => {
+        const source = timelogToSource(entry, `${entry.date} ${entry.startTime} ${entry.endTime}`, snapshot);
+        return {
+            ...source,
+            snippet: `${entry.date} ${entry.startTime}-${entry.endTime} (${formatDurationLabel(entry.durationMinutes)})${entry.notes ? ` • ${entry.notes}` : ""}`,
+            score: 1000 - compareDates(entry.date, fromDate),
+        };
+    })
+        .sort((left, right) => (right.date || "").localeCompare(left.date || ""))
+        .slice(0, Math.max(1, Math.min(30, limit)));
+    return {
+        fromDate,
+        toDate,
+        totalMinutes: filteredEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0),
+        totalEntries: filteredEntries.length,
+        groups,
+        sources,
+    };
 };
 export const summarizeNoteSmithWorkspace = (snapshot, includePrivate = false) => {
     const sessions = snapshot.sessions.filter((session) => !session.deletedAt && (includePrivate || !session.isPrivate));

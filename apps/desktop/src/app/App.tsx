@@ -3517,7 +3517,11 @@ export const App = () => {
                 onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "structure")}
               />
             ) : activeWorkspace === "assistant" ? (
-              <AssistantWorkspace snapshot={snapshot} onOpenSettings={() => openSettingsSection("ai")} />
+              <AssistantWorkspace
+                snapshot={snapshot}
+                onOpenSettings={() => openSettingsSection("ai")}
+                onSaveSettings={(settings) => saveSettings(settings)}
+              />
             ) : activeWorkspace !== "notes" ? (
               <div className="card empty-state-card">
                 <h2>Coming next</h2>

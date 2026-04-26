@@ -27,6 +27,21 @@ export interface NoteSmithAssistantLinkedContext {
   timelogs: NoteSmithAssistantSource[];
 }
 
+export interface NoteSmithTimelogRangeSummary {
+  fromDate: string;
+  toDate: string;
+  totalMinutes: number;
+  totalEntries: number;
+  groups: Array<{
+    targetType: "todo" | "activity";
+    targetId: string;
+    title: string;
+    totalMinutes: number;
+    entryCount: number;
+  }>;
+  sources: NoteSmithAssistantSource[];
+}
+
 const DEFAULT_LIMIT = 8;
 const MAX_SNIPPET_CHARS = 420;
 
@@ -204,6 +219,24 @@ const timelogToSource = (entry: TimeLogRecord, query: string, snapshot: DesktopA
   };
 };
 
+const isPrivateTimelogTarget = (entry: TimeLogRecord, snapshot: DesktopAppSnapshot) => {
+  if (entry.targetType === "todo") {
+    return Boolean(snapshot.todos.find((todo) => todo.id === entry.targetId)?.isPrivate);
+  }
+  return Boolean(snapshot.activities.find((activity) => activity.id === entry.targetId)?.isPrivate);
+};
+
+const compareDates = (left: string, right: string) => left.localeCompare(right);
+
+const formatDurationLabel = (minutes: number) => {
+  const normalized = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(normalized / 60);
+  const remaining = normalized % 60;
+  if (!hours) return `${remaining}m`;
+  if (!remaining) return `${hours}h`;
+  return `${hours}h ${remaining}m`;
+};
+
 const sourceTypeAllowed = (type: NoteSmithAssistantSourceType, sourceTypes?: NoteSmithAssistantSourceType[]) =>
   !sourceTypes?.length || sourceTypes.includes(type);
 
@@ -241,6 +274,69 @@ export const searchNoteSmithData = (
     sources.push(...snapshot.timelogs.map((entry) => timelogToSource(entry, query, snapshot)));
   }
   return sortSources(sources, limit);
+};
+
+export const getNoteSmithTimelogsByDateRange = (
+  snapshot: DesktopAppSnapshot,
+  {
+    fromDate,
+    toDate,
+    includePrivate = false,
+    limit = 12,
+  }: {
+    fromDate: string;
+    toDate: string;
+    includePrivate?: boolean;
+    limit?: number;
+  },
+): NoteSmithTimelogRangeSummary => {
+  const filteredEntries = snapshot.timelogs
+    .filter((entry) => compareDates(entry.date, fromDate) >= 0 && compareDates(entry.date, toDate) <= 0)
+    .filter((entry) => includePrivate || !isPrivateTimelogTarget(entry, snapshot));
+
+  const groupsMap = new Map<string, NoteSmithTimelogRangeSummary["groups"][number]>();
+  filteredEntries.forEach((entry) => {
+    const source = timelogToSource(entry, `${entry.date} ${entry.startTime} ${entry.endTime}`, snapshot);
+    const key = `${entry.targetType}:${entry.targetId}`;
+    const current = groupsMap.get(key);
+    if (current) {
+      current.totalMinutes += entry.durationMinutes;
+      current.entryCount += 1;
+      return;
+    }
+    groupsMap.set(key, {
+      targetType: entry.targetType,
+      targetId: entry.targetId,
+      title: source.title,
+      totalMinutes: entry.durationMinutes,
+      entryCount: 1,
+    });
+  });
+
+  const groups = Array.from(groupsMap.values()).sort(
+    (left, right) => right.totalMinutes - left.totalMinutes || left.title.localeCompare(right.title),
+  );
+
+  const sources = filteredEntries
+    .map((entry) => {
+      const source = timelogToSource(entry, `${entry.date} ${entry.startTime} ${entry.endTime}`, snapshot);
+      return {
+        ...source,
+        snippet: `${entry.date} ${entry.startTime}-${entry.endTime} (${formatDurationLabel(entry.durationMinutes)})${entry.notes ? ` • ${entry.notes}` : ""}`,
+        score: 1000 - compareDates(entry.date, fromDate),
+      };
+    })
+    .sort((left, right) => (right.date || "").localeCompare(left.date || ""))
+    .slice(0, Math.max(1, Math.min(30, limit)));
+
+  return {
+    fromDate,
+    toDate,
+    totalMinutes: filteredEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0),
+    totalEntries: filteredEntries.length,
+    groups,
+    sources,
+  };
 };
 
 export const summarizeNoteSmithWorkspace = (snapshot: DesktopAppSnapshot, includePrivate = false): NoteSmithAssistantSource => {

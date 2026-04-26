@@ -1,4 +1,4 @@
-import { getNoteSmithLinkedContext, searchNoteSmithData, summarizeNoteSmithWorkspace, } from "./notesmithDataTools";
+import { getNoteSmithLinkedContext, getNoteSmithTimelogsByDateRange, searchNoteSmithData, summarizeNoteSmithWorkspace, } from "./notesmithDataTools";
 const searchInputSchema = (description) => ({
     type: "object",
     properties: {
@@ -29,6 +29,26 @@ const idInputSchema = (description) => ({
         },
     },
     required: ["id"],
+    additionalProperties: false,
+});
+const dateRangeInputSchema = (description) => ({
+    type: "object",
+    properties: {
+        fromDate: { type: "string", description: `${description} Start date in YYYY-MM-DD format.` },
+        toDate: { type: "string", description: `${description} End date in YYYY-MM-DD format.` },
+        includePrivate: {
+            type: "boolean",
+            default: false,
+            description: "Include private NoteSmith records. Defaults to false.",
+        },
+        limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 30,
+            default: 12,
+        },
+    },
+    required: ["fromDate", "toDate"],
     additionalProperties: false,
 });
 export const NOTESMITH_MCP_TOOLS = [
@@ -69,6 +89,12 @@ export const NOTESMITH_MCP_TOOLS = [
         riskLevel: "low",
     },
     {
+        name: "notesmith_get_timelogs_by_date_range",
+        description: "Get NoteSmith timelogs for a specific date range, including grouped time totals.",
+        inputSchema: dateRangeInputSchema("Date range for timelog lookup."),
+        riskLevel: "low",
+    },
+    {
         name: "notesmith_get_linked_context",
         description: "Get sanitized linked context for a NoteSmith session or activity id.",
         inputSchema: idInputSchema("A NoteSmith session id or activity id."),
@@ -100,6 +126,12 @@ const parseIdArgs = (args) => ({
     id: typeof args.id === "string" ? args.id : "",
     includePrivate: Boolean(args.includePrivate),
 });
+const parseDateRangeArgs = (args) => ({
+    fromDate: typeof args.fromDate === "string" ? args.fromDate : "",
+    toDate: typeof args.toDate === "string" ? args.toDate : "",
+    includePrivate: Boolean(args.includePrivate),
+    limit: Number.isFinite(Number(args.limit)) ? Math.max(1, Math.min(30, Math.round(Number(args.limit)))) : 12,
+});
 const searchByType = (snapshot, args, sourceTypes) => {
     const parsed = parseSearchArgs(args);
     return {
@@ -123,6 +155,17 @@ export const invokeNoteSmithMcpTool = (snapshot, toolName, args = {}) => {
             return searchByType(snapshot, args, ["activity"]);
         case "notesmith_search_timelogs":
             return searchByType(snapshot, args, ["timelog"]);
+        case "notesmith_get_timelogs_by_date_range": {
+            const parsed = parseDateRangeArgs(args);
+            return {
+                summary: getNoteSmithTimelogsByDateRange(snapshot, {
+                    fromDate: parsed.fromDate,
+                    toDate: parsed.toDate,
+                    includePrivate: parsed.includePrivate,
+                    limit: parsed.limit,
+                }),
+            };
+        }
         case "notesmith_get_linked_context": {
             const parsed = parseIdArgs(args);
             return getNoteSmithLinkedContext(snapshot, parsed.id, parsed.includePrivate);

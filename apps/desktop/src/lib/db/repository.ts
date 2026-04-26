@@ -205,6 +205,7 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   abbreviations: [],
   preferredParticipantNames: [],
   ruleSuggestions: [],
+  assistantQueryMemories: [],
   promptProfile: resolvePromptProfile(undefined).profile,
 });
 
@@ -394,6 +395,27 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
           updatedAt: typeof entry?.updatedAt === "string" && entry.updatedAt ? entry.updatedAt : now(),
         }))
         .filter((entry) => Boolean(entry.sourceValue && entry.suggestedValue))
+    : [],
+  assistantQueryMemories: Array.isArray(settings.assistantQueryMemories)
+    ? settings.assistantQueryMemories
+        .map((entry) => ({
+          id: typeof entry?.id === "string" && entry.id.trim() ? entry.id : crypto.randomUUID(),
+          fingerprint: typeof entry?.fingerprint === "string" ? entry.fingerprint.trim() : "",
+          learnedFromQuestion: typeof entry?.learnedFromQuestion === "string" ? entry.learnedFromQuestion.trim() : "",
+          route:
+            entry?.route === "timelogs" ||
+            entry?.route === "sessions" ||
+            entry?.route === "calendar" ||
+            entry?.route === "todos" ||
+            entry?.route === "activities" ||
+            entry?.route === "workspace"
+              ? entry.route
+              : "workspace",
+          clarificationAnswer: typeof entry?.clarificationAnswer === "string" ? entry.clarificationAnswer.trim() : "",
+          createdAt: typeof entry?.createdAt === "string" && entry.createdAt ? entry.createdAt : now(),
+          updatedAt: typeof entry?.updatedAt === "string" && entry.updatedAt ? entry.updatedAt : now(),
+        }))
+        .filter((entry) => Boolean(entry.fingerprint))
     : [],
   promptProfile: normalizePromptProfile(settings.promptProfile),
 });

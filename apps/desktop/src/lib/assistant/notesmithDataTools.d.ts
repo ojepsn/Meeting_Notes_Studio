@@ -22,7 +22,27 @@ export interface NoteSmithAssistantLinkedContext {
     todos: NoteSmithAssistantSource[];
     timelogs: NoteSmithAssistantSource[];
 }
+export interface NoteSmithTimelogRangeSummary {
+    fromDate: string;
+    toDate: string;
+    totalMinutes: number;
+    totalEntries: number;
+    groups: Array<{
+        targetType: "todo" | "activity";
+        targetId: string;
+        title: string;
+        totalMinutes: number;
+        entryCount: number;
+    }>;
+    sources: NoteSmithAssistantSource[];
+}
 export declare const searchNoteSmithData: (snapshot: DesktopAppSnapshot, { query, includePrivate, limit, sourceTypes }: NoteSmithAssistantSearchOptions) => NoteSmithAssistantSource[];
+export declare const getNoteSmithTimelogsByDateRange: (snapshot: DesktopAppSnapshot, { fromDate, toDate, includePrivate, limit, }: {
+    fromDate: string;
+    toDate: string;
+    includePrivate?: boolean;
+    limit?: number;
+}) => NoteSmithTimelogRangeSummary;
 export declare const summarizeNoteSmithWorkspace: (snapshot: DesktopAppSnapshot, includePrivate?: boolean) => NoteSmithAssistantSource;
 export declare const getNoteSmithLinkedContext: (snapshot: DesktopAppSnapshot, id: string, includePrivate?: boolean) => NoteSmithAssistantLinkedContext;
 export declare const buildAssistantPreviewAnswer: (snapshot: DesktopAppSnapshot, query: string, includePrivate?: boolean) => {

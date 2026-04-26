@@ -1094,7 +1094,7 @@ export const CalendarWorkspace = ({
                               }}
                             />
                           ) : (
-                            <strong className="calendar-item-title">{slotToTime(startSlot)} {item.title}</strong>
+                            <strong className="calendar-item-title">{item.title}</strong>
                           )}
                           <span className="calendar-item-single-row-actions">
                             <span
@@ -1175,7 +1175,7 @@ export const CalendarWorkspace = ({
                           }}
                         />
                       ) : (
-                        <strong className="calendar-item-title">{slotToTime(startSlot)} {item.title}</strong>
+                        <strong className="calendar-item-title">{item.isMeeting ? `${slotToTime(startSlot)} ${item.title}` : item.title}</strong>
                       )) : null}
                       <span className="calendar-item-meta">{item.isMeeting ? durationLabel(durationSlots) : item.label}{runningLog ? ` • Running ${runningLabel}` : ""}</span>
                       {linkedSessionState?.sessionId ? (

@@ -207,6 +207,16 @@ export interface RuleSuggestionRecord {
   updatedAt: string;
 }
 
+export interface AssistantQueryMemoryRecord {
+  id: string;
+  fingerprint: string;
+  learnedFromQuestion: string;
+  route: "timelogs" | "sessions" | "calendar" | "todos" | "activities" | "workspace";
+  clarificationAnswer: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LocalAppSettings {
   theme: string;
   outputLanguage: "same" | "sv" | "en";
@@ -237,6 +247,7 @@ export interface LocalAppSettings {
   abbreviations: Array<{ id: string; shortForm: string; fullForm: string }>;
   preferredParticipantNames: PreferredParticipantName[];
   ruleSuggestions: RuleSuggestionRecord[];
+  assistantQueryMemories?: AssistantQueryMemoryRecord[];
   promptProfile: PromptProfile;
 }
 

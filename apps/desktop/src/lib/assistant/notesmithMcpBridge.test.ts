@@ -153,6 +153,6 @@ describe("notesmithMcpBridge", () => {
 
   it("returns a workspace summary through the MCP contract", () => {
     const result = invokeNoteSmithMcpTool(snapshot, "notesmith_summarize_workspace", {});
-    expect("summary" in result && result.summary ? result.summary.snippet : "").toContain("1 active sessions");
+    expect("summary" in result && result.summary && "snippet" in result.summary ? result.summary.snippet : "").toContain("1 active sessions");
   });
 });
