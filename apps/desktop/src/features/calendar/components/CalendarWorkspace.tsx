@@ -1149,7 +1149,7 @@ export const CalendarWorkspace = ({
                                   onCreateLinkedTaskSession(item.targetId);
                                 }}
                               >
-                                Create session
+                                Session
                               </span>
                             )}
                           </span>

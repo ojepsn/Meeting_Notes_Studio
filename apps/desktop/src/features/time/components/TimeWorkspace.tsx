@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { ActivityRecord, TimeLogRecord, TimeReportPreset, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
@@ -31,6 +31,8 @@ type EditableTimeLogRecord = TimeLogRecord & { title: string; contextLabel: stri
 type DatePreset = "today" | "this-week" | "this-month" | "custom";
 type TimeLogColumnKey = "source" | "date" | "start" | "stop" | "duration" | "comment" | "actions";
 type TimeLogColumnWidths = Record<TimeLogColumnKey, number>;
+const TIMelog_RECENT_DAYS = 7;
+const TIMELOG_OLDER_BATCH_SIZE = 30;
 
 const defaultTimeLogColumnWidths: TimeLogColumnWidths = {
   source: 300,
@@ -143,6 +145,8 @@ export const TimeWorkspace = ({
   const [presetDraft, setPresetDraft] = useState("");
   const [now, setNow] = useState(() => new Date());
   const [timeLogColumnWidths, setTimeLogColumnWidths] = useState<TimeLogColumnWidths>(defaultTimeLogColumnWidths);
+  const [olderVisibleCount, setOlderVisibleCount] = useState(TIMELOG_OLDER_BATCH_SIZE);
+  const timeLogScrollAreaRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (requestedProject !== undefined && requestedProject !== null) setProjectFilter(requestedProject || "all");
@@ -257,6 +261,38 @@ export const TimeWorkspace = ({
     [fromDate, logsMatchingStructure, searchQuery, toDate],
   );
 
+  const listSearchLogs = useMemo(
+    () =>
+      logsMatchingStructure.filter((log) => {
+        if (searchQuery.trim()) {
+          const query = searchQuery.trim().toLocaleLowerCase();
+          const haystack = `${log.title} ${log.contextLabel} ${log.notes}`.toLocaleLowerCase();
+          if (!haystack.includes(query)) return false;
+        }
+        return true;
+      }),
+    [logsMatchingStructure, searchQuery],
+  );
+
+  const listRecentCutoffDate = useMemo(() => shiftDays(formatDateInput(now), -(TIMelog_RECENT_DAYS - 1)), [now]);
+
+  const listRecentLogs = useMemo(
+    () =>
+      listSearchLogs.filter((log) => log.startTime === log.endTime || log.date >= listRecentCutoffDate),
+    [listRecentCutoffDate, listSearchLogs],
+  );
+
+  const listOlderLogs = useMemo(
+    () =>
+      listSearchLogs.filter((log) => log.startTime !== log.endTime && log.date < listRecentCutoffDate),
+    [listRecentCutoffDate, listSearchLogs],
+  );
+
+  const visibleListLogs = useMemo(
+    () => [...listRecentLogs, ...listOlderLogs.slice(0, olderVisibleCount)],
+    [listOlderLogs, listRecentLogs, olderVisibleCount],
+  );
+
   const comparisonRange = useMemo(() => {
     if (!fromDate || !toDate) return null;
     const rangeDays = differenceInDaysInclusive(fromDate, toDate);
@@ -273,9 +309,33 @@ export const TimeWorkspace = ({
     [comparisonRange, logsMatchingStructure],
   );
 
-  const runningLogs = useMemo(() => filteredLogs.filter((log) => log.startTime === log.endTime), [filteredLogs]);
-  const activeLog = useMemo<EditableTimeLogRecord | null>(() => getRunningTimeLog(filteredLogs) as EditableTimeLogRecord | null, [filteredLogs]);
+  const runningLogs = useMemo(() => enrichedLogs.filter((log) => log.startTime === log.endTime), [enrichedLogs]);
+  const activeLog = useMemo<EditableTimeLogRecord | null>(() => getRunningTimeLog(enrichedLogs) as EditableTimeLogRecord | null, [enrichedLogs]);
+  const activeLogIsOutsideCurrentFilters = useMemo(
+    () => Boolean(activeLog && !visibleListLogs.some((log) => log.id === activeLog.id)),
+    [activeLog, visibleListLogs],
+  );
   const recentLogs = useMemo(() => filteredLogs.slice(0, 24), [filteredLogs]);
+
+  useEffect(() => {
+    setOlderVisibleCount(TIMELOG_OLDER_BATCH_SIZE);
+  }, [projectFilter, domainFilter, activityFilter, searchQuery]);
+
+  useEffect(() => {
+    const node = timeLogScrollAreaRef.current;
+    if (!node) return;
+    const handleScroll = () => {
+      if (!listOlderLogs.length) return;
+      const remaining = node.scrollHeight - node.scrollTop - node.clientHeight;
+      if (remaining <= 180) {
+        setOlderVisibleCount((current) =>
+          current >= listOlderLogs.length ? current : Math.min(current + TIMELOG_OLDER_BATCH_SIZE, listOlderLogs.length),
+        );
+      }
+    };
+    node.addEventListener("scroll", handleScroll, { passive: true });
+    return () => node.removeEventListener("scroll", handleScroll);
+  }, [listOlderLogs.length]);
 
   useEffect(() => {
     if (!activeLog) return;
@@ -579,7 +639,7 @@ export const TimeWorkspace = ({
                     ? isBaselineWorkRunning
                       ? "General work time is being logged to Other until a more specific timelog takes over."
                       : hasSpecificRunningTimeLog
-                        ? "A specific timelog is active, so baseline work capture is paused and will resume automatically."
+                        ? `A specific timelog is active${activeLog ? ` (${activeLog.title})` : ""}, so baseline work capture is paused and will resume automatically.`
                         : "Baseline work capture is armed and will run when no specific timelog is active."
                     : "Click Start work to begin continuous baseline capture."}
                 </span>
@@ -608,6 +668,11 @@ export const TimeWorkspace = ({
                 <div className="timelog-active-copy">
                   <strong>{activeLog.title}</strong>
                   <span className="tiny-text">{activeLog.contextLabel}</span>
+                  {activeLogIsOutsideCurrentFilters ? (
+                    <span className="tiny-text">
+                      This running timelog is outside the current visible date/filter range, but it is still active.
+                    </span>
+                  ) : null}
                   <span className="status-chip">
                     Running • {formatTrackedMinutes(calculateLiveDurationMinutes(activeLog, now))}
                   </span>
@@ -639,9 +704,9 @@ export const TimeWorkspace = ({
                 <h3>All time logs</h3>
                 <p className="muted">Most recent first. Edit date, start, stop, and comment inline.</p>
               </div>
-              <span className="status-chip">{filteredLogs.length} visible</span>
+              <span className="status-chip">{visibleListLogs.length} visible</span>
             </div>
-            <div className="time-log-editor-scroll-area" style={timeLogTableStyle}>
+            <div ref={timeLogScrollAreaRef} className="time-log-editor-scroll-area" style={timeLogTableStyle}>
               <div className="time-log-sticky-controls">
                 <div className="time-log-toolbar">
                   <div className="field field-wide">
@@ -671,7 +736,7 @@ export const TimeWorkspace = ({
                 </div>
               </div>
               <div className="time-log-editor-table">
-              {filteredLogs.length ? filteredLogs.map((log) => {
+              {visibleListLogs.length ? visibleListLogs.map((log) => {
                 const running = log.startTime === log.endTime;
                 const displayedMinutes = running ? calculateLiveDurationMinutes(log, now) : log.durationMinutes;
                 return (
@@ -743,7 +808,12 @@ export const TimeWorkspace = ({
                     </div>
                   </div>
                 );
-              }) : <div className="empty-state-card compact-empty-state"><h3>No time logs yet</h3><p>Start and stop work from Todos, Activities, or Calendar, then manage the logs here.</p></div>}
+              }) : <div className="empty-state-card compact-empty-state"><h3>No time logs yet</h3><p>Start and stop work from Tasks, Meetings, or Calendar, then manage the logs here.</p></div>}
+              {listOlderLogs.length > visibleListLogs.length - listRecentLogs.length ? (
+                <div className="time-log-list-footnote">
+                  Scroll down to load older timelogs. Showing the most recent 7 days first.
+                </div>
+              ) : null}
             </div>
             </div>
           </div>
