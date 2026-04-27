@@ -4,21 +4,21 @@ import { DateInput } from "../../../components/DateInput";
 import { saveTextFile } from "../../../lib/storage/desktopStorage";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
 const defaultTimeLogColumnWidths = {
-    source: 360,
+    source: 300,
     date: 150,
     start: 110,
     stop: 110,
-    duration: 120,
-    comment: 250,
-    actions: 150,
+    duration: 104,
+    comment: 210,
+    actions: 138,
 };
 const minTimeLogColumnWidths = {
-    source: 220,
+    source: 180,
     date: 150,
     start: 104,
     stop: 104,
-    duration: 96,
-    comment: 180,
+    duration: 88,
+    comment: 140,
     actions: 132,
 };
 export const formatMinutes = (minutes) => {

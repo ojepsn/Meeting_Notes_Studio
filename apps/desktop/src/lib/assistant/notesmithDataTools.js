@@ -234,6 +234,49 @@ export const getNoteSmithTimelogsByDateRange = (snapshot, { fromDate, toDate, in
         sources,
     };
 };
+export const getNoteSmithCalendarItemsByDateRange = (snapshot, { fromDate, toDate, includePrivate = false, limit = 12, }) => {
+    const filteredItems = snapshot.calendarItems
+        .filter((item) => compareDates(item.date, fromDate) >= 0 && compareDates(item.date, toDate) <= 0)
+        .filter((item) => {
+        const target = item.targetType === "todo"
+            ? snapshot.todos.find((todo) => todo.id === item.targetId)
+            : snapshot.activities.find((activity) => activity.id === item.targetId);
+        return includePrivate || !target?.isPrivate;
+    });
+    const sources = filteredItems
+        .map((item) => {
+        const source = calendarItemToSource(item, `${item.date} ${item.targetType}`, snapshot);
+        const startMinutes = item.startSlot * 5;
+        const endMinutes = (item.startSlot + item.durationSlots) * 5;
+        const startHour = `${Math.floor(startMinutes / 60)}`.padStart(2, "0");
+        const startMinute = `${startMinutes % 60}`.padStart(2, "0");
+        const endHour = `${Math.floor(endMinutes / 60)}`.padStart(2, "0");
+        const endMinute = `${endMinutes % 60}`.padStart(2, "0");
+        const isMeeting = item.targetType === "activity" && snapshot.activities.find((activity) => activity.id === item.targetId)?.type === "meeting";
+        return {
+            ...source,
+            snippet: `${item.date} ${startHour}:${startMinute}-${endHour}:${endMinute} • ${isMeeting ? "Meeting" : "Task"}`,
+            score: 1000 - compareDates(item.date, fromDate),
+        };
+    })
+        .sort((left, right) => {
+        const dateSort = (left.date || "").localeCompare(right.date || "");
+        if (dateSort !== 0)
+            return dateSort;
+        return left.title.localeCompare(right.title);
+    })
+        .slice(0, Math.max(1, Math.min(30, limit)));
+    const meetingCount = filteredItems.filter((item) => item.targetType === "activity" && snapshot.activities.find((activity) => activity.id === item.targetId)?.type === "meeting").length;
+    const taskCount = filteredItems.length - meetingCount;
+    return {
+        fromDate,
+        toDate,
+        totalItems: filteredItems.length,
+        meetingCount,
+        taskCount,
+        sources,
+    };
+};
 export const summarizeNoteSmithWorkspace = (snapshot, includePrivate = false) => {
     const sessions = snapshot.sessions.filter((session) => !session.deletedAt && (includePrivate || !session.isPrivate));
     const todos = snapshot.todos.filter((todo) => includePrivate || !todo.isPrivate);

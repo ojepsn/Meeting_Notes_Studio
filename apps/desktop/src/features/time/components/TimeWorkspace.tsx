@@ -33,22 +33,22 @@ type TimeLogColumnKey = "source" | "date" | "start" | "stop" | "duration" | "com
 type TimeLogColumnWidths = Record<TimeLogColumnKey, number>;
 
 const defaultTimeLogColumnWidths: TimeLogColumnWidths = {
-  source: 360,
+  source: 300,
   date: 150,
   start: 110,
   stop: 110,
-  duration: 120,
-  comment: 250,
-  actions: 150,
+  duration: 104,
+  comment: 210,
+  actions: 138,
 };
 
 const minTimeLogColumnWidths: TimeLogColumnWidths = {
-  source: 220,
+  source: 180,
   date: 150,
   start: 104,
   stop: 104,
-  duration: 96,
-  comment: 180,
+  duration: 88,
+  comment: 140,
   actions: 132,
 };
 

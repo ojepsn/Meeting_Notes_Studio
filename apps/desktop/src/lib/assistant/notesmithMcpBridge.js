@@ -1,4 +1,4 @@
-import { getNoteSmithLinkedContext, getNoteSmithTimelogsByDateRange, searchNoteSmithData, summarizeNoteSmithWorkspace, } from "./notesmithDataTools";
+import { getNoteSmithCalendarItemsByDateRange, getNoteSmithLinkedContext, getNoteSmithTimelogsByDateRange, searchNoteSmithData, summarizeNoteSmithWorkspace, } from "./notesmithDataTools";
 const searchInputSchema = (description) => ({
     type: "object",
     properties: {
@@ -89,6 +89,12 @@ export const NOTESMITH_MCP_TOOLS = [
         riskLevel: "low",
     },
     {
+        name: "notesmith_get_calendar_by_date_range",
+        description: "Get NoteSmith calendar items for a specific date range, including meeting and task counts.",
+        inputSchema: dateRangeInputSchema("Date range for calendar lookup."),
+        riskLevel: "low",
+    },
+    {
         name: "notesmith_get_timelogs_by_date_range",
         description: "Get NoteSmith timelogs for a specific date range, including grouped time totals.",
         inputSchema: dateRangeInputSchema("Date range for timelog lookup."),
@@ -155,6 +161,17 @@ export const invokeNoteSmithMcpTool = (snapshot, toolName, args = {}) => {
             return searchByType(snapshot, args, ["activity"]);
         case "notesmith_search_timelogs":
             return searchByType(snapshot, args, ["timelog"]);
+        case "notesmith_get_calendar_by_date_range": {
+            const parsed = parseDateRangeArgs(args);
+            return {
+                summary: getNoteSmithCalendarItemsByDateRange(snapshot, {
+                    fromDate: parsed.fromDate,
+                    toDate: parsed.toDate,
+                    includePrivate: parsed.includePrivate,
+                    limit: parsed.limit,
+                }),
+            };
+        }
         case "notesmith_get_timelogs_by_date_range": {
             const parsed = parseDateRangeArgs(args);
             return {

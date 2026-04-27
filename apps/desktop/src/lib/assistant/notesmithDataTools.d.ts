@@ -36,6 +36,14 @@ export interface NoteSmithTimelogRangeSummary {
     }>;
     sources: NoteSmithAssistantSource[];
 }
+export interface NoteSmithCalendarRangeSummary {
+    fromDate: string;
+    toDate: string;
+    totalItems: number;
+    meetingCount: number;
+    taskCount: number;
+    sources: NoteSmithAssistantSource[];
+}
 export declare const searchNoteSmithData: (snapshot: DesktopAppSnapshot, { query, includePrivate, limit, sourceTypes }: NoteSmithAssistantSearchOptions) => NoteSmithAssistantSource[];
 export declare const getNoteSmithTimelogsByDateRange: (snapshot: DesktopAppSnapshot, { fromDate, toDate, includePrivate, limit, }: {
     fromDate: string;
@@ -43,6 +51,12 @@ export declare const getNoteSmithTimelogsByDateRange: (snapshot: DesktopAppSnaps
     includePrivate?: boolean;
     limit?: number;
 }) => NoteSmithTimelogRangeSummary;
+export declare const getNoteSmithCalendarItemsByDateRange: (snapshot: DesktopAppSnapshot, { fromDate, toDate, includePrivate, limit, }: {
+    fromDate: string;
+    toDate: string;
+    includePrivate?: boolean;
+    limit?: number;
+}) => NoteSmithCalendarRangeSummary;
 export declare const summarizeNoteSmithWorkspace: (snapshot: DesktopAppSnapshot, includePrivate?: boolean) => NoteSmithAssistantSource;
 export declare const getNoteSmithLinkedContext: (snapshot: DesktopAppSnapshot, id: string, includePrivate?: boolean) => NoteSmithAssistantLinkedContext;
 export declare const buildAssistantPreviewAnswer: (snapshot: DesktopAppSnapshot, query: string, includePrivate?: boolean) => {

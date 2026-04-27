@@ -5426,13 +5426,13 @@ select {
   max-height: min(60vh, 980px);
   overflow: auto;
   padding-right: 0.1rem;
-  --timelog-col-source: 360px;
+  --timelog-col-source: 300px;
   --timelog-col-date: 150px;
   --timelog-col-start: 110px;
   --timelog-col-stop: 110px;
-  --timelog-col-duration: 120px;
-  --timelog-col-comment: 250px;
-  --timelog-col-actions: 150px;
+  --timelog-col-duration: 104px;
+  --timelog-col-comment: 210px;
+  --timelog-col-actions: 138px;
 }
 
 .time-log-sticky-controls {
@@ -5450,12 +5450,12 @@ select {
 .time-log-editor-header {
   display: grid;
   grid-template-columns:
-    minmax(220px, var(--timelog-col-source))
+    minmax(180px, var(--timelog-col-source))
     minmax(150px, var(--timelog-col-date))
     minmax(104px, var(--timelog-col-start))
     minmax(104px, var(--timelog-col-stop))
-    minmax(96px, var(--timelog-col-duration))
-    minmax(180px, var(--timelog-col-comment))
+    minmax(88px, var(--timelog-col-duration))
+    minmax(140px, var(--timelog-col-comment))
     minmax(132px, var(--timelog-col-actions));
   gap: 0.4rem;
   align-items: center;
@@ -5483,15 +5483,24 @@ select {
   justify-content: flex-end;
 }
 
+.time-log-editor-header > :last-child {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  justify-content: flex-end;
+  padding-left: 0.35rem;
+  background: color-mix(in srgb, var(--app-surface) 94%, var(--app-surface-soft) 6%);
+}
+
 .time-log-editor-row {
   display: grid;
   grid-template-columns:
-    minmax(220px, var(--timelog-col-source))
+    minmax(180px, var(--timelog-col-source))
     minmax(150px, var(--timelog-col-date))
     minmax(104px, var(--timelog-col-start))
     minmax(104px, var(--timelog-col-stop))
-    minmax(96px, var(--timelog-col-duration))
-    minmax(180px, var(--timelog-col-comment))
+    minmax(88px, var(--timelog-col-duration))
+    minmax(140px, var(--timelog-col-comment))
     minmax(132px, var(--timelog-col-actions));
   gap: 0.4rem;
   align-items: center;
@@ -5567,6 +5576,15 @@ select {
   gap: 0.35rem;
   justify-content: flex-end;
   min-width: 0;
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  padding-left: 0.35rem;
+  background: var(--app-surface-soft);
+}
+
+.time-log-editor-row-active .time-log-inline-actions {
+  background: color-mix(in srgb, var(--app-accent-soft) 18%, var(--app-surface-soft) 82%);
 }
 
 .time-log-inline-actions .small-button {

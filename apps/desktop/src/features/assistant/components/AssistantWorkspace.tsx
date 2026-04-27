@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { AssistantQueryMemoryRecord, DesktopAppSnapshot } from "@notesmith/domain";
 import {
   summarizeNoteSmithWorkspace,
+  type NoteSmithCalendarRangeSummary,
   type NoteSmithTimelogRangeSummary,
   type NoteSmithAssistantSource,
 } from "../../../lib/assistant/notesmithDataTools";
@@ -70,6 +71,12 @@ const summarizeTimelogGroups = (
   groups
     .slice(0, 8)
     .map((group) => `- ${group.title}: ${group.totalMinutes} minutes across ${group.entryCount} entr${group.entryCount === 1 ? "y" : "ies"}`)
+    .join("\n");
+
+const summarizeCalendarSources = (sources: NoteSmithAssistantSource[]) =>
+  sources
+    .slice(0, 10)
+    .map((source) => `- ${source.title}${source.date ? ` (${source.date})` : ""}: ${source.snippet}`)
     .join("\n");
 
 const dedupeSources = (sources: NoteSmithAssistantSource[]) => {
@@ -206,6 +213,29 @@ export const AssistantWorkspace = ({ snapshot, onOpenSettings, onSaveSettings }:
             `- Total tracked time: ${summary.totalMinutes} minutes`,
             `- Total timelog entries: ${summary.totalEntries}`,
             summary.groups.length ? summarizeTimelogGroups(summary.groups) : "- No timelogs found in this range",
+          ].join("\n"),
+        );
+        sources.push(...summary.sources);
+      }
+    }
+
+    if (route === "calendar" && effectivePlan.dateRange) {
+      const calendarResult = invokeNoteSmithMcpTool(snapshot, "notesmith_get_calendar_by_date_range", {
+        fromDate: effectivePlan.dateRange.fromDate,
+        toDate: effectivePlan.dateRange.toDate,
+        includePrivate,
+        limit: 12,
+      }) as { summary: NoteSmithCalendarRangeSummary };
+      if (calendarResult.summary) {
+        const summary = calendarResult.summary;
+        sections.push(
+          [
+            `Calendar summary for ${effectivePlan.dateRange.label}:`,
+            `- Absolute date range: ${summary.fromDate} to ${summary.toDate}`,
+            `- Total scheduled items: ${summary.totalItems}`,
+            `- Meetings: ${summary.meetingCount}`,
+            `- Tasks: ${summary.taskCount}`,
+            summary.sources.length ? summarizeCalendarSources(summary.sources) : "- No calendar items found in this range",
           ].join("\n"),
         );
         sources.push(...summary.sources);

@@ -85,6 +85,12 @@ export const resolveAssistantDateRange = (query: string, now = new Date()): Assi
     const date = formatLocalDate(now);
     return { fromDate: date, toDate: date, label: `today (${date})` };
   }
+  if (/\btomorrow\b/.test(normalized)) {
+    const value = new Date(now);
+    value.setDate(value.getDate() + 1);
+    const date = formatLocalDate(value);
+    return { fromDate: date, toDate: date, label: `tomorrow (${date})` };
+  }
   if (/\blast week\b/.test(normalized)) {
     const value = new Date(now);
     value.setDate(value.getDate() - 7);
@@ -136,7 +142,10 @@ export const planAssistantQuery = (
       route = "timelogs";
     } else if (/(decision|decisions|agreed|action items|minutes|meeting notes|summary of meeting|output)/i.test(normalized)) {
       route = "sessions";
-    } else if (/(calendar|schedule|meetings today|meetings yesterday|scheduled|in my calendar)/i.test(normalized)) {
+    } else if (
+      /(calendar|schedule|scheduled|in my calendar|upcoming)/i.test(normalized) ||
+      (/\bmeeting|\bmeetings/.test(normalized) && /\b(today|tomorrow|yesterday|week|month|next)\b/.test(normalized))
+    ) {
       route = "calendar";
     } else if (/(task|tasks|todo|todos|due today|due tomorrow|open work)/i.test(normalized)) {
       route = "todos";
