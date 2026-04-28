@@ -127,6 +127,7 @@ type Item = {
   isMeeting: boolean;
   isPrivate: boolean;
   isDone: boolean;
+  isPriority: boolean;
   lane: number;
   laneCount: number;
 };
@@ -147,6 +148,7 @@ type EditorDraft = {
   activity: string;
   isPrivate: boolean;
   isDone: boolean;
+  isPriority: boolean;
   isMeeting: boolean;
 };
 
@@ -236,7 +238,7 @@ export const CalendarWorkspace = ({
   const [creationContextActivityId, setCreationContextActivityId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "task" | "meeting">("all");
-  const [visibilityFilter, setVisibilityFilter] = useState<"all" | "public" | "private">("all");
+  const [visibilityFilter, setVisibilityFilter] = useState<"all" | "public" | "private">(settings.calendarVisibilityFilter ?? "all");
   const [hideCompletedTodos, setHideCompletedTodos] = useState(false);
   const [inlineTodoEdit, setInlineTodoEdit] = useState<{ itemId: string; todoId: string; value: string } | null>(null);
   const [resizeState, setResizeState] = useState<null | { itemId: string; edge: "start" | "end"; date: string; startSlot: number; durationSlots: number }>(null);
@@ -269,7 +271,8 @@ export const CalendarWorkspace = ({
       !settings.calendarFullScreenPreferenceInitialized ||
       settings.calendarDetailsPaneWidth !== detailsPaneWidth ||
       settings.calendarScrollTop !== scrollTop ||
-      settings.calendarScrollLeft !== scrollLeft
+      settings.calendarScrollLeft !== scrollLeft ||
+      settings.calendarVisibilityFilter !== visibilityFilter
     ) {
       onSaveSettings({
         ...settings,
@@ -280,9 +283,10 @@ export const CalendarWorkspace = ({
         calendarDetailsPaneWidth: detailsPaneWidth,
         calendarScrollTop: scrollTop,
         calendarScrollLeft: scrollLeft,
+        calendarVisibilityFilter: visibilityFilter,
       });
     }
-  }, [daysInView, detailsPaneWidth, isFullScreen, onSaveSettings, scrollLeft, scrollTop, settings, slotHeight]);
+  }, [daysInView, detailsPaneWidth, isFullScreen, onSaveSettings, scrollLeft, scrollTop, settings, slotHeight, visibilityFilter]);
 
   const visibleDates = useMemo(
     () =>
@@ -316,11 +320,11 @@ export const CalendarWorkspace = ({
         if (item.targetType === "todo") {
           const todo = todoMap.get(item.targetId);
           if (!todo) return null;
-          return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "todo" as const, targetId: item.targetId, title: todo.description, label: "Task", isMeeting: false, isPrivate: todo.isPrivate, isDone: todo.isDone, lane: 0, laneCount: 1 };
+          return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "todo" as const, targetId: item.targetId, title: todo.description, label: "Task", isMeeting: false, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: Boolean(todo.isPriority), lane: 0, laneCount: 1 };
         }
         const activity = activityMap.get(item.targetId);
         if (!activity) return null;
-        return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "activity" as const, targetId: item.targetId, title: activity.description, label: activity.type === "meeting" ? "Meeting" : "Task", isMeeting: activity.type === "meeting", isPrivate: activity.isPrivate, isDone: activity.isDone, lane: 0, laneCount: 1 };
+        return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "activity" as const, targetId: item.targetId, title: activity.description, label: activity.type === "meeting" ? "Meeting" : "Task", isMeeting: activity.type === "meeting", isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, lane: 0, laneCount: 1 };
       })
       .filter((item): item is Item => item !== null)
       .sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.title.localeCompare(right.title));
@@ -544,12 +548,12 @@ export const CalendarWorkspace = ({
     if (calendarItem.targetType === "todo") {
       const todo = todos.find((entry) => entry.id === calendarItem.targetId);
       if (!todo) return;
-      setEditorDraft({ itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, activityId: todo.activityId, parentActivityId: "", doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isMeeting: false });
+      setEditorDraft({ itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, activityId: todo.activityId, parentActivityId: "", doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: Boolean(todo.isPriority), isMeeting: false });
       return;
     }
     const activity = activities.find((entry) => entry.id === calendarItem.targetId);
     if (!activity) return;
-    setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isMeeting: activity.type === "meeting" });
+    setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, isMeeting: activity.type === "meeting" });
   }, [activities, calendarItems, editorDraft?.itemId, selectedItemId, todos]);
 
   useEffect(() => {
@@ -801,7 +805,7 @@ export const CalendarWorkspace = ({
     if (draft.targetType === "todo") {
       const todo = todos.find((entry) => entry.id === draft.targetId);
       if (!todo) return;
-      onSaveTodo({ ...todo, description: draft.title.trim() || todo.description, activityId: draft.activityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone });
+      onSaveTodo({ ...todo, description: draft.title.trim() || todo.description, activityId: draft.activityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone, isPriority: draft.isPriority });
     } else {
       const activity = activities.find((entry) => entry.id === draft.targetId);
       if (!activity) return;
@@ -1060,7 +1064,7 @@ export const CalendarWorkspace = ({
                     ].filter(Boolean).map((className) => ` ${className}`).join("");
                     const inlineTodoEditForItem = inlineTodoEdit?.itemId === item.id ? inlineTodoEdit : null;
                     const isSingleRowTodo = item.targetType === "todo" && durationSlots <= 1;
-                    return <div key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${item.targetType === "todo" && item.isDone ? " calendar-item-block-completed-todo" : ""}${isPastCalendarItem ? " calendar-item-block-past" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${inlineTodoEditForItem ? " calendar-item-block-inline-editing" : ""}${sizeClass}`} role="button" tabIndex={0} style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
+                    return <div key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${item.targetType === "todo" && item.isPriority ? " calendar-item-block-priority-todo" : ""}${item.targetType === "todo" && item.isDone ? " calendar-item-block-completed-todo" : ""}${isPastCalendarItem ? " calendar-item-block-past" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${inlineTodoEditForItem ? " calendar-item-block-inline-editing" : ""}${sizeClass}`} role="button" tabIndex={0} style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
                       const target = event.target as HTMLElement;
                       if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle") || target.closest(".calendar-item-title-input")) return;
                       event.preventDefault();
@@ -1368,6 +1372,16 @@ export const CalendarWorkspace = ({
                       onChange={(event) => updateEditorDraft({ ...editorDraft, isDone: event.target.checked })}
                     />
                     <span>{editorDraft.isDone ? "Done" : "Mark as done"}</span>
+                  </label>
+                ) : null}
+                {editorDraft.targetType === "todo" ? (
+                  <label className="compact-private-toggle calendar-done-toggle">
+                    <input
+                      type="checkbox"
+                      checked={editorDraft.isPriority}
+                      onChange={(event) => updateEditorDraft({ ...editorDraft, isPriority: event.target.checked })}
+                    />
+                    <span>Prio</span>
                   </label>
                 ) : null}
                 <label className="compact-private-toggle calendar-done-toggle">

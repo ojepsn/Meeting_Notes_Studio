@@ -3,6 +3,7 @@ import {
   DEFAULT_TEMPLATE_BY_CAPTURE_MODE,
   getPrimaryCaptureMode,
   type AttachmentRecord,
+  type ArchivedTaskRecord,
   type ActivityRecord,
   type CalendarItemRecord,
   type CaptureMode,
@@ -31,6 +32,7 @@ const STORAGE_KEYS = {
   sessions: "notesmith-desktop-sessions",
   templates: "notesmith-desktop-templates",
   todos: "notesmith-desktop-todos",
+  archivedTasks: "notesmith-desktop-archived-tasks",
   activities: "notesmith-desktop-activities",
   timelogs: "notesmith-desktop-timelogs",
   calendarItems: "notesmith-desktop-calendar-items",
@@ -98,7 +100,9 @@ const normalizeAttachmentRecord = (attachment: AttachmentRecord): AttachmentReco
 
 const normalizeTodoRecord = (todo: TodoRecord): TodoRecord => ({
   ...todo,
+  completedAt: typeof todo.completedAt === "string" ? todo.completedAt : null,
   isPrivate: Boolean(todo.isPrivate),
+  isPriority: Boolean(todo.isPriority),
   comments: typeof todo.comments === "string" ? todo.comments : "",
   activityId: typeof todo.activityId === "string" ? todo.activityId : "",
   domain: typeof todo.domain === "string" ? todo.domain : "",
@@ -113,6 +117,19 @@ const normalizeTodoRecord = (todo: TodoRecord): TodoRecord => ({
         ? todo.comments
         : "",
   sessionIds: Array.isArray(todo.sessionIds) ? todo.sessionIds.filter((value): value is string => typeof value === "string") : [],
+});
+
+const normalizeArchivedTaskRecord = (task: ArchivedTaskRecord): ArchivedTaskRecord => ({
+  id: task.id,
+  title: typeof task.title === "string" ? task.title : "",
+  isPrivate: Boolean(task.isPrivate),
+  domain: typeof task.domain === "string" ? task.domain : "",
+  project: typeof task.project === "string" ? task.project : "",
+  activity: typeof task.activity === "string" ? task.activity : "",
+  activityId: typeof task.activityId === "string" ? task.activityId : "",
+  deletedAt: typeof task.deletedAt === "string" && task.deletedAt ? task.deletedAt : now(),
+  originalCreatedAt: typeof task.originalCreatedAt === "string" && task.originalCreatedAt ? task.originalCreatedAt : now(),
+  originalCompletedAt: typeof task.originalCompletedAt === "string" ? task.originalCompletedAt : null,
 });
 
 const normalizeActivityRecord = (activity: ActivityRecord): ActivityRecord => ({
@@ -190,6 +207,7 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   calendarDetailsPaneWidth: 320,
   calendarScrollTop: 0,
   calendarScrollLeft: 0,
+  calendarVisibilityFilter: "all",
   baselineWorkEnabled: false,
   baselineWorkActivityId: "",
   apiKey: "",
@@ -248,6 +266,7 @@ export const createDefaultSnapshot = (): DesktopAppSnapshot => ({
   ],
   templates: BUILTIN_TEMPLATES,
   todos: [],
+  archivedTasks: [],
   activities: [],
   timelogs: [],
   calendarItems: [],
@@ -263,6 +282,8 @@ export interface EntityRepository {
   saveTemplates(records: TemplateDefinition[]): Promise<void>;
   loadTodos(): Promise<TodoRecord[]>;
   saveTodos(records: TodoRecord[]): Promise<void>;
+  loadArchivedTasks(): Promise<ArchivedTaskRecord[]>;
+  saveArchivedTasks(records: ArchivedTaskRecord[]): Promise<void>;
   loadActivities(): Promise<ActivityRecord[]>;
   saveActivities(records: ActivityRecord[]): Promise<void>;
   loadTimeLogs(): Promise<TimeLogRecord[]>;
@@ -327,6 +348,10 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
   calendarScrollLeft: Number.isFinite(Number(settings.calendarScrollLeft))
     ? Math.max(0, Math.round(Number(settings.calendarScrollLeft)))
     : 0,
+  calendarVisibilityFilter:
+    settings.calendarVisibilityFilter === "public" || settings.calendarVisibilityFilter === "private"
+      ? settings.calendarVisibilityFilter
+      : "all",
   baselineWorkEnabled: Boolean(settings.baselineWorkEnabled),
   baselineWorkActivityId:
     typeof settings.baselineWorkActivityId === "string" ? settings.baselineWorkActivityId.trim() : "",
@@ -453,6 +478,14 @@ class BrowserEntityRepository implements AppRepository {
     writeLocalJson(STORAGE_KEYS.activities, records);
   }
 
+  async loadArchivedTasks() {
+    return readLocalJson<ArchivedTaskRecord[]>(STORAGE_KEYS.archivedTasks, []).map(normalizeArchivedTaskRecord);
+  }
+
+  async saveArchivedTasks(records: ArchivedTaskRecord[]) {
+    writeLocalJson(STORAGE_KEYS.archivedTasks, records);
+  }
+
   async loadTimeLogs() {
     return readLocalJson<TimeLogRecord[]>(STORAGE_KEYS.timelogs, []).map(normalizeTimeLogRecord);
   }
@@ -518,10 +551,11 @@ class BrowserEntityRepository implements AppRepository {
   }
 
   async loadSnapshot(): Promise<DesktopAppSnapshot> {
-    const [sessions, templates, todos, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
+    const [sessions, templates, todos, archivedTasks, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
       this.loadSessions(),
       this.loadTemplates(),
       this.loadTodos(),
+      this.loadArchivedTasks(),
       this.loadActivities(),
       this.loadTimeLogs(),
       this.loadCalendarItems(),
@@ -534,6 +568,7 @@ class BrowserEntityRepository implements AppRepository {
       sessions: sessions.length ? sessions : createDefaultSnapshot().sessions,
       templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
       todos,
+      archivedTasks,
       activities,
       timelogs,
       calendarItems,
@@ -548,6 +583,7 @@ class BrowserEntityRepository implements AppRepository {
       this.saveSessions(snapshot.sessions),
       this.saveTemplates(snapshot.templates),
       this.saveTodos(snapshot.todos),
+      this.saveArchivedTasks(snapshot.archivedTasks),
       this.saveActivities(snapshot.activities),
       this.saveTimeLogs(snapshot.timelogs),
       this.saveCalendarItems(snapshot.calendarItems),
@@ -593,6 +629,7 @@ class TauriSqliteRepository implements AppRepository {
         await db.execute("ALTER TABLE attachments ADD COLUMN output_position INTEGER NOT NULL DEFAULT 0").catch(() => {});
         await db.execute("CREATE TABLE IF NOT EXISTS calendar_items (id TEXT PRIMARY KEY, target_type TEXT NOT NULL, target_id TEXT NOT NULL, schedule_date TEXT NOT NULL, start_slot INTEGER NOT NULL, duration_slots INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
         await db.execute("CREATE TABLE IF NOT EXISTS timelogs (id TEXT PRIMARY KEY, target_type TEXT NOT NULL, target_id TEXT NOT NULL, log_date TEXT NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL, duration_minutes INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
+        await db.execute("CREATE TABLE IF NOT EXISTS archived_tasks (id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
         return db;
       })();
     }
@@ -758,6 +795,25 @@ class TauriSqliteRepository implements AppRepository {
     const db = await this.getDb();
     const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM activities ORDER BY created_at DESC");
     return rows.map((row) => normalizeActivityRecord(JSON.parse(row.payload_json) as ActivityRecord));
+  }
+
+  async loadArchivedTasks() {
+    const db = await this.getDb();
+    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM archived_tasks ORDER BY deleted_at DESC");
+    return rows.map((row) => normalizeArchivedTaskRecord(JSON.parse(row.payload_json) as ArchivedTaskRecord));
+  }
+
+  async saveArchivedTasks(records: ArchivedTaskRecord[]) {
+    const db = await this.getDb();
+    await db.execute("DELETE FROM archived_tasks");
+    await Promise.all(
+      records.map((record) =>
+        db.execute(
+          "INSERT INTO archived_tasks (id, deleted_at, payload_json) VALUES (?, ?, ?)",
+          [record.id, record.deletedAt, JSON.stringify(record)],
+        ),
+      ),
+    );
   }
 
   async saveActivities(records: ActivityRecord[]) {
@@ -964,10 +1020,11 @@ class TauriSqliteRepository implements AppRepository {
   }
 
   async loadSnapshot(): Promise<DesktopAppSnapshot> {
-    const [sessions, templates, todos, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
+    const [sessions, templates, todos, archivedTasks, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
       this.loadSessions(),
       this.loadTemplates(),
       this.loadTodos(),
+      this.loadArchivedTasks(),
       this.loadActivities(),
       this.loadTimeLogs(),
       this.loadCalendarItems(),
@@ -980,6 +1037,7 @@ class TauriSqliteRepository implements AppRepository {
       sessions: sessions.length ? sessions : createDefaultSnapshot().sessions,
       templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
       todos,
+      archivedTasks,
       activities,
       timelogs,
       calendarItems,
@@ -994,6 +1052,7 @@ class TauriSqliteRepository implements AppRepository {
       this.saveSessions(snapshot.sessions),
       this.saveTemplates(snapshot.templates),
       this.saveTodos(snapshot.todos),
+      this.saveArchivedTasks(snapshot.archivedTasks),
       this.saveActivities(snapshot.activities),
       this.saveTimeLogs(snapshot.timelogs),
       this.saveCalendarItems(snapshot.calendarItems),

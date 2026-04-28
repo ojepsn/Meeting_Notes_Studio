@@ -1,6 +1,7 @@
-import type { ActivityRecord, TimeLogRecord, TimeReportPreset, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, ArchivedTaskRecord, TimeLogRecord, TimeReportPreset, TodoRecord } from "@notesmith/domain";
 type TimeWorkspaceProps = {
     todos: TodoRecord[];
+    archivedTasks: ArchivedTaskRecord[];
     activities: ActivityRecord[];
     timeLogs: TimeLogRecord[];
     requestedDomain?: string | null;
@@ -33,5 +34,5 @@ export declare const getPresetRange: (preset: Exclude<DatePreset, "custom">, now
 export declare const calculateDurationMinutes: (date: string, startTime: string, endTime: string) => number;
 export declare const buildExportFilename: (kind: "csv" | "md", now?: Date) => string;
 export declare const buildJsonExportFilename: (now?: Date) => string;
-export declare const TimeWorkspace: ({ todos, activities, timeLogs, requestedDomain, requestedProject, reportPresets, isBaselineWorkEnabled, isBaselineWorkRunning, hasSpecificRunningTimeLog, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onStartWorkBaseline, onStopWorkBaseline, onOpenTodoDetail, onOpenActivityDetail, onSaveReportPreset, onDeleteReportPreset, }: TimeWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const TimeWorkspace: ({ todos, archivedTasks, activities, timeLogs, requestedDomain, requestedProject, reportPresets, isBaselineWorkEnabled, isBaselineWorkRunning, hasSpecificRunningTimeLog, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onStartWorkBaseline, onStopWorkBaseline, onOpenTodoDetail, onOpenActivityDetail, onSaveReportPreset, onDeleteReportPreset, }: TimeWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

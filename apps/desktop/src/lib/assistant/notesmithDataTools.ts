@@ -207,11 +207,15 @@ const calendarItemToSource = (
 };
 
 const timelogToSource = (entry: TimeLogRecord, query: string, snapshot: DesktopAppSnapshot): NoteSmithAssistantSource => {
+  const archivedTask = entry.targetType === "todo" ? snapshot.archivedTasks.find((task) => task.id === entry.targetId) : null;
   const target =
     entry.targetType === "todo"
       ? snapshot.todos.find((todo) => todo.id === entry.targetId)
       : snapshot.activities.find((activity) => activity.id === entry.targetId);
-  const targetTitle = target && "description" in target ? target.description : "Time log";
+  const targetTitle =
+    target && "description" in target
+      ? target.description
+      : archivedTask?.title || (entry.targetType === "todo" ? "Archived task" : "Time log");
   const text = toSearchText(targetTitle, entry.notes, entry.date, entry.startTime, entry.endTime);
   return {
     id: entry.id,
@@ -224,13 +228,17 @@ const timelogToSource = (entry: TimeLogRecord, query: string, snapshot: DesktopA
       targetType: entry.targetType,
       targetId: entry.targetId,
       durationMinutes: entry.durationMinutes,
+      archived: Boolean(archivedTask && !target),
     },
   };
 };
 
 const isPrivateTimelogTarget = (entry: TimeLogRecord, snapshot: DesktopAppSnapshot) => {
   if (entry.targetType === "todo") {
-    return Boolean(snapshot.todos.find((todo) => todo.id === entry.targetId)?.isPrivate);
+    return Boolean(
+      snapshot.todos.find((todo) => todo.id === entry.targetId)?.isPrivate
+      ?? snapshot.archivedTasks.find((task) => task.id === entry.targetId)?.isPrivate,
+    );
   }
   return Boolean(snapshot.activities.find((activity) => activity.id === entry.targetId)?.isPrivate);
 };

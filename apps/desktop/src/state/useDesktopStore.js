@@ -20,6 +20,8 @@ const ROLLED_TODO_EARLY_MORNING_ROWS = 24;
 const ROLLED_TODO_MAX_PER_ROW = 2;
 const OTHER_STRUCTURE_VALUE = "Other";
 const BASELINE_WORK_ACTIVITY_LABEL = "Other";
+const COMPLETED_TASK_PURGE_DAYS = 90;
+const COMPLETED_TASK_PURGE_MS = COMPLETED_TASK_PURGE_DAYS * 24 * 60 * 60 * 1000;
 const formatLocalDate = (value = new Date()) => {
     const year = value.getFullYear();
     const month = `${value.getMonth() + 1}`.padStart(2, "0");
@@ -27,6 +29,58 @@ const formatLocalDate = (value = new Date()) => {
     return `${year}-${month}-${day}`;
 };
 const formatLocalTime = (value = new Date()) => `${`${value.getHours()}`.padStart(2, "0")}:${`${value.getMinutes()}`.padStart(2, "0")}`;
+const normalizeCompletionState = (previousTodo, nextTodo, timestamp = new Date().toISOString()) => {
+    if (nextTodo.isDone) {
+        return {
+            ...nextTodo,
+            completedAt: typeof nextTodo.completedAt === "string" && nextTodo.completedAt
+                ? nextTodo.completedAt
+                : previousTodo?.completedAt || timestamp,
+        };
+    }
+    return {
+        ...nextTodo,
+        completedAt: null,
+    };
+};
+const archiveTodoRecord = (archivedTasks, todo, deletedAt = new Date().toISOString()) => {
+    const archivedTask = {
+        id: todo.id,
+        title: todo.description,
+        isPrivate: Boolean(todo.isPrivate),
+        domain: todo.domain,
+        project: todo.project,
+        activity: todo.activity,
+        activityId: todo.activityId,
+        deletedAt,
+        originalCreatedAt: todo.createdAt,
+        originalCompletedAt: typeof todo.completedAt === "string" ? todo.completedAt : null,
+    };
+    return archivedTasks.some((entry) => entry.id === archivedTask.id)
+        ? archivedTasks.map((entry) => (entry.id === archivedTask.id ? archivedTask : entry))
+        : [archivedTask, ...archivedTasks];
+};
+const applyCompletedTaskCleanup = (snapshot, nowValue = new Date()) => {
+    const purgeThreshold = nowValue.getTime() - COMPLETED_TASK_PURGE_MS;
+    const purgeableTodos = snapshot.todos.filter((todo) => {
+        if (!todo.isDone || !todo.completedAt)
+            return false;
+        const completedAtMs = Date.parse(todo.completedAt);
+        return Number.isFinite(completedAtMs) && completedAtMs <= purgeThreshold;
+    });
+    if (!purgeableTodos.length)
+        return snapshot;
+    const purgeableIds = new Set(purgeableTodos.map((todo) => todo.id));
+    const deletedAt = nowValue.toISOString();
+    return {
+        ...snapshot,
+        archivedTasks: purgeableTodos.reduce((current, todo) => archiveTodoRecord(current, todo, deletedAt), snapshot.archivedTasks),
+        todos: snapshot.todos.filter((todo) => !purgeableIds.has(todo.id)),
+        calendarItems: snapshot.calendarItems.filter((item) => !(item.targetType === "todo" && purgeableIds.has(item.targetId))),
+        entityLinks: snapshot.entityLinks.filter((entry) => !((entry.fromType === "todo" && purgeableIds.has(entry.fromId)) ||
+            (entry.toType === "todo" && purgeableIds.has(entry.toId)))),
+    };
+};
 const clampSlotIndex = (slot) => Math.max(0, Math.min(MAX_SLOT_INDEX, Math.round(slot)));
 const timeToSlot = (time) => {
     const [hours, minutes] = time.split(":").map(Number);
@@ -484,7 +538,11 @@ const logPersistError = (error) => {
     console.error("NoteSmith desktop persistence failed", error);
 };
 const scheduleSnapshotPersist = (repository, snapshot, setState) => {
-    pendingSnapshot = snapshot;
+    const nextSnapshot = applyCompletedTaskCleanup(snapshot);
+    pendingSnapshot = nextSnapshot;
+    if (nextSnapshot !== snapshot) {
+        setState({ snapshot: nextSnapshot });
+    }
     setState({ saveState: "saving" });
     if (persistTimer) {
         clearTimeout(persistTimer);
@@ -510,6 +568,10 @@ const scheduleSnapshotPersist = (repository, snapshot, setState) => {
     }, PERSIST_DEBOUNCE_MS);
 };
 const flushSnapshotPersist = async (repository, snapshot, setState) => {
+    const nextSnapshot = applyCompletedTaskCleanup(snapshot);
+    if (nextSnapshot !== snapshot) {
+        setState({ snapshot: nextSnapshot });
+    }
     pendingSnapshot = null;
     if (persistTimer) {
         clearTimeout(persistTimer);
@@ -517,7 +579,7 @@ const flushSnapshotPersist = async (repository, snapshot, setState) => {
     }
     setState({ saveState: "saving" });
     try {
-        await repository.saveSnapshot(snapshot);
+        await repository.saveSnapshot(nextSnapshot);
         setState({
             saveState: "saved",
             lastSavedAt: new Date().toISOString(),
@@ -566,6 +628,7 @@ export const useDesktopStore = create((set, get) => ({
                 attachments: nextAttachments,
                 activities: recalculateActivitiesWithTimeLogs(loadedSnapshot.activities, loadedSnapshot.timelogs),
             };
+            snapshot = applyCompletedTaskCleanup(snapshot);
             const rolloverResult = rollForwardOverdueCalendarTodos(snapshot);
             snapshot = rolloverResult.snapshot;
             const activeCandidate = getFirstActiveSessionId(snapshot.sessions);
@@ -727,6 +790,7 @@ export const useDesktopStore = create((set, get) => ({
         const snapshot = get().snapshot;
         if (!snapshot)
             return;
+        const existingTodo = snapshot.todos.find((entry) => entry.id === todo.id);
         const normalizedTask = normalizeTaskRecord({
             ...todoToTaskRecord(todo),
             ...applyActivityInheritance(snapshot, {
@@ -736,11 +800,12 @@ export const useDesktopStore = create((set, get) => ({
                 activityId: todo.activityId,
             }),
         });
+        const nextTodo = normalizeCompletionState(existingTodo, taskToTodoRecord(normalizedTask));
         const nextSnapshot = {
             ...snapshot,
-            todos: upsertTodo(snapshot.todos, taskToTodoRecord(normalizedTask)),
+            todos: upsertTodo(snapshot.todos, nextTodo),
         };
-        const syncedSnapshot = syncLinkedSessionForTodo(nextSnapshot, taskToTodoRecord(normalizedTask));
+        const syncedSnapshot = syncLinkedSessionForTodo(nextSnapshot, nextTodo);
         set({ snapshot: syncedSnapshot });
         scheduleSnapshotPersist(get().repository, syncedSnapshot, set);
     },
@@ -763,7 +828,9 @@ export const useDesktopStore = create((set, get) => ({
             id: todoId,
             description: description.trim(),
             isDone: false,
+            completedAt: null,
             isPrivate: false,
+            isPriority: false,
             comments: options?.comments || "",
             activityId: inherited.activityId,
             domain: inherited.domain,
@@ -796,11 +863,14 @@ export const useDesktopStore = create((set, get) => ({
         const snapshot = get().snapshot;
         if (!snapshot)
             return;
-        const nextTimeLogs = snapshot.timelogs.filter((entry) => !(entry.targetType === "todo" && entry.targetId === id));
+        const todoToArchive = snapshot.todos.find((todo) => todo.id === id);
+        const nextArchivedTasks = todoToArchive
+            ? archiveTodoRecord(snapshot.archivedTasks, todoToArchive)
+            : snapshot.archivedTasks;
         const nextSnapshot = {
             ...snapshot,
+            archivedTasks: nextArchivedTasks,
             todos: snapshot.todos.filter((todo) => todo.id !== id),
-            timelogs: nextTimeLogs,
             calendarItems: snapshot.calendarItems.filter((item) => !(item.targetType === "todo" && item.targetId === id)),
             entityLinks: snapshot.entityLinks.filter((entry) => !((entry.fromType === "todo" && entry.fromId === id) ||
                 (entry.toType === "todo" && entry.toId === id))),
@@ -865,21 +935,24 @@ export const useDesktopStore = create((set, get) => ({
         if (!snapshot)
             return;
         const removedActivityIds = collectActivityDescendants(snapshot.activities, id);
+        const todosToArchive = snapshot.todos.filter((todo) => removedActivityIds.has(todo.activityId));
+        const removedTodoIds = new Set(todosToArchive.map((todo) => todo.id));
         const removedSessionIds = new Set(snapshot.entityLinks
             .filter((entry) => entry.fromType === "activity" && removedActivityIds.has(entry.fromId))
             .map((entry) => entry.toId));
+        const nextArchivedTasks = todosToArchive.reduce((current, todo) => archiveTodoRecord(current, todo), snapshot.archivedTasks);
         const nextSnapshot = {
             ...snapshot,
+            archivedTasks: nextArchivedTasks,
             activities: snapshot.activities.filter((activity) => !removedActivityIds.has(activity.id)),
             todos: snapshot.todos.filter((todo) => !removedActivityIds.has(todo.activityId)),
-            timelogs: snapshot.timelogs.filter((entry) => !((entry.targetType === "activity" && removedActivityIds.has(entry.targetId)) ||
-                (entry.targetType === "todo" &&
-                    snapshot.todos.some((todo) => todo.id === entry.targetId && removedActivityIds.has(todo.activityId))))),
             calendarItems: snapshot.calendarItems.filter((item) => !((item.targetType === "activity" && removedActivityIds.has(item.targetId)) ||
                 (item.targetType === "todo" &&
                     snapshot.todos.some((todo) => todo.id === item.targetId && removedActivityIds.has(todo.activityId))))),
             entityLinks: snapshot.entityLinks.filter((entry) => !((entry.fromType === "activity" && removedActivityIds.has(entry.fromId)) ||
                 (entry.toType === "activity" && removedActivityIds.has(entry.toId)) ||
+                (entry.fromType === "todo" && removedTodoIds.has(entry.fromId)) ||
+                (entry.toType === "todo" && removedTodoIds.has(entry.toId)) ||
                 (entry.toType === "session" && removedSessionIds.has(entry.toId)))),
         };
         set({ snapshot: nextSnapshot });
@@ -1050,7 +1123,9 @@ export const useDesktopStore = create((set, get) => ({
                 id: crypto.randomUUID(),
                 description: parsed.description,
                 isDone: false,
+                completedAt: null,
                 isPrivate: false,
+                isPriority: false,
                 comments: "",
                 activityId: options?.activityId || "",
                 domain: inherited.domain,
@@ -1458,13 +1533,15 @@ export const useDesktopStore = create((set, get) => ({
         return "imported";
     },
     importBackupSnapshot: async (snapshot) => {
-        const nextSnapshot = {
+        const nextSnapshot = applyCompletedTaskCleanup({
             ...snapshot,
             sessions: Array.isArray(snapshot.sessions) && snapshot.sessions.length
                 ? snapshot.sessions
                 : [createSessionRecord(snapshot.settings?.preferredDesktopTemplateId || "meeting", "meeting-note")],
+            todos: Array.isArray(snapshot.todos) ? snapshot.todos.map((todo) => normalizeTaskRecord(todoToTaskRecord(todo))) : [],
+            archivedTasks: Array.isArray(snapshot.archivedTasks) ? snapshot.archivedTasks : [],
             activities: recalculateActivitiesWithTimeLogs(snapshot.activities ?? [], snapshot.timelogs ?? []),
-        };
+        });
         set({
             snapshot: nextSnapshot,
             activeSessionId: getFirstActiveSessionId(nextSnapshot.sessions),

@@ -3404,6 +3404,7 @@ export const App = () => {
             ) : activeWorkspace === "time" ? (
               <TimeWorkspace
                 todos={snapshot.todos}
+                archivedTasks={snapshot.archivedTasks}
                 activities={snapshot.activities}
                 timeLogs={snapshot.timelogs}
                 requestedDomain={requestedTimeDomain}
@@ -3668,7 +3669,7 @@ export const App = () => {
             )}
           </section>
 
-        {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && activeWorkspace !== "notes" && activeWorkspace !== "todos" ? (
+        {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && activeWorkspace !== "notes" && activeWorkspace !== "todos" && activeWorkspace !== "time" ? (
           <aside className="workspace-inspector stack">
             <div className="sidebar-card">
               <div>

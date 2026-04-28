@@ -9,6 +9,7 @@ const createBlankTodoDraft = (description = "") => ({
     description,
     isDone: false,
     isPrivate: false,
+    isPriority: false,
     comments: "",
     activityId: "",
     domain: "",

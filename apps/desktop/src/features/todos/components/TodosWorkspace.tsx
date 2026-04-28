@@ -39,6 +39,7 @@ const createBlankTodoDraft = (description = ""): TaskRecord => ({
   description,
   isDone: false,
   isPrivate: false,
+  isPriority: false,
   comments: "",
   activityId: "",
   domain: "",

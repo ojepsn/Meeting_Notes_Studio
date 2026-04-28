@@ -59,6 +59,11 @@ export const sqliteBootstrapStatements = [
     updated_at TEXT NOT NULL,
     payload_json TEXT NOT NULL
   );`,
+  `CREATE TABLE IF NOT EXISTS archived_tasks (
+    id TEXT PRIMARY KEY,
+    deleted_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+  );`,
   `CREATE TABLE IF NOT EXISTS calendar_items (
     id TEXT PRIMARY KEY,
     target_type TEXT NOT NULL,

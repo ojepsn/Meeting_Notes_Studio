@@ -70,7 +70,9 @@ export interface TodoRecord {
   id: string;
   description: string;
   isDone: boolean;
+  completedAt?: string | null;
   isPrivate: boolean;
+  isPriority?: boolean;
   comments: string;
   activityId: string;
   domain: string;
@@ -84,6 +86,19 @@ export interface TodoRecord {
 }
 
 export type TaskRecord = TodoRecord;
+
+export interface ArchivedTaskRecord {
+  id: string;
+  title: string;
+  isPrivate: boolean;
+  domain: string;
+  project: string;
+  activity: string;
+  activityId: string;
+  deletedAt: string;
+  originalCreatedAt: string;
+  originalCompletedAt?: string | null;
+}
 
 export interface ActivityRecord {
   id: string;
@@ -232,6 +247,7 @@ export interface LocalAppSettings {
   calendarDetailsPaneWidth: number;
   calendarScrollTop: number;
   calendarScrollLeft: number;
+  calendarVisibilityFilter?: "all" | "public" | "private";
   baselineWorkEnabled: boolean;
   baselineWorkActivityId: string;
   apiKey: string;
@@ -255,6 +271,7 @@ export interface DesktopAppSnapshot {
   sessions: SessionRecord[];
   templates: TemplateDefinition[];
   todos: TodoRecord[];
+  archivedTasks: ArchivedTaskRecord[];
   activities: ActivityRecord[];
   timelogs: TimeLogRecord[];
   calendarItems: CalendarItemRecord[];

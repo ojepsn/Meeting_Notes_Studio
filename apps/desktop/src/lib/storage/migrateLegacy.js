@@ -211,6 +211,7 @@ const buildLegacySnapshot = (parsedSessions, parsedSettings) => {
         sessions: mapLegacySessions(parsedSessions),
         templates: mapLegacyTemplates(parsedSettings?.customTemplates),
         todos: mapLegacyTodos(parsedSettings?.todoItems),
+        archivedTasks: [],
         activities: [],
         timelogs: [],
         calendarItems: [],

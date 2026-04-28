@@ -393,12 +393,16 @@ select {
 .desktop-shell {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
+  align-items: start;
 }
 
 .workspace-rail {
   position: sticky;
   top: 0;
+  align-self: start;
   min-height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
   padding: 1.5rem 1rem;
   border-right: 1px solid var(--app-border);
   background: var(--app-surface-strong);
@@ -4381,6 +4385,23 @@ select {
 .calendar-item-block-completed-todo {
   opacity: 0.62;
   filter: grayscale(0.35);
+}
+
+.calendar-item-block-priority-todo {
+  background: color-mix(in srgb, var(--app-accent-soft) 84%, var(--app-surface-soft) 16%);
+  border-color: color-mix(in srgb, var(--app-accent-border) 90%, transparent 10%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--app-accent-border) 35%, transparent 65%),
+    0 8px 22px color-mix(in srgb, var(--app-accent-border) 18%, transparent 82%);
+}
+
+.calendar-item-block-priority-todo .calendar-item-title {
+  color: color-mix(in srgb, var(--app-accent) 80%, var(--app-text) 20%);
+}
+
+.calendar-item-block-priority-todo .calendar-item-inline-action {
+  border-color: color-mix(in srgb, var(--app-accent-border) 60%, transparent 40%);
+  background: color-mix(in srgb, var(--app-surface-strong) 62%, var(--app-accent-soft) 38%);
 }
 
 .calendar-item-block-completed-todo .calendar-item-title {

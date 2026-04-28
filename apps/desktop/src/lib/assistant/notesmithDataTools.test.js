@@ -69,6 +69,7 @@ const buildSnapshot = () => ({
             id: "todo-1",
             description: "Follow up recruitment risk",
             isDone: false,
+            completedAt: null,
             isPrivate: false,
             comments: "",
             activityId: "activity-1",
@@ -82,6 +83,7 @@ const buildSnapshot = () => ({
             sessionIds: ["session-public"],
         },
     ],
+    archivedTasks: [],
     activities: [
         {
             id: "activity-1",
@@ -141,9 +143,11 @@ const buildSnapshot = () => ({
         calendarDaysInView: 5,
         calendarSlotHeight: 16,
         calendarIsFullScreen: true,
+        calendarFullScreenPreferenceInitialized: false,
         calendarDetailsPaneWidth: 320,
         calendarScrollTop: 0,
         calendarScrollLeft: 0,
+        calendarVisibilityFilter: "all",
         baselineWorkEnabled: false,
         baselineWorkActivityId: "",
         apiKey: "",
@@ -159,6 +163,7 @@ const buildSnapshot = () => ({
         abbreviations: [],
         preferredParticipantNames: [],
         ruleSuggestions: [],
+        assistantQueryMemories: [],
         promptProfile: {
             meetingMinutesSystem: "",
             meetingMinutesRules: "",

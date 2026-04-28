@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
-import type { ActivityRecord, TimeLogRecord, TimeReportPreset, TodoRecord } from "@notesmith/domain";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
+import type { ActivityRecord, ArchivedTaskRecord, TimeLogRecord, TimeReportPreset, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { saveTextFile } from "../../../lib/storage/desktopStorage";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
 
 type TimeWorkspaceProps = {
   todos: TodoRecord[];
+  archivedTasks: ArchivedTaskRecord[];
   activities: ActivityRecord[];
   timeLogs: TimeLogRecord[];
   requestedDomain?: string | null;
@@ -27,7 +28,13 @@ type TimeWorkspaceProps = {
   onDeleteReportPreset: (presetId: string) => void;
 };
 
-type EditableTimeLogRecord = TimeLogRecord & { title: string; contextLabel: string };
+type EditableTimeLogRecord = TimeLogRecord & { title: string; contextLabel: string; isArchivedTarget?: boolean };
+type TimeLogEditDraft = {
+  date: string;
+  startTime: string;
+  endTime: string;
+  notes: string;
+};
 type DatePreset = "today" | "this-week" | "this-month" | "custom";
 type TimeLogColumnKey = "source" | "date" | "start" | "stop" | "duration" | "comment" | "actions";
 type TimeLogColumnWidths = Record<TimeLogColumnKey, number>;
@@ -115,6 +122,7 @@ const csvCell = (value: string | number) => `"${String(value ?? "").replaceAll("
 
 export const TimeWorkspace = ({
   todos,
+  archivedTasks,
   activities,
   timeLogs,
   requestedDomain,
@@ -146,6 +154,7 @@ export const TimeWorkspace = ({
   const [now, setNow] = useState(() => new Date());
   const [timeLogColumnWidths, setTimeLogColumnWidths] = useState<TimeLogColumnWidths>(defaultTimeLogColumnWidths);
   const [olderVisibleCount, setOlderVisibleCount] = useState(TIMELOG_OLDER_BATCH_SIZE);
+  const [timeLogDrafts, setTimeLogDrafts] = useState<Record<string, TimeLogEditDraft>>({});
   const timeLogScrollAreaRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -156,6 +165,10 @@ export const TimeWorkspace = ({
   }, [requestedDomain]);
 
   const todoLookup = useMemo(() => Object.fromEntries(todos.map((todo) => [todo.id, todo])) as Record<string, TodoRecord>, [todos]);
+  const archivedTaskLookup = useMemo(
+    () => Object.fromEntries(archivedTasks.map((task) => [task.id, task])) as Record<string, ArchivedTaskRecord>,
+    [archivedTasks],
+  );
   const activityLookup = useMemo(
     () => Object.fromEntries(activities.map((activity) => [activity.id, activity])) as Record<string, ActivityRecord>,
     [activities],
@@ -167,11 +180,19 @@ export const TimeWorkspace = ({
         .map((log) => {
           if (log.targetType === "todo") {
             const todo = todoLookup[log.targetId];
+            const archivedTask = todo ? null : archivedTaskLookup[log.targetId];
             const linkedActivity = todo?.activityId ? activityLookup[todo.activityId] : null;
             return {
               ...log,
-              title: todo?.description || "Deleted todo",
-              contextLabel: linkedActivity?.description || todo?.project || todo?.domain || "Unassigned todo",
+              title: todo?.description || archivedTask?.title || "Deleted task",
+              contextLabel:
+                linkedActivity?.description ||
+                todo?.project ||
+                archivedTask?.project ||
+                todo?.domain ||
+                archivedTask?.domain ||
+                "Archived task",
+              isArchivedTarget: !todo && Boolean(archivedTask),
             };
           }
           const activity = activityLookup[log.targetId];
@@ -187,7 +208,7 @@ export const TimeWorkspace = ({
           if (leftRunning !== rightRunning) return leftRunning ? -1 : 1;
           return `${right.date} ${right.startTime}`.localeCompare(`${left.date} ${left.startTime}`);
         }),
-    [activityLookup, timeLogs, todoLookup],
+    [activityLookup, archivedTaskLookup, timeLogs, todoLookup],
   );
 
   const projectOptions = useMemo(
@@ -196,12 +217,13 @@ export const TimeWorkspace = ({
         new Set(
           enrichedLogs.map((log) => {
             const todo = log.targetType === "todo" ? todoLookup[log.targetId] : null;
+            const archivedTask = log.targetType === "todo" ? archivedTaskLookup[log.targetId] : null;
             const activity = log.targetType === "activity" ? activityLookup[log.targetId] : todo?.activityId ? activityLookup[todo.activityId] : null;
-            return activity?.project || todo?.project || "No project";
+            return activity?.project || todo?.project || archivedTask?.project || "No project";
           }),
         ),
       ).sort(),
-    [activityLookup, enrichedLogs, todoLookup],
+    [activityLookup, archivedTaskLookup, enrichedLogs, todoLookup],
   );
   const domainOptions = useMemo(
     () =>
@@ -209,12 +231,13 @@ export const TimeWorkspace = ({
         new Set(
           enrichedLogs.map((log) => {
             const todo = log.targetType === "todo" ? todoLookup[log.targetId] : null;
+            const archivedTask = log.targetType === "todo" ? archivedTaskLookup[log.targetId] : null;
             const activity = log.targetType === "activity" ? activityLookup[log.targetId] : todo?.activityId ? activityLookup[todo.activityId] : null;
-            return activity?.domain || todo?.domain || "No domain";
+            return activity?.domain || todo?.domain || archivedTask?.domain || "No domain";
           }),
         ),
       ).sort(),
-    [activityLookup, enrichedLogs, todoLookup],
+    [activityLookup, archivedTaskLookup, enrichedLogs, todoLookup],
   );
   const activityOptions = useMemo(
     () =>
@@ -222,28 +245,30 @@ export const TimeWorkspace = ({
         new Set(
           enrichedLogs.map((log) => {
             const todo = log.targetType === "todo" ? todoLookup[log.targetId] : null;
+            const archivedTask = log.targetType === "todo" ? archivedTaskLookup[log.targetId] : null;
             const activity = log.targetType === "activity" ? activityLookup[log.targetId] : todo?.activityId ? activityLookup[todo.activityId] : null;
-            return activity?.description || todo?.activity || "No activity";
+            return activity?.description || todo?.activity || archivedTask?.activity || "No activity";
           }),
         ),
       ).sort(),
-    [activityLookup, enrichedLogs, todoLookup],
+    [activityLookup, archivedTaskLookup, enrichedLogs, todoLookup],
   );
 
   const logsMatchingStructure = useMemo(
     () =>
       enrichedLogs.filter((log) => {
         const todo = log.targetType === "todo" ? todoLookup[log.targetId] : null;
+        const archivedTask = log.targetType === "todo" ? archivedTaskLookup[log.targetId] : null;
         const activity = log.targetType === "activity" ? activityLookup[log.targetId] : todo?.activityId ? activityLookup[todo.activityId] : null;
-        const project = activity?.project || todo?.project || "No project";
-        const domain = activity?.domain || todo?.domain || "No domain";
-        const activityName = activity?.description || todo?.activity || "No activity";
+        const project = activity?.project || todo?.project || archivedTask?.project || "No project";
+        const domain = activity?.domain || todo?.domain || archivedTask?.domain || "No domain";
+        const activityName = activity?.description || todo?.activity || archivedTask?.activity || "No activity";
         if (projectFilter !== "all" && project !== projectFilter) return false;
         if (domainFilter !== "all" && domain !== domainFilter) return false;
         if (activityFilter !== "all" && activityName !== activityFilter) return false;
         return true;
       }),
-    [activityFilter, activityLookup, domainFilter, enrichedLogs, projectFilter, todoLookup],
+    [activityFilter, activityLookup, archivedTaskLookup, domainFilter, enrichedLogs, projectFilter, todoLookup],
   );
 
   const filteredLogs = useMemo(
@@ -322,6 +347,21 @@ export const TimeWorkspace = ({
   }, [projectFilter, domainFilter, activityFilter, searchQuery]);
 
   useEffect(() => {
+    setTimeLogDrafts((current) => {
+      const activeLogIds = new Set(enrichedLogs.map((log) => log.id));
+      let changed = false;
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([id]) => {
+          const keep = activeLogIds.has(id);
+          if (!keep) changed = true;
+          return keep;
+        }),
+      ) as Record<string, TimeLogEditDraft>;
+      return changed ? next : current;
+    });
+  }, [enrichedLogs]);
+
+  useEffect(() => {
     const node = timeLogScrollAreaRef.current;
     if (!node) return;
     const handleScroll = () => {
@@ -350,26 +390,28 @@ export const TimeWorkspace = ({
   }, [filteredLogs]);
 
   const activityTotals = useMemo(() => {
-    const grouped = new Map<string, { label: string; domain: string; project: string; minutes: number; targetType: "activity" | "todo"; targetId: string }>();
+    const grouped = new Map<string, { label: string; domain: string; project: string; minutes: number; targetType: "activity" | "todo"; targetId: string; isArchivedTarget?: boolean }>();
     filteredLogs.forEach((log) => {
       const todo = log.targetType === "todo" ? todoLookup[log.targetId] : null;
+      const archivedTask = log.targetType === "todo" ? archivedTaskLookup[log.targetId] : null;
       const linkedActivity = todo?.activityId ? activityLookup[todo.activityId] : null;
       const directActivity = log.targetType === "activity" ? activityLookup[log.targetId] : null;
       const aggregateActivity = linkedActivity || directActivity;
       const key = aggregateActivity ? `activity:${aggregateActivity.id}` : `${log.targetType}:${log.targetId}`;
       const existing = grouped.get(key) || {
         label: aggregateActivity?.description || log.title,
-        domain: aggregateActivity?.domain || todo?.domain || "",
-        project: aggregateActivity?.project || todo?.project || "",
+        domain: aggregateActivity?.domain || todo?.domain || archivedTask?.domain || "",
+        project: aggregateActivity?.project || todo?.project || archivedTask?.project || "",
         minutes: 0,
         targetType: aggregateActivity ? "activity" : log.targetType,
         targetId: aggregateActivity?.id || log.targetId,
+        isArchivedTarget: !aggregateActivity && log.targetType === "todo" && !todo && Boolean(archivedTask),
       };
       existing.minutes += log.durationMinutes;
       grouped.set(key, existing);
     });
     return Array.from(grouped.values()).sort((l, r) => r.minutes - l.minutes || l.label.localeCompare(r.label));
-  }, [activityLookup, filteredLogs, todoLookup]);
+  }, [activityLookup, archivedTaskLookup, filteredLogs, todoLookup]);
 
   const projectTotals = useMemo(() => {
     const grouped = new Map<string, number>();
@@ -386,7 +428,7 @@ export const TimeWorkspace = ({
   const workspaceTotals = useMemo(() => {
     const grouped = new Map<string, number>();
     filteredLogs.forEach((log) => {
-      const label = log.targetType === "todo" ? "Todos workspace" : "Activities workspace";
+      const label = log.targetType === "todo" ? "Tasks workspace" : "Activities workspace";
       grouped.set(label, (grouped.get(label) || 0) + log.durationMinutes);
     });
     return Array.from(grouped.entries()).map(([label, minutes]) => ({ label, minutes })).sort((l, r) => r.minutes - l.minutes || l.label.localeCompare(r.label));
@@ -537,6 +579,75 @@ export const TimeWorkspace = ({
     { key: "actions", label: "Actions", align: "right" },
   ];
 
+  const getTimeLogDraft = (log: EditableTimeLogRecord): TimeLogEditDraft =>
+    timeLogDrafts[log.id] ?? {
+      date: log.date,
+      startTime: log.startTime,
+      endTime: log.endTime,
+      notes: log.notes,
+    };
+
+  const updateTimeLogDraft = (log: EditableTimeLogRecord, updates: Partial<TimeLogEditDraft>) => {
+    setTimeLogDrafts((current) => ({
+      ...current,
+      [log.id]: {
+        ...getTimeLogDraft(log),
+        ...updates,
+      },
+    }));
+  };
+
+  const clearTimeLogDraft = (logId: string) => {
+    setTimeLogDrafts((current) => {
+      if (!(logId in current)) return current;
+      const next = { ...current };
+      delete next[logId];
+      return next;
+    });
+  };
+
+  const commitTimeLogDraft = (log: EditableTimeLogRecord) => {
+    const draft = timeLogDrafts[log.id];
+    if (!draft) return;
+    const nextDate = draft.date || log.date;
+    const nextStartTime = draft.startTime || log.startTime;
+    const nextEndTime = draft.endTime || log.endTime;
+    const nextNotes = draft.notes;
+    const changed =
+      nextDate !== log.date ||
+      nextStartTime !== log.startTime ||
+      nextEndTime !== log.endTime ||
+      nextNotes !== log.notes;
+    clearTimeLogDraft(log.id);
+    if (!changed) return;
+    onSaveTimeLog({
+      ...log,
+      date: nextDate,
+      startTime: nextStartTime,
+      endTime: nextEndTime,
+      durationMinutes: calculateDurationMinutes(nextDate, nextStartTime, nextEndTime),
+      notes: nextNotes,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const handleTimeLogDraftKeyDown = (
+    event: ReactKeyboardEvent<HTMLInputElement>,
+    log: EditableTimeLogRecord,
+  ) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitTimeLogDraft(log);
+      event.currentTarget.blur();
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      clearTimeLogDraft(log.id);
+      event.currentTarget.blur();
+    }
+  };
+
   return (
     <div className="card todos-workspace todos-workspace-minimal time-workspace-card">
       <div className="card-header session-editor-header-minimal">
@@ -684,9 +795,10 @@ export const TimeWorkspace = ({
                   <button
                     className="small-button"
                     type="button"
+                    disabled={Boolean(activeLog.isArchivedTarget)}
                     onClick={() => (activeLog.targetType === "todo" ? onOpenTodoDetail(activeLog.targetId) : onOpenActivityDetail(activeLog.targetId))}
                   >
-                    Open source
+                    {activeLog.isArchivedTarget ? "Archived" : "Open source"}
                   </button>
                 </div>
               </div>
@@ -739,63 +851,46 @@ export const TimeWorkspace = ({
               {visibleListLogs.length ? visibleListLogs.map((log) => {
                 const running = log.startTime === log.endTime;
                 const displayedMinutes = running ? calculateLiveDurationMinutes(log, now) : log.durationMinutes;
+                const draft = getTimeLogDraft(log);
                 return (
                   <div key={log.id} className={`time-log-editor-row${running ? " time-log-editor-row-active" : ""}`}>
                     <button
                       type="button"
                       className="time-log-source-button"
+                      disabled={Boolean(log.isArchivedTarget)}
                       onClick={() => (log.targetType === "todo" ? onOpenTodoDetail(log.targetId) : onOpenActivityDetail(log.targetId))}
                     >
                       <strong>{log.title}</strong>
                       <span className="tiny-text">{log.contextLabel}</span>
                     </button>
                     <DateInput
-                      value={log.date}
-                      onChange={(event) =>
-                        onSaveTimeLog({
-                          ...log,
-                          date: event.target.value,
-                          durationMinutes: calculateDurationMinutes(event.target.value, log.startTime, log.endTime),
-                          updatedAt: new Date().toISOString(),
-                        })
-                      }
+                      value={draft.date}
+                      onChange={(event) => updateTimeLogDraft(log, { date: event.target.value })}
+                      onBlur={() => commitTimeLogDraft(log)}
+                      onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
                     />
                     <input
                       type="time"
                       step={300}
-                      value={log.startTime}
-                      onChange={(event) =>
-                        onSaveTimeLog({
-                          ...log,
-                          startTime: event.target.value,
-                          durationMinutes: calculateDurationMinutes(log.date, event.target.value, log.endTime),
-                          updatedAt: new Date().toISOString(),
-                        })
-                      }
+                      value={draft.startTime}
+                      onChange={(event) => updateTimeLogDraft(log, { startTime: event.target.value })}
+                      onBlur={() => commitTimeLogDraft(log)}
+                      onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
                     />
                     <input
                       type="time"
                       step={300}
-                      value={log.endTime}
-                      onChange={(event) =>
-                        onSaveTimeLog({
-                          ...log,
-                          endTime: event.target.value,
-                          durationMinutes: calculateDurationMinutes(log.date, log.startTime, event.target.value),
-                          updatedAt: new Date().toISOString(),
-                        })
-                      }
+                      value={draft.endTime}
+                      onChange={(event) => updateTimeLogDraft(log, { endTime: event.target.value })}
+                      onBlur={() => commitTimeLogDraft(log)}
+                      onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
                     />
                     <span className="status-chip">{running ? `Running • ${formatTrackedMinutes(displayedMinutes)}` : formatMinutes(displayedMinutes)}</span>
                     <input
-                      value={log.notes}
-                      onChange={(event) =>
-                        onSaveTimeLog({
-                          ...log,
-                          notes: event.target.value,
-                          updatedAt: new Date().toISOString(),
-                        })
-                      }
+                      value={draft.notes}
+                      onChange={(event) => updateTimeLogDraft(log, { notes: event.target.value })}
+                      onBlur={() => commitTimeLogDraft(log)}
+                      onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
                       placeholder="Comment"
                     />
                     <div className="time-log-inline-actions">
@@ -944,7 +1039,13 @@ export const TimeWorkspace = ({
                   <div className="stack tight-stack">
                     <strong>Activities</strong>
                     {activityTotals.slice(0, 10).map((entry) => (
-                      <button key={`${entry.targetType}-${entry.targetId}`} className="list-item list-item-button" type="button" onClick={() => entry.targetType === "activity" ? onOpenActivityDetail(entry.targetId) : onOpenTodoDetail(entry.targetId)}>
+                      <button
+                        key={`${entry.targetType}-${entry.targetId}`}
+                        className="list-item list-item-button"
+                        type="button"
+                        disabled={Boolean(entry.isArchivedTarget)}
+                        onClick={() => entry.targetType === "activity" ? onOpenActivityDetail(entry.targetId) : onOpenTodoDetail(entry.targetId)}
+                      >
                         <span>{entry.label}</span><span>{formatMinutes(entry.minutes)}</span>
                       </button>
                     ))}
