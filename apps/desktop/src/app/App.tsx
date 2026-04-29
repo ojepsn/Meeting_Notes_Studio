@@ -81,16 +81,7 @@ import { acceptRuleSuggestion, collectRuleSuggestionObservations, ignoreRuleSugg
 import { buildStructureOptions, createEmptyStructureOptions } from "../lib/structure/options";
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
-
-const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
-const stockholmDateKeyFormatter = new Intl.DateTimeFormat("sv-SE", {
-  timeZone: STOCKHOLM_TIME_ZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
-const getStockholmDateKey = (value = new Date()) => stockholmDateKeyFormatter.format(value);
+import { formatStockholmDate as getStockholmDateKey } from "../lib/time/stockholm";
 
 type AppWorkspace = "notes" | "todos" | "calendar" | "time" | "analytics" | "structure" | "assistant" | "files";
 type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | "instructions" | null;
@@ -3422,6 +3413,7 @@ export const App = () => {
             ) : activeWorkspace === "calendar" ? (
               <CalendarWorkspace
                 todos={snapshot.todos}
+                checklists={snapshot.checklists}
                 activities={snapshot.activities}
                 timeLogs={snapshot.timelogs}
                 calendarItems={snapshot.calendarItems ?? []}
@@ -3434,6 +3426,9 @@ export const App = () => {
                 onMoveItem={(id, date, startSlot) => void moveCalendarItem(id, date, startSlot)}
                 onSaveTodo={(todo) => void saveTodo(todo)}
                 onDeleteTodo={(id) => void deleteTodo(id)}
+                onCreateChecklist={(todoId, title) => void createChecklist("todo", todoId, title)}
+                onSaveChecklist={(checklist) => void saveChecklist(checklist)}
+                onDeleteChecklist={(id) => void deleteChecklist(id)}
                 onSaveActivity={(activity) => void saveActivity(activity)}
                 onDeleteActivity={(id) => void deleteActivity(id)}
                 onConvertTodoToMeeting={(todo, options) =>

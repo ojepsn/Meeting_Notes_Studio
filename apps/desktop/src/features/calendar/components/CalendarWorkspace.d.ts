@@ -1,4 +1,4 @@
-import type { ActivityRecord, CalendarItemRecord, LocalAppSettings, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, CalendarItemRecord, ChecklistRecord, LocalAppSettings, TodoRecord } from "@notesmith/domain";
 import { type StructureOptions } from "../../../lib/structure/options";
 declare const DAYS: readonly [3, 5, 7, 14];
 export declare const addDays: (date: string, days: number) => string;
@@ -23,6 +23,7 @@ export declare const layoutCalendarItems: <T extends {
 }>(items: T[]) => T[];
 interface CalendarWorkspaceProps {
     todos: TodoRecord[];
+    checklists: ChecklistRecord[];
     activities: ActivityRecord[];
     timeLogs: import("@notesmith/domain").TimeLogRecord[];
     calendarItems: CalendarItemRecord[];
@@ -48,6 +49,9 @@ interface CalendarWorkspaceProps {
     onMoveItem: (id: string, date: string, startSlot: number) => void;
     onSaveTodo: (todo: TodoRecord) => void;
     onDeleteTodo: (id: string) => void;
+    onCreateChecklist: (todoId: string, title: string) => void;
+    onSaveChecklist: (checklist: ChecklistRecord) => void;
+    onDeleteChecklist: (id: string) => void;
     onSaveActivity: (activity: ActivityRecord) => void;
     onDeleteActivity: (id: string) => void;
     onConvertTodoToMeeting: (todo: TodoRecord, options: {
@@ -73,5 +77,5 @@ interface CalendarWorkspaceProps {
     onPreviewSessionOutput: (sessionId: string) => void;
     onFullScreenChange?: (isFullScreen: boolean) => void;
 }
-export declare const CalendarWorkspace: ({ todos, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, linkedSessionStateByTodo, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onCreateLinkedTaskSession, onPreviewSessionOutput, onFullScreenChange, }: CalendarWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const CalendarWorkspace: ({ todos, checklists, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, linkedSessionStateByTodo, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onCreateChecklist, onSaveChecklist, onDeleteChecklist, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onCreateLinkedTaskSession, onPreviewSessionOutput, onFullScreenChange, }: CalendarWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

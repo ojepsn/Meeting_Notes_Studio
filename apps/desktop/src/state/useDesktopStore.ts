@@ -18,6 +18,12 @@ import { removePersistedAttachment } from "../lib/files/attachmentStore";
 import { findSessionIdForActivity, findSessionIdForTodo, upsertEntityLink } from "../lib/links/entityLinks";
 import { loadLatestLocalSnapshotBackup } from "../lib/storage/desktopStorage";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
+import {
+  formatStockholmDate as formatLocalDate,
+  formatStockholmIsoWeek as formatLocalIsoWeek,
+  formatStockholmMonth as formatLocalMonth,
+  formatStockholmTime as formatLocalTime,
+} from "../lib/time/stockholm";
 
 type DesktopView = "capture" | "output";
 type SaveState = "saved" | "saving" | "error";
@@ -43,61 +49,6 @@ type Task = TaskRecord;
 type Activity = ActivityRecord;
 type TimeLog = TimeLogRecord;
 
-const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
-const stockholmDateTimeFormatter = new Intl.DateTimeFormat("sv-SE", {
-  timeZone: STOCKHOLM_TIME_ZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
-const getStockholmDateTimeParts = (value = new Date()) => {
-  const parts = stockholmDateTimeFormatter.formatToParts(value);
-  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const year = Number(lookup.year);
-  const month = Number(lookup.month);
-  const day = Number(lookup.day);
-  const hours = Number(lookup.hour);
-  const minutes = Number(lookup.minute);
-  return {
-    year,
-    month,
-    day,
-    hours,
-    minutes,
-  };
-};
-
-const formatLocalDate = (value = new Date()) => {
-  const { year, month, day } = getStockholmDateTimeParts(value);
-  return `${year}-${`${month}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
-};
-
-const formatLocalMonth = (value = new Date()) => formatLocalDate(value).slice(0, 7);
-
-const getIsoWeekParts = (value = new Date()) => {
-  const { year, month, day } = getStockholmDateTimeParts(value);
-  const nextValue = new Date(Date.UTC(year, month - 1, day));
-  nextValue.setUTCDate(nextValue.getUTCDate() + 3 - ((nextValue.getUTCDay() + 6) % 7));
-  const isoYear = nextValue.getUTCFullYear();
-  const weekOne = new Date(Date.UTC(isoYear, 0, 4));
-  const weekOneDay = (weekOne.getUTCDay() + 6) % 7;
-  weekOne.setUTCDate(weekOne.getUTCDate() - weekOneDay);
-  const isoWeek = Math.round((nextValue.getTime() - weekOne.getTime()) / 604800000) + 1;
-  return {
-    isoYear,
-    isoWeek,
-  };
-};
-
-const formatLocalIsoWeek = (value = new Date()) => {
-  const { isoYear, isoWeek } = getIsoWeekParts(value);
-  return `${isoYear}-W${`${isoWeek}`.padStart(2, "0")}`;
-};
-
 const stripChecklistDateSuffix = (value: string) =>
   value.trim().replace(/\s*-\s*(?:\d{4}-\d{2}(?:-\d{2})?|\d{4}-W\d{2})$/, "").trim();
 
@@ -112,11 +63,6 @@ const buildRecurringChecklistTitle = (
   const baseTitle = stripChecklistDateSuffix(title);
   const period = buildRecurringChecklistPeriodKey(cadence, value);
   return baseTitle ? `${baseTitle} - ${period}` : period;
-};
-
-const formatLocalTime = (value = new Date()) => {
-  const { hours, minutes } = getStockholmDateTimeParts(value);
-  return `${`${hours}`.padStart(2, "0")}:${`${minutes}`.padStart(2, "0")}`;
 };
 
 const normalizeCompletionState = (

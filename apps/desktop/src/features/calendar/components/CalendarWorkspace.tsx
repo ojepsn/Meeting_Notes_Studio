@@ -1,9 +1,17 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ActivityRecord, CalendarItemRecord, LocalAppSettings, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, CalendarItemRecord, ChecklistRecord, LocalAppSettings, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
+import {
+  addDaysIso,
+  daysBetweenIso,
+  formatStockholmDate,
+  formatStockholmDayLabel,
+  getStockholmDateTimeParts,
+  parseIsoDateUtc,
+} from "../../../lib/time/stockholm";
 
 const TOTAL_SLOTS = 24 * 12;
 const MINUTES_PER_SLOT = 5;
@@ -15,60 +23,8 @@ const MAX_PANE = 520;
 const HORIZONTAL_BUFFER_DAYS = 28;
 const HORIZONTAL_EXTEND_DAYS = 14;
 const HORIZONTAL_EDGE_DAYS = 7;
-const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
-const stockholmDateTimeFormatter = new Intl.DateTimeFormat("sv-SE", {
-  timeZone: STOCKHOLM_TIME_ZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-const stockholmDayFormatter = new Intl.DateTimeFormat(undefined, {
-  timeZone: STOCKHOLM_TIME_ZONE,
-  weekday: "short",
-  month: "2-digit",
-  day: "2-digit",
-});
-
-const getStockholmDateTimeParts = (value = new Date()) => {
-  const parts = stockholmDateTimeFormatter.formatToParts(value);
-  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return {
-    year: Number(lookup.year),
-    month: Number(lookup.month),
-    day: Number(lookup.day),
-    hours: Number(lookup.hour),
-    minutes: Number(lookup.minute),
-  };
-};
-
-const formatDateParts = (year: number, month: number, day: number) =>
-  `${year}-${`${month}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
-
-const parseDateStringUtc = (date: string) => {
-  const [year, month, day] = date.split("-").map(Number);
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-    return new Date(Date.UTC(1970, 0, 1));
-  }
-  return new Date(Date.UTC(year, month - 1, day));
-};
-
-const formatDateStringUtc = (value: Date) =>
-  `${value.getUTCFullYear()}-${`${value.getUTCMonth() + 1}`.padStart(2, "0")}-${`${value.getUTCDate()}`.padStart(2, "0")}`;
-
-export const addDays = (date: string, days: number) => {
-  const next = parseDateStringUtc(date);
-  next.setUTCDate(next.getUTCDate() + days);
-  return formatDateStringUtc(next);
-};
-export const daysBetween = (fromDate: string, toDate: string) => {
-  const from = parseDateStringUtc(fromDate);
-  const to = parseDateStringUtc(toDate);
-  const diff = Math.round((to.getTime() - from.getTime()) / 86400000);
-  return Number.isFinite(diff) ? diff : 0;
-};
+export const addDays = addDaysIso;
+export const daysBetween = daysBetweenIso;
 export const clampSlot = (slot: number) => Math.max(0, Math.min(TOTAL_SLOTS - 1, slot));
 export const clampPane = (width: number) => Math.min(MAX_PANE, Math.max(MIN_PANE, Math.round(width)));
 export const durationFromTimes = (startTime: string, endTime: string) => Math.max(1, timeToSlot(endTime) - timeToSlot(startTime));
@@ -81,13 +37,8 @@ export const timeToSlot = (time: string) => {
   if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
   return hours * 12 + Math.floor(minutes / MINUTES_PER_SLOT);
 };
-export const formatDay = (date: string) =>
-  stockholmDayFormatter.format(new Date(parseDateStringUtc(date).getTime() + 12 * 60 * 60 * 1000));
-export const getLocalDateString = (date = new Date()) =>
-  formatDateParts(...(() => {
-    const { year, month, day } = getStockholmDateTimeParts(date);
-    return [year, month, day] as const;
-  })());
+export const formatDay = (date: string) => formatStockholmDayLabel(date);
+export const getLocalDateString = (date = new Date()) => formatStockholmDate(date);
 export const initialCalendarScrollTop = (date: Date, slotHeight: number) => {
   const { hours, minutes } = getStockholmDateTimeParts(date);
   const currentSlot = clampSlot(hours * 12 + Math.floor(minutes / MINUTES_PER_SLOT));
@@ -116,8 +67,8 @@ export const dayColumnWidthForView = (daysInView: typeof DAYS[number]) => {
 };
 
 const slotToDateTime = (date: string, slot: number) => {
-  const next = new Date(`${date}T00:00:00`);
-  next.setMinutes(slot * MINUTES_PER_SLOT);
+  const next = parseIsoDateUtc(date);
+  next.setUTCMinutes(slot * MINUTES_PER_SLOT);
   return next;
 };
 
@@ -246,6 +197,7 @@ type EditorDraft = {
 
 interface CalendarWorkspaceProps {
   todos: TodoRecord[];
+  checklists: ChecklistRecord[];
   activities: ActivityRecord[];
   timeLogs: import("@notesmith/domain").TimeLogRecord[];
   calendarItems: CalendarItemRecord[];
@@ -263,6 +215,9 @@ interface CalendarWorkspaceProps {
   onMoveItem: (id: string, date: string, startSlot: number) => void;
   onSaveTodo: (todo: TodoRecord) => void;
   onDeleteTodo: (id: string) => void;
+  onCreateChecklist: (todoId: string, title: string) => void;
+  onSaveChecklist: (checklist: ChecklistRecord) => void;
+  onDeleteChecklist: (id: string) => void;
   onSaveActivity: (activity: ActivityRecord) => void;
   onDeleteActivity: (id: string) => void;
   onConvertTodoToMeeting: (todo: TodoRecord, options: { date: string; startTime: string; endTime: string }) => void;
@@ -283,6 +238,7 @@ interface CalendarWorkspaceProps {
 
 export const CalendarWorkspace = ({
   todos,
+  checklists,
   activities,
   timeLogs,
   calendarItems,
@@ -295,6 +251,9 @@ export const CalendarWorkspace = ({
   onMoveItem,
   onSaveTodo,
   onDeleteTodo,
+  onCreateChecklist,
+  onSaveChecklist,
+  onDeleteChecklist,
   onSaveActivity,
   onDeleteActivity,
   onConvertTodoToMeeting,
@@ -333,6 +292,8 @@ export const CalendarWorkspace = ({
   const [showPrivateItems, setShowPrivateItems] = useState(settings.calendarShowPrivate ?? (settings.calendarVisibilityFilter === "public" ? false : true));
   const [showBusinessItems, setShowBusinessItems] = useState(settings.calendarShowBusiness ?? (settings.calendarVisibilityFilter === "private" ? false : true));
   const [hideCompletedTodos, setHideCompletedTodos] = useState(false);
+  const [checklistDraft, setChecklistDraft] = useState("");
+  const [checklistItemDrafts, setChecklistItemDrafts] = useState<Record<string, string>>({});
   const [inlineTodoEdit, setInlineTodoEdit] = useState<{ itemId: string; todoId: string; value: string } | null>(null);
   const [resizeState, setResizeState] = useState<null | { itemId: string; edge: "start" | "end"; date: string; startSlot: number; durationSlots: number }>(null);
   const [now, setNow] = useState(() => new Date());
@@ -465,6 +426,15 @@ export const CalendarWorkspace = ({
   const selectedItem = useMemo(
     () => (selectedItemId ? items.find((item) => item.id === selectedItemId) ?? null : null),
     [items, selectedItemId],
+  );
+  const currentTaskChecklists = useMemo(
+    () =>
+      editorDraft?.targetType === "todo"
+        ? checklists
+            .filter((checklist) => checklist.ownerType === "todo" && checklist.ownerId === editorDraft.targetId)
+            .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        : [],
+    [checklists, editorDraft],
   );
   const editorProjectOptions = editorDraft ? getProjectsForDomain(structureOptions, editorDraft.domain) : [];
   const editorActivityOptions = editorDraft ? getActivitiesForSelection(structureOptions, editorDraft.domain, editorDraft.project) : [];
@@ -633,9 +603,6 @@ export const CalendarWorkspace = ({
       setEditorDraft(null);
       return;
     }
-    if (editorDraft?.itemId === selectedItemId) {
-      return;
-    }
     const calendarItem = calendarItems.find((item) => item.id === selectedItemId);
     if (!calendarItem) {
       setEditorDraft(null);
@@ -644,12 +611,58 @@ export const CalendarWorkspace = ({
     if (calendarItem.targetType === "todo") {
       const todo = todos.find((entry) => entry.id === calendarItem.targetId);
       if (!todo) return;
-      setEditorDraft({ itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, activityId: todo.activityId, parentActivityId: "", doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: Boolean(todo.isPriority), isMeeting: false });
+      const nextDraft = { itemId: calendarItem.id, targetType: "todo" as const, targetId: todo.id, title: todo.description, activityId: todo.activityId, parentActivityId: "", doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: Boolean(todo.isPriority), isMeeting: false };
+      if (
+        editorDraft &&
+        editorDraft.itemId === nextDraft.itemId &&
+        editorDraft.targetType === nextDraft.targetType &&
+        editorDraft.targetId === nextDraft.targetId &&
+        editorDraft.title === nextDraft.title &&
+        editorDraft.activityId === nextDraft.activityId &&
+        editorDraft.parentActivityId === nextDraft.parentActivityId &&
+        editorDraft.doOn === nextDraft.doOn &&
+        editorDraft.dueDate === nextDraft.dueDate &&
+        editorDraft.startTime === nextDraft.startTime &&
+        editorDraft.endTime === nextDraft.endTime &&
+        editorDraft.domain === nextDraft.domain &&
+        editorDraft.project === nextDraft.project &&
+        editorDraft.activity === nextDraft.activity &&
+        editorDraft.isPrivate === nextDraft.isPrivate &&
+        editorDraft.isDone === nextDraft.isDone &&
+        editorDraft.isPriority === nextDraft.isPriority &&
+        editorDraft.isMeeting === nextDraft.isMeeting
+      ) {
+        return;
+      }
+      setEditorDraft(nextDraft);
       return;
     }
     const activity = activities.find((entry) => entry.id === calendarItem.targetId);
     if (!activity) return;
-    setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, isMeeting: activity.type === "meeting" });
+    const nextDraft = { itemId: calendarItem.id, targetType: "activity" as const, targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, isMeeting: activity.type === "meeting" };
+    if (
+      editorDraft &&
+      editorDraft.itemId === nextDraft.itemId &&
+      editorDraft.targetType === nextDraft.targetType &&
+      editorDraft.targetId === nextDraft.targetId &&
+      editorDraft.title === nextDraft.title &&
+      editorDraft.activityId === nextDraft.activityId &&
+      editorDraft.parentActivityId === nextDraft.parentActivityId &&
+      editorDraft.doOn === nextDraft.doOn &&
+      editorDraft.dueDate === nextDraft.dueDate &&
+      editorDraft.startTime === nextDraft.startTime &&
+      editorDraft.endTime === nextDraft.endTime &&
+      editorDraft.domain === nextDraft.domain &&
+      editorDraft.project === nextDraft.project &&
+      editorDraft.activity === nextDraft.activity &&
+      editorDraft.isPrivate === nextDraft.isPrivate &&
+      editorDraft.isDone === nextDraft.isDone &&
+      editorDraft.isPriority === nextDraft.isPriority &&
+      editorDraft.isMeeting === nextDraft.isMeeting
+    ) {
+      return;
+    }
+    setEditorDraft(nextDraft);
   }, [activities, calendarItems, editorDraft?.itemId, selectedItemId, todos]);
 
   useEffect(() => {
@@ -913,6 +926,73 @@ export const CalendarWorkspace = ({
   const updateEditorDraft = (draft: EditorDraft) => {
     setEditorDraft(draft);
     persistEditorDraft(draft);
+  };
+
+  const saveChecklistItems = (checklist: ChecklistRecord, items: ChecklistRecord["items"]) => {
+    onSaveChecklist({
+      ...checklist,
+      items,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const setChecklistItemDraft = (checklistId: string, value: string) => {
+    setChecklistItemDrafts((current) => ({ ...current, [checklistId]: value }));
+  };
+
+  const addChecklistItem = (checklist: ChecklistRecord) => {
+    const nextLabel = (checklistItemDrafts[checklist.id] || "").trim();
+    if (!nextLabel) return;
+    saveChecklistItems(checklist, [
+      ...checklist.items,
+      {
+        id: crypto.randomUUID(),
+        label: nextLabel,
+        isChecked: false,
+        notes: "",
+        position: checklist.items.length + 1,
+        checkedAt: null,
+      },
+    ]);
+    setChecklistItemDraft(checklist.id, "");
+  };
+
+  const toggleChecklistItem = (checklist: ChecklistRecord, itemId: string) => {
+    const timestamp = new Date().toISOString();
+    saveChecklistItems(
+      checklist,
+      checklist.items.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              isChecked: !item.isChecked,
+              checkedAt: item.isChecked ? null : timestamp,
+            }
+          : item,
+      ),
+    );
+  };
+
+  const deleteChecklistItem = (checklist: ChecklistRecord, itemId: string) => {
+    saveChecklistItems(
+      checklist,
+      checklist.items
+        .filter((item) => item.id !== itemId)
+        .map((item, index) => ({ ...item, position: index + 1 })),
+    );
+  };
+
+  const moveChecklistItem = (checklist: ChecklistRecord, itemId: string, direction: -1 | 1) => {
+    const currentIndex = checklist.items.findIndex((item) => item.id === itemId);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= checklist.items.length) return;
+    const nextItems = [...checklist.items];
+    const [moved] = nextItems.splice(currentIndex, 1);
+    nextItems.splice(nextIndex, 0, moved);
+    saveChecklistItems(
+      checklist,
+      nextItems.map((item, index) => ({ ...item, position: index + 1 })),
+    );
   };
 
   const saveInlineTodoEdit = () => {
@@ -1686,6 +1766,137 @@ export const CalendarWorkspace = ({
                     </div>
                   </div>
                 </div>
+              ) : null}
+              {editorDraft.targetType === "todo" ? (
+                <details className="workspace-disclosure calendar-inspector-disclosure" open>
+                  <summary>Checklists</summary>
+                  <div className="workspace-disclosure-body stack">
+                    <div className="page-actions">
+                      <span className="status-chip">{currentTaskChecklists.length} checklists</span>
+                    </div>
+                    <div className="todos-workspace-input-row">
+                      <div className="field field-wide">
+                        <label htmlFor="calendar-checklist-draft">New checklist</label>
+                        <input
+                          id="calendar-checklist-draft"
+                          value={checklistDraft}
+                          onChange={(event) => setChecklistDraft(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" && !event.shiftKey) {
+                              event.preventDefault();
+                              const nextTitle = checklistDraft.trim();
+                              if (!nextTitle) return;
+                              onCreateChecklist(editorDraft.targetId, nextTitle);
+                              setChecklistDraft("");
+                            }
+                          }}
+                          placeholder="For example: Monthly reporting staff"
+                        />
+                      </div>
+                      <button
+                        className="small-button"
+                        type="button"
+                        onClick={() => {
+                          const nextTitle = checklistDraft.trim();
+                          if (!nextTitle) return;
+                          onCreateChecklist(editorDraft.targetId, nextTitle);
+                          setChecklistDraft("");
+                        }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {currentTaskChecklists.length ? (
+                      <div className="structure-checklist-list">
+                        {currentTaskChecklists.map((checklist) => {
+                          const checkedCount = checklist.items.filter((item) => item.isChecked).length;
+                          return (
+                            <details key={checklist.id} className="structure-checklist-card" open>
+                              <summary>
+                                <span>{checklist.title}</span>
+                                <span className="tiny-text">
+                                  {checkedCount}/{checklist.items.length}
+                                </span>
+                              </summary>
+                              <div className="structure-checklist-body">
+                                <div className="page-actions">
+                                  <button className="small-button danger-button" type="button" onClick={() => onDeleteChecklist(checklist.id)}>
+                                    Delete checklist
+                                  </button>
+                                </div>
+                                {checklist.items.length ? (
+                                  <div className="section-list">
+                                    {checklist.items.map((item) => (
+                                      <div key={item.id} className="list-item">
+                                        <label className="structure-checklist-item">
+                                          <input
+                                            type="checkbox"
+                                            checked={item.isChecked}
+                                            onChange={() => toggleChecklistItem(checklist, item.id)}
+                                          />
+                                          <span>{item.label}</span>
+                                        </label>
+                                        <div className="page-actions">
+                                          <button
+                                            className="small-button"
+                                            type="button"
+                                            onClick={() => moveChecklistItem(checklist, item.id, -1)}
+                                            disabled={item.position <= 1}
+                                          >
+                                            Up
+                                          </button>
+                                          <button
+                                            className="small-button"
+                                            type="button"
+                                            onClick={() => moveChecklistItem(checklist, item.id, 1)}
+                                            disabled={item.position >= checklist.items.length}
+                                          >
+                                            Down
+                                          </button>
+                                          <button
+                                            className="small-button danger-button"
+                                            type="button"
+                                            onClick={() => deleteChecklistItem(checklist, item.id)}
+                                          >
+                                            Delete
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="muted">No checklist items yet.</p>
+                                )}
+                                <div className="todos-workspace-input-row">
+                                  <div className="field field-wide">
+                                    <label htmlFor={`calendar-checklist-item-${checklist.id}`}>New item</label>
+                                    <input
+                                      id={`calendar-checklist-item-${checklist.id}`}
+                                      value={checklistItemDrafts[checklist.id] || ""}
+                                      onChange={(event) => setChecklistItemDraft(checklist.id, event.target.value)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter" && !event.shiftKey) {
+                                          event.preventDefault();
+                                          addChecklistItem(checklist);
+                                        }
+                                      }}
+                                      placeholder="Add a checkbox item"
+                                    />
+                                  </div>
+                                  <button className="small-button" type="button" onClick={() => addChecklistItem(checklist)}>
+                                    Add item
+                                  </button>
+                                </div>
+                              </div>
+                            </details>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="muted">No task checklists yet.</p>
+                    )}
+                  </div>
+                </details>
               ) : null}
               <details className="workspace-disclosure calendar-inspector-disclosure calendar-structure-disclosure">
                 <summary>{editorDraft.isMeeting ? "Structure and advanced details" : "Task details"}</summary>

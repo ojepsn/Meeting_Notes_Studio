@@ -4,6 +4,7 @@ import { DateInput } from "../../../components/DateInput";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain } from "../../../lib/structure/options";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
+import { addDaysIso, daysBetweenIso, formatStockholmDate, formatStockholmDayLabel, getStockholmDateTimeParts, parseIsoDateUtc, } from "../../../lib/time/stockholm";
 const TOTAL_SLOTS = 24 * 12;
 const MINUTES_PER_SLOT = 5;
 const DEFAULT_MEETING_DURATION_SLOTS = 12;
@@ -14,53 +15,8 @@ const MAX_PANE = 520;
 const HORIZONTAL_BUFFER_DAYS = 28;
 const HORIZONTAL_EXTEND_DAYS = 14;
 const HORIZONTAL_EDGE_DAYS = 7;
-const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
-const stockholmDateTimeFormatter = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: STOCKHOLM_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-});
-const stockholmDayFormatter = new Intl.DateTimeFormat(undefined, {
-    timeZone: STOCKHOLM_TIME_ZONE,
-    weekday: "short",
-    month: "2-digit",
-    day: "2-digit",
-});
-const getStockholmDateTimeParts = (value = new Date()) => {
-    const parts = stockholmDateTimeFormatter.formatToParts(value);
-    const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-    return {
-        year: Number(lookup.year),
-        month: Number(lookup.month),
-        day: Number(lookup.day),
-        hours: Number(lookup.hour),
-        minutes: Number(lookup.minute),
-    };
-};
-const formatDateParts = (year, month, day) => `${year}-${`${month}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
-const parseDateStringUtc = (date) => {
-    const [year, month, day] = date.split("-").map(Number);
-    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-        return new Date(Date.UTC(1970, 0, 1));
-    }
-    return new Date(Date.UTC(year, month - 1, day));
-};
-const formatDateStringUtc = (value) => `${value.getUTCFullYear()}-${`${value.getUTCMonth() + 1}`.padStart(2, "0")}-${`${value.getUTCDate()}`.padStart(2, "0")}`;
-export const addDays = (date, days) => {
-    const next = parseDateStringUtc(date);
-    next.setUTCDate(next.getUTCDate() + days);
-    return formatDateStringUtc(next);
-};
-export const daysBetween = (fromDate, toDate) => {
-    const from = parseDateStringUtc(fromDate);
-    const to = parseDateStringUtc(toDate);
-    const diff = Math.round((to.getTime() - from.getTime()) / 86400000);
-    return Number.isFinite(diff) ? diff : 0;
-};
+export const addDays = addDaysIso;
+export const daysBetween = daysBetweenIso;
 export const clampSlot = (slot) => Math.max(0, Math.min(TOTAL_SLOTS - 1, slot));
 export const clampPane = (width) => Math.min(MAX_PANE, Math.max(MIN_PANE, Math.round(width)));
 export const durationFromTimes = (startTime, endTime) => Math.max(1, timeToSlot(endTime) - timeToSlot(startTime));
@@ -74,11 +30,8 @@ export const timeToSlot = (time) => {
         return 0;
     return hours * 12 + Math.floor(minutes / MINUTES_PER_SLOT);
 };
-export const formatDay = (date) => stockholmDayFormatter.format(new Date(parseDateStringUtc(date).getTime() + 12 * 60 * 60 * 1000));
-export const getLocalDateString = (date = new Date()) => formatDateParts(...(() => {
-    const { year, month, day } = getStockholmDateTimeParts(date);
-    return [year, month, day];
-})());
+export const formatDay = (date) => formatStockholmDayLabel(date);
+export const getLocalDateString = (date = new Date()) => formatStockholmDate(date);
 export const initialCalendarScrollTop = (date, slotHeight) => {
     const { hours, minutes } = getStockholmDateTimeParts(date);
     const currentSlot = clampSlot(hours * 12 + Math.floor(minutes / MINUTES_PER_SLOT));
@@ -107,8 +60,8 @@ export const dayColumnWidthForView = (daysInView) => {
     }
 };
 const slotToDateTime = (date, slot) => {
-    const next = new Date(`${date}T00:00:00`);
-    next.setMinutes(slot * MINUTES_PER_SLOT);
+    const next = parseIsoDateUtc(date);
+    next.setUTCMinutes(slot * MINUTES_PER_SLOT);
     return next;
 };
 const WORKDAY_END_START_SLOT = 17 * 12;
@@ -179,7 +132,7 @@ export const layoutCalendarItems = (items) => {
     });
     return result.sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.lane - right.lane);
 };
-export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, linkedSessionStateByTodo, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onCreateLinkedTaskSession, onPreviewSessionOutput, onFullScreenChange, }) => {
+export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, linkedSessionStateByTodo, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onCreateChecklist, onSaveChecklist, onDeleteChecklist, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onCreateLinkedTaskSession, onPreviewSessionOutput, onFullScreenChange, }) => {
     const today = getLocalDateString();
     const initialIsFullScreen = true;
     const [anchorDate, setAnchorDate] = useState(today);
@@ -201,6 +154,8 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
     const [showPrivateItems, setShowPrivateItems] = useState(settings.calendarShowPrivate ?? (settings.calendarVisibilityFilter === "public" ? false : true));
     const [showBusinessItems, setShowBusinessItems] = useState(settings.calendarShowBusiness ?? (settings.calendarVisibilityFilter === "private" ? false : true));
     const [hideCompletedTodos, setHideCompletedTodos] = useState(false);
+    const [checklistDraft, setChecklistDraft] = useState("");
+    const [checklistItemDrafts, setChecklistItemDrafts] = useState({});
     const [inlineTodoEdit, setInlineTodoEdit] = useState(null);
     const [resizeState, setResizeState] = useState(null);
     const [now, setNow] = useState(() => new Date());
@@ -314,6 +269,11 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
         return grouped;
     }, [filteredItems]);
     const selectedItem = useMemo(() => (selectedItemId ? items.find((item) => item.id === selectedItemId) ?? null : null), [items, selectedItemId]);
+    const currentTaskChecklists = useMemo(() => editorDraft?.targetType === "todo"
+        ? checklists
+            .filter((checklist) => checklist.ownerType === "todo" && checklist.ownerId === editorDraft.targetId)
+            .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        : [], [checklists, editorDraft]);
     const editorProjectOptions = editorDraft ? getProjectsForDomain(structureOptions, editorDraft.domain) : [];
     const editorActivityOptions = editorDraft ? getActivitiesForSelection(structureOptions, editorDraft.domain, editorDraft.project) : [];
     const linkedActivityOptions = topLevelActivities.filter((activity) => {
@@ -475,9 +435,6 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
             setEditorDraft(null);
             return;
         }
-        if (editorDraft?.itemId === selectedItemId) {
-            return;
-        }
         const calendarItem = calendarItems.find((item) => item.id === selectedItemId);
         if (!calendarItem) {
             setEditorDraft(null);
@@ -487,13 +444,55 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
             const todo = todos.find((entry) => entry.id === calendarItem.targetId);
             if (!todo)
                 return;
-            setEditorDraft({ itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, activityId: todo.activityId, parentActivityId: "", doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: Boolean(todo.isPriority), isMeeting: false });
+            const nextDraft = { itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, activityId: todo.activityId, parentActivityId: "", doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: Boolean(todo.isPriority), isMeeting: false };
+            if (editorDraft &&
+                editorDraft.itemId === nextDraft.itemId &&
+                editorDraft.targetType === nextDraft.targetType &&
+                editorDraft.targetId === nextDraft.targetId &&
+                editorDraft.title === nextDraft.title &&
+                editorDraft.activityId === nextDraft.activityId &&
+                editorDraft.parentActivityId === nextDraft.parentActivityId &&
+                editorDraft.doOn === nextDraft.doOn &&
+                editorDraft.dueDate === nextDraft.dueDate &&
+                editorDraft.startTime === nextDraft.startTime &&
+                editorDraft.endTime === nextDraft.endTime &&
+                editorDraft.domain === nextDraft.domain &&
+                editorDraft.project === nextDraft.project &&
+                editorDraft.activity === nextDraft.activity &&
+                editorDraft.isPrivate === nextDraft.isPrivate &&
+                editorDraft.isDone === nextDraft.isDone &&
+                editorDraft.isPriority === nextDraft.isPriority &&
+                editorDraft.isMeeting === nextDraft.isMeeting) {
+                return;
+            }
+            setEditorDraft(nextDraft);
             return;
         }
         const activity = activities.find((entry) => entry.id === calendarItem.targetId);
         if (!activity)
             return;
-        setEditorDraft({ itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, isMeeting: activity.type === "meeting" });
+        const nextDraft = { itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, isMeeting: activity.type === "meeting" };
+        if (editorDraft &&
+            editorDraft.itemId === nextDraft.itemId &&
+            editorDraft.targetType === nextDraft.targetType &&
+            editorDraft.targetId === nextDraft.targetId &&
+            editorDraft.title === nextDraft.title &&
+            editorDraft.activityId === nextDraft.activityId &&
+            editorDraft.parentActivityId === nextDraft.parentActivityId &&
+            editorDraft.doOn === nextDraft.doOn &&
+            editorDraft.dueDate === nextDraft.dueDate &&
+            editorDraft.startTime === nextDraft.startTime &&
+            editorDraft.endTime === nextDraft.endTime &&
+            editorDraft.domain === nextDraft.domain &&
+            editorDraft.project === nextDraft.project &&
+            editorDraft.activity === nextDraft.activity &&
+            editorDraft.isPrivate === nextDraft.isPrivate &&
+            editorDraft.isDone === nextDraft.isDone &&
+            editorDraft.isPriority === nextDraft.isPriority &&
+            editorDraft.isMeeting === nextDraft.isMeeting) {
+            return;
+        }
+        setEditorDraft(nextDraft);
     }, [activities, calendarItems, editorDraft?.itemId, selectedItemId, todos]);
     useEffect(() => {
         if (!inlineTodoEdit || selectedItemId === inlineTodoEdit.itemId)
@@ -765,6 +764,58 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
     const updateEditorDraft = (draft) => {
         setEditorDraft(draft);
         persistEditorDraft(draft);
+    };
+    const saveChecklistItems = (checklist, items) => {
+        onSaveChecklist({
+            ...checklist,
+            items,
+            updatedAt: new Date().toISOString(),
+        });
+    };
+    const setChecklistItemDraft = (checklistId, value) => {
+        setChecklistItemDrafts((current) => ({ ...current, [checklistId]: value }));
+    };
+    const addChecklistItem = (checklist) => {
+        const nextLabel = (checklistItemDrafts[checklist.id] || "").trim();
+        if (!nextLabel)
+            return;
+        saveChecklistItems(checklist, [
+            ...checklist.items,
+            {
+                id: crypto.randomUUID(),
+                label: nextLabel,
+                isChecked: false,
+                notes: "",
+                position: checklist.items.length + 1,
+                checkedAt: null,
+            },
+        ]);
+        setChecklistItemDraft(checklist.id, "");
+    };
+    const toggleChecklistItem = (checklist, itemId) => {
+        const timestamp = new Date().toISOString();
+        saveChecklistItems(checklist, checklist.items.map((item) => item.id === itemId
+            ? {
+                ...item,
+                isChecked: !item.isChecked,
+                checkedAt: item.isChecked ? null : timestamp,
+            }
+            : item));
+    };
+    const deleteChecklistItem = (checklist, itemId) => {
+        saveChecklistItems(checklist, checklist.items
+            .filter((item) => item.id !== itemId)
+            .map((item, index) => ({ ...item, position: index + 1 })));
+    };
+    const moveChecklistItem = (checklist, itemId, direction) => {
+        const currentIndex = checklist.items.findIndex((item) => item.id === itemId);
+        const nextIndex = currentIndex + direction;
+        if (currentIndex < 0 || nextIndex < 0 || nextIndex >= checklist.items.length)
+            return;
+        const nextItems = [...checklist.items];
+        const [moved] = nextItems.splice(currentIndex, 1);
+        nextItems.splice(nextIndex, 0, moved);
+        saveChecklistItems(checklist, nextItems.map((item, index) => ({ ...item, position: index + 1 })));
     };
     const saveInlineTodoEdit = () => {
         if (!inlineTodoEdit)
@@ -1068,7 +1119,30 @@ export const CalendarWorkspace = ({ todos, activities, timeLogs, calendarItems, 
                                                                     const sessionId = linkedSessionStateByTodo[editorDraft.targetId]?.sessionId;
                                                                     if (sessionId)
                                                                         onPreviewSessionOutput(sessionId);
-                                                                }, children: "Open note output" })) : null] })) : (_jsx("button", { className: "shell-button", type: "button", onClick: () => onCreateLinkedTaskSession(editorDraft.targetId), children: "Create linked task note" })) })] })] })) : null, _jsxs("details", { className: "workspace-disclosure calendar-inspector-disclosure calendar-structure-disclosure", children: [_jsx("summary", { children: editorDraft.isMeeting ? "Structure and advanced details" : "Task details" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsxs("div", { className: "metadata-triplet-grid", children: [!editorDraft.isMeeting ? (_jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-link", children: "Linked activity" }), _jsxs("select", { id: "calendar-edit-link", value: editorDraft.activityId, onChange: (event) => {
+                                                                }, children: "Open note output" })) : null] })) : (_jsx("button", { className: "shell-button", type: "button", onClick: () => onCreateLinkedTaskSession(editorDraft.targetId), children: "Create linked task note" })) })] })] })) : null, editorDraft.targetType === "todo" ? (_jsxs("details", { className: "workspace-disclosure calendar-inspector-disclosure", open: true, children: [_jsx("summary", { children: "Checklists" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsx("div", { className: "page-actions", children: _jsxs("span", { className: "status-chip", children: [currentTaskChecklists.length, " checklists"] }) }), _jsxs("div", { className: "todos-workspace-input-row", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "calendar-checklist-draft", children: "New checklist" }), _jsx("input", { id: "calendar-checklist-draft", value: checklistDraft, onChange: (event) => setChecklistDraft(event.target.value), onKeyDown: (event) => {
+                                                                        if (event.key === "Enter" && !event.shiftKey) {
+                                                                            event.preventDefault();
+                                                                            const nextTitle = checklistDraft.trim();
+                                                                            if (!nextTitle)
+                                                                                return;
+                                                                            onCreateChecklist(editorDraft.targetId, nextTitle);
+                                                                            setChecklistDraft("");
+                                                                        }
+                                                                    }, placeholder: "For example: Monthly reporting staff" })] }), _jsx("button", { className: "small-button", type: "button", onClick: () => {
+                                                                const nextTitle = checklistDraft.trim();
+                                                                if (!nextTitle)
+                                                                    return;
+                                                                onCreateChecklist(editorDraft.targetId, nextTitle);
+                                                                setChecklistDraft("");
+                                                            }, children: "Add" })] }), currentTaskChecklists.length ? (_jsx("div", { className: "structure-checklist-list", children: currentTaskChecklists.map((checklist) => {
+                                                        const checkedCount = checklist.items.filter((item) => item.isChecked).length;
+                                                        return (_jsxs("details", { className: "structure-checklist-card", open: true, children: [_jsxs("summary", { children: [_jsx("span", { children: checklist.title }), _jsxs("span", { className: "tiny-text", children: [checkedCount, "/", checklist.items.length] })] }), _jsxs("div", { className: "structure-checklist-body", children: [_jsx("div", { className: "page-actions", children: _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onDeleteChecklist(checklist.id), children: "Delete checklist" }) }), checklist.items.length ? (_jsx("div", { className: "section-list", children: checklist.items.map((item) => (_jsxs("div", { className: "list-item", children: [_jsxs("label", { className: "structure-checklist-item", children: [_jsx("input", { type: "checkbox", checked: item.isChecked, onChange: () => toggleChecklistItem(checklist, item.id) }), _jsx("span", { children: item.label })] }), _jsxs("div", { className: "page-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => moveChecklistItem(checklist, item.id, -1), disabled: item.position <= 1, children: "Up" }), _jsx("button", { className: "small-button", type: "button", onClick: () => moveChecklistItem(checklist, item.id, 1), disabled: item.position >= checklist.items.length, children: "Down" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => deleteChecklistItem(checklist, item.id), children: "Delete" })] })] }, item.id))) })) : (_jsx("p", { className: "muted", children: "No checklist items yet." })), _jsxs("div", { className: "todos-workspace-input-row", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: `calendar-checklist-item-${checklist.id}`, children: "New item" }), _jsx("input", { id: `calendar-checklist-item-${checklist.id}`, value: checklistItemDrafts[checklist.id] || "", onChange: (event) => setChecklistItemDraft(checklist.id, event.target.value), onKeyDown: (event) => {
+                                                                                                if (event.key === "Enter" && !event.shiftKey) {
+                                                                                                    event.preventDefault();
+                                                                                                    addChecklistItem(checklist);
+                                                                                                }
+                                                                                            }, placeholder: "Add a checkbox item" })] }), _jsx("button", { className: "small-button", type: "button", onClick: () => addChecklistItem(checklist), children: "Add item" })] })] })] }, checklist.id));
+                                                    }) })) : (_jsx("p", { className: "muted", children: "No task checklists yet." }))] })] })) : null, _jsxs("details", { className: "workspace-disclosure calendar-inspector-disclosure calendar-structure-disclosure", children: [_jsx("summary", { children: editorDraft.isMeeting ? "Structure and advanced details" : "Task details" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsxs("div", { className: "metadata-triplet-grid", children: [!editorDraft.isMeeting ? (_jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-edit-link", children: "Linked activity" }), _jsxs("select", { id: "calendar-edit-link", value: editorDraft.activityId, onChange: (event) => {
                                                                         const nextId = event.target.value;
                                                                         const linkedActivity = nextId ? activityLookup[nextId] : null;
                                                                         updateEditorDraft({
