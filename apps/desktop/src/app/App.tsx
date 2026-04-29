@@ -2229,6 +2229,33 @@ export const App = () => {
     setStatusNote("Added image to the session. You can caption it and choose whether it should appear in the polished output.");
   };
 
+  const handleCreateInlineImageAttachment = async (file: File) => {
+    const persistedPath = await persistGeneratedAttachment({
+      sessionId: activeSession.id,
+      file,
+    });
+
+    const nextOutputPosition =
+      activeAttachments.filter((attachment) => attachment.kind === "image").length + 1;
+
+    const attachmentRecord = {
+      ...fileToAttachmentRecord({
+        file,
+        sessionId: activeSession.id,
+        kind: "image",
+        filePath: persistedPath,
+      }),
+      outputPosition: nextOutputPosition,
+    };
+
+    await saveAttachments([
+      ...snapshot.attachments,
+      attachmentRecord,
+    ]);
+    setStatusNote("Pasted image added to Manual notes and saved as a session attachment.");
+    return attachmentRecord;
+  };
+
   const transcribeAudioIntoSession = async ({
     sessionId,
     file,
@@ -2345,6 +2372,16 @@ export const App = () => {
 
     if (attachment.kind === "transcript" && attachment.sessionId === activeSession.id) {
       await saveSession({ ...activeSession, uploadedTranscript: "" });
+    }
+
+    if (attachment.kind === "image" && attachment.sessionId === activeSession.id) {
+      const cleanedManualNotes = activeSession.manualNotes.replace(
+        new RegExp(`<figure[^>]*data-notesmith-attachment-id="${attachment.id}"[^>]*>.*?<\\/figure>(?:<p><br><\\/p>)?`, "gis"),
+        "",
+      );
+      if (cleanedManualNotes !== activeSession.manualNotes) {
+        await saveSession({ ...activeSession, manualNotes: cleanedManualNotes });
+      }
     }
 
     setStatusNote(`Removed ${attachment.filename} from the session attachments.`);
@@ -2708,6 +2745,7 @@ export const App = () => {
             onClearGenerationLog={() => setGenerationLog([])}
             onChange={handleCaptureSessionChange}
             onImportImage={() => void handleImportImage()}
+            onCreateInlineImageAttachment={(file) => handleCreateInlineImageAttachment(file)}
             onImportAudio={() => void handleImportAudio()}
             onTranscribeAudio={() => void handleTranscribeAudio()}
             onChangeRecordingMode={setRecordingMode}
@@ -3635,6 +3673,7 @@ export const App = () => {
                       onClearGenerationLog={() => setGenerationLog([])}
                       onChange={handleCaptureSessionChange}
                       onImportImage={() => void handleImportImage()}
+                      onCreateInlineImageAttachment={(file) => handleCreateInlineImageAttachment(file)}
                       onImportAudio={() => void handleImportAudio()}
                       onTranscribeAudio={() => void handleTranscribeAudio()}
                       onChangeRecordingMode={setRecordingMode}

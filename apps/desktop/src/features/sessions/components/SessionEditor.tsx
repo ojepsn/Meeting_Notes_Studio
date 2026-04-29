@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from "react";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
 import { DateInput } from "../../../components/DateInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
@@ -6,6 +6,7 @@ import { TokenPicker } from "../../../components/TokenPicker";
 import { parseTokenList } from "../../../components/peoplePickerUtils";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import type { RecordingMode } from "../../../lib/files/recording";
+import { createAttachmentPreviewUrl } from "../../../lib/files/attachmentStore";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type AttachmentRecord, type CaptureWorkspaceDensity, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 
 const richTextToPlainText = (value: string) => {
@@ -75,8 +76,9 @@ const normalizeRichTextHtml = (value: string) => {
     }
     fontElement.replaceWith(span);
   });
-  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN"]);
+  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "FIGURE", "FIGCAPTION"]);
   wrapper.querySelectorAll("*").forEach((element) => {
+    const inlineAttachmentId = element.getAttribute("data-notesmith-attachment-id");
     if (!allowedTags.has(element.tagName)) {
       const fragment = document.createDocumentFragment();
       while (element.firstChild) {
@@ -87,6 +89,13 @@ const normalizeRichTextHtml = (value: string) => {
     }
     const fontFamily = element instanceof HTMLElement ? element.style.fontFamily : "";
     [...element.attributes].forEach((attribute) => element.removeAttribute(attribute.name));
+    if (element.tagName === "FIGURE" && inlineAttachmentId) {
+      element.setAttribute("data-notesmith-attachment-id", inlineAttachmentId);
+      element.setAttribute("contenteditable", "false");
+      if (element instanceof HTMLElement) {
+        element.classList.add("notes-inline-attachment");
+      }
+    }
     const allowedFont = resolveAllowedRichTextFont(fontFamily);
     if (element instanceof HTMLElement && allowedFont) {
       element.style.fontFamily = allowedFont;
@@ -211,6 +220,7 @@ interface SessionEditorProps {
   onImportTranscript: () => void;
   onImportAudio: () => void;
   onImportImage: () => void;
+  onCreateInlineImageAttachment?: (file: File) => Promise<AttachmentRecord | null>;
   onTranscribeAudio: () => void;
   onChangeRecordingMode: (mode: RecordingMode) => void;
   onStartRecording: (mode?: RecordingMode) => void;
@@ -279,7 +289,7 @@ export const SessionEditor = ({
   savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities,
   suggestedActivities, structureOptions, savedTags, suggestedTags, isTranscribingAudio, recordingMode,
   isRecordingAudio, recordingStatusNote, generationLog = [], onClearGenerationLog, onChange, onImportTranscript, onImportAudio, onImportImage,
-  onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment,
+  onCreateInlineImageAttachment, onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment,
   onUpdateAttachment, onOpenDetails, onCreateSessionFromTemplate,
   onOpenInstructions,
 }: SessionEditorProps) => {
@@ -419,6 +429,68 @@ export const SessionEditor = ({
     manualNotesEditorRef.current.dataset.empty = richTextToPlainText(nextHtml) ? "false" : "true";
   }, [session.manualNotes, session.id]);
 
+  useEffect(() => {
+    const editor = manualNotesEditorRef.current;
+    if (!editor) return;
+
+    let active = true;
+    const generatedUrls: string[] = [];
+
+    const hydrateInlineAttachments = async () => {
+      const figures = Array.from(editor.querySelectorAll<HTMLElement>("figure[data-notesmith-attachment-id]"));
+      for (const figure of figures) {
+        const attachmentId = figure.getAttribute("data-notesmith-attachment-id");
+        if (!attachmentId) continue;
+        const attachment = attachments.find((entry) => entry.id === attachmentId && entry.kind === "image");
+        const existingImage = figure.querySelector("img");
+        let figcaption = figure.querySelector("figcaption");
+        if (!figcaption) {
+          figcaption = document.createElement("figcaption");
+          figure.appendChild(figcaption);
+        }
+
+        if (!attachment) {
+          if (existingImage) existingImage.remove();
+          figcaption.textContent = "Missing image attachment";
+          continue;
+        }
+
+        figure.setAttribute("contenteditable", "false");
+        figure.classList.add("notes-inline-attachment");
+        figcaption.textContent = attachment.caption.trim() || attachment.filename;
+
+        if (existingImage) {
+          existingImage.alt = attachment.caption || attachment.filename;
+          existingImage.className = "notes-inline-attachment-preview";
+          continue;
+        }
+
+        const previewUrl = await createAttachmentPreviewUrl({
+          filePath: attachment.filePath,
+          mimeType: attachment.mimeType,
+        });
+        if (!previewUrl) continue;
+        if (!active) {
+          URL.revokeObjectURL(previewUrl);
+          return;
+        }
+        generatedUrls.push(previewUrl);
+        const image = document.createElement("img");
+        image.src = previewUrl;
+        image.alt = attachment.caption || attachment.filename;
+        image.className = "notes-inline-attachment-preview";
+        figure.insertBefore(image, figcaption);
+      }
+    };
+
+    void hydrateInlineAttachments();
+
+    return () => {
+      active = false;
+      generatedUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [attachments, session.manualNotes, session.id]);
+
   const updateAgenda = (html: string) => {
     if (!agendaField) return;
     update("customFieldValues", { ...session.customFieldValues, [agendaField.id]: html });
@@ -432,6 +504,55 @@ export const SessionEditor = ({
     if (manualNotesEditorRef.current) {
       manualNotesEditorRef.current.dataset.empty = richTextToPlainText(html) ? "false" : "true";
     }
+  };
+
+  const insertHtmlAtSelection = (editor: HTMLDivElement, html: string) => {
+    const selection = document.getSelection();
+    if (!selection?.rangeCount || !isSelectionInsideEditor(editor, selection)) {
+      editor.focus();
+    }
+    const activeSelection = document.getSelection();
+    if (!activeSelection?.rangeCount) return;
+    const range = activeSelection.getRangeAt(0);
+    range.deleteContents();
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    const fragment = template.content;
+    const lastNode = fragment.lastChild;
+    range.insertNode(fragment);
+    if (lastNode) {
+      const nextRange = document.createRange();
+      nextRange.setStartAfter(lastNode);
+      nextRange.collapse(true);
+      activeSelection.removeAllRanges();
+      activeSelection.addRange(nextRange);
+    }
+  };
+
+  const handleManualNotesPaste = async (event: ReactClipboardEvent<HTMLDivElement>) => {
+    if (!onCreateInlineImageAttachment) {
+      return;
+    }
+    const imageItem = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"));
+    if (!imageItem) {
+      return;
+    }
+    const file = imageItem.getAsFile();
+    if (!file || !manualNotesEditorRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    const attachment = await onCreateInlineImageAttachment(file);
+    if (!attachment) {
+      return;
+    }
+
+    const caption = attachment.caption.trim() || attachment.filename;
+    const inlineHtml = `<figure data-notesmith-attachment-id="${attachment.id}" contenteditable="false" class="notes-inline-attachment"><figcaption>${caption}</figcaption></figure><p><br></p>`;
+    insertHtmlAtSelection(manualNotesEditorRef.current, inlineHtml);
+    updateManualNotes(normalizeRichTextHtml(manualNotesEditorRef.current.innerHTML));
+    setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef));
   };
 
   const applyRichTextCommand = (
@@ -678,7 +799,7 @@ export const SessionEditor = ({
                           data-placeholder="List the planned agenda, topics, or framing points for this meeting."
                           data-empty="true"
                           onInput={(event) => {
-                            updateAgenda((event.currentTarget as HTMLDivElement).innerHTML);
+                            updateAgenda(normalizeRichTextHtml((event.currentTarget as HTMLDivElement).innerHTML));
                             setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef));
                           }}
                           onKeyUp={() => setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef))}
@@ -873,9 +994,10 @@ export const SessionEditor = ({
                   data-placeholder="Write your own notes here, which will be included in the Output"
                   data-empty="true"
                   onInput={(event) => {
-                    updateManualNotes((event.currentTarget as HTMLDivElement).innerHTML);
+                    updateManualNotes(normalizeRichTextHtml((event.currentTarget as HTMLDivElement).innerHTML));
                     setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef));
                   }}
+                  onPaste={(event) => void handleManualNotesPaste(event)}
                   onKeyUp={() => setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef))}
                   onMouseUp={() => setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef))}
                 />
@@ -974,7 +1096,7 @@ export const SessionEditor = ({
                     data-placeholder="List the planned agenda, topics, or framing points for this meeting."
                     data-empty="true"
                     onInput={(event) => {
-                      updateAgenda((event.currentTarget as HTMLDivElement).innerHTML);
+                      updateAgenda(normalizeRichTextHtml((event.currentTarget as HTMLDivElement).innerHTML));
                       setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef));
                     }}
                     onKeyUp={() => setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef))}
@@ -1069,9 +1191,10 @@ export const SessionEditor = ({
             data-placeholder={modeMeta.primaryFieldPlaceholder}
             data-empty="true"
             onInput={(event) => {
-              updateManualNotes((event.currentTarget as HTMLDivElement).innerHTML);
+              updateManualNotes(normalizeRichTextHtml((event.currentTarget as HTMLDivElement).innerHTML));
               setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef));
             }}
+            onPaste={(event) => void handleManualNotesPaste(event)}
             onKeyUp={() => setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef))}
             onMouseUp={() => setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef))}
           />
