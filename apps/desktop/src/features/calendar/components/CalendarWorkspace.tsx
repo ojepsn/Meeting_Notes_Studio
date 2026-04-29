@@ -1827,7 +1827,7 @@ export const CalendarWorkspace = ({
                                 {checklist.items.length ? (
                                   <div className="section-list">
                                     {checklist.items.map((item) => (
-                                      <div key={item.id} className="list-item">
+                                      <div key={item.id} className="list-item structure-checklist-row">
                                         <label className="structure-checklist-item">
                                           <input
                                             type="checkbox"
@@ -1836,9 +1836,9 @@ export const CalendarWorkspace = ({
                                           />
                                           <span>{item.label}</span>
                                         </label>
-                                        <div className="page-actions">
+                                        <div className="page-actions structure-checklist-actions">
                                           <button
-                                            className="small-button"
+                                            className="small-button structure-checklist-action-button"
                                             type="button"
                                             onClick={() => moveChecklistItem(checklist, item.id, -1)}
                                             disabled={item.position <= 1}
@@ -1846,7 +1846,7 @@ export const CalendarWorkspace = ({
                                             Up
                                           </button>
                                           <button
-                                            className="small-button"
+                                            className="small-button structure-checklist-action-button"
                                             type="button"
                                             onClick={() => moveChecklistItem(checklist, item.id, 1)}
                                             disabled={item.position >= checklist.items.length}
@@ -1854,7 +1854,7 @@ export const CalendarWorkspace = ({
                                             Down
                                           </button>
                                           <button
-                                            className="small-button danger-button"
+                                            className="small-button danger-button structure-checklist-action-button"
                                             type="button"
                                             onClick={() => deleteChecklistItem(checklist, item.id)}
                                           >

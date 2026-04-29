@@ -3516,6 +3516,7 @@ export const App = () => {
                 archivedTasks={snapshot.archivedTasks}
                 activities={snapshot.activities}
                 timeLogs={snapshot.timelogs}
+                settings={snapshot.settings}
                 onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "analytics")}
                 onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "analytics")}
               />

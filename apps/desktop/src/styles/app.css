@@ -6051,6 +6051,84 @@ select {
   min-width: 0;
 }
 
+.analytics-stacked-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.analytics-stacked-timeline-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 150px) minmax(0, 1fr) auto;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.analytics-stacked-timeline-track {
+  display: flex;
+  min-height: 1.15rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-surface-soft) 82%, var(--app-border) 18%);
+  min-width: 0;
+}
+
+.analytics-stacked-timeline-track span,
+.analytics-segment-button {
+  min-width: 0;
+}
+
+.analytics-segment-button {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-height: 1.15rem;
+  cursor: pointer;
+}
+
+.analytics-segment-button:hover,
+.analytics-segment-button-active {
+  filter: brightness(1.08);
+}
+
+.analytics-series-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.analytics-series-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface-soft);
+  color: var(--app-text);
+  cursor: pointer;
+}
+
+.analytics-series-chip-active {
+  border-color: var(--app-accent-border);
+  background: color-mix(in srgb, var(--app-accent-soft) 22%, var(--app-surface-soft) 78%);
+}
+
+.analytics-series-chip-swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.analytics-visibility-field {
+  min-width: 0;
+}
+
+.analytics-visibility-actions {
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
 .analytics-stacked-strip {
   margin-bottom: 0.8rem;
 }
@@ -6171,11 +6249,42 @@ select {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  flex: 1 1 auto;
 }
 
 .structure-checklist-item span {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.structure-checklist-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+}
+
+.structure-checklist-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.structure-checklist-action-button.small-button {
+  min-height: 1.55rem;
+  padding: 0.14rem 0.42rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.structure-checklist-action-button.small-button.danger-button {
+  padding-inline: 0.5rem;
 }
 
 .structure-template-category-field {

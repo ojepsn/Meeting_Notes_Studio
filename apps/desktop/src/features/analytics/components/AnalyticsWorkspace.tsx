@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ActivityRecord, ArchivedTaskRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, ArchivedTaskRecord, LocalAppSettings, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, isTimeLogRunning } from "../../../lib/time/tracking";
 
@@ -8,12 +8,14 @@ type AnalyticsWorkspaceProps = {
   archivedTasks: ArchivedTaskRecord[];
   activities: ActivityRecord[];
   timeLogs: TimeLogRecord[];
+  settings: LocalAppSettings;
   onOpenTodoDetail: (todoId: string) => void;
   onOpenActivityDetail: (activityId: string) => void;
 };
 
 type TimelineGranularity = "daily" | "weekly" | "monthly";
 type AnalyticsRangePreset = "30d" | "90d" | "365d" | "custom";
+type ChartDisplayMode = "share" | "hours";
 type EnrichedTimeLog = TimeLogRecord & {
   title: string;
   contextLabel: string;
@@ -22,6 +24,8 @@ type EnrichedTimeLog = TimeLogRecord & {
   activityLabel: string;
   workKind: "Task" | "Meeting" | "Activity";
   effectiveMinutes: number;
+  isPrivate: boolean;
+  isBaselineWork: boolean;
   isArchivedTarget?: boolean;
 };
 
@@ -78,11 +82,128 @@ const buildBucketKey = (value: string, granularity: TimelineGranularity) => {
 
 const topSlice = <T,>(entries: T[], count = 10) => entries.slice(0, count);
 
+const ANALYTICS_SERIES_COLORS = [
+  "var(--app-accent-strong)",
+  "#4f7cff",
+  "#3fb68b",
+  "#e0a33a",
+  "#d96c6c",
+  "#8a6fe8",
+];
+
+const buildCategorizedTimelineSeries = (
+  logs: EnrichedTimeLog[],
+  granularity: TimelineGranularity,
+  getLabel: (log: EnrichedTimeLog) => string,
+  limit = 5,
+) => {
+  const totalByLabel = new Map<string, number>();
+  logs.forEach((log) => {
+    const label = getLabel(log) || "Unspecified";
+    totalByLabel.set(label, (totalByLabel.get(label) || 0) + log.effectiveMinutes);
+  });
+
+  const topLabels = Array.from(totalByLabel.entries())
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, limit)
+    .map(([label]) => label);
+
+  const includedLabels = new Set(topLabels);
+  const bucketMap = new Map<
+    string,
+    {
+      bucketKey: string;
+      label: string;
+      totalMinutes: number;
+      series: Record<string, number>;
+    }
+  >();
+
+  logs.forEach((log) => {
+    const bucketKey = buildBucketKey(log.date, granularity);
+    const bucket = bucketMap.get(bucketKey) || {
+      bucketKey,
+      label: formatBucketLabel(bucketKey, granularity),
+      totalMinutes: 0,
+      series: {},
+    };
+    const rawLabel = getLabel(log) || "Unspecified";
+    const label = includedLabels.has(rawLabel) ? rawLabel : "Other";
+    bucket.totalMinutes += log.effectiveMinutes;
+    bucket.series[label] = (bucket.series[label] || 0) + log.effectiveMinutes;
+    bucketMap.set(bucketKey, bucket);
+  });
+
+  const orderedLabels = bucketMap.size && Array.from(bucketMap.values()).some((entry) => entry.series.Other)
+    ? [...topLabels, "Other"]
+    : topLabels;
+
+  return {
+    labels: orderedLabels,
+    buckets: Array.from(bucketMap.values()).sort((left, right) => left.bucketKey.localeCompare(right.bucketKey)),
+  };
+};
+
+const buildBinaryTimelineSeries = (
+  logs: EnrichedTimeLog[],
+  granularity: TimelineGranularity,
+  labels: [string, string],
+  predicate: (log: EnrichedTimeLog) => boolean,
+) => {
+  const [positiveLabel, negativeLabel] = labels;
+  const bucketMap = new Map<
+    string,
+    {
+      bucketKey: string;
+      label: string;
+      totalMinutes: number;
+      series: Record<string, number>;
+    }
+  >();
+
+  logs.forEach((log) => {
+    const bucketKey = buildBucketKey(log.date, granularity);
+    const bucket = bucketMap.get(bucketKey) || {
+      bucketKey,
+      label: formatBucketLabel(bucketKey, granularity),
+      totalMinutes: 0,
+      series: {},
+    };
+    const label = predicate(log) ? positiveLabel : negativeLabel;
+    bucket.totalMinutes += log.effectiveMinutes;
+    bucket.series[label] = (bucket.series[label] || 0) + log.effectiveMinutes;
+    bucketMap.set(bucketKey, bucket);
+  });
+
+  return {
+    labels: [positiveLabel, negativeLabel],
+    buckets: Array.from(bucketMap.values()).sort((left, right) => left.bucketKey.localeCompare(right.bucketKey)),
+  };
+};
+
+const getActivitySeriesLabel = (log: EnrichedTimeLog) =>
+  log.project && log.project !== "No project" ? `${log.activityLabel} - ${log.project}` : log.activityLabel;
+
+type DrilldownState =
+  | {
+      scope: "activity";
+      label: string;
+    }
+  | {
+      scope: "privacy";
+      label: "Private" | "Business";
+    }
+  | {
+      scope: "baseline";
+      label: "Baseline work" | "Explicit timelogs";
+    };
+
 export const AnalyticsWorkspace = ({
   todos,
   archivedTasks,
   activities,
   timeLogs,
+  settings,
   onOpenTodoDetail,
   onOpenActivityDetail,
 }: AnalyticsWorkspaceProps) => {
@@ -94,7 +215,11 @@ export const AnalyticsWorkspace = ({
   const [projectFilter, setProjectFilter] = useState("all");
   const [domainFilter, setDomainFilter] = useState("all");
   const [activityFilter, setActivityFilter] = useState("all");
+  const [showPrivateItems, setShowPrivateItems] = useState(true);
+  const [showBusinessItems, setShowBusinessItems] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [chartDisplayMode, setChartDisplayMode] = useState<ChartDisplayMode>("share");
+  const [drilldown, setDrilldown] = useState<DrilldownState | null>(null);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -136,6 +261,8 @@ export const AnalyticsWorkspace = ({
             activityLabel: linkedActivity?.description || todo?.activity || archivedTask?.activity || "No activity",
             workKind: "Task",
             effectiveMinutes: isTimeLogRunning(log) ? calculateLiveDurationMinutes(log, now) : log.durationMinutes,
+            isPrivate: Boolean(todo?.isPrivate ?? archivedTask?.isPrivate),
+            isBaselineWork: false,
             isArchivedTarget: !todo && Boolean(archivedTask),
           };
         }
@@ -149,9 +276,11 @@ export const AnalyticsWorkspace = ({
           activityLabel: activity?.description || "No activity",
           workKind: activity?.type === "meeting" ? "Meeting" : "Activity",
           effectiveMinutes: isTimeLogRunning(log) ? calculateLiveDurationMinutes(log, now) : log.durationMinutes,
+          isPrivate: Boolean(activity?.isPrivate),
+          isBaselineWork: Boolean(settings.baselineWorkActivityId) && log.targetType === "activity" && log.targetId === settings.baselineWorkActivityId,
         };
       }),
-    [activityLookup, archivedTaskLookup, now, timeLogs, todoLookup],
+    [activityLookup, archivedTaskLookup, now, settings.baselineWorkActivityId, timeLogs, todoLookup],
   );
 
   const projectOptions = useMemo(
@@ -175,6 +304,8 @@ export const AnalyticsWorkspace = ({
         if (projectFilter !== "all" && log.project !== projectFilter) return false;
         if (domainFilter !== "all" && log.domain !== domainFilter) return false;
         if (activityFilter !== "all" && log.activityLabel !== activityFilter) return false;
+        if (!showPrivateItems && log.isPrivate) return false;
+        if (!showBusinessItems && !log.isPrivate) return false;
         if (searchQuery.trim()) {
           const query = searchQuery.trim().toLocaleLowerCase();
           const haystack = `${log.title} ${log.contextLabel} ${log.project} ${log.domain} ${log.activityLabel} ${log.notes}`.toLocaleLowerCase();
@@ -182,7 +313,7 @@ export const AnalyticsWorkspace = ({
         }
         return true;
       }),
-    [activityFilter, domainFilter, enrichedLogs, fromDate, projectFilter, searchQuery, toDate],
+    [activityFilter, domainFilter, enrichedLogs, fromDate, projectFilter, searchQuery, showBusinessItems, showPrivateItems, toDate],
   );
 
   const totalMinutes = useMemo(() => filteredLogs.reduce((sum, log) => sum + log.effectiveMinutes, 0), [filteredLogs]);
@@ -257,6 +388,63 @@ export const AnalyticsWorkspace = ({
     return Array.from(grouped.entries()).map(([label, minutes]) => ({ label, minutes })).sort((left, right) => right.minutes - left.minutes || left.label.localeCompare(right.label));
   }, [filteredLogs]);
 
+  const activityTimelineSeries = useMemo(
+    () => buildCategorizedTimelineSeries(filteredLogs, timelineGranularity, getActivitySeriesLabel),
+    [filteredLogs, timelineGranularity],
+  );
+
+  const privacyTimelineSeries = useMemo(
+    () => buildBinaryTimelineSeries(filteredLogs, timelineGranularity, ["Private", "Business"], (log) => log.isPrivate),
+    [filteredLogs, timelineGranularity],
+  );
+
+  const baselineTimelineSeries = useMemo(
+    () =>
+      buildBinaryTimelineSeries(
+        filteredLogs,
+        timelineGranularity,
+        ["Baseline work", "Explicit timelogs"],
+        (log) => log.isBaselineWork,
+      ),
+    [filteredLogs, timelineGranularity],
+  );
+
+  const activityMaxBucketMinutes = Math.max(1, ...activityTimelineSeries.buckets.map((entry) => entry.totalMinutes));
+  const privacyMaxBucketMinutes = Math.max(1, ...privacyTimelineSeries.buckets.map((entry) => entry.totalMinutes));
+  const baselineMaxBucketMinutes = Math.max(1, ...baselineTimelineSeries.buckets.map((entry) => entry.totalMinutes));
+
+  const drilldownLogs = useMemo(() => {
+    if (!drilldown) return [];
+    if (drilldown.scope === "activity") {
+      return filteredLogs.filter((log) => getActivitySeriesLabel(log) === drilldown.label);
+    }
+    if (drilldown.scope === "privacy") {
+      return filteredLogs.filter((log) => (drilldown.label === "Private" ? log.isPrivate : !log.isPrivate));
+    }
+    return filteredLogs.filter((log) => (drilldown.label === "Baseline work" ? log.isBaselineWork : !log.isBaselineWork));
+  }, [drilldown, filteredLogs]);
+
+  useEffect(() => {
+    if (!drilldown) return;
+    if (drilldown.scope === "activity" && !activityTimelineSeries.labels.includes(drilldown.label)) {
+      setDrilldown(null);
+      return;
+    }
+    if (
+      drilldown.scope === "privacy" &&
+      !privacyTimelineSeries.labels.includes(drilldown.label)
+    ) {
+      setDrilldown(null);
+      return;
+    }
+    if (
+      drilldown.scope === "baseline" &&
+      !baselineTimelineSeries.labels.includes(drilldown.label)
+    ) {
+      setDrilldown(null);
+    }
+  }, [activityTimelineSeries.labels, baselineTimelineSeries.labels, drilldown, privacyTimelineSeries.labels]);
+
   const busiestBucket = timelineBuckets.length
     ? timelineBuckets.reduce((best, entry) => (entry.minutes > best.minutes ? entry : best), timelineBuckets[0])
     : null;
@@ -293,6 +481,17 @@ export const AnalyticsWorkspace = ({
             </button>
             <button className="segment-button" data-active={timelineGranularity === "monthly"} type="button" onClick={() => setTimelineGranularity("monthly")}>
               Monthly
+            </button>
+          </div>
+        </div>
+        <div className="analytics-toolbar-group">
+          <span className="tiny-text analytics-toolbar-label">Chart mode</span>
+          <div className="capture-density-toggle">
+            <button className="segment-button" data-active={chartDisplayMode === "share"} type="button" onClick={() => setChartDisplayMode("share")}>
+              Stacked share
+            </button>
+            <button className="segment-button" data-active={chartDisplayMode === "hours"} type="button" onClick={() => setChartDisplayMode("hours")}>
+              Absolute hours
             </button>
           </div>
         </div>
@@ -371,6 +570,19 @@ export const AnalyticsWorkspace = ({
             ))}
           </select>
         </div>
+        <div className="field analytics-visibility-field">
+          <label>Visibility</label>
+          <div className="page-actions analytics-visibility-actions">
+            <label className="compact-private-toggle calendar-top-filter-toggle">
+              <input type="checkbox" checked={showPrivateItems} onChange={(event) => setShowPrivateItems(event.target.checked)} />
+              <span>Show private</span>
+            </label>
+            <label className="compact-private-toggle calendar-top-filter-toggle">
+              <input type="checkbox" checked={showBusinessItems} onChange={(event) => setShowBusinessItems(event.target.checked)} />
+              <span>Show business</span>
+            </label>
+          </div>
+        </div>
         <div className="field field-wide">
           <label htmlFor="analytics-search">Search</label>
           <input
@@ -381,6 +593,271 @@ export const AnalyticsWorkspace = ({
           />
         </div>
       </div>
+
+      <div className="analytics-chart-grid">
+        <div className="sidebar-card">
+          <div className="card-header">
+            <div>
+              <h3>Activity time over time</h3>
+              <p className="muted">Tracked hours summarized by {timelineGranularity.slice(0, -2)} and split by the top activities in view.</p>
+            </div>
+          </div>
+          <div className="analytics-stacked-timeline">
+            {activityTimelineSeries.buckets.length ? (
+              activityTimelineSeries.buckets.map((bucket) => (
+                <div key={bucket.bucketKey} className="analytics-stacked-timeline-row">
+                  <span className="tiny-text analytics-bar-label">{bucket.label}</span>
+                  <div
+                    className="analytics-stacked-timeline-track"
+                    style={
+                      chartDisplayMode === "hours"
+                        ? { width: `${(bucket.totalMinutes / activityMaxBucketMinutes) * 100}%` }
+                        : undefined
+                    }
+                  >
+                    {activityTimelineSeries.labels.map((label, index) => {
+                      const minutes = bucket.series[label] || 0;
+                      const denominator = chartDisplayMode === "share" ? bucket.totalMinutes : activityMaxBucketMinutes;
+                      if (!minutes || !denominator) return null;
+                      return (
+                        <button
+                          key={`${bucket.bucketKey}-${label}`}
+                          type="button"
+                          className={`analytics-segment-button${drilldown?.scope === "activity" && drilldown.label === label ? " analytics-segment-button-active" : ""}`}
+                          title={`${label}: ${formatMinutes(minutes)}`}
+                          onClick={() => setDrilldown({ scope: "activity", label })}
+                          style={{
+                            width: `${(minutes / denominator) * 100}%`,
+                            background: ANALYTICS_SERIES_COLORS[index % ANALYTICS_SERIES_COLORS.length],
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <strong>{formatMinutes(bucket.totalMinutes)}</strong>
+                </div>
+              ))
+            ) : (
+              <p className="muted">No project time data matches the current filters.</p>
+            )}
+          </div>
+          {activityTimelineSeries.labels.length ? (
+            <div className="analytics-series-legend">
+              {activityTimelineSeries.labels.map((label, index) => (
+                <button key={label} type="button" className={`status-chip analytics-series-chip${drilldown?.scope === "activity" && drilldown.label === label ? " analytics-series-chip-active" : ""}`} onClick={() => setDrilldown({ scope: "activity", label })}>
+                  <span
+                    className="analytics-series-chip-swatch"
+                    style={{ background: ANALYTICS_SERIES_COLORS[index % ANALYTICS_SERIES_COLORS.length] }}
+                  />
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="analytics-chart-grid">
+        <div className="sidebar-card">
+          <div className="card-header">
+            <div>
+              <h3>Business vs private</h3>
+              <p className="muted">A split of visible work over time between business and private entries.</p>
+            </div>
+          </div>
+          <div className="analytics-stacked-timeline">
+            {privacyTimelineSeries.buckets.length ? (
+              privacyTimelineSeries.buckets.map((bucket) => (
+                <div key={bucket.bucketKey} className="analytics-stacked-timeline-row">
+                  <span className="tiny-text analytics-bar-label">{bucket.label}</span>
+                  <div
+                    className="analytics-stacked-timeline-track"
+                    style={
+                      chartDisplayMode === "hours"
+                        ? { width: `${(bucket.totalMinutes / privacyMaxBucketMinutes) * 100}%` }
+                        : undefined
+                    }
+                  >
+                    {privacyTimelineSeries.labels.map((label, index) => {
+                      const minutes = bucket.series[label] || 0;
+                      const denominator = chartDisplayMode === "share" ? bucket.totalMinutes : privacyMaxBucketMinutes;
+                      if (!minutes || !denominator) return null;
+                      return (
+                        <button
+                          key={`${bucket.bucketKey}-${label}`}
+                          type="button"
+                          className={`analytics-segment-button${drilldown?.scope === "privacy" && drilldown.label === label ? " analytics-segment-button-active" : ""}`}
+                          title={`${label}: ${formatMinutes(minutes)}`}
+                          onClick={() => setDrilldown({ scope: "privacy", label: label as "Private" | "Business" })}
+                          style={{
+                            width: `${(minutes / denominator) * 100}%`,
+                            background: ANALYTICS_SERIES_COLORS[index % ANALYTICS_SERIES_COLORS.length],
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <strong>{formatMinutes(bucket.totalMinutes)}</strong>
+                </div>
+              ))
+            ) : (
+              <p className="muted">No activity time data matches the current filters.</p>
+            )}
+          </div>
+          {privacyTimelineSeries.labels.length ? (
+            <div className="analytics-series-legend">
+              {privacyTimelineSeries.labels.map((label, index) => (
+                <button key={label} type="button" className={`status-chip analytics-series-chip${drilldown?.scope === "privacy" && drilldown.label === label ? " analytics-series-chip-active" : ""}`} onClick={() => setDrilldown({ scope: "privacy", label: label as "Private" | "Business" })}>
+                  <span
+                    className="analytics-series-chip-swatch"
+                    style={{ background: ANALYTICS_SERIES_COLORS[index % ANALYTICS_SERIES_COLORS.length] }}
+                  />
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="sidebar-card">
+          <div className="card-header">
+            <div>
+              <h3>Baseline vs explicit timelogs</h3>
+              <p className="muted">See how much time is flowing through baseline work capture versus specific tracked work.</p>
+            </div>
+          </div>
+          <div className="analytics-stacked-timeline">
+            {baselineTimelineSeries.buckets.length ? (
+              baselineTimelineSeries.buckets.map((bucket) => (
+                <div key={bucket.bucketKey} className="analytics-stacked-timeline-row">
+                  <span className="tiny-text analytics-bar-label">{bucket.label}</span>
+                  <div
+                    className="analytics-stacked-timeline-track"
+                    style={
+                      chartDisplayMode === "hours"
+                        ? { width: `${(bucket.totalMinutes / baselineMaxBucketMinutes) * 100}%` }
+                        : undefined
+                    }
+                  >
+                    {baselineTimelineSeries.labels.map((label, index) => {
+                      const minutes = bucket.series[label] || 0;
+                      const denominator = chartDisplayMode === "share" ? bucket.totalMinutes : baselineMaxBucketMinutes;
+                      if (!minutes || !denominator) return null;
+                      return (
+                        <button
+                          key={`${bucket.bucketKey}-${label}`}
+                          type="button"
+                          className={`analytics-segment-button${drilldown?.scope === "baseline" && drilldown.label === label ? " analytics-segment-button-active" : ""}`}
+                          title={`${label}: ${formatMinutes(minutes)}`}
+                          onClick={() => setDrilldown({ scope: "baseline", label: label as "Baseline work" | "Explicit timelogs" })}
+                          style={{
+                            width: `${(minutes / denominator) * 100}%`,
+                            background: ANALYTICS_SERIES_COLORS[index % ANALYTICS_SERIES_COLORS.length],
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <strong>{formatMinutes(bucket.totalMinutes)}</strong>
+                </div>
+              ))
+            ) : (
+              <p className="muted">No timelog split data matches the current filters.</p>
+            )}
+          </div>
+          {baselineTimelineSeries.labels.length ? (
+            <div className="analytics-series-legend">
+              {baselineTimelineSeries.labels.map((label, index) => (
+                <button key={label} type="button" className={`status-chip analytics-series-chip${drilldown?.scope === "baseline" && drilldown.label === label ? " analytics-series-chip-active" : ""}`} onClick={() => setDrilldown({ scope: "baseline", label: label as "Baseline work" | "Explicit timelogs" })}>
+                  <span
+                    className="analytics-series-chip-swatch"
+                    style={{ background: ANALYTICS_SERIES_COLORS[index % ANALYTICS_SERIES_COLORS.length] }}
+                  />
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {drilldown ? (
+        <div className="sidebar-card">
+          <div className="card-header">
+            <div>
+              <h3>Drill-down timelogs</h3>
+              <p className="muted">
+                {drilldown.scope === "activity"
+                  ? `Showing timelogs for ${drilldown.label}.`
+                  : drilldown.scope === "privacy"
+                    ? `Showing ${drilldown.label.toLowerCase()} timelogs.`
+                    : `Showing ${drilldown.label.toLowerCase()} timelogs.`}
+              </p>
+            </div>
+            <div className="page-actions">
+              <button className="small-button" type="button" onClick={() => setDrilldown(null)}>
+                Clear
+              </button>
+            </div>
+          </div>
+          <div className="section-list">
+            {drilldownLogs.length ? (
+              [...drilldownLogs]
+                .sort(
+                  (left, right) =>
+                    right.date.localeCompare(left.date) ||
+                    right.startTime.localeCompare(left.startTime) ||
+                    right.effectiveMinutes - left.effectiveMinutes,
+                )
+                .map((log) =>
+                log.targetType === "todo" && !log.isArchivedTarget ? (
+                  <button
+                    key={`${log.id}-${log.targetType}`}
+                    className="list-item list-item-button"
+                    type="button"
+                    onClick={() => onOpenTodoDetail(log.targetId)}
+                  >
+                    <div className="analytics-list-main">
+                      <strong>{log.title}</strong>
+                      <span className="tiny-text">
+                        {log.date} {log.startTime}-{log.endTime} · {log.contextLabel}
+                      </span>
+                    </div>
+                    <span>{formatMinutes(log.effectiveMinutes)}</span>
+                  </button>
+                ) : log.targetType === "activity" ? (
+                  <button
+                    key={`${log.id}-${log.targetType}`}
+                    className="list-item list-item-button"
+                    type="button"
+                    onClick={() => onOpenActivityDetail(log.targetId)}
+                  >
+                    <div className="analytics-list-main">
+                      <strong>{log.title}</strong>
+                      <span className="tiny-text">
+                        {log.date} {log.startTime}-{log.endTime} · {log.contextLabel}
+                      </span>
+                    </div>
+                    <span>{formatMinutes(log.effectiveMinutes)}</span>
+                  </button>
+                ) : (
+                  <div key={`${log.id}-${log.targetType}`} className="list-item">
+                    <div className="analytics-list-main">
+                      <strong>{log.title}</strong>
+                      <span className="tiny-text">
+                        {log.date} {log.startTime}-{log.endTime} · {log.contextLabel}
+                      </span>
+                    </div>
+                    <span>{formatMinutes(log.effectiveMinutes)}</span>
+                  </div>
+                ),
+              )
+            ) : (
+              <p className="muted">No timelogs match this drill-down.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <div className="analytics-summary-grid">
         <div className="sidebar-card">
