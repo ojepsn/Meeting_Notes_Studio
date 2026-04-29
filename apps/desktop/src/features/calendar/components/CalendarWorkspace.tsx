@@ -75,6 +75,51 @@ const slotToDateTime = (date: string, slot: number) => {
   return next;
 };
 
+const WORKDAY_END_START_SLOT = 17 * 12;
+
+const getFutureAnchoredSlot = (value = new Date()) => {
+  const exactSlot = (value.getHours() * 60 + value.getMinutes()) / MINUTES_PER_SLOT;
+  return Math.min(WORKDAY_END_START_SLOT, clampSlot(Math.ceil(exactSlot)));
+};
+
+const repositionTodaySingleRowTodos = <T extends Item>(items: T[], today: string, value = new Date()) => {
+  const anchorSlot = getFutureAnchoredSlot(value);
+  const occupiedSlots = new Set<number>();
+  const floatingTodos: T[] = [];
+  const fixedItems: T[] = [];
+
+  items.forEach((item) => {
+    const isFloatingTodayTodo = item.targetType === "todo" && item.date === today && item.durationSlots <= 1;
+    if (isFloatingTodayTodo) {
+      floatingTodos.push(item);
+      return;
+    }
+    fixedItems.push(item);
+    if (item.date !== today) return;
+    const endSlot = item.startSlot + Math.max(1, item.durationSlots);
+    for (let slot = item.startSlot; slot < endSlot; slot += 1) {
+      occupiedSlots.add(slot);
+    }
+  });
+
+  const repositionedTodos = [...floatingTodos]
+    .sort((left, right) => left.startSlot - right.startSlot || left.title.localeCompare(right.title))
+    .map((item) => {
+      let nextSlot = anchorSlot;
+      while (occupiedSlots.has(nextSlot) && nextSlot < TOTAL_SLOTS - 1) {
+        nextSlot += 1;
+      }
+      occupiedSlots.add(nextSlot);
+      return {
+        ...item,
+        startSlot: nextSlot,
+        durationSlots: 1,
+      };
+    });
+
+  return [...fixedItems, ...repositionedTodos];
+};
+
 export const layoutCalendarItems = <T extends {
   date: string;
   startSlot: number;
@@ -238,7 +283,8 @@ export const CalendarWorkspace = ({
   const [creationContextActivityId, setCreationContextActivityId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "task" | "meeting">("all");
-  const [visibilityFilter, setVisibilityFilter] = useState<"all" | "public" | "private">(settings.calendarVisibilityFilter ?? "all");
+  const [showPrivateItems, setShowPrivateItems] = useState(settings.calendarShowPrivate ?? (settings.calendarVisibilityFilter === "public" ? false : true));
+  const [showBusinessItems, setShowBusinessItems] = useState(settings.calendarShowBusiness ?? (settings.calendarVisibilityFilter === "private" ? false : true));
   const [hideCompletedTodos, setHideCompletedTodos] = useState(false);
   const [inlineTodoEdit, setInlineTodoEdit] = useState<{ itemId: string; todoId: string; value: string } | null>(null);
   const [resizeState, setResizeState] = useState<null | { itemId: string; edge: "start" | "end"; date: string; startSlot: number; durationSlots: number }>(null);
@@ -272,7 +318,8 @@ export const CalendarWorkspace = ({
       settings.calendarDetailsPaneWidth !== detailsPaneWidth ||
       settings.calendarScrollTop !== scrollTop ||
       settings.calendarScrollLeft !== scrollLeft ||
-      settings.calendarVisibilityFilter !== visibilityFilter
+      settings.calendarShowPrivate !== showPrivateItems ||
+      settings.calendarShowBusiness !== showBusinessItems
     ) {
       onSaveSettings({
         ...settings,
@@ -283,10 +330,12 @@ export const CalendarWorkspace = ({
         calendarDetailsPaneWidth: detailsPaneWidth,
         calendarScrollTop: scrollTop,
         calendarScrollLeft: scrollLeft,
-        calendarVisibilityFilter: visibilityFilter,
+        calendarVisibilityFilter: showPrivateItems && showBusinessItems ? "all" : showPrivateItems ? "private" : showBusinessItems ? "public" : "all",
+        calendarShowPrivate: showPrivateItems,
+        calendarShowBusiness: showBusinessItems,
       });
     }
-  }, [daysInView, detailsPaneWidth, isFullScreen, onSaveSettings, scrollLeft, scrollTop, settings, slotHeight, visibilityFilter]);
+  }, [daysInView, detailsPaneWidth, isFullScreen, onSaveSettings, scrollLeft, scrollTop, settings, showBusinessItems, showPrivateItems, slotHeight]);
 
   const visibleDates = useMemo(
     () =>
@@ -344,16 +393,17 @@ export const CalendarWorkspace = ({
 
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return layoutCalendarItems(items.filter((item) => {
+    const visibleItems = items.filter((item) => {
       if (typeFilter === "task" && item.isMeeting) return false;
       if (typeFilter === "meeting" && !item.isMeeting) return false;
-      if (visibilityFilter === "private" && !item.isPrivate) return false;
-      if (visibilityFilter === "public" && item.isPrivate) return false;
+      if (!showPrivateItems && item.isPrivate) return false;
+      if (!showBusinessItems && !item.isPrivate) return false;
       if (hideCompletedTodos && item.targetType === "todo" && item.isDone) return false;
       if (!query) return true;
       return `${item.title} ${item.label}`.toLowerCase().includes(query);
-    }));
-  }, [hideCompletedTodos, items, searchQuery, typeFilter, visibilityFilter]);
+    });
+    return layoutCalendarItems(repositionTodaySingleRowTodos(visibleItems, today, now));
+  }, [hideCompletedTodos, items, now, searchQuery, showBusinessItems, showPrivateItems, today, typeFilter]);
 
   const itemsByDate = useMemo(() => {
     const grouped = new Map<string, Item[]>();
@@ -369,7 +419,6 @@ export const CalendarWorkspace = ({
     () => (selectedItemId ? items.find((item) => item.id === selectedItemId) ?? null : null),
     [items, selectedItemId],
   );
-  const showPrivateItems = visibilityFilter !== "public";
   const editorProjectOptions = editorDraft ? getProjectsForDomain(structureOptions, editorDraft.domain) : [];
   const editorActivityOptions = editorDraft ? getActivitiesForSelection(structureOptions, editorDraft.domain, editorDraft.project) : [];
   const linkedActivityOptions = topLevelActivities.filter((activity) => {
@@ -945,13 +994,21 @@ export const CalendarWorkspace = ({
           <button className="shell-button" type="button" onClick={() => jumpToCalendarDate(addDays(anchorDate, -daysInView))}>Previous</button>
           <button className="shell-button" type="button" onClick={() => { const currentDate = new Date(); jumpToCalendarDate(getLocalDateString(currentDate)); window.requestAnimationFrame(() => scrollToCurrentTime(currentDate)); }}>Today</button>
           <button className="shell-button" type="button" onClick={() => jumpToCalendarDate(addDays(anchorDate, daysInView))}>Next</button>
-          <label className="compact-private-toggle calendar-top-private-toggle">
+          <label className="compact-private-toggle calendar-top-private-toggle calendar-top-filter-toggle">
             <input
               type="checkbox"
               checked={showPrivateItems}
-              onChange={(event) => setVisibilityFilter(event.target.checked ? "all" : "public")}
+              onChange={(event) => setShowPrivateItems(event.target.checked)}
             />
             <span>Show private</span>
+          </label>
+          <label className="compact-private-toggle calendar-top-private-toggle calendar-top-filter-toggle">
+            <input
+              type="checkbox"
+              checked={showBusinessItems}
+              onChange={(event) => setShowBusinessItems(event.target.checked)}
+            />
+            <span>Show business</span>
           </label>
           <button className="small-button danger-button" type="button" onClick={deleteSelectedCalendarItems} disabled={!selectedItemId && !selectedItemIds.length}>
             Delete selected
@@ -976,7 +1033,22 @@ export const CalendarWorkspace = ({
               <button className="shell-button" type="button" onClick={() => jumpToCalendarDate(jumpDate || today)}>Go</button>
               <div className="field field-wide"><label htmlFor="calendar-search">Search</label><input id="calendar-search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search title" /></div>
               <div className="field"><label htmlFor="calendar-type-filter">Type</label><select id="calendar-type-filter" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | "task" | "meeting")}><option value="all">All</option><option value="task">Tasks</option><option value="meeting">Meetings</option></select></div>
-              <div className="field"><label htmlFor="calendar-visibility-filter">Private</label><select id="calendar-visibility-filter" value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value as "all" | "public" | "private")}><option value="all">All</option><option value="public">Public</option><option value="private">Private</option></select></div>
+              <label className="compact-private-toggle calendar-top-filter-toggle">
+                <input
+                  type="checkbox"
+                  checked={showPrivateItems}
+                  onChange={(event) => setShowPrivateItems(event.target.checked)}
+                />
+                <span>Show private</span>
+              </label>
+              <label className="compact-private-toggle calendar-top-filter-toggle">
+                <input
+                  type="checkbox"
+                  checked={showBusinessItems}
+                  onChange={(event) => setShowBusinessItems(event.target.checked)}
+                />
+                <span>Show business</span>
+              </label>
               <div className="field calendar-context-field">
                 <label htmlFor="calendar-creation-context">Attach new entries</label>
                 <select
@@ -1136,7 +1208,7 @@ export const CalendarWorkspace = ({
                                   onOpenSession(linkedSessionState.sessionId!, item.id);
                                 }}
                               >
-                                Open session
+                                Session
                               </span>
                             ) : (
                               <span
@@ -1181,16 +1253,20 @@ export const CalendarWorkspace = ({
                       ) : (
                         <strong className="calendar-item-title">{item.isMeeting ? `${slotToTime(startSlot)} ${item.title}` : item.title}</strong>
                       )) : null}
-                      <span className="calendar-item-meta">{item.isMeeting ? durationLabel(durationSlots) : item.label}{runningLog ? ` • Running ${runningLabel}` : ""}</span>
-                      {linkedSessionState?.sessionId ? (
-                        <span className={`calendar-item-link-state${linkedSessionState.hasOutput ? " calendar-item-link-state-output" : ""}`}>
-                          {linkedSessionState.hasOutput ? "Output ready" : "Session linked"}
-                        </span>
-                      ) : (
-                        <span className="calendar-item-link-state calendar-item-link-state-empty">
-                          {item.targetType === "todo" ? "No note" : "No session"}
-                        </span>
-                      )}
+                      {!isSingleRowTodo ? (
+                        <>
+                          <span className="calendar-item-meta">{item.isMeeting ? durationLabel(durationSlots) : item.label}{runningLog ? ` • Running ${runningLabel}` : ""}</span>
+                          {linkedSessionState?.sessionId ? (
+                            <span className={`calendar-item-link-state${linkedSessionState.hasOutput ? " calendar-item-link-state-output" : ""}`}>
+                              {linkedSessionState.hasOutput ? "Output ready" : "Session linked"}
+                            </span>
+                          ) : (
+                            <span className="calendar-item-link-state calendar-item-link-state-empty">
+                              {item.targetType === "todo" ? "No note" : "No session"}
+                            </span>
+                          )}
+                        </>
+                      ) : null}
                       {item.isMeeting ? (
                         <div className="calendar-item-launcher-row">
                           {linkedSessionState?.sessionId ? (
@@ -1251,6 +1327,7 @@ export const CalendarWorkspace = ({
                         </div>
                       ) : null}
                       {!item.isMeeting && item.targetType === "todo" ? (
+                        !isSingleRowTodo ? (
                         <div className="calendar-item-launcher-row">
                           {linkedSessionState?.sessionId ? (
                             <>
@@ -1268,7 +1345,7 @@ export const CalendarWorkspace = ({
                                   onOpenSession(linkedSessionState.sessionId!, item.id);
                                 }}
                               >
-                                Open note
+                                Session
                               </span>
                               {linkedSessionState.hasOutput ? (
                                 <span
@@ -1304,31 +1381,34 @@ export const CalendarWorkspace = ({
                                 onCreateLinkedTaskSession(item.targetId);
                               }}
                             >
-                              Create note
+                              Session
                             </span>
                           )}
                         </div>
+                        ) : null
                       ) : null}
-                      <span
-                        className={`calendar-item-inline-action${runningLog ? " calendar-item-inline-action-active" : ""}`}
-                        role="button"
-                        tabIndex={-1}
-                        onMouseDown={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                        }}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          if (runningLog) {
-                            onStopTracking(item.targetType, item.targetId);
-                            return;
-                          }
-                          onStartTracking(item.targetType, item.targetId);
-                        }}
-                      >
-                        {runningLog ? "Stop" : "Start"}
-                      </span>
+                      {!isSingleRowTodo ? (
+                        <span
+                          className={`calendar-item-inline-action${runningLog ? " calendar-item-inline-action-active" : ""}`}
+                          role="button"
+                          tabIndex={-1}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (runningLog) {
+                              onStopTracking(item.targetType, item.targetId);
+                              return;
+                            }
+                            onStartTracking(item.targetType, item.targetId);
+                          }}
+                        >
+                          {runningLog ? "Stop" : "Start"}
+                        </span>
+                      ) : null}
                       {item.isMeeting ? <span className="calendar-resize-handle calendar-resize-handle-end" onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); setResizeState({ itemId: item.id, edge: "end", date: item.date, startSlot, durationSlots }); }} /> : null}
                     </div>;
                   })}

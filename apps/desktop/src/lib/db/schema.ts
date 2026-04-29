@@ -64,6 +64,25 @@ export const sqliteBootstrapStatements = [
     deleted_at TEXT NOT NULL,
     payload_json TEXT NOT NULL
   );`,
+  `CREATE TABLE IF NOT EXISTS checklists (
+    id TEXT PRIMARY KEY,
+    owner_type TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+  );`,
+  `CREATE TABLE IF NOT EXISTS checklist_templates (
+    id TEXT PRIMARY KEY,
+    updated_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+  );`,
+  `CREATE TABLE IF NOT EXISTS checklist_recurrences (
+    id TEXT PRIMARY KEY,
+    owner_type TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+  );`,
   `CREATE TABLE IF NOT EXISTS calendar_items (
     id TEXT PRIMARY KEY,
     target_type TEXT NOT NULL,

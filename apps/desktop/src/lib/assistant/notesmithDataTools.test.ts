@@ -85,6 +85,9 @@ const buildSnapshot = (): DesktopAppSnapshot => ({
       sessionIds: ["session-public"],
     },
   ],
+  checklists: [],
+  checklistTemplates: [],
+  checklistRecurrences: [],
   archivedTasks: [],
   activities: [
     {

@@ -83,6 +83,9 @@ const buildSnapshot = () => ({
             sessionIds: ["session-public"],
         },
     ],
+    checklists: [],
+    checklistTemplates: [],
+    checklistRecurrences: [],
     archivedTasks: [],
     activities: [
         {

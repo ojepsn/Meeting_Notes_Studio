@@ -1,9 +1,12 @@
 import { useMemo, useState } from "react";
-import type { ActivityRecord, ProjectLinkRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, ProjectLinkRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 
 type StructureWorkspaceProps = {
   activities: ActivityRecord[];
   todos: TodoRecord[];
+  checklists: ChecklistRecord[];
+  checklistTemplates: ChecklistTemplateRecord[];
+  checklistRecurrences: ChecklistRecurrenceRecord[];
   timeLogs: TimeLogRecord[];
   savedDomains: string[];
   savedProjects: string[];
@@ -12,6 +15,15 @@ type StructureWorkspaceProps = {
   onRenameDomain: (previousValue: string, nextValue: string) => void;
   onAddProject: (project: string, domain: string) => void;
   onAddActivityToProject: (description: string, project: string, domain: string, type: ActivityRecord["type"]) => void;
+  onCreateProjectChecklist: (project: string, title: string) => void;
+  onCreateProjectChecklistFromTemplate: (project: string, templateId: string) => void;
+  onCreateProjectChecklistRecurrence: (project: string, templateId: string, cadence: ChecklistRecurrenceCadence) => void;
+  onSaveChecklist: (checklist: ChecklistRecord) => void;
+  onDeleteChecklist: (id: string) => void;
+  onCreateChecklistTemplate: (title: string, category?: string, items?: ChecklistTemplateRecord["items"]) => void;
+  onSaveChecklistTemplate: (template: ChecklistTemplateRecord) => void;
+  onDeleteChecklistTemplate: (id: string) => void;
+  onDeleteChecklistRecurrence: (id: string) => void;
   onRenameProject: (previousValue: string, nextValue: string) => void;
   onAssignProjectDomain: (project: string, domain: string) => void;
   onOpenTodosForDomain: (domain: string) => void;
@@ -32,6 +44,11 @@ type StructureFocus = {
   label: string;
 } | null;
 
+const CHECKLIST_RECURRENCE_OPTIONS: Array<{ value: ChecklistRecurrenceCadence; label: string }> = [
+  { value: "monthly", label: "Monthly" },
+  { value: "weekly", label: "Weekly" },
+];
+
 const formatMinutes = (minutes: number) => {
   if (!minutes) return "0m";
   const hours = Math.floor(minutes / 60);
@@ -41,9 +58,40 @@ const formatMinutes = (minutes: number) => {
   return `${hours}h ${rest}m`;
 };
 
+const getIsoWeekLabel = (value: Date) => {
+  const nextValue = new Date(value);
+  nextValue.setHours(0, 0, 0, 0);
+  nextValue.setDate(nextValue.getDate() + 3 - ((nextValue.getDay() + 6) % 7));
+  const isoYear = nextValue.getFullYear();
+  const weekOne = new Date(isoYear, 0, 4);
+  const weekOneDay = (weekOne.getDay() + 6) % 7;
+  weekOne.setDate(weekOne.getDate() - weekOneDay);
+  const isoWeek = Math.round((nextValue.getTime() - weekOne.getTime()) / 604800000) + 1;
+  return `${isoYear}-W${`${isoWeek}`.padStart(2, "0")}`;
+};
+
+const formatChecklistRecurrenceLabel = (cadence: ChecklistRecurrenceCadence) =>
+  cadence === "weekly" ? "Weekly" : "Monthly";
+
+const formatNextChecklistDueLabel = (cadence: ChecklistRecurrenceCadence, value = new Date()) => {
+  const nextValue = new Date(value);
+  if (cadence === "weekly") {
+    nextValue.setDate(nextValue.getDate() + 7);
+    return `Next due ${getIsoWeekLabel(nextValue)}`;
+  }
+  nextValue.setMonth(nextValue.getMonth() + 1, 1);
+  return `Next due ${nextValue.getFullYear()}-${`${nextValue.getMonth() + 1}`.padStart(2, "0")}`;
+};
+
+const formatLastCreatedChecklistLabel = (checklist: ChecklistRecord | null) =>
+  checklist?.title ? `Last created ${checklist.title}` : "Not created yet";
+
 export const StructureWorkspace = ({
   activities,
   todos,
+  checklists,
+  checklistTemplates,
+  checklistRecurrences,
   timeLogs,
   savedDomains,
   savedProjects,
@@ -52,6 +100,15 @@ export const StructureWorkspace = ({
   onRenameDomain,
   onAddProject,
   onAddActivityToProject,
+  onCreateProjectChecklist,
+  onCreateProjectChecklistFromTemplate,
+  onCreateProjectChecklistRecurrence,
+  onSaveChecklist,
+  onDeleteChecklist,
+  onCreateChecklistTemplate,
+  onSaveChecklistTemplate,
+  onDeleteChecklistTemplate,
+  onDeleteChecklistRecurrence,
   onRenameProject,
   onAssignProjectDomain,
   onOpenTodosForDomain,
@@ -72,6 +129,15 @@ export const StructureWorkspace = ({
   const [addingActivityToProject, setAddingActivityToProject] = useState<string | null>(null);
   const [projectActivityDraft, setProjectActivityDraft] = useState("");
   const [projectActivityTypeDraft, setProjectActivityTypeDraft] = useState<ActivityRecord["type"]>("task");
+  const [addingChecklistToProject, setAddingChecklistToProject] = useState<string | null>(null);
+  const [projectChecklistDraft, setProjectChecklistDraft] = useState("");
+  const [projectChecklistTemplateId, setProjectChecklistTemplateId] = useState("");
+  const [projectChecklistRecurrenceCadence, setProjectChecklistRecurrenceCadence] = useState<ChecklistRecurrenceCadence>("monthly");
+  const [checklistTemplateCategoryDraft, setChecklistTemplateCategoryDraft] = useState("General");
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editingTemplateTitle, setEditingTemplateTitle] = useState("");
+  const [editingTemplateCategory, setEditingTemplateCategory] = useState("General");
+  const [checklistItemDrafts, setChecklistItemDrafts] = useState<Record<string, string>>({});
   const [focus, setFocus] = useState<StructureFocus>(null);
 
   const projectDomainLookup = useMemo(
@@ -223,6 +289,169 @@ export const StructureWorkspace = ({
     setProjectActivityDraft("");
     setProjectActivityTypeDraft("task");
     setFocus({ kind: "project", label: project || "No project" });
+  };
+
+  const submitProjectChecklist = (project: string) => {
+    const next = projectChecklistDraft.trim();
+    if (!next) return;
+    onCreateProjectChecklist(project, next);
+    setAddingChecklistToProject(null);
+    setProjectChecklistDraft("");
+  };
+
+  const setChecklistItemDraft = (checklistId: string, value: string) =>
+    setChecklistItemDrafts((current) => ({ ...current, [checklistId]: value }));
+
+  const saveChecklistItems = (checklist: ChecklistRecord, items: ChecklistRecord["items"]) => {
+    onSaveChecklist({
+      ...checklist,
+      items,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const toggleChecklistItem = (checklist: ChecklistRecord, itemId: string) => {
+    const timestamp = new Date().toISOString();
+    saveChecklistItems(
+      checklist,
+      checklist.items.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              isChecked: !item.isChecked,
+              checkedAt: item.isChecked ? null : timestamp,
+            }
+          : item,
+      ),
+    );
+  };
+
+  const addChecklistItem = (checklist: ChecklistRecord) => {
+    const nextLabel = (checklistItemDrafts[checklist.id] || "").trim();
+    if (!nextLabel) return;
+    saveChecklistItems(checklist, [
+      ...checklist.items,
+      {
+        id: crypto.randomUUID(),
+        label: nextLabel,
+        isChecked: false,
+        notes: "",
+        position: checklist.items.length + 1,
+        checkedAt: null,
+      },
+    ]);
+    setChecklistItemDraft(checklist.id, "");
+  };
+
+  const deleteChecklistItem = (checklist: ChecklistRecord, itemId: string) => {
+    saveChecklistItems(
+      checklist,
+      checklist.items
+        .filter((item) => item.id !== itemId)
+        .map((item, index) => ({ ...item, position: index + 1 })),
+    );
+  };
+
+  const moveChecklistItem = (checklist: ChecklistRecord, itemId: string, direction: -1 | 1) => {
+    const currentIndex = checklist.items.findIndex((item) => item.id === itemId);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= checklist.items.length) return;
+    const nextItems = [...checklist.items];
+    const [moved] = nextItems.splice(currentIndex, 1);
+    nextItems.splice(nextIndex, 0, moved);
+    saveChecklistItems(
+      checklist,
+      nextItems.map((item, index) => ({ ...item, position: index + 1 })),
+    );
+  };
+
+  const resetChecklist = (checklist: ChecklistRecord) => {
+    saveChecklistItems(
+      checklist,
+      checklist.items.map((item, index) => ({
+        ...item,
+        isChecked: false,
+        checkedAt: null,
+        position: index + 1,
+      })),
+    );
+  };
+
+  const duplicateChecklist = (checklist: ChecklistRecord) => {
+    onSaveChecklist({
+      ...checklist,
+      id: crypto.randomUUID(),
+      title: `${checklist.title} copy`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      items: checklist.items.map((item, index) => ({
+        ...item,
+        id: crypto.randomUUID(),
+        isChecked: false,
+        checkedAt: null,
+        position: index + 1,
+      })),
+    });
+  };
+
+  const saveChecklistAsTemplate = (checklist: ChecklistRecord) => {
+    onCreateChecklistTemplate(
+      checklist.title,
+      checklistTemplateCategoryDraft,
+      checklist.items.map((item, index) => ({
+        ...item,
+        id: crypto.randomUUID(),
+        isChecked: false,
+        checkedAt: null,
+        position: index + 1,
+      })),
+    );
+  };
+
+  const templateCategories = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          checklistTemplates
+            .map((template) => template.category?.trim() || "General")
+            .filter(Boolean)
+            .concat(["General", "Monthly", "Weekly", "People", "Compliance"]),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [checklistTemplates],
+  );
+
+  const templatesByCategory = useMemo(() => {
+    const grouped = new Map<string, ChecklistTemplateRecord[]>();
+    checklistTemplates.forEach((template) => {
+      const category = template.category?.trim() || "General";
+      grouped.set(category, [...(grouped.get(category) || []), template]);
+    });
+    return Array.from(grouped.entries()).sort((left, right) => left[0].localeCompare(right[0]));
+  }, [checklistTemplates]);
+
+  const beginTemplateEdit = (template: ChecklistTemplateRecord) => {
+    setEditingTemplateId(template.id);
+    setEditingTemplateTitle(template.title);
+    setEditingTemplateCategory(template.category?.trim() || "General");
+  };
+
+  const cancelTemplateEdit = () => {
+    setEditingTemplateId(null);
+    setEditingTemplateTitle("");
+    setEditingTemplateCategory("General");
+  };
+
+  const commitTemplateEdit = (template: ChecklistTemplateRecord) => {
+    const nextTitle = editingTemplateTitle.trim();
+    if (!nextTitle) return;
+    onSaveChecklistTemplate({
+      ...template,
+      title: nextTitle,
+      category: editingTemplateCategory.trim() || "General",
+      updatedAt: new Date().toISOString(),
+    });
+    cancelTemplateEdit();
   };
 
   const focusedActivities = useMemo(() => {
@@ -531,10 +760,99 @@ export const StructureWorkspace = ({
                 <p className="muted">This is the authoritative place to create activities inside projects and connect them to the rest of the app.</p>
               </div>
             </div>
+            <details className="workspace-disclosure">
+              <summary>Checklist templates</summary>
+              <div className="workspace-disclosure-body stack">
+                {templatesByCategory.length ? (
+                  <div className="structure-checklist-list">
+                    {templatesByCategory.map(([category, templates]) => (
+                      <details key={category} className="structure-checklist-card" open>
+                        <summary>
+                          <span>{category}</span>
+                          <span className="tiny-text">{templates.length} templates</span>
+                        </summary>
+                        <div className="structure-checklist-body">
+                          {templates.map((template) => (
+                            <div key={template.id} className="structure-checklist-card">
+                              <div className="structure-checklist-body">
+                                {editingTemplateId === template.id ? (
+                                  <>
+                                    <div className="todos-workspace-input-row">
+                                      <div className="field field-wide">
+                                        <label htmlFor={`structure-template-title-${template.id}`}>Template title</label>
+                                        <input
+                                          id={`structure-template-title-${template.id}`}
+                                          value={editingTemplateTitle}
+                                          onChange={(event) => setEditingTemplateTitle(event.target.value)}
+                                        />
+                                      </div>
+                                      <div className="field structure-template-category-field">
+                                        <label htmlFor={`structure-template-category-edit-${template.id}`}>Category</label>
+                                        <select
+                                          id={`structure-template-category-edit-${template.id}`}
+                                          value={editingTemplateCategory}
+                                          onChange={(event) => setEditingTemplateCategory(event.target.value)}
+                                        >
+                                          {templateCategories.map((categoryOption) => (
+                                            <option key={categoryOption} value={categoryOption}>
+                                              {categoryOption}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    </div>
+                                    <div className="page-actions">
+                                      <button className="small-button" type="button" onClick={() => commitTemplateEdit(template)}>
+                                        Save
+                                      </button>
+                                      <button className="small-button" type="button" onClick={cancelTemplateEdit}>
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="structure-checklist-header">
+                                      <strong>{template.title}</strong>
+                                      <span className="tiny-text">{template.items.length} items</span>
+                                    </div>
+                                    <p className="muted">{template.items.map((item) => item.label).slice(0, 3).join(", ") || "No template items yet."}</p>
+                                    <div className="page-actions">
+                                      <button className="small-button" type="button" onClick={() => beginTemplateEdit(template)}>
+                                        Edit
+                                      </button>
+                                      <button
+                                        className="small-button danger-button"
+                                        type="button"
+                                        onClick={() => onDeleteChecklistTemplate(template.id)}
+                                      >
+                                        Delete template
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="muted">No checklist templates yet. Save a project or task checklist as a template to reuse it later. Reused templates create fresh checklist names with the current YYYY-MM.</p>
+                )}
+              </div>
+            </details>
             <div className="time-log-table">
               {projectRows.map((row) => {
                 const project = row.label === "No project" ? "" : row.label;
                 const isEditing = editingProject === row.label;
+                const projectChecklists = checklists
+                  .filter((checklist) => checklist.ownerType === "project" && checklist.ownerId === project)
+                  .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+                const projectChecklistRecurrences = checklistRecurrences
+                  .filter((rule) => rule.ownerType === "project" && rule.ownerId === project)
+                  .sort((left, right) => left.cadence.localeCompare(right.cadence) || right.updatedAt.localeCompare(left.updatedAt));
                 return (
                   <div key={row.label} className="structure-card">
                     <div className="structure-row">
@@ -600,6 +918,20 @@ export const StructureWorkspace = ({
                       </div>
                       {!isEditing ? (
                         <div className="page-actions">
+                          {project ? (
+                            <button
+                              className="small-button"
+                              type="button"
+                              onClick={() => {
+                                setAddingChecklistToProject((current) => (current === row.label ? null : row.label));
+                                setProjectChecklistDraft("");
+                                setProjectChecklistTemplateId("");
+                                setProjectChecklistRecurrenceCadence("monthly");
+                              }}
+                            >
+                              {addingChecklistToProject === row.label ? "Close checklist" : "New checklist"}
+                            </button>
+                          ) : null}
                           {project ? (
                             <button
                               className="small-button"
@@ -671,6 +1003,83 @@ export const StructureWorkspace = ({
                         </button>
                       </div>
                     ) : null}
+                    {addingChecklistToProject === row.label ? (
+                      <div className="todos-workspace-input-row structure-inline-create-row">
+                        <div className="field field-wide">
+                          <label htmlFor={`structure-project-checklist-draft-${row.label}`}>New checklist in {row.label}</label>
+                          <input
+                            id={`structure-project-checklist-draft-${row.label}`}
+                            value={projectChecklistDraft}
+                            onChange={(event) => setProjectChecklistDraft(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" && !event.shiftKey) {
+                                event.preventDefault();
+                                submitProjectChecklist(project);
+                              }
+                            }}
+                            placeholder="For example: Monthly reporting staff"
+                          />
+                        </div>
+                        <div className="field">
+                          <label htmlFor={`structure-project-checklist-template-${row.label}`}>Template</label>
+                          <select
+                            id={`structure-project-checklist-template-${row.label}`}
+                            value={projectChecklistTemplateId}
+                            onChange={(event) => setProjectChecklistTemplateId(event.target.value)}
+                          >
+                            <option value="">No template</option>
+                            {checklistTemplates.map((template) => (
+                              <option key={template.id} value={template.id}>
+                                {`${template.category || "General"} - ${template.title}`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label htmlFor={`structure-project-checklist-recurrence-${row.label}`}>Recurring</label>
+                          <select
+                            id={`structure-project-checklist-recurrence-${row.label}`}
+                            value={projectChecklistRecurrenceCadence}
+                            onChange={(event) => setProjectChecklistRecurrenceCadence(event.target.value as ChecklistRecurrenceCadence)}
+                          >
+                            {CHECKLIST_RECURRENCE_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <button className="primary-button" type="button" onClick={() => submitProjectChecklist(project)}>
+                          Add
+                        </button>
+                        <button
+                          className="small-button"
+                          type="button"
+                          disabled={!projectChecklistTemplateId}
+                          onClick={() => {
+                            if (!projectChecklistTemplateId) return;
+                            onCreateProjectChecklistFromTemplate(project, projectChecklistTemplateId);
+                            setProjectChecklistTemplateId("");
+                            setAddingChecklistToProject(null);
+                          }}
+                        >
+                          Use dated template
+                        </button>
+                        <button
+                          className="small-button"
+                          type="button"
+                          disabled={!projectChecklistTemplateId}
+                          onClick={() => {
+                            if (!projectChecklistTemplateId) return;
+                            onCreateProjectChecklistRecurrence(project, projectChecklistTemplateId, projectChecklistRecurrenceCadence);
+                            setProjectChecklistTemplateId("");
+                            setAddingChecklistToProject(null);
+                          }}
+                        >
+                          Enable recurring
+                        </button>
+                      </div>
+                    ) : null}
                     <div className="structure-preview-row">
                       {row.preview.activities.length ? (
                         <div className="structure-preview-group">
@@ -707,6 +1116,157 @@ export const StructureWorkspace = ({
                         </div>
                       ) : null}
                     </div>
+                    {project ? (
+                      <div className="structure-checklist-section">
+                        <div className="structure-checklist-header">
+                          <span className="tiny-text">Checklists</span>
+                          <span className="status-chip">{projectChecklists.length}</span>
+                          <span className="status-chip">{projectChecklistRecurrences.length} recurring</span>
+                        </div>
+                        {projectChecklistRecurrences.length ? (
+                          <div className="structure-checklist-list">
+                            {projectChecklistRecurrences.map((rule) => {
+                              const template = checklistTemplates.find((entry) => entry.id === rule.templateId);
+                              const latestChecklist = projectChecklists.find((checklist) => checklist.recurrenceRuleId === rule.id) || null;
+                              return (
+                                <div key={rule.id} className="structure-checklist-card">
+                                  <div className="structure-checklist-body">
+                                    <div className="structure-checklist-header">
+                                      <strong>{template?.title || "Missing template"}</strong>
+                                      <span className="tiny-text">{formatChecklistRecurrenceLabel(rule.cadence)}</span>
+                                    </div>
+                                    <p className="muted">
+                                      Automatically creates a fresh dated checklist for this project when a new {rule.cadence === "weekly" ? "week" : "month"} starts.
+                                    </p>
+                                    <div className="tiny-text">
+                                      <div>{formatLastCreatedChecklistLabel(latestChecklist)}</div>
+                                      <div>{formatNextChecklistDueLabel(rule.cadence)}</div>
+                                    </div>
+                                    <div className="page-actions">
+                                      <button className="small-button danger-button" type="button" onClick={() => onDeleteChecklistRecurrence(rule.id)}>
+                                        Disable recurring
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                        {projectChecklists.length ? (
+                          <div className="structure-checklist-list">
+                            {projectChecklists.map((checklist) => {
+                              const checkedCount = checklist.items.filter((item) => item.isChecked).length;
+                              return (
+                                <details key={checklist.id} className="structure-checklist-card">
+                                  <summary>
+                                    <span>{checklist.title}</span>
+                                    <span className="tiny-text">
+                                      {checkedCount}/{checklist.items.length}
+                                    </span>
+                                  </summary>
+                                  <div className="structure-checklist-body">
+                                    <div className="page-actions">
+                                      <div className="field structure-template-category-field">
+                                        <label htmlFor={`structure-template-category-${checklist.id}`}>Category</label>
+                                        <select
+                                          id={`structure-template-category-${checklist.id}`}
+                                          value={checklistTemplateCategoryDraft}
+                                          onChange={(event) => setChecklistTemplateCategoryDraft(event.target.value)}
+                                        >
+                                          {templateCategories.map((category) => (
+                                            <option key={category} value={category}>
+                                              {category}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      <button className="small-button" type="button" onClick={() => saveChecklistAsTemplate(checklist)}>
+                                        Save as template
+                                      </button>
+                                      <button className="small-button" type="button" onClick={() => duplicateChecklist(checklist)}>
+                                        Duplicate
+                                      </button>
+                                      <button className="small-button" type="button" onClick={() => resetChecklist(checklist)}>
+                                        Reset
+                                      </button>
+                                      <button className="small-button danger-button" type="button" onClick={() => onDeleteChecklist(checklist.id)}>
+                                        Delete checklist
+                                      </button>
+                                    </div>
+                                    {checklist.items.length ? (
+                                      <div className="section-list">
+                                        {checklist.items.map((item) => (
+                                          <div key={item.id} className="list-item">
+                                            <label className="structure-checklist-item">
+                                              <input
+                                                type="checkbox"
+                                                checked={item.isChecked}
+                                                onChange={() => toggleChecklistItem(checklist, item.id)}
+                                              />
+                                              <span>{item.label}</span>
+                                            </label>
+                                            <div className="page-actions">
+                                              <button
+                                                className="small-button"
+                                                type="button"
+                                                onClick={() => moveChecklistItem(checklist, item.id, -1)}
+                                                disabled={item.position <= 1}
+                                              >
+                                                Up
+                                              </button>
+                                              <button
+                                                className="small-button"
+                                                type="button"
+                                                onClick={() => moveChecklistItem(checklist, item.id, 1)}
+                                                disabled={item.position >= checklist.items.length}
+                                              >
+                                                Down
+                                              </button>
+                                              <button
+                                                className="small-button danger-button"
+                                                type="button"
+                                                onClick={() => deleteChecklistItem(checklist, item.id)}
+                                              >
+                                                Delete
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="muted">No checklist items yet.</p>
+                                    )}
+                                    <div className="todos-workspace-input-row">
+                                      <div className="field field-wide">
+                                        <label htmlFor={`structure-checklist-item-${checklist.id}`}>New item</label>
+                                        <input
+                                          id={`structure-checklist-item-${checklist.id}`}
+                                          value={checklistItemDrafts[checklist.id] || ""}
+                                          onChange={(event) => setChecklistItemDraft(checklist.id, event.target.value)}
+                                          onKeyDown={(event) => {
+                                            if (event.key === "Enter" && !event.shiftKey) {
+                                              event.preventDefault();
+                                              addChecklistItem(checklist);
+                                            }
+                                          }}
+                                          placeholder="Add a checkbox item"
+                                        />
+                                      </div>
+                                      <button className="small-button" type="button" onClick={() => addChecklistItem(checklist)}>
+                                        Add item
+                                      </button>
+                                    </div>
+                                  </div>
+                                </details>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="muted">No project checklists yet.</p>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

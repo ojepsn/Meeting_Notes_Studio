@@ -1,7 +1,10 @@
-import type { ActivityRecord, ProjectLinkRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, ProjectLinkRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 type StructureWorkspaceProps = {
     activities: ActivityRecord[];
     todos: TodoRecord[];
+    checklists: ChecklistRecord[];
+    checklistTemplates: ChecklistTemplateRecord[];
+    checklistRecurrences: ChecklistRecurrenceRecord[];
     timeLogs: TimeLogRecord[];
     savedDomains: string[];
     savedProjects: string[];
@@ -10,6 +13,15 @@ type StructureWorkspaceProps = {
     onRenameDomain: (previousValue: string, nextValue: string) => void;
     onAddProject: (project: string, domain: string) => void;
     onAddActivityToProject: (description: string, project: string, domain: string, type: ActivityRecord["type"]) => void;
+    onCreateProjectChecklist: (project: string, title: string) => void;
+    onCreateProjectChecklistFromTemplate: (project: string, templateId: string) => void;
+    onCreateProjectChecklistRecurrence: (project: string, templateId: string, cadence: ChecklistRecurrenceCadence) => void;
+    onSaveChecklist: (checklist: ChecklistRecord) => void;
+    onDeleteChecklist: (id: string) => void;
+    onCreateChecklistTemplate: (title: string, category?: string, items?: ChecklistTemplateRecord["items"]) => void;
+    onSaveChecklistTemplate: (template: ChecklistTemplateRecord) => void;
+    onDeleteChecklistTemplate: (id: string) => void;
+    onDeleteChecklistRecurrence: (id: string) => void;
     onRenameProject: (previousValue: string, nextValue: string) => void;
     onAssignProjectDomain: (project: string, domain: string) => void;
     onOpenTodosForDomain: (domain: string) => void;
@@ -19,5 +31,5 @@ type StructureWorkspaceProps = {
     onOpenActivityDetail: (activityId: string) => void;
     onOpenTodoDetail: (todoId: string) => void;
 };
-export declare const StructureWorkspace: ({ activities, todos, timeLogs, savedDomains, savedProjects, projectLinks, onAddDomain, onRenameDomain, onAddProject, onAddActivityToProject, onRenameProject, onAssignProjectDomain, onOpenTodosForDomain, onOpenTodosForProject, onOpenTimeForDomain, onOpenTimeForProject, onOpenActivityDetail, onOpenTodoDetail, }: StructureWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const StructureWorkspace: ({ activities, todos, checklists, checklistTemplates, checklistRecurrences, timeLogs, savedDomains, savedProjects, projectLinks, onAddDomain, onRenameDomain, onAddProject, onAddActivityToProject, onCreateProjectChecklist, onCreateProjectChecklistFromTemplate, onCreateProjectChecklistRecurrence, onSaveChecklist, onDeleteChecklist, onCreateChecklistTemplate, onSaveChecklistTemplate, onDeleteChecklistTemplate, onDeleteChecklistRecurrence, onRenameProject, onAssignProjectDomain, onOpenTodosForDomain, onOpenTodosForProject, onOpenTimeForDomain, onOpenTimeForProject, onOpenActivityDetail, onOpenTodoDetail, }: StructureWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

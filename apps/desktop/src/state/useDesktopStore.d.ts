@@ -1,4 +1,4 @@
-import type { CaptureMode, DesktopAppSnapshot, TimeLogRecord } from "@notesmith/domain";
+import type { CaptureMode, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistTemplateRecord, DesktopAppSnapshot, TimeLogRecord } from "@notesmith/domain";
 import { createAppRepository } from "../lib/db/repository";
 type DesktopView = "capture" | "output";
 type SaveState = "saved" | "saving" | "error";
@@ -51,6 +51,15 @@ interface DesktopState {
         comments?: string;
     }) => Promise<void>;
     deleteActivity: (id: string) => Promise<void>;
+    saveChecklist: (checklist: ChecklistRecord) => Promise<void>;
+    createChecklist: (ownerType: ChecklistRecord["ownerType"], ownerId: string, title: string) => Promise<void>;
+    deleteChecklist: (id: string) => Promise<void>;
+    saveChecklistTemplate: (template: ChecklistTemplateRecord) => Promise<void>;
+    createChecklistTemplate: (title: string, category?: string, items?: ChecklistTemplateRecord["items"]) => Promise<void>;
+    deleteChecklistTemplate: (id: string) => Promise<void>;
+    createChecklistFromTemplate: (ownerType: ChecklistRecord["ownerType"], ownerId: string, templateId: string) => Promise<void>;
+    createChecklistRecurrence: (ownerType: ChecklistRecord["ownerType"], ownerId: string, templateId: string, cadence: ChecklistRecurrenceCadence) => Promise<void>;
+    deleteChecklistRecurrence: (id: string) => Promise<void>;
     saveTimeLog: (timeLog: TimeLog) => Promise<void>;
     deleteTimeLog: (id: string) => Promise<void>;
     startTimeTracking: (targetType: TimeLog["targetType"], targetId: string) => Promise<void>;

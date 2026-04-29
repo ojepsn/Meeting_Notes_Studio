@@ -8,6 +8,7 @@ import { CalendarWorkspace } from "../features/calendar/components/CalendarWorks
 import { TodosRailCard } from "../features/todos/components/TodosRailCard";
 import { TodosWorkspace } from "../features/todos/components/TodosWorkspace";
 import { TimeWorkspace } from "../features/time/components/TimeWorkspace";
+import { AnalyticsWorkspace } from "../features/analytics/components/AnalyticsWorkspace";
 import { StructureWorkspace } from "../features/structure/components/StructureWorkspace";
 import { AssistantWorkspace } from "../features/assistant/components/AssistantWorkspace";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
@@ -81,7 +82,7 @@ import { buildStructureOptions, createEmptyStructureOptions } from "../lib/struc
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
 
-type AppWorkspace = "notes" | "todos" | "calendar" | "time" | "structure" | "assistant" | "files";
+type AppWorkspace = "notes" | "todos" | "calendar" | "time" | "analytics" | "structure" | "assistant" | "files";
 type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | "instructions" | null;
 type CommandAction = {
   id: string;
@@ -169,6 +170,7 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
   { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
   { id: "todos", label: "Tasks", description: "Focused follow-up management", available: true },
   { id: "time", label: "Timelogs", description: "Active timers, dense logs, and reporting", available: true },
+  { id: "analytics", label: "Analytics", description: "Summaries and trends across your tracked work", available: true },
   { id: "structure", label: "Structure", description: "Domains and projects as operational views", available: true },
   { id: "assistant", label: "Assistant", description: "Agentic chat with NoteSmith data", available: true },
   { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
@@ -271,6 +273,15 @@ export const App = () => {
     saveActivity,
     addActivity,
     deleteActivity,
+    saveChecklist,
+    createChecklist,
+    deleteChecklist,
+    saveChecklistTemplate,
+    createChecklistTemplate,
+    deleteChecklistTemplate,
+    createChecklistFromTemplate,
+    createChecklistRecurrence,
+    deleteChecklistRecurrence,
     saveTimeLog,
     deleteTimeLog,
     startTimeTracking,
@@ -2553,6 +2564,13 @@ export const App = () => {
         action: () => setActiveWorkspace("time"),
       },
       {
+        id: "analytics",
+        label: "Open Analytics",
+        description: "Review trends, summaries, and rollups from your timelogs.",
+        keywords: ["analytics dashboard trends summaries reports"],
+        action: () => setActiveWorkspace("analytics"),
+      },
+      {
         id: "structure",
         label: "Open Structure",
         description: "Inspect domains and projects as work views.",
@@ -3323,6 +3341,9 @@ export const App = () => {
             {activeWorkspace === "todos" ? (
               <TodosWorkspace
                 todos={snapshot.todos}
+                checklists={snapshot.checklists}
+                checklistTemplates={snapshot.checklistTemplates}
+                checklistRecurrences={snapshot.checklistRecurrences}
                 activities={snapshot.activities}
                 timeLogs={snapshot.timelogs}
                 structureOptions={structureOptions}
@@ -3334,6 +3355,15 @@ export const App = () => {
                 onAdd={(description, options) => void addTodo(description, options)}
                 onSave={(todo) => void saveTodo(todo)}
                 onDelete={(id) => void deleteTodo(id)}
+                onCreateChecklist={(todoId, title) => void createChecklist("todo", todoId, title)}
+                onCreateChecklistFromTemplate={(todoId, templateId) => void createChecklistFromTemplate("todo", todoId, templateId)}
+                onCreateChecklistRecurrence={(todoId, templateId, cadence) => void createChecklistRecurrence("todo", todoId, templateId, cadence)}
+                onDeleteChecklistRecurrence={(id) => void deleteChecklistRecurrence(id)}
+                onSaveChecklist={(checklist) => void saveChecklist(checklist)}
+                onDeleteChecklist={(id) => void deleteChecklist(id)}
+                onCreateChecklistTemplate={(title, category, items) => void createChecklistTemplate(title, category, items)}
+                onSaveChecklistTemplate={(template) => void saveChecklistTemplate(template)}
+                onDeleteChecklistTemplate={(id) => void deleteChecklistTemplate(id)}
                 onConvertToActivity={(todo) => void convertTodoToActivity(todo)}
                 onSaveTimeLog={(timeLog) => void saveTimeLog(timeLog)}
                 onDeleteTimeLog={(id) => void deleteTimeLog(id)}
@@ -3437,10 +3467,22 @@ export const App = () => {
                   })
                 }
               />
+            ) : activeWorkspace === "analytics" ? (
+              <AnalyticsWorkspace
+                todos={snapshot.todos}
+                archivedTasks={snapshot.archivedTasks}
+                activities={snapshot.activities}
+                timeLogs={snapshot.timelogs}
+                onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "analytics")}
+                onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "analytics")}
+              />
             ) : activeWorkspace === "structure" ? (
               <StructureWorkspace
                 activities={snapshot.activities}
                 todos={snapshot.todos}
+                checklists={snapshot.checklists}
+                checklistTemplates={snapshot.checklistTemplates}
+                checklistRecurrences={snapshot.checklistRecurrences}
                 timeLogs={snapshot.timelogs}
                 savedDomains={snapshot.settings.savedDomains}
                 savedProjects={snapshot.settings.savedProjects}
@@ -3464,13 +3506,22 @@ export const App = () => {
                         : snapshot.settings.projectLinks.filter((entry) => entry.project !== project.trim()),
                     })
                   }
-                  onAddActivityToProject={(description, project, domain, type) =>
-                    void addActivity(description, type, {
+                onAddActivityToProject={(description, project, domain, type) =>
+                  void addActivity(description, type, {
                       project,
                       domain,
                     })
                   }
-                  onRenameProject={(previousValue, nextValue) => void renameProjectValue(previousValue, nextValue)}
+                onCreateProjectChecklist={(project, title) => void createChecklist("project", project, title)}
+                onCreateProjectChecklistFromTemplate={(project, templateId) => void createChecklistFromTemplate("project", project, templateId)}
+                onCreateProjectChecklistRecurrence={(project, templateId, cadence) => void createChecklistRecurrence("project", project, templateId, cadence)}
+                onDeleteChecklistRecurrence={(id) => void deleteChecklistRecurrence(id)}
+                onSaveChecklist={(checklist) => void saveChecklist(checklist)}
+                onDeleteChecklist={(id) => void deleteChecklist(id)}
+                onCreateChecklistTemplate={(title, category, items) => void createChecklistTemplate(title, category, items)}
+                onSaveChecklistTemplate={(template) => void saveChecklistTemplate(template)}
+                onDeleteChecklistTemplate={(id) => void deleteChecklistTemplate(id)}
+                onRenameProject={(previousValue, nextValue) => void renameProjectValue(previousValue, nextValue)}
                 onAssignProjectDomain={(project, domain) =>
                   void saveSettings({
                     ...snapshot.settings,
@@ -3669,7 +3720,7 @@ export const App = () => {
             )}
           </section>
 
-        {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && activeWorkspace !== "notes" && activeWorkspace !== "todos" && activeWorkspace !== "time" ? (
+        {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && activeWorkspace !== "notes" && activeWorkspace !== "todos" && activeWorkspace !== "time" && activeWorkspace !== "analytics" ? (
           <aside className="workspace-inspector stack">
             <div className="sidebar-card">
               <div>

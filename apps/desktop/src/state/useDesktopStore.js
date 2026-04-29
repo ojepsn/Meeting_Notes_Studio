@@ -22,11 +22,39 @@ const OTHER_STRUCTURE_VALUE = "Other";
 const BASELINE_WORK_ACTIVITY_LABEL = "Other";
 const COMPLETED_TASK_PURGE_DAYS = 90;
 const COMPLETED_TASK_PURGE_MS = COMPLETED_TASK_PURGE_DAYS * 24 * 60 * 60 * 1000;
+const DEFAULT_CHECKLIST_TEMPLATE_CATEGORY = "General";
+const DEFAULT_CHECKLIST_RECURRENCE_CADENCE = "monthly";
 const formatLocalDate = (value = new Date()) => {
     const year = value.getFullYear();
     const month = `${value.getMonth() + 1}`.padStart(2, "0");
     const day = `${value.getDate()}`.padStart(2, "0");
     return `${year}-${month}-${day}`;
+};
+const formatLocalMonth = (value = new Date()) => formatLocalDate(value).slice(0, 7);
+const getIsoWeekParts = (value = new Date()) => {
+    const nextValue = new Date(value);
+    nextValue.setHours(0, 0, 0, 0);
+    nextValue.setDate(nextValue.getDate() + 3 - ((nextValue.getDay() + 6) % 7));
+    const isoYear = nextValue.getFullYear();
+    const weekOne = new Date(isoYear, 0, 4);
+    const weekOneDay = (weekOne.getDay() + 6) % 7;
+    weekOne.setDate(weekOne.getDate() - weekOneDay);
+    const isoWeek = Math.round((nextValue.getTime() - weekOne.getTime()) / 604800000) + 1;
+    return {
+        isoYear,
+        isoWeek,
+    };
+};
+const formatLocalIsoWeek = (value = new Date()) => {
+    const { isoYear, isoWeek } = getIsoWeekParts(value);
+    return `${isoYear}-W${`${isoWeek}`.padStart(2, "0")}`;
+};
+const stripChecklistDateSuffix = (value) => value.trim().replace(/\s*-\s*(?:\d{4}-\d{2}(?:-\d{2})?|\d{4}-W\d{2})$/, "").trim();
+const buildRecurringChecklistPeriodKey = (cadence, value = new Date()) => cadence === "weekly" ? formatLocalIsoWeek(value) : formatLocalMonth(value);
+const buildRecurringChecklistTitle = (title, cadence, value = new Date()) => {
+    const baseTitle = stripChecklistDateSuffix(title);
+    const period = buildRecurringChecklistPeriodKey(cadence, value);
+    return baseTitle ? `${baseTitle} - ${period}` : period;
 };
 const formatLocalTime = (value = new Date()) => `${`${value.getHours()}`.padStart(2, "0")}:${`${value.getMinutes()}`.padStart(2, "0")}`;
 const normalizeCompletionState = (previousTodo, nextTodo, timestamp = new Date().toISOString()) => {
@@ -76,6 +104,8 @@ const applyCompletedTaskCleanup = (snapshot, nowValue = new Date()) => {
         ...snapshot,
         archivedTasks: purgeableTodos.reduce((current, todo) => archiveTodoRecord(current, todo, deletedAt), snapshot.archivedTasks),
         todos: snapshot.todos.filter((todo) => !purgeableIds.has(todo.id)),
+        checklists: snapshot.checklists.filter((checklist) => !(checklist.ownerType === "todo" && purgeableIds.has(checklist.ownerId))),
+        checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => !(rule.ownerType === "todo" && purgeableIds.has(rule.ownerId))),
         calendarItems: snapshot.calendarItems.filter((item) => !(item.targetType === "todo" && purgeableIds.has(item.targetId))),
         entityLinks: snapshot.entityLinks.filter((entry) => !((entry.fromType === "todo" && purgeableIds.has(entry.fromId)) ||
             (entry.toType === "todo" && purgeableIds.has(entry.toId)))),
@@ -532,13 +562,188 @@ const syncCalendarItemForMeeting = (snapshot, activity) => {
         calendarItems: upsertCalendarItem(snapshot.calendarItems, nextItem),
     };
 };
+const buildChecklistRecord = (ownerType, ownerId, title, options) => {
+    const timestamp = new Date().toISOString();
+    return {
+        id: crypto.randomUUID(),
+        ownerType,
+        ownerId,
+        title: title.trim(),
+        description: "",
+        archived: false,
+        templateId: options?.templateId ?? null,
+        recurrenceRuleId: options?.recurrenceRuleId ?? null,
+        recurrenceKey: options?.recurrenceKey ?? null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        items: [],
+    };
+};
+const buildChecklistTemplateRecord = (title, category, items = []) => {
+    const timestamp = new Date().toISOString();
+    return {
+        id: crypto.randomUUID(),
+        title: stripChecklistDateSuffix(title),
+        category: category.trim() || DEFAULT_CHECKLIST_TEMPLATE_CATEGORY,
+        description: "",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        items,
+    };
+};
+const buildChecklistRecurrenceRecord = (ownerType, ownerId, templateId, cadence = DEFAULT_CHECKLIST_RECURRENCE_CADENCE) => {
+    const timestamp = new Date().toISOString();
+    return {
+        id: crypto.randomUUID(),
+        ownerType,
+        ownerId,
+        templateId,
+        cadence,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        lastInstantiatedPeriodKey: null,
+    };
+};
+const normalizeChecklist = (checklist) => ({
+    ...checklist,
+    ownerType: checklist.ownerType === "todo" ? "todo" : "project",
+    ownerId: checklist.ownerId.trim(),
+    title: checklist.title.trim(),
+    description: checklist.description ?? "",
+    archived: Boolean(checklist.archived),
+    templateId: typeof checklist.templateId === "string" ? checklist.templateId.trim() || null : null,
+    recurrenceRuleId: typeof checklist.recurrenceRuleId === "string" ? checklist.recurrenceRuleId.trim() || null : null,
+    recurrenceKey: typeof checklist.recurrenceKey === "string" ? checklist.recurrenceKey.trim() || null : null,
+    createdAt: checklist.createdAt,
+    updatedAt: checklist.updatedAt || new Date().toISOString(),
+    items: [...(checklist.items ?? [])]
+        .map((item, index) => ({
+        ...item,
+        id: item.id || crypto.randomUUID(),
+        label: item.label ?? "",
+        notes: item.notes ?? "",
+        isChecked: Boolean(item.isChecked),
+        position: Number.isFinite(Number(item.position)) ? Number(item.position) : index + 1,
+        checkedAt: typeof item.checkedAt === "string" ? item.checkedAt : null,
+    }))
+        .sort((left, right) => left.position - right.position || left.label.localeCompare(right.label)),
+});
+const normalizeChecklistTemplate = (template) => ({
+    ...template,
+    title: template.title.trim(),
+    category: template.category?.trim() || DEFAULT_CHECKLIST_TEMPLATE_CATEGORY,
+    description: template.description ?? "",
+    createdAt: template.createdAt,
+    updatedAt: template.updatedAt || new Date().toISOString(),
+    items: [...(template.items ?? [])]
+        .map((item, index) => ({
+        ...item,
+        id: item.id || crypto.randomUUID(),
+        label: item.label ?? "",
+        notes: item.notes ?? "",
+        isChecked: Boolean(item.isChecked),
+        position: Number.isFinite(Number(item.position)) ? Number(item.position) : index + 1,
+        checkedAt: typeof item.checkedAt === "string" ? item.checkedAt : null,
+    }))
+        .sort((left, right) => left.position - right.position || left.label.localeCompare(right.label)),
+});
+const normalizeChecklistRecurrence = (rule) => ({
+    ...rule,
+    ownerType: rule.ownerType === "todo" ? "todo" : "project",
+    ownerId: rule.ownerId.trim(),
+    templateId: rule.templateId.trim(),
+    cadence: rule.cadence === "weekly" ? "weekly" : "monthly",
+    createdAt: rule.createdAt,
+    updatedAt: rule.updatedAt || new Date().toISOString(),
+    lastInstantiatedPeriodKey: typeof rule.lastInstantiatedPeriodKey === "string" ? rule.lastInstantiatedPeriodKey.trim() || null : null,
+});
+const upsertChecklist = (checklists, nextChecklist) => checklists.some((checklist) => checklist.id === nextChecklist.id)
+    ? checklists.map((checklist) => (checklist.id === nextChecklist.id ? nextChecklist : checklist))
+    : [nextChecklist, ...checklists];
+const upsertChecklistTemplate = (templates, nextTemplate) => templates.some((template) => template.id === nextTemplate.id)
+    ? templates.map((template) => (template.id === nextTemplate.id ? nextTemplate : template))
+    : [nextTemplate, ...templates];
+const upsertChecklistRecurrence = (rules, nextRule) => rules.some((rule) => rule.id === nextRule.id)
+    ? rules.map((rule) => (rule.id === nextRule.id ? nextRule : rule))
+    : [nextRule, ...rules];
+const instantiateChecklistFromTemplate = (ownerType, ownerId, template, options) => {
+    const cadence = options?.cadence ?? "monthly";
+    const recurrenceKey = buildRecurringChecklistPeriodKey(cadence, options?.date);
+    const nextChecklist = buildChecklistRecord(ownerType, ownerId, buildRecurringChecklistTitle(template.title, cadence, options?.date), {
+        templateId: template.id,
+        recurrenceRuleId: options?.recurrenceRuleId ?? null,
+        recurrenceKey,
+    });
+    return {
+        ...nextChecklist,
+        description: template.description,
+        items: template.items.map((item, index) => ({
+            ...item,
+            id: crypto.randomUUID(),
+            isChecked: false,
+            checkedAt: null,
+            position: index + 1,
+        })),
+    };
+};
+const applyRecurringChecklistInstantiation = (snapshot, value = new Date()) => {
+    if (!snapshot.checklistRecurrences.length || !snapshot.checklistTemplates.length)
+        return snapshot;
+    const nextRules = [];
+    const nextChecklists = [...snapshot.checklists];
+    let changed = false;
+    for (const rawRule of snapshot.checklistRecurrences) {
+        const rule = normalizeChecklistRecurrence(rawRule);
+        const template = snapshot.checklistTemplates.find((entry) => entry.id === rule.templateId);
+        if (!template || !rule.ownerId) {
+            nextRules.push(rule);
+            continue;
+        }
+        const recurrenceKey = buildRecurringChecklistPeriodKey(rule.cadence, value);
+        const alreadyExists = nextChecklists.some((checklist) => checklist.ownerType === rule.ownerType &&
+            checklist.ownerId === rule.ownerId &&
+            checklist.recurrenceRuleId === rule.id &&
+            checklist.recurrenceKey === recurrenceKey);
+        const nextRule = {
+            ...rule,
+            lastInstantiatedPeriodKey: alreadyExists ? recurrenceKey : rule.lastInstantiatedPeriodKey ?? null,
+            updatedAt: alreadyExists || rule.lastInstantiatedPeriodKey === recurrenceKey
+                ? rule.updatedAt
+                : new Date().toISOString(),
+        };
+        if (nextRule.lastInstantiatedPeriodKey !== rule.lastInstantiatedPeriodKey ||
+            nextRule.updatedAt !== rule.updatedAt) {
+            changed = true;
+        }
+        nextRules.push(nextRule);
+        if (alreadyExists) {
+            continue;
+        }
+        nextChecklists.unshift(instantiateChecklistFromTemplate(rule.ownerType, rule.ownerId, template, {
+            cadence: rule.cadence,
+            date: value,
+            recurrenceRuleId: rule.id,
+        }));
+        nextRule.lastInstantiatedPeriodKey = recurrenceKey;
+        nextRule.updatedAt = new Date().toISOString();
+        changed = true;
+    }
+    if (!changed) {
+        return snapshot;
+    }
+    return {
+        ...snapshot,
+        checklists: nextChecklists,
+        checklistRecurrences: nextRules,
+    };
+};
 let persistTimer = null;
 let pendingSnapshot = null;
 const logPersistError = (error) => {
     console.error("NoteSmith desktop persistence failed", error);
 };
 const scheduleSnapshotPersist = (repository, snapshot, setState) => {
-    const nextSnapshot = applyCompletedTaskCleanup(snapshot);
+    const nextSnapshot = applyCompletedTaskCleanup(applyRecurringChecklistInstantiation(snapshot));
     pendingSnapshot = nextSnapshot;
     if (nextSnapshot !== snapshot) {
         setState({ snapshot: nextSnapshot });
@@ -568,7 +773,7 @@ const scheduleSnapshotPersist = (repository, snapshot, setState) => {
     }, PERSIST_DEBOUNCE_MS);
 };
 const flushSnapshotPersist = async (repository, snapshot, setState) => {
-    const nextSnapshot = applyCompletedTaskCleanup(snapshot);
+    const nextSnapshot = applyCompletedTaskCleanup(applyRecurringChecklistInstantiation(snapshot));
     if (nextSnapshot !== snapshot) {
         setState({ snapshot: nextSnapshot });
     }
@@ -628,6 +833,7 @@ export const useDesktopStore = create((set, get) => ({
                 attachments: nextAttachments,
                 activities: recalculateActivitiesWithTimeLogs(loadedSnapshot.activities, loadedSnapshot.timelogs),
             };
+            snapshot = applyRecurringChecklistInstantiation(snapshot);
             snapshot = applyCompletedTaskCleanup(snapshot);
             const rolloverResult = rollForwardOverdueCalendarTodos(snapshot);
             snapshot = rolloverResult.snapshot;
@@ -871,6 +1077,8 @@ export const useDesktopStore = create((set, get) => ({
             ...snapshot,
             archivedTasks: nextArchivedTasks,
             todos: snapshot.todos.filter((todo) => todo.id !== id),
+            checklists: snapshot.checklists.filter((checklist) => !(checklist.ownerType === "todo" && checklist.ownerId === id)),
+            checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => !(rule.ownerType === "todo" && rule.ownerId === id)),
             calendarItems: snapshot.calendarItems.filter((item) => !(item.targetType === "todo" && item.targetId === id)),
             entityLinks: snapshot.entityLinks.filter((entry) => !((entry.fromType === "todo" && entry.fromId === id) ||
                 (entry.toType === "todo" && entry.toId === id))),
@@ -946,6 +1154,8 @@ export const useDesktopStore = create((set, get) => ({
             archivedTasks: nextArchivedTasks,
             activities: snapshot.activities.filter((activity) => !removedActivityIds.has(activity.id)),
             todos: snapshot.todos.filter((todo) => !removedActivityIds.has(todo.activityId)),
+            checklists: snapshot.checklists.filter((checklist) => !(checklist.ownerType === "todo" && removedTodoIds.has(checklist.ownerId))),
+            checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => !(rule.ownerType === "todo" && removedTodoIds.has(rule.ownerId))),
             calendarItems: snapshot.calendarItems.filter((item) => !((item.targetType === "activity" && removedActivityIds.has(item.targetId)) ||
                 (item.targetType === "todo" &&
                     snapshot.todos.some((todo) => todo.id === item.targetId && removedActivityIds.has(todo.activityId))))),
@@ -954,6 +1164,147 @@ export const useDesktopStore = create((set, get) => ({
                 (entry.fromType === "todo" && removedTodoIds.has(entry.fromId)) ||
                 (entry.toType === "todo" && removedTodoIds.has(entry.toId)) ||
                 (entry.toType === "session" && removedSessionIds.has(entry.toId)))),
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    saveChecklist: async (checklist) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const nextChecklist = normalizeChecklist({
+            ...checklist,
+            updatedAt: new Date().toISOString(),
+        });
+        const nextSnapshot = {
+            ...snapshot,
+            checklists: upsertChecklist(snapshot.checklists, nextChecklist),
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    createChecklist: async (ownerType, ownerId, title) => {
+        const snapshot = get().snapshot;
+        const nextTitle = title.trim();
+        const nextOwnerId = ownerId.trim();
+        if (!snapshot || !nextTitle || !nextOwnerId)
+            return;
+        const nextChecklist = buildChecklistRecord(ownerType, nextOwnerId, nextTitle);
+        const nextSnapshot = {
+            ...snapshot,
+            checklists: [nextChecklist, ...snapshot.checklists],
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    deleteChecklist: async (id) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const nextSnapshot = {
+            ...snapshot,
+            checklists: snapshot.checklists.filter((checklist) => checklist.id !== id),
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    saveChecklistTemplate: async (template) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const nextTemplate = normalizeChecklistTemplate({
+            ...template,
+            updatedAt: new Date().toISOString(),
+        });
+        const nextSnapshot = {
+            ...snapshot,
+            checklistTemplates: upsertChecklistTemplate(snapshot.checklistTemplates, nextTemplate),
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    createChecklistTemplate: async (title, category = DEFAULT_CHECKLIST_TEMPLATE_CATEGORY, items = []) => {
+        const snapshot = get().snapshot;
+        const nextTitle = stripChecklistDateSuffix(title);
+        if (!snapshot || !nextTitle)
+            return;
+        const normalizedItems = items.map((item, index) => ({
+            ...item,
+            id: item.id || crypto.randomUUID(),
+            isChecked: false,
+            checkedAt: null,
+            position: index + 1,
+        }));
+        const nextTemplate = buildChecklistTemplateRecord(nextTitle, category, normalizedItems);
+        const nextSnapshot = {
+            ...snapshot,
+            checklistTemplates: [nextTemplate, ...snapshot.checklistTemplates],
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    deleteChecklistTemplate: async (id) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const nextSnapshot = {
+            ...snapshot,
+            checklistTemplates: snapshot.checklistTemplates.filter((template) => template.id !== id),
+            checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => rule.templateId !== id),
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    createChecklistFromTemplate: async (ownerType, ownerId, templateId) => {
+        const snapshot = get().snapshot;
+        const nextOwnerId = ownerId.trim();
+        if (!snapshot || !nextOwnerId)
+            return;
+        const template = snapshot.checklistTemplates.find((entry) => entry.id === templateId);
+        if (!template)
+            return;
+        const nextChecklist = normalizeChecklist(instantiateChecklistFromTemplate(ownerType, nextOwnerId, template, {
+            cadence: "monthly",
+        }));
+        const nextSnapshot = {
+            ...snapshot,
+            checklists: [nextChecklist, ...snapshot.checklists],
+        };
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    createChecklistRecurrence: async (ownerType, ownerId, templateId, cadence) => {
+        const snapshot = get().snapshot;
+        const nextOwnerId = ownerId.trim();
+        if (!snapshot || !nextOwnerId)
+            return;
+        const template = snapshot.checklistTemplates.find((entry) => entry.id === templateId);
+        if (!template)
+            return;
+        const existingRule = snapshot.checklistRecurrences.find((rule) => rule.ownerType === ownerType &&
+            rule.ownerId === nextOwnerId &&
+            rule.templateId === templateId &&
+            rule.cadence === cadence);
+        const nextRule = existingRule
+            ? normalizeChecklistRecurrence({
+                ...existingRule,
+                updatedAt: new Date().toISOString(),
+            })
+            : buildChecklistRecurrenceRecord(ownerType, nextOwnerId, templateId, cadence);
+        const nextSnapshot = applyRecurringChecklistInstantiation({
+            ...snapshot,
+            checklistRecurrences: upsertChecklistRecurrence(snapshot.checklistRecurrences, nextRule),
+        }, new Date());
+        set({ snapshot: nextSnapshot });
+        await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    },
+    deleteChecklistRecurrence: async (id) => {
+        const snapshot = get().snapshot;
+        if (!snapshot)
+            return;
+        const nextSnapshot = {
+            ...snapshot,
+            checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => rule.id !== id),
         };
         set({ snapshot: nextSnapshot });
         await flushSnapshotPersist(get().repository, nextSnapshot, set);
@@ -1474,6 +1825,12 @@ export const useDesktopStore = create((set, get) => ({
             ...snapshot,
             sessions: snapshot.sessions.map((session) => session.project === previous ? { ...session, project: next, updatedAt: new Date().toISOString() } : session),
             todos: snapshot.todos.map((todo) => (todo.project === previous ? { ...todo, project: next } : todo)),
+            checklists: snapshot.checklists.map((checklist) => checklist.ownerType === "project" && checklist.ownerId === previous
+                ? { ...checklist, ownerId: next, updatedAt: new Date().toISOString() }
+                : checklist),
+            checklistRecurrences: snapshot.checklistRecurrences.map((rule) => rule.ownerType === "project" && rule.ownerId === previous
+                ? { ...rule, ownerId: next, updatedAt: new Date().toISOString() }
+                : rule),
             activities: snapshot.activities.map((activity) => activity.project === previous ? { ...activity, project: next } : activity),
             settings: {
                 ...snapshot.settings,
@@ -1539,6 +1896,13 @@ export const useDesktopStore = create((set, get) => ({
                 ? snapshot.sessions
                 : [createSessionRecord(snapshot.settings?.preferredDesktopTemplateId || "meeting", "meeting-note")],
             todos: Array.isArray(snapshot.todos) ? snapshot.todos.map((todo) => normalizeTaskRecord(todoToTaskRecord(todo))) : [],
+            checklists: Array.isArray(snapshot.checklists) ? snapshot.checklists.map((checklist) => normalizeChecklist(checklist)) : [],
+            checklistTemplates: Array.isArray(snapshot.checklistTemplates)
+                ? snapshot.checklistTemplates.map((template) => normalizeChecklistTemplate(template))
+                : [],
+            checklistRecurrences: Array.isArray(snapshot.checklistRecurrences)
+                ? snapshot.checklistRecurrences.map((rule) => normalizeChecklistRecurrence(rule))
+                : [],
             archivedTasks: Array.isArray(snapshot.archivedTasks) ? snapshot.archivedTasks : [],
             activities: recalculateActivitiesWithTimeLogs(snapshot.activities ?? [], snapshot.timelogs ?? []),
         });

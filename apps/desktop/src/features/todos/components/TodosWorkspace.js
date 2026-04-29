@@ -1,9 +1,13 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DateInput } from "../../../components/DateInput";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain } from "../../../lib/structure/options";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog, isTimeLogRunning } from "../../../lib/time/tracking";
+const CHECKLIST_RECURRENCE_OPTIONS = [
+    { value: "monthly", label: "Monthly" },
+    { value: "weekly", label: "Weekly" },
+];
 const createBlankTodoDraft = (description = "") => ({
     id: "",
     description,
@@ -90,7 +94,29 @@ const calculateDurationMinutes = (date, startTime, endTime) => {
     const diff = Math.round((end.getTime() - start.getTime()) / 60000);
     return Number.isFinite(diff) ? Math.max(0, diff) : 0;
 };
-export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, requestedTodoId, requestedDomain, requestedProject, onEditorClose, onToggle, onAdd, onSave, onDelete, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }) => {
+const getIsoWeekLabel = (value) => {
+    const nextValue = new Date(value);
+    nextValue.setHours(0, 0, 0, 0);
+    nextValue.setDate(nextValue.getDate() + 3 - ((nextValue.getDay() + 6) % 7));
+    const isoYear = nextValue.getFullYear();
+    const weekOne = new Date(isoYear, 0, 4);
+    const weekOneDay = (weekOne.getDay() + 6) % 7;
+    weekOne.setDate(weekOne.getDate() - weekOneDay);
+    const isoWeek = Math.round((nextValue.getTime() - weekOne.getTime()) / 604800000) + 1;
+    return `${isoYear}-W${`${isoWeek}`.padStart(2, "0")}`;
+};
+const formatChecklistRecurrenceLabel = (cadence) => cadence === "weekly" ? "Weekly" : "Monthly";
+const formatNextChecklistDueLabel = (cadence, value = new Date()) => {
+    const nextValue = new Date(value);
+    if (cadence === "weekly") {
+        nextValue.setDate(nextValue.getDate() + 7);
+        return `Next due ${getIsoWeekLabel(nextValue)}`;
+    }
+    nextValue.setMonth(nextValue.getMonth() + 1, 1);
+    return `Next due ${nextValue.getFullYear()}-${`${nextValue.getMonth() + 1}`.padStart(2, "0")}`;
+};
+const formatLastCreatedChecklistLabel = (checklist) => checklist?.title ? `Last created ${checklist.title}` : "Not created yet";
+export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklistRecurrences, activities, timeLogs, structureOptions, requestedTodoId, requestedDomain, requestedProject, onEditorClose, onToggle, onAdd, onSave, onDelete, onCreateChecklist, onCreateChecklistFromTemplate, onCreateChecklistRecurrence, onSaveChecklist, onDeleteChecklist, onCreateChecklistTemplate, onSaveChecklistTemplate, onDeleteChecklistTemplate, onDeleteChecklistRecurrence, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }) => {
     const [draft, setDraft] = useState("");
     const [sortKey, setSortKey] = useState("createdAt");
     const [sortDirection, setSortDirection] = useState("desc");
@@ -102,6 +128,15 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
     const [editingDraft, setEditingDraft] = useState(createBlankTodoDraft());
     const [editingTimeLogId, setEditingTimeLogId] = useState(null);
     const [timeLogDraft, setTimeLogDraft] = useState(null);
+    const [addingChecklist, setAddingChecklist] = useState(false);
+    const [checklistDraft, setChecklistDraft] = useState("");
+    const [checklistTemplateId, setChecklistTemplateId] = useState("");
+    const [checklistRecurrenceCadence, setChecklistRecurrenceCadence] = useState("monthly");
+    const [checklistTemplateCategoryDraft, setChecklistTemplateCategoryDraft] = useState("General");
+    const [editingTemplateId, setEditingTemplateId] = useState(null);
+    const [editingTemplateTitle, setEditingTemplateTitle] = useState("");
+    const [editingTemplateCategory, setEditingTemplateCategory] = useState("General");
+    const [checklistItemDrafts, setChecklistItemDrafts] = useState({});
     const [now, setNow] = useState(() => new Date());
     const detailsEditorRef = useRef(null);
     const activityLookup = useMemo(() => Object.fromEntries(activities.map((activity) => [activity.id, activity])), [activities]);
@@ -225,6 +260,12 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
             detailsEditorRef.current.innerHTML = nextHtml;
         }
     }, [editingDraft.detailsHtml, editingDraft.id]);
+    useEffect(() => {
+        setAddingChecklist(false);
+        setChecklistDraft("");
+        setChecklistTemplateId("");
+        setChecklistRecurrenceCadence("monthly");
+    }, [selectedTodoId]);
     const submitDraft = () => {
         const nextValue = draft.trim();
         if (!nextValue)
@@ -233,6 +274,16 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
         setDraft("");
     };
     const currentTimeLogs = selectedTodoId ? timeLogsByTodoId.get(selectedTodoId) || [] : [];
+    const currentChecklists = useMemo(() => selectedTodoId
+        ? checklists
+            .filter((checklist) => checklist.ownerType === "todo" && checklist.ownerId === selectedTodoId)
+            .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        : [], [checklists, selectedTodoId]);
+    const currentChecklistRecurrences = useMemo(() => selectedTodoId
+        ? checklistRecurrences
+            .filter((rule) => rule.ownerType === "todo" && rule.ownerId === selectedTodoId)
+            .sort((left, right) => left.cadence.localeCompare(right.cadence) || right.updatedAt.localeCompare(left.updatedAt))
+        : [], [checklistRecurrences, selectedTodoId]);
     const activeTimeLog = getRunningTimeLog(currentTimeLogs);
     const hasOpenTimer = Boolean(activeTimeLog);
     const currentActivity = editingDraft.activityId ? activityLookup[editingDraft.activityId] : null;
@@ -268,6 +319,125 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
         setEditingTimeLogId(null);
         setTimeLogDraft(null);
         onEditorClose?.();
+    };
+    const saveChecklistItems = (checklist, items) => {
+        onSaveChecklist({
+            ...checklist,
+            items,
+            updatedAt: new Date().toISOString(),
+        });
+    };
+    const setChecklistItemDraft = (checklistId, value) => {
+        setChecklistItemDrafts((current) => ({ ...current, [checklistId]: value }));
+    };
+    const addChecklistItem = (checklist) => {
+        const nextLabel = (checklistItemDrafts[checklist.id] || "").trim();
+        if (!nextLabel)
+            return;
+        saveChecklistItems(checklist, [
+            ...checklist.items,
+            {
+                id: crypto.randomUUID(),
+                label: nextLabel,
+                isChecked: false,
+                notes: "",
+                position: checklist.items.length + 1,
+                checkedAt: null,
+            },
+        ]);
+        setChecklistItemDraft(checklist.id, "");
+    };
+    const toggleChecklistItem = (checklist, itemId) => {
+        const timestamp = new Date().toISOString();
+        saveChecklistItems(checklist, checklist.items.map((item) => item.id === itemId
+            ? {
+                ...item,
+                isChecked: !item.isChecked,
+                checkedAt: item.isChecked ? null : timestamp,
+            }
+            : item));
+    };
+    const deleteChecklistItem = (checklist, itemId) => {
+        saveChecklistItems(checklist, checklist.items
+            .filter((item) => item.id !== itemId)
+            .map((item, index) => ({ ...item, position: index + 1 })));
+    };
+    const moveChecklistItem = (checklist, itemId, direction) => {
+        const currentIndex = checklist.items.findIndex((item) => item.id === itemId);
+        const nextIndex = currentIndex + direction;
+        if (currentIndex < 0 || nextIndex < 0 || nextIndex >= checklist.items.length)
+            return;
+        const nextItems = [...checklist.items];
+        const [moved] = nextItems.splice(currentIndex, 1);
+        nextItems.splice(nextIndex, 0, moved);
+        saveChecklistItems(checklist, nextItems.map((item, index) => ({ ...item, position: index + 1 })));
+    };
+    const resetChecklist = (checklist) => {
+        saveChecklistItems(checklist, checklist.items.map((item, index) => ({
+            ...item,
+            isChecked: false,
+            checkedAt: null,
+            position: index + 1,
+        })));
+    };
+    const duplicateChecklist = (checklist) => {
+        onSaveChecklist({
+            ...checklist,
+            id: crypto.randomUUID(),
+            title: `${checklist.title} copy`,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            items: checklist.items.map((item, index) => ({
+                ...item,
+                id: crypto.randomUUID(),
+                isChecked: false,
+                checkedAt: null,
+                position: index + 1,
+            })),
+        });
+    };
+    const saveChecklistAsTemplate = (checklist) => {
+        onCreateChecklistTemplate(checklist.title, checklistTemplateCategoryDraft, checklist.items.map((item, index) => ({
+            ...item,
+            id: crypto.randomUUID(),
+            isChecked: false,
+            checkedAt: null,
+            position: index + 1,
+        })));
+    };
+    const templateCategories = useMemo(() => Array.from(new Set(checklistTemplates
+        .map((template) => template.category?.trim() || "General")
+        .filter(Boolean)
+        .concat(["General", "Monthly", "Weekly", "People", "Compliance"]))).sort((left, right) => left.localeCompare(right)), [checklistTemplates]);
+    const templatesByCategory = useMemo(() => {
+        const grouped = new Map();
+        checklistTemplates.forEach((template) => {
+            const category = template.category?.trim() || "General";
+            grouped.set(category, [...(grouped.get(category) || []), template]);
+        });
+        return Array.from(grouped.entries()).sort((left, right) => left[0].localeCompare(right[0]));
+    }, [checklistTemplates]);
+    const beginTemplateEdit = (template) => {
+        setEditingTemplateId(template.id);
+        setEditingTemplateTitle(template.title);
+        setEditingTemplateCategory(template.category?.trim() || "General");
+    };
+    const cancelTemplateEdit = () => {
+        setEditingTemplateId(null);
+        setEditingTemplateTitle("");
+        setEditingTemplateCategory("General");
+    };
+    const commitTemplateEdit = (template) => {
+        const nextTitle = editingTemplateTitle.trim();
+        if (!nextTitle)
+            return;
+        onSaveChecklistTemplate({
+            ...template,
+            title: nextTitle,
+            category: editingTemplateCategory.trim() || "General",
+            updatedAt: new Date().toISOString(),
+        });
+        cancelTemplateEdit();
     };
     const deleteSelectedTodo = () => {
         if (!selectedTodoId)
@@ -396,7 +566,52 @@ export const TodosWorkspace = ({ todos, activities, timeLogs, structureOptions, 
                                 })) : (_jsxs("div", { className: "empty-state-card compact-empty-state", children: [_jsx("h3", { children: "No open tasks" }), _jsx("p", { children: "Capture the next action here, or type `td` followed by text in any input across the app." })] })) }), completedTodos.length ? (_jsxs("details", { className: "workspace-disclosure", children: [_jsx("summary", { children: "Recently completed" }), _jsx("div", { className: "workspace-disclosure-body todos-workspace-completed", children: completedTodos.map((todo) => (_jsxs("label", { className: "todos-workspace-main todos-workspace-main-completed", children: [_jsx("input", { type: "checkbox", checked: todo.isDone, onChange: () => onToggle({ ...todo, isDone: !todo.isDone }) }), _jsxs("span", { className: "todos-workspace-copy", children: [_jsx("strong", { children: todo.description }), _jsx("span", { className: "muted", children: todo.createdAt.slice(0, 10) })] })] }, todo.id))) })] })) : null] }), isDetailOpen ? (_jsx("section", { className: "todos-hub-detail-panel todos-detail-modal", children: selectedTodoId ? (_jsxs("div", { className: "stack", children: [_jsxs("div", { className: "card-header activities-detail-header", children: [_jsxs("div", { children: [_jsx("h3", { children: editingDraft.description || "Task" }), _jsxs("div", { className: "calendar-editor-meta", children: [currentActivity ? _jsx("span", { className: "status-chip", children: currentActivity.description }) : _jsx("span", { className: "status-chip", children: "Unassigned" }), editingDraft.project ? _jsx("span", { className: "status-chip", children: editingDraft.project }) : null, editingDraft.domain ? _jsx("span", { className: "status-chip", children: editingDraft.domain }) : null, _jsx("span", { className: "status-chip", children: hasOpenTimer ? "Timer running" : `${currentTimeLogs.reduce((sum, entry) => sum + entry.durationMinutes, 0)} min logged` })] })] }), _jsxs("div", { className: "page-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: clearSelection, children: "Close" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => {
                                                         onDelete(editingDraft.id);
                                                         clearSelection();
-                                                    }, children: "Delete" })] })] }), _jsxs("div", { className: "activities-detail-grid", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "todo-edit-description", children: "Task" }), _jsx("input", { id: "todo-edit-description", value: editingDraft.description, onChange: (event) => setEditingDraft({ ...editingDraft, description: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-edit-domain", children: "Domain" }), _jsx(TokenPicker, { value: editingDraft.domain, savedOptions: structureOptions.domains, suggestedOptions: structureOptions.domains, placeholder: "Search or add domain", suggestionSummary: "Domains", suggestionBadgeText: "Available", mode: "single", onChange: handleDraftDomainChange })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-edit-project", children: "Project" }), _jsx(TokenPicker, { value: editingDraft.project, savedOptions: editorProjectOptions, suggestedOptions: editorProjectOptions, placeholder: "Search or add project", suggestionSummary: "Projects", suggestionBadgeText: "Available", mode: "single", onChange: handleDraftProjectChange })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-edit-activity-label", children: "Activity" }), _jsx(TokenPicker, { value: editingDraft.activity, savedOptions: editorActivityOptions, suggestedOptions: editorActivityOptions, placeholder: "Search or add activity", suggestionSummary: "Activities", suggestionBadgeText: "Available", mode: "single", onChange: (value) => setEditingDraft({ ...editingDraft, activity: value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-edit-do-on", children: "Do on" }), _jsx(DateInput, { id: "todo-edit-do-on", value: editingDraft.doOn, onChange: (event) => setEditingDraft({ ...editingDraft, doOn: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-edit-due-date", children: "Due date" }), _jsx(DateInput, { id: "todo-edit-due-date", value: editingDraft.dueDate, onChange: (event) => setEditingDraft({ ...editingDraft, dueDate: event.target.value }) })] }), _jsxs("div", { className: "field activity-private-field", children: [_jsx("span", { children: "Private" }), _jsxs("div", { className: "compact-private-toggle", children: [_jsx("input", { id: "todo-edit-private", type: "checkbox", checked: editingDraft.isPrivate, onChange: (event) => setEditingDraft({ ...editingDraft, isPrivate: event.target.checked }) }), _jsx("label", { htmlFor: "todo-edit-private", className: "checkbox-label", children: "Private" })] })] })] }), currentActivity ? (_jsxs("div", { className: "prompt-actions-row", children: [_jsxs("div", { className: "prompt-actions-copy", children: [_jsx("strong", { children: "Linked activity" }), _jsx("span", { className: "muted", children: "Keep this task inside its parent work stream, or jump there for broader planning." })] }), onOpenActivityDetail ? (_jsx("button", { className: "small-button", type: "button", onClick: () => onOpenActivityDetail(currentActivity.id), children: "Open activity" })) : null] })) : null, _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-edit-details", children: "Details" }), _jsx("div", { id: "todo-edit-details", ref: detailsEditorRef, className: "rich-text-surface todo-rich-text-surface", contentEditable: true, suppressContentEditableWarning: true, onInput: (event) => setEditingDraft({ ...editingDraft, detailsHtml: event.currentTarget.innerHTML }) })] }), _jsxs("details", { className: "workspace-disclosure", open: true, children: [_jsx("summary", { children: "Time logs" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsxs("div", { className: "page-actions", children: [_jsx("span", { className: "status-chip", children: hasOpenTimer && activeTimeLog
+                                                    }, children: "Delete" })] })] }), _jsxs("div", { className: "activities-detail-grid", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "todo-edit-description", children: "Task" }), _jsx("input", { id: "todo-edit-description", value: editingDraft.description, onChange: (event) => setEditingDraft({ ...editingDraft, description: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-edit-domain", children: "Domain" }), _jsx(TokenPicker, { value: editingDraft.domain, savedOptions: structureOptions.domains, suggestedOptions: structureOptions.domains, placeholder: "Search or add domain", suggestionSummary: "Domains", suggestionBadgeText: "Available", mode: "single", onChange: handleDraftDomainChange })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-edit-project", children: "Project" }), _jsx(TokenPicker, { value: editingDraft.project, savedOptions: editorProjectOptions, suggestedOptions: editorProjectOptions, placeholder: "Search or add project", suggestionSummary: "Projects", suggestionBadgeText: "Available", mode: "single", onChange: handleDraftProjectChange })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-edit-activity-label", children: "Activity" }), _jsx(TokenPicker, { value: editingDraft.activity, savedOptions: editorActivityOptions, suggestedOptions: editorActivityOptions, placeholder: "Search or add activity", suggestionSummary: "Activities", suggestionBadgeText: "Available", mode: "single", onChange: (value) => setEditingDraft({ ...editingDraft, activity: value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-edit-do-on", children: "Do on" }), _jsx(DateInput, { id: "todo-edit-do-on", value: editingDraft.doOn, onChange: (event) => setEditingDraft({ ...editingDraft, doOn: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-edit-due-date", children: "Due date" }), _jsx(DateInput, { id: "todo-edit-due-date", value: editingDraft.dueDate, onChange: (event) => setEditingDraft({ ...editingDraft, dueDate: event.target.value }) })] }), _jsxs("div", { className: "field activity-private-field", children: [_jsx("span", { children: "Private" }), _jsxs("div", { className: "compact-private-toggle", children: [_jsx("input", { id: "todo-edit-private", type: "checkbox", checked: editingDraft.isPrivate, onChange: (event) => setEditingDraft({ ...editingDraft, isPrivate: event.target.checked }) }), _jsx("label", { htmlFor: "todo-edit-private", className: "checkbox-label", children: "Private" })] })] })] }), currentActivity ? (_jsxs("div", { className: "prompt-actions-row", children: [_jsxs("div", { className: "prompt-actions-copy", children: [_jsx("strong", { children: "Linked activity" }), _jsx("span", { className: "muted", children: "Keep this task inside its parent work stream, or jump there for broader planning." })] }), onOpenActivityDetail ? (_jsx("button", { className: "small-button", type: "button", onClick: () => onOpenActivityDetail(currentActivity.id), children: "Open activity" })) : null] })) : null, _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-edit-details", children: "Details" }), _jsx("div", { id: "todo-edit-details", ref: detailsEditorRef, className: "rich-text-surface todo-rich-text-surface", contentEditable: true, suppressContentEditableWarning: true, onInput: (event) => setEditingDraft({ ...editingDraft, detailsHtml: event.currentTarget.innerHTML }) })] }), _jsxs("details", { className: "workspace-disclosure", open: true, children: [_jsx("summary", { children: "Checklists" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsxs("div", { className: "page-actions", children: [_jsxs("span", { className: "status-chip", children: [currentChecklists.length, " checklists"] }), _jsxs("span", { className: "status-chip", children: [currentChecklistRecurrences.length, " recurring"] }), _jsx("button", { className: "small-button", type: "button", onClick: () => {
+                                                                setAddingChecklist((current) => !current);
+                                                                setChecklistDraft("");
+                                                                setChecklistTemplateId("");
+                                                            }, children: addingChecklist ? "Close checklist" : "New checklist" })] }), addingChecklist ? (_jsxs("div", { className: "todos-workspace-input-row", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "todo-checklist-draft", children: "Checklist title" }), _jsx("input", { id: "todo-checklist-draft", value: checklistDraft, onChange: (event) => setChecklistDraft(event.target.value), onKeyDown: (event) => {
+                                                                        if (event.key === "Enter" && !event.shiftKey) {
+                                                                            event.preventDefault();
+                                                                            const nextTitle = checklistDraft.trim();
+                                                                            if (!nextTitle || !editingDraft.id)
+                                                                                return;
+                                                                            onCreateChecklist(editingDraft.id, nextTitle);
+                                                                            setChecklistDraft("");
+                                                                            setAddingChecklist(false);
+                                                                        }
+                                                                    }, placeholder: "For example: Monthly reporting staff" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-checklist-template", children: "Template" }), _jsxs("select", { id: "todo-checklist-template", value: checklistTemplateId, onChange: (event) => setChecklistTemplateId(event.target.value), children: [_jsx("option", { value: "", children: "No template" }), checklistTemplates.map((template) => (_jsx("option", { value: template.id, children: `${template.category || "General"} - ${template.title}` }, template.id)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "todo-checklist-recurrence", children: "Recurring" }), _jsx("select", { id: "todo-checklist-recurrence", value: checklistRecurrenceCadence, onChange: (event) => setChecklistRecurrenceCadence(event.target.value), children: CHECKLIST_RECURRENCE_OPTIONS.map((option) => (_jsx("option", { value: option.value, children: option.label }, option.value))) })] }), _jsx("button", { className: "primary-button", type: "button", onClick: () => {
+                                                                const nextTitle = checklistDraft.trim();
+                                                                if (!nextTitle || !editingDraft.id)
+                                                                    return;
+                                                                onCreateChecklist(editingDraft.id, nextTitle);
+                                                                setChecklistDraft("");
+                                                                setAddingChecklist(false);
+                                                            }, children: "Add" }), _jsx("button", { className: "small-button", type: "button", disabled: !checklistTemplateId || !editingDraft.id, onClick: () => {
+                                                                if (!checklistTemplateId || !editingDraft.id)
+                                                                    return;
+                                                                onCreateChecklistFromTemplate(editingDraft.id, checklistTemplateId);
+                                                                setChecklistTemplateId("");
+                                                                setAddingChecklist(false);
+                                                            }, children: "Use dated template" }), _jsx("button", { className: "small-button", type: "button", disabled: !checklistTemplateId || !editingDraft.id, onClick: () => {
+                                                                if (!checklistTemplateId || !editingDraft.id)
+                                                                    return;
+                                                                onCreateChecklistRecurrence(editingDraft.id, checklistTemplateId, checklistRecurrenceCadence);
+                                                                setChecklistTemplateId("");
+                                                                setAddingChecklist(false);
+                                                            }, children: "Enable recurring" })] })) : null, currentChecklistRecurrences.length ? (_jsx("div", { className: "structure-checklist-list", children: currentChecklistRecurrences.map((rule) => {
+                                                        const template = checklistTemplates.find((entry) => entry.id === rule.templateId);
+                                                        const latestChecklist = currentChecklists.find((checklist) => checklist.recurrenceRuleId === rule.id) || null;
+                                                        return (_jsx("div", { className: "structure-checklist-card", children: _jsxs("div", { className: "structure-checklist-body", children: [_jsxs("div", { className: "structure-checklist-header", children: [_jsx("strong", { children: template?.title || "Missing template" }), _jsx("span", { className: "tiny-text", children: formatChecklistRecurrenceLabel(rule.cadence) })] }), _jsxs("p", { className: "muted", children: ["Automatically creates a fresh dated checklist for this task when a new ", rule.cadence === "weekly" ? "week" : "month", " starts."] }), _jsxs("div", { className: "tiny-text", children: [_jsx("div", { children: formatLastCreatedChecklistLabel(latestChecklist) }), _jsx("div", { children: formatNextChecklistDueLabel(rule.cadence) })] }), _jsx("div", { className: "page-actions", children: _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onDeleteChecklistRecurrence(rule.id), children: "Disable recurring" }) })] }) }, rule.id));
+                                                    }) })) : null, currentChecklists.length ? (_jsx("div", { className: "structure-checklist-list", children: currentChecklists.map((checklist) => {
+                                                        const checkedCount = checklist.items.filter((item) => item.isChecked).length;
+                                                        return (_jsxs("details", { className: "structure-checklist-card", open: true, children: [_jsxs("summary", { children: [_jsx("span", { children: checklist.title }), _jsxs("span", { className: "tiny-text", children: [checkedCount, "/", checklist.items.length] })] }), _jsxs("div", { className: "structure-checklist-body", children: [_jsxs("div", { className: "page-actions", children: [_jsxs("div", { className: "field structure-template-category-field", children: [_jsx("label", { htmlFor: `todo-template-category-${checklist.id}`, children: "Category" }), _jsx("select", { id: `todo-template-category-${checklist.id}`, value: checklistTemplateCategoryDraft, onChange: (event) => setChecklistTemplateCategoryDraft(event.target.value), children: templateCategories.map((category) => (_jsx("option", { value: category, children: category }, category))) })] }), _jsx("button", { className: "small-button", type: "button", onClick: () => saveChecklistAsTemplate(checklist), children: "Save as template" }), _jsx("button", { className: "small-button", type: "button", onClick: () => duplicateChecklist(checklist), children: "Duplicate" }), _jsx("button", { className: "small-button", type: "button", onClick: () => resetChecklist(checklist), children: "Reset" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onDeleteChecklist(checklist.id), children: "Delete checklist" })] }), checklist.items.length ? (_jsx("div", { className: "section-list", children: checklist.items.map((item) => (_jsxs("div", { className: "list-item", children: [_jsxs("label", { className: "structure-checklist-item", children: [_jsx("input", { type: "checkbox", checked: item.isChecked, onChange: () => toggleChecklistItem(checklist, item.id) }), _jsx("span", { children: item.label })] }), _jsxs("div", { className: "page-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => moveChecklistItem(checklist, item.id, -1), disabled: item.position <= 1, children: "Up" }), _jsx("button", { className: "small-button", type: "button", onClick: () => moveChecklistItem(checklist, item.id, 1), disabled: item.position >= checklist.items.length, children: "Down" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => deleteChecklistItem(checklist, item.id), children: "Delete" })] })] }, item.id))) })) : (_jsx("p", { className: "muted", children: "No checklist items yet." })), _jsxs("div", { className: "todos-workspace-input-row", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: `todo-checklist-item-${checklist.id}`, children: "New item" }), _jsx("input", { id: `todo-checklist-item-${checklist.id}`, value: checklistItemDrafts[checklist.id] || "", onChange: (event) => setChecklistItemDraft(checklist.id, event.target.value), onKeyDown: (event) => {
+                                                                                                if (event.key === "Enter" && !event.shiftKey) {
+                                                                                                    event.preventDefault();
+                                                                                                    addChecklistItem(checklist);
+                                                                                                }
+                                                                                            }, placeholder: "Add a checkbox item" })] }), _jsx("button", { className: "small-button", type: "button", onClick: () => addChecklistItem(checklist), children: "Add item" })] })] })] }, checklist.id));
+                                                    }) })) : (_jsx("p", { className: "muted", children: "No task checklists yet. Use these for grouped checkbox tracking that should not become separate tasks." })), checklistTemplates.length ? (_jsxs("details", { className: "workspace-disclosure", children: [_jsx("summary", { children: "Checklist templates" }), _jsx("div", { className: "workspace-disclosure-body stack", children: templatesByCategory.map(([category, templates]) => (_jsxs("details", { className: "structure-checklist-card", open: true, children: [_jsxs("summary", { children: [_jsx("span", { children: category }), _jsxs("span", { className: "tiny-text", children: [templates.length, " templates"] })] }), _jsx("div", { className: "structure-checklist-body", children: templates.map((template) => (_jsx("div", { className: "structure-checklist-card", children: _jsx("div", { className: "structure-checklist-body", children: editingTemplateId === template.id ? (_jsxs(_Fragment, { children: [_jsxs("div", { className: "todos-workspace-input-row", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: `todo-template-title-${template.id}`, children: "Template title" }), _jsx("input", { id: `todo-template-title-${template.id}`, value: editingTemplateTitle, onChange: (event) => setEditingTemplateTitle(event.target.value) })] }), _jsxs("div", { className: "field structure-template-category-field", children: [_jsx("label", { htmlFor: `todo-template-category-edit-${template.id}`, children: "Category" }), _jsx("select", { id: `todo-template-category-edit-${template.id}`, value: editingTemplateCategory, onChange: (event) => setEditingTemplateCategory(event.target.value), children: templateCategories.map((categoryOption) => (_jsx("option", { value: categoryOption, children: categoryOption }, categoryOption))) })] })] }), _jsxs("div", { className: "page-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => commitTemplateEdit(template), children: "Save" }), _jsx("button", { className: "small-button", type: "button", onClick: cancelTemplateEdit, children: "Cancel" })] })] })) : (_jsxs(_Fragment, { children: [_jsxs("div", { className: "structure-checklist-header", children: [_jsx("strong", { children: template.title }), _jsxs("span", { className: "tiny-text", children: [template.items.length, " items"] })] }), _jsx("p", { className: "muted", children: template.items.map((item) => item.label).slice(0, 3).join(", ") || "No template items yet." }), _jsxs("div", { className: "page-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => beginTemplateEdit(template), children: "Edit" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onDeleteChecklistTemplate(template.id), children: "Delete template" })] })] })) }) }, template.id))) })] }, category))) })] })) : (_jsx("p", { className: "muted", children: "Save a checklist as a template to reuse it later. Reused templates create fresh checklist names with the current YYYY-MM." }))] })] }), _jsxs("details", { className: "workspace-disclosure", open: true, children: [_jsx("summary", { children: "Time logs" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsxs("div", { className: "page-actions", children: [_jsx("span", { className: "status-chip", children: hasOpenTimer && activeTimeLog
                                                                 ? `Running • ${formatTrackedMinutes(calculateLiveDurationMinutes(activeTimeLog, now))}`
                                                                 : `${currentTimeLogs.reduce((sum, entry) => sum + entry.durationMinutes, 0)} min logged` }), _jsx("button", { className: "primary-button", type: "button", onClick: () => (hasOpenTimer ? onStopTracking("todo", editingDraft.id) : onStartTracking("todo", editingDraft.id)), children: hasOpenTimer ? "Stop" : "Start" }), _jsx("button", { className: "small-button", type: "button", onClick: () => {
                                                                 const draftLog = createBlankTimeLogDraft(editingDraft.id);

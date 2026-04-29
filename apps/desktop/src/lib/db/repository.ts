@@ -6,6 +6,9 @@ import {
   type ArchivedTaskRecord,
   type ActivityRecord,
   type CalendarItemRecord,
+  type ChecklistRecord,
+  type ChecklistRecurrenceRecord,
+  type ChecklistTemplateRecord,
   type CaptureMode,
   type DesktopAppSnapshot,
   type EntityLinkRecord,
@@ -32,6 +35,9 @@ const STORAGE_KEYS = {
   sessions: "notesmith-desktop-sessions",
   templates: "notesmith-desktop-templates",
   todos: "notesmith-desktop-todos",
+  checklists: "notesmith-desktop-checklists",
+  checklistTemplates: "notesmith-desktop-checklist-templates",
+  checklistRecurrences: "notesmith-desktop-checklist-recurrences",
   archivedTasks: "notesmith-desktop-archived-tasks",
   activities: "notesmith-desktop-activities",
   timelogs: "notesmith-desktop-timelogs",
@@ -132,6 +138,64 @@ const normalizeArchivedTaskRecord = (task: ArchivedTaskRecord): ArchivedTaskReco
   originalCompletedAt: typeof task.originalCompletedAt === "string" ? task.originalCompletedAt : null,
 });
 
+const normalizeChecklistRecord = (checklist: ChecklistRecord): ChecklistRecord => ({
+  id: checklist.id,
+  ownerType: checklist.ownerType === "todo" ? "todo" : "project",
+  ownerId: typeof checklist.ownerId === "string" ? checklist.ownerId : "",
+  title: typeof checklist.title === "string" ? checklist.title : "",
+  description: typeof checklist.description === "string" ? checklist.description : "",
+  archived: Boolean(checklist.archived),
+  templateId: typeof checklist.templateId === "string" ? checklist.templateId : null,
+  recurrenceRuleId: typeof checklist.recurrenceRuleId === "string" ? checklist.recurrenceRuleId : null,
+  recurrenceKey: typeof checklist.recurrenceKey === "string" ? checklist.recurrenceKey : null,
+  createdAt: typeof checklist.createdAt === "string" && checklist.createdAt ? checklist.createdAt : now(),
+  updatedAt: typeof checklist.updatedAt === "string" && checklist.updatedAt ? checklist.updatedAt : now(),
+  items: Array.isArray(checklist.items)
+    ? checklist.items
+        .map((item, index) => ({
+          id: typeof item?.id === "string" && item.id.trim() ? item.id : crypto.randomUUID(),
+          label: typeof item?.label === "string" ? item.label : "",
+          isChecked: Boolean(item?.isChecked),
+          notes: typeof item?.notes === "string" ? item.notes : "",
+          position: Number.isFinite(Number(item?.position)) ? Number(item.position) : index + 1,
+          checkedAt: typeof item?.checkedAt === "string" ? item.checkedAt : null,
+        }))
+        .sort((left, right) => left.position - right.position || left.label.localeCompare(right.label))
+    : [],
+});
+
+const normalizeChecklistTemplateRecord = (template: ChecklistTemplateRecord): ChecklistTemplateRecord => ({
+  id: template.id,
+  title: typeof template.title === "string" ? template.title : "",
+  category: typeof template.category === "string" ? template.category : "",
+  description: typeof template.description === "string" ? template.description : "",
+  createdAt: typeof template.createdAt === "string" && template.createdAt ? template.createdAt : now(),
+  updatedAt: typeof template.updatedAt === "string" && template.updatedAt ? template.updatedAt : now(),
+  items: Array.isArray(template.items)
+    ? template.items
+        .map((item, index) => ({
+          id: typeof item?.id === "string" && item.id.trim() ? item.id : crypto.randomUUID(),
+          label: typeof item?.label === "string" ? item.label : "",
+          isChecked: Boolean(item?.isChecked),
+          notes: typeof item?.notes === "string" ? item.notes : "",
+          position: Number.isFinite(Number(item?.position)) ? Number(item.position) : index + 1,
+          checkedAt: typeof item?.checkedAt === "string" ? item.checkedAt : null,
+        }))
+        .sort((left, right) => left.position - right.position || left.label.localeCompare(right.label))
+    : [],
+});
+
+const normalizeChecklistRecurrenceRecord = (rule: ChecklistRecurrenceRecord): ChecklistRecurrenceRecord => ({
+  id: rule.id,
+  ownerType: rule.ownerType === "todo" ? "todo" : "project",
+  ownerId: typeof rule.ownerId === "string" ? rule.ownerId : "",
+  templateId: typeof rule.templateId === "string" ? rule.templateId : "",
+  cadence: rule.cadence === "weekly" ? "weekly" : "monthly",
+  createdAt: typeof rule.createdAt === "string" && rule.createdAt ? rule.createdAt : now(),
+  updatedAt: typeof rule.updatedAt === "string" && rule.updatedAt ? rule.updatedAt : now(),
+  lastInstantiatedPeriodKey: typeof rule.lastInstantiatedPeriodKey === "string" ? rule.lastInstantiatedPeriodKey : null,
+});
+
 const normalizeActivityRecord = (activity: ActivityRecord): ActivityRecord => ({
   ...activity,
   type: activity.type === "meeting" ? "meeting" : "task",
@@ -208,6 +272,8 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   calendarScrollTop: 0,
   calendarScrollLeft: 0,
   calendarVisibilityFilter: "all",
+  calendarShowPrivate: true,
+  calendarShowBusiness: true,
   baselineWorkEnabled: false,
   baselineWorkActivityId: "",
   apiKey: "",
@@ -266,6 +332,9 @@ export const createDefaultSnapshot = (): DesktopAppSnapshot => ({
   ],
   templates: BUILTIN_TEMPLATES,
   todos: [],
+  checklists: [],
+  checklistTemplates: [],
+  checklistRecurrences: [],
   archivedTasks: [],
   activities: [],
   timelogs: [],
@@ -282,6 +351,12 @@ export interface EntityRepository {
   saveTemplates(records: TemplateDefinition[]): Promise<void>;
   loadTodos(): Promise<TodoRecord[]>;
   saveTodos(records: TodoRecord[]): Promise<void>;
+  loadChecklists(): Promise<ChecklistRecord[]>;
+  saveChecklists(records: ChecklistRecord[]): Promise<void>;
+  loadChecklistTemplates(): Promise<ChecklistTemplateRecord[]>;
+  saveChecklistTemplates(records: ChecklistTemplateRecord[]): Promise<void>;
+  loadChecklistRecurrences(): Promise<ChecklistRecurrenceRecord[]>;
+  saveChecklistRecurrences(records: ChecklistRecurrenceRecord[]): Promise<void>;
   loadArchivedTasks(): Promise<ArchivedTaskRecord[]>;
   saveArchivedTasks(records: ArchivedTaskRecord[]): Promise<void>;
   loadActivities(): Promise<ActivityRecord[]>;
@@ -352,6 +427,18 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
     settings.calendarVisibilityFilter === "public" || settings.calendarVisibilityFilter === "private"
       ? settings.calendarVisibilityFilter
       : "all",
+  calendarShowPrivate:
+    typeof settings.calendarShowPrivate === "boolean"
+      ? settings.calendarShowPrivate
+      : settings.calendarVisibilityFilter === "public"
+        ? false
+        : true,
+  calendarShowBusiness:
+    typeof settings.calendarShowBusiness === "boolean"
+      ? settings.calendarShowBusiness
+      : settings.calendarVisibilityFilter === "private"
+        ? false
+        : true,
   baselineWorkEnabled: Boolean(settings.baselineWorkEnabled),
   baselineWorkActivityId:
     typeof settings.baselineWorkActivityId === "string" ? settings.baselineWorkActivityId.trim() : "",
@@ -470,6 +557,30 @@ class BrowserEntityRepository implements AppRepository {
     writeLocalJson(STORAGE_KEYS.todos, records);
   }
 
+  async loadChecklists() {
+    return readLocalJson<ChecklistRecord[]>(STORAGE_KEYS.checklists, []).map(normalizeChecklistRecord);
+  }
+
+  async saveChecklists(records: ChecklistRecord[]) {
+    writeLocalJson(STORAGE_KEYS.checklists, records);
+  }
+
+  async loadChecklistTemplates() {
+    return readLocalJson<ChecklistTemplateRecord[]>(STORAGE_KEYS.checklistTemplates, []).map(normalizeChecklistTemplateRecord);
+  }
+
+  async saveChecklistTemplates(records: ChecklistTemplateRecord[]) {
+    writeLocalJson(STORAGE_KEYS.checklistTemplates, records);
+  }
+
+  async loadChecklistRecurrences() {
+    return readLocalJson<ChecklistRecurrenceRecord[]>(STORAGE_KEYS.checklistRecurrences, []).map(normalizeChecklistRecurrenceRecord);
+  }
+
+  async saveChecklistRecurrences(records: ChecklistRecurrenceRecord[]) {
+    writeLocalJson(STORAGE_KEYS.checklistRecurrences, records);
+  }
+
   async loadActivities() {
     return readLocalJson<ActivityRecord[]>(STORAGE_KEYS.activities, []).map(normalizeActivityRecord);
   }
@@ -551,10 +662,13 @@ class BrowserEntityRepository implements AppRepository {
   }
 
   async loadSnapshot(): Promise<DesktopAppSnapshot> {
-    const [sessions, templates, todos, archivedTasks, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
+    const [sessions, templates, todos, checklists, checklistTemplates, checklistRecurrences, archivedTasks, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
       this.loadSessions(),
       this.loadTemplates(),
       this.loadTodos(),
+      this.loadChecklists(),
+      this.loadChecklistTemplates(),
+      this.loadChecklistRecurrences(),
       this.loadArchivedTasks(),
       this.loadActivities(),
       this.loadTimeLogs(),
@@ -568,6 +682,9 @@ class BrowserEntityRepository implements AppRepository {
       sessions: sessions.length ? sessions : createDefaultSnapshot().sessions,
       templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
       todos,
+      checklists,
+      checklistTemplates,
+      checklistRecurrences,
       archivedTasks,
       activities,
       timelogs,
@@ -583,6 +700,9 @@ class BrowserEntityRepository implements AppRepository {
       this.saveSessions(snapshot.sessions),
       this.saveTemplates(snapshot.templates),
       this.saveTodos(snapshot.todos),
+      this.saveChecklists(snapshot.checklists),
+      this.saveChecklistTemplates(snapshot.checklistTemplates),
+      this.saveChecklistRecurrences(snapshot.checklistRecurrences),
       this.saveArchivedTasks(snapshot.archivedTasks),
       this.saveActivities(snapshot.activities),
       this.saveTimeLogs(snapshot.timelogs),
@@ -630,6 +750,9 @@ class TauriSqliteRepository implements AppRepository {
         await db.execute("CREATE TABLE IF NOT EXISTS calendar_items (id TEXT PRIMARY KEY, target_type TEXT NOT NULL, target_id TEXT NOT NULL, schedule_date TEXT NOT NULL, start_slot INTEGER NOT NULL, duration_slots INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
         await db.execute("CREATE TABLE IF NOT EXISTS timelogs (id TEXT PRIMARY KEY, target_type TEXT NOT NULL, target_id TEXT NOT NULL, log_date TEXT NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL, duration_minutes INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
         await db.execute("CREATE TABLE IF NOT EXISTS archived_tasks (id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
+        await db.execute("CREATE TABLE IF NOT EXISTS checklists (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
+        await db.execute("CREATE TABLE IF NOT EXISTS checklist_templates (id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
+        await db.execute("CREATE TABLE IF NOT EXISTS checklist_recurrences (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
         return db;
       })();
     }
@@ -786,6 +909,63 @@ class TauriSqliteRepository implements AppRepository {
         db.execute(
           "INSERT INTO todos (id, description, is_done, comments, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
           [record.id, record.description, record.isDone ? 1 : 0, record.comments, record.createdAt, JSON.stringify(record)],
+        ),
+      ),
+    );
+  }
+
+  async loadChecklists() {
+    const db = await this.getDb();
+    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM checklists ORDER BY updated_at DESC");
+    return rows.map((row) => normalizeChecklistRecord(JSON.parse(row.payload_json) as ChecklistRecord));
+  }
+
+  async saveChecklists(records: ChecklistRecord[]) {
+    const db = await this.getDb();
+    await db.execute("DELETE FROM checklists");
+    await Promise.all(
+      records.map((record) =>
+        db.execute(
+          "INSERT INTO checklists (id, owner_type, owner_id, updated_at, payload_json) VALUES (?, ?, ?, ?, ?)",
+          [record.id, record.ownerType, record.ownerId, record.updatedAt, JSON.stringify(record)],
+        ),
+      ),
+    );
+  }
+
+  async loadChecklistTemplates() {
+    const db = await this.getDb();
+    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM checklist_templates ORDER BY updated_at DESC");
+    return rows.map((row) => normalizeChecklistTemplateRecord(JSON.parse(row.payload_json) as ChecklistTemplateRecord));
+  }
+
+  async saveChecklistTemplates(records: ChecklistTemplateRecord[]) {
+    const db = await this.getDb();
+    await db.execute("DELETE FROM checklist_templates");
+    await Promise.all(
+      records.map((record) =>
+        db.execute(
+          "INSERT INTO checklist_templates (id, updated_at, payload_json) VALUES (?, ?, ?)",
+          [record.id, record.updatedAt, JSON.stringify(record)],
+        ),
+      ),
+    );
+  }
+
+  async loadChecklistRecurrences() {
+    const db = await this.getDb();
+    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM checklist_recurrences ORDER BY updated_at DESC");
+    return rows.map((row) => normalizeChecklistRecurrenceRecord(JSON.parse(row.payload_json) as ChecklistRecurrenceRecord));
+  }
+
+  async saveChecklistRecurrences(records: ChecklistRecurrenceRecord[]) {
+    const db = await this.getDb();
+    await db.execute("DELETE FROM checklist_recurrences");
+    await Promise.all(
+      records.map((record) =>
+        db.execute(
+          "INSERT INTO checklist_recurrences (id, owner_type, owner_id, updated_at, payload_json) VALUES (?, ?, ?, ?, ?)",
+          [record.id, record.ownerType, record.ownerId, record.updatedAt, JSON.stringify(record)],
         ),
       ),
     );
@@ -1020,10 +1200,13 @@ class TauriSqliteRepository implements AppRepository {
   }
 
   async loadSnapshot(): Promise<DesktopAppSnapshot> {
-    const [sessions, templates, todos, archivedTasks, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
+    const [sessions, templates, todos, checklists, checklistTemplates, checklistRecurrences, archivedTasks, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
       this.loadSessions(),
       this.loadTemplates(),
       this.loadTodos(),
+      this.loadChecklists(),
+      this.loadChecklistTemplates(),
+      this.loadChecklistRecurrences(),
       this.loadArchivedTasks(),
       this.loadActivities(),
       this.loadTimeLogs(),
@@ -1037,6 +1220,9 @@ class TauriSqliteRepository implements AppRepository {
       sessions: sessions.length ? sessions : createDefaultSnapshot().sessions,
       templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
       todos,
+      checklists,
+      checklistTemplates,
+      checklistRecurrences,
       archivedTasks,
       activities,
       timelogs,
@@ -1052,6 +1238,9 @@ class TauriSqliteRepository implements AppRepository {
       this.saveSessions(snapshot.sessions),
       this.saveTemplates(snapshot.templates),
       this.saveTodos(snapshot.todos),
+      this.saveChecklists(snapshot.checklists),
+      this.saveChecklistTemplates(snapshot.checklistTemplates),
+      this.saveChecklistRecurrences(snapshot.checklistRecurrences),
       this.saveArchivedTasks(snapshot.archivedTasks),
       this.saveActivities(snapshot.activities),
       this.saveTimeLogs(snapshot.timelogs),

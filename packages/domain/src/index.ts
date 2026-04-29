@@ -188,6 +188,53 @@ export interface ProjectLinkRecord {
   domain: string;
 }
 
+export interface ChecklistItemRecord {
+  id: string;
+  label: string;
+  isChecked: boolean;
+  notes: string;
+  position: number;
+  checkedAt?: string | null;
+}
+
+export interface ChecklistRecord {
+  id: string;
+  ownerType: "project" | "todo";
+  ownerId: string;
+  title: string;
+  description: string;
+  archived: boolean;
+  templateId?: string | null;
+  recurrenceRuleId?: string | null;
+  recurrenceKey?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items: ChecklistItemRecord[];
+}
+
+export interface ChecklistTemplateRecord {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+  items: ChecklistItemRecord[];
+}
+
+export type ChecklistRecurrenceCadence = "weekly" | "monthly";
+
+export interface ChecklistRecurrenceRecord {
+  id: string;
+  ownerType: "project" | "todo";
+  ownerId: string;
+  templateId: string;
+  cadence: ChecklistRecurrenceCadence;
+  createdAt: string;
+  updatedAt: string;
+  lastInstantiatedPeriodKey?: string | null;
+}
+
 export interface AttachmentRecord {
   id: string;
   sessionId: string;
@@ -248,6 +295,8 @@ export interface LocalAppSettings {
   calendarScrollTop: number;
   calendarScrollLeft: number;
   calendarVisibilityFilter?: "all" | "public" | "private";
+  calendarShowPrivate?: boolean;
+  calendarShowBusiness?: boolean;
   baselineWorkEnabled: boolean;
   baselineWorkActivityId: string;
   apiKey: string;
@@ -271,6 +320,9 @@ export interface DesktopAppSnapshot {
   sessions: SessionRecord[];
   templates: TemplateDefinition[];
   todos: TodoRecord[];
+  checklists: ChecklistRecord[];
+  checklistTemplates: ChecklistTemplateRecord[];
+  checklistRecurrences: ChecklistRecurrenceRecord[];
   archivedTasks: ArchivedTaskRecord[];
   activities: ActivityRecord[];
   timelogs: TimeLogRecord[];
