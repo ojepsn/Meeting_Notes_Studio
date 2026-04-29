@@ -15,15 +15,57 @@ const MAX_PANE = 520;
 const HORIZONTAL_BUFFER_DAYS = 28;
 const HORIZONTAL_EXTEND_DAYS = 14;
 const HORIZONTAL_EDGE_DAYS = 7;
+const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
+const stockholmDateTimeFormatter = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: STOCKHOLM_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+const stockholmDayFormatter = new Intl.DateTimeFormat(undefined, {
+  timeZone: STOCKHOLM_TIME_ZONE,
+  weekday: "short",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const getStockholmDateTimeParts = (value = new Date()) => {
+  const parts = stockholmDateTimeFormatter.formatToParts(value);
+  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: Number(lookup.year),
+    month: Number(lookup.month),
+    day: Number(lookup.day),
+    hours: Number(lookup.hour),
+    minutes: Number(lookup.minute),
+  };
+};
+
+const formatDateParts = (year: number, month: number, day: number) =>
+  `${year}-${`${month}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
+
+const parseDateStringUtc = (date: string) => {
+  const [year, month, day] = date.split("-").map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return new Date(Date.UTC(1970, 0, 1));
+  }
+  return new Date(Date.UTC(year, month - 1, day));
+};
+
+const formatDateStringUtc = (value: Date) =>
+  `${value.getUTCFullYear()}-${`${value.getUTCMonth() + 1}`.padStart(2, "0")}-${`${value.getUTCDate()}`.padStart(2, "0")}`;
 
 export const addDays = (date: string, days: number) => {
-  const next = new Date(`${date}T00:00:00`);
-  next.setDate(next.getDate() + days);
-  return `${next.getFullYear()}-${`${next.getMonth() + 1}`.padStart(2, "0")}-${`${next.getDate()}`.padStart(2, "0")}`;
+  const next = parseDateStringUtc(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return formatDateStringUtc(next);
 };
 export const daysBetween = (fromDate: string, toDate: string) => {
-  const from = new Date(`${fromDate}T00:00:00`);
-  const to = new Date(`${toDate}T00:00:00`);
+  const from = parseDateStringUtc(fromDate);
+  const to = parseDateStringUtc(toDate);
   const diff = Math.round((to.getTime() - from.getTime()) / 86400000);
   return Number.isFinite(diff) ? diff : 0;
 };
@@ -40,11 +82,15 @@ export const timeToSlot = (time: string) => {
   return hours * 12 + Math.floor(minutes / MINUTES_PER_SLOT);
 };
 export const formatDay = (date: string) =>
-  new Intl.DateTimeFormat(undefined, { weekday: "short", month: "2-digit", day: "2-digit" }).format(new Date(`${date}T00:00:00`));
+  stockholmDayFormatter.format(new Date(parseDateStringUtc(date).getTime() + 12 * 60 * 60 * 1000));
 export const getLocalDateString = (date = new Date()) =>
-  `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-${`${date.getDate()}`.padStart(2, "0")}`;
+  formatDateParts(...(() => {
+    const { year, month, day } = getStockholmDateTimeParts(date);
+    return [year, month, day] as const;
+  })());
 export const initialCalendarScrollTop = (date: Date, slotHeight: number) => {
-  const currentSlot = clampSlot(date.getHours() * 12 + Math.floor(date.getMinutes() / MINUTES_PER_SLOT));
+  const { hours, minutes } = getStockholmDateTimeParts(date);
+  const currentSlot = clampSlot(hours * 12 + Math.floor(minutes / MINUTES_PER_SLOT));
   const previousHourSlot = Math.max(0, currentSlot - 12);
   return previousHourSlot * slotHeight;
 };
@@ -78,7 +124,8 @@ const slotToDateTime = (date: string, slot: number) => {
 const WORKDAY_END_START_SLOT = 17 * 12;
 
 const getFutureAnchoredSlot = (value = new Date()) => {
-  const exactSlot = (value.getHours() * 60 + value.getMinutes()) / MINUTES_PER_SLOT;
+  const { hours, minutes } = getStockholmDateTimeParts(value);
+  const exactSlot = (hours * 60 + minutes) / MINUTES_PER_SLOT;
   return Math.min(WORKDAY_END_START_SLOT, clampSlot(Math.ceil(exactSlot)));
 };
 

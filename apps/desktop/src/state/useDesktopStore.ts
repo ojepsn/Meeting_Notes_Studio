@@ -43,23 +43,49 @@ type Task = TaskRecord;
 type Activity = ActivityRecord;
 type TimeLog = TimeLogRecord;
 
+const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
+const stockholmDateTimeFormatter = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: STOCKHOLM_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+const getStockholmDateTimeParts = (value = new Date()) => {
+  const parts = stockholmDateTimeFormatter.formatToParts(value);
+  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const year = Number(lookup.year);
+  const month = Number(lookup.month);
+  const day = Number(lookup.day);
+  const hours = Number(lookup.hour);
+  const minutes = Number(lookup.minute);
+  return {
+    year,
+    month,
+    day,
+    hours,
+    minutes,
+  };
+};
+
 const formatLocalDate = (value = new Date()) => {
-  const year = value.getFullYear();
-  const month = `${value.getMonth() + 1}`.padStart(2, "0");
-  const day = `${value.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  const { year, month, day } = getStockholmDateTimeParts(value);
+  return `${year}-${`${month}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
 };
 
 const formatLocalMonth = (value = new Date()) => formatLocalDate(value).slice(0, 7);
 
 const getIsoWeekParts = (value = new Date()) => {
-  const nextValue = new Date(value);
-  nextValue.setHours(0, 0, 0, 0);
-  nextValue.setDate(nextValue.getDate() + 3 - ((nextValue.getDay() + 6) % 7));
-  const isoYear = nextValue.getFullYear();
-  const weekOne = new Date(isoYear, 0, 4);
-  const weekOneDay = (weekOne.getDay() + 6) % 7;
-  weekOne.setDate(weekOne.getDate() - weekOneDay);
+  const { year, month, day } = getStockholmDateTimeParts(value);
+  const nextValue = new Date(Date.UTC(year, month - 1, day));
+  nextValue.setUTCDate(nextValue.getUTCDate() + 3 - ((nextValue.getUTCDay() + 6) % 7));
+  const isoYear = nextValue.getUTCFullYear();
+  const weekOne = new Date(Date.UTC(isoYear, 0, 4));
+  const weekOneDay = (weekOne.getUTCDay() + 6) % 7;
+  weekOne.setUTCDate(weekOne.getUTCDate() - weekOneDay);
   const isoWeek = Math.round((nextValue.getTime() - weekOne.getTime()) / 604800000) + 1;
   return {
     isoYear,
@@ -88,8 +114,10 @@ const buildRecurringChecklistTitle = (
   return baseTitle ? `${baseTitle} - ${period}` : period;
 };
 
-const formatLocalTime = (value = new Date()) =>
-  `${`${value.getHours()}`.padStart(2, "0")}:${`${value.getMinutes()}`.padStart(2, "0")}`;
+const formatLocalTime = (value = new Date()) => {
+  const { hours, minutes } = getStockholmDateTimeParts(value);
+  return `${`${hours}`.padStart(2, "0")}:${`${minutes}`.padStart(2, "0")}`;
+};
 
 const normalizeCompletionState = (
   previousTodo: TodoRecord | undefined,
@@ -582,6 +610,24 @@ const isSessionExpired = (session: DesktopAppSnapshot["sessions"][number], nowMs
 const getFirstActiveSessionId = (sessions: DesktopAppSnapshot["sessions"]) =>
   sessions.find((session) => !session.deletedAt)?.id ?? null;
 
+const applySessionStructure = <
+  T extends {
+    domain?: string;
+    project?: string;
+    activity?: string;
+    isPrivate?: boolean;
+  },
+>(
+  session: DesktopAppSnapshot["sessions"][number],
+  source: T,
+) => ({
+  ...session,
+  isPrivate: typeof source.isPrivate === "boolean" ? source.isPrivate : session.isPrivate,
+  project: typeof source.project === "string" ? source.project : session.project,
+  domain: typeof source.domain === "string" ? source.domain : session.domain,
+  activity: typeof source.activity === "string" ? source.activity : session.activity,
+});
+
 const buildLinkedMeetingSession = (
   activity: DesktopAppSnapshot["activities"][number],
   preferredTemplateId: string,
@@ -589,12 +635,8 @@ const buildLinkedMeetingSession = (
   const session = createSessionRecord(preferredTemplateId || "meeting", "meeting-note");
   const meetingDate = activity.doOn || activity.dueDate || session.date;
   return {
-    ...session,
+    ...applySessionStructure(session, activity),
     title: activity.description,
-    isPrivate: activity.isPrivate,
-    project: activity.project,
-    domain: activity.domain,
-    activity: activity.activity,
     date: meetingDate,
     startTime: activity.startTime || session.startTime,
     endTime: activity.endTime || session.endTime,
@@ -606,12 +648,8 @@ const buildLinkedTaskSession = (todo: DesktopAppSnapshot["todos"][number]) => {
   const session = createSessionRecord("personal-note", "quick-note");
   const taskDate = todo.doOn || todo.dueDate || session.date;
   return {
-    ...session,
+    ...applySessionStructure(session, todo),
     title: todo.description,
-    isPrivate: todo.isPrivate,
-    project: todo.project,
-    domain: todo.domain,
-    activity: todo.activity,
     date: taskDate,
     updatedAt: new Date().toISOString(),
   };
@@ -629,14 +667,17 @@ const syncLinkedSessionForMeeting = (
     ...snapshot,
     sessions: snapshot.sessions.map((session) =>
       session.id === linkedSessionId
-        ? {
-            ...session,
+        ? applySessionStructure(
+            {
+              ...session,
             title: activity.description || session.title,
             date: activity.doOn || session.date,
             startTime: activity.startTime || session.startTime,
             endTime: activity.endTime || session.endTime,
             updatedAt: new Date().toISOString(),
-          }
+            },
+            activity,
+          )
         : session,
     ),
   };
@@ -654,16 +695,15 @@ const syncLinkedSessionForTodo = (
     ...snapshot,
     sessions: snapshot.sessions.map((session) =>
       session.id === linkedSessionId
-        ? {
-            ...session,
+        ? applySessionStructure(
+            {
+              ...session,
             title: todo.description || session.title,
-            isPrivate: todo.isPrivate,
             date: todo.doOn || todo.dueDate || session.date,
-            project: todo.project,
-            domain: todo.domain,
-            activity: todo.activity,
             updatedAt: new Date().toISOString(),
-          }
+            },
+            todo,
+          )
         : session,
     ),
   };
