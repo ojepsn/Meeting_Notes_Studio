@@ -37,6 +37,14 @@ import { acceptRuleSuggestion, collectRuleSuggestionObservations, ignoreRuleSugg
 import { buildStructureOptions, createEmptyStructureOptions } from "../lib/structure/options";
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
+const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
+const stockholmDateKeyFormatter = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: STOCKHOLM_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+});
+const getStockholmDateKey = (value = new Date()) => stockholmDateKeyFormatter.format(value);
 const richTextToPlainText = (value) => {
     if (!value)
         return "";
@@ -212,7 +220,7 @@ export const App = () => {
     const audioContextRef = useRef(null);
     const recordingChunksRef = useRef([]);
     const recordingSessionIdRef = useRef(null);
-    const todoRolloverDateRef = useRef(new Date().toDateString());
+    const todoRolloverDateRef = useRef(getStockholmDateKey());
     const localSafetyBackupDateRef = useRef(null);
     const buildDesktopBackupBundle = () => {
         if (!snapshot) {
@@ -235,7 +243,7 @@ export const App = () => {
         if (!isLoaded || loadError)
             return;
         const checkTodoRolloverDate = () => {
-            const currentDate = new Date().toDateString();
+            const currentDate = getStockholmDateKey();
             if (todoRolloverDateRef.current === currentDate)
                 return;
             todoRolloverDateRef.current = currentDate;
@@ -262,9 +270,9 @@ export const App = () => {
         if (!isLoaded || loadError || !snapshot || !storageInfo)
             return;
         const latestBackupDate = latestLocalBackupInfo
-            ? new Date(latestLocalBackupInfo.modifiedMs).toLocaleDateString("sv-SE")
+            ? getStockholmDateKey(new Date(latestLocalBackupInfo.modifiedMs))
             : null;
-        const today = new Date().toLocaleDateString("sv-SE");
+        const today = getStockholmDateKey();
         if (localSafetyBackupDateRef.current === today || latestBackupDate === today) {
             localSafetyBackupDateRef.current = today;
             return;
