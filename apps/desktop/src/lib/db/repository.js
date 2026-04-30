@@ -249,38 +249,7 @@ const normalizePromptProfile = (promptProfile) => {
     return resolvePromptProfile(promptProfile).profile;
 };
 export const createDefaultSnapshot = () => ({
-    sessions: [
-        {
-            id: crypto.randomUUID(),
-            captureMode: "meeting-note",
-            templateId: "meeting",
-            title: "2026-03-30 Weekly team sync",
-            isPrivate: false,
-            deletedAt: null,
-            participantText: "Anna, Marcus, Ola",
-            project: "Alpha",
-            domain: "Product",
-            activity: "Release planning",
-            tagsText: "release, weekly-sync",
-            date: "2026-03-30",
-            startTime: "09:00",
-            endTime: "10:00",
-            quickHighlights: "Release planning, blockers, client timeline",
-            transcribeOnly: false,
-            outputLanguage: "same",
-            detailLevel: 3,
-            additionalInstructions: "",
-            manualNotes: "Talked through current blockers and the April release cut.",
-            liveTranscript: "",
-            uploadedTranscript: "",
-            customFieldValues: {},
-            excludedSectionIds: [],
-            output: "",
-            outputVersions: [],
-            createdAt: now(),
-            updatedAt: now(),
-        },
-    ],
+    sessions: [],
     templates: BUILTIN_TEMPLATES,
     todos: [],
     checklists: [],
@@ -549,7 +518,7 @@ class BrowserEntityRepository {
             this.loadSettings(),
         ]);
         return {
-            sessions: sessions.length ? sessions : createDefaultSnapshot().sessions,
+            sessions,
             templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
             todos,
             checklists,
@@ -905,7 +874,7 @@ class TauriSqliteRepository {
             this.loadSettings(),
         ]);
         return {
-            sessions: sessions.length ? sessions : createDefaultSnapshot().sessions,
+            sessions,
             templates: templates.length ? templates : BUILTIN_TEMPLATES.map(normalizeTemplateRecord),
             todos,
             checklists,

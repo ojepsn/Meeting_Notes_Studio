@@ -368,6 +368,16 @@ const isDesktopBackupBundle = (value) => {
         Number(candidate.version) === 2 &&
         isDesktopSnapshotLike(candidate.snapshot));
 };
+const parseLocalSnapshotBackupContent = (content) => {
+    const parsed = JSON.parse(content);
+    if (isDesktopBackupBundle(parsed)) {
+        return parsed.snapshot;
+    }
+    if (isDesktopSnapshotLike(parsed)) {
+        return parsed;
+    }
+    return null;
+};
 export const mergeImportedPwaSnapshot = (current, imported) => {
     const makeSessionIdentity = (session) => `${(session.date || "").trim()}::${(session.title || "").trim().toLocaleLowerCase()}`;
     const existingIds = new Set(current.sessions.map((session) => session.id));
@@ -509,5 +519,26 @@ export const loadLatestLocalSnapshotBackup = async () => {
         return null;
     }
     const content = await decodeBackupBytes(new Uint8Array(bytes));
-    return JSON.parse(content);
+    return parseLocalSnapshotBackupContent(content);
+};
+export const loadRecentLocalSnapshotBackups = async (limit = 10) => {
+    if (!isTauriRuntime()) {
+        return [];
+    }
+    const files = await invoke("load_recent_local_backups", { limit });
+    const parsedBackups = await Promise.all(files.map(async (file) => {
+        const content = await decodeBackupBytes(new Uint8Array(file.bytes));
+        const parsed = parseLocalSnapshotBackupContent(content);
+        if (!parsed) {
+            return null;
+        }
+        return {
+            path: file.path,
+            modifiedMs: file.modifiedMs,
+            snapshot: parsed,
+        };
+    }));
+    return parsedBackups
+        .filter((entry) => Boolean(entry))
+        .sort((left, right) => right.modifiedMs - left.modifiedMs);
 };

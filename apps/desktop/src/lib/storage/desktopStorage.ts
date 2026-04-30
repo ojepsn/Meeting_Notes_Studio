@@ -21,6 +21,18 @@ export interface LocalBackupInfo {
   modifiedMs: number;
 }
 
+interface LocalBackupFile {
+  path: string;
+  modifiedMs: number;
+  bytes: number[];
+}
+
+export interface LocalSnapshotBackup {
+  path: string;
+  modifiedMs: number;
+  snapshot: DesktopAppSnapshot;
+}
+
 export interface ImportedSnapshotResult {
   kind: "desktop-backup" | "pwa-export";
   snapshot: DesktopAppSnapshot;
@@ -473,6 +485,17 @@ const isDesktopBackupBundle = (value: unknown): value is DesktopBackupBundle => 
   );
 };
 
+const parseLocalSnapshotBackupContent = (content: string): DesktopAppSnapshot | null => {
+  const parsed = JSON.parse(content) as unknown;
+  if (isDesktopBackupBundle(parsed)) {
+    return parsed.snapshot;
+  }
+  if (isDesktopSnapshotLike(parsed)) {
+    return parsed;
+  }
+  return null;
+};
+
 export const mergeImportedPwaSnapshot = (
   current: DesktopAppSnapshot,
   imported: DesktopAppSnapshot,
@@ -651,5 +674,31 @@ export const loadLatestLocalSnapshotBackup = async (): Promise<DesktopAppSnapsho
   }
 
   const content = await decodeBackupBytes(new Uint8Array(bytes));
-  return JSON.parse(content) as DesktopAppSnapshot;
+  return parseLocalSnapshotBackupContent(content);
+};
+
+export const loadRecentLocalSnapshotBackups = async (limit = 10): Promise<LocalSnapshotBackup[]> => {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+
+  const files = await invoke<LocalBackupFile[]>("load_recent_local_backups", { limit });
+  const parsedBackups = await Promise.all(
+    files.map(async (file) => {
+      const content = await decodeBackupBytes(new Uint8Array(file.bytes));
+      const parsed = parseLocalSnapshotBackupContent(content);
+      if (!parsed) {
+        return null;
+      }
+      return {
+        path: file.path,
+        modifiedMs: file.modifiedMs,
+        snapshot: parsed,
+      } satisfies LocalSnapshotBackup;
+    }),
+  );
+
+  return parsedBackups
+    .filter((entry): entry is LocalSnapshotBackup => Boolean(entry))
+    .sort((left, right) => right.modifiedMs - left.modifiedMs);
 };

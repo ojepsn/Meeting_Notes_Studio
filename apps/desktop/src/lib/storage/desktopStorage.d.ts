@@ -12,6 +12,11 @@ export interface LocalBackupInfo {
     path: string;
     modifiedMs: number;
 }
+export interface LocalSnapshotBackup {
+    path: string;
+    modifiedMs: number;
+    snapshot: DesktopAppSnapshot;
+}
 export interface ImportedSnapshotResult {
     kind: "desktop-backup" | "pwa-export";
     snapshot: DesktopAppSnapshot;
@@ -78,3 +83,4 @@ export declare const getLatestLocalBackupInfo: () => Promise<LocalBackupInfo | n
 export declare const mergeImportedPwaSnapshot: (current: DesktopAppSnapshot, imported: DesktopAppSnapshot) => DesktopAppSnapshot;
 export declare const importSnapshotBackup: () => Promise<ImportedSnapshotResult | null>;
 export declare const loadLatestLocalSnapshotBackup: () => Promise<DesktopAppSnapshot | null>;
+export declare const loadRecentLocalSnapshotBackups: (limit?: number) => Promise<LocalSnapshotBackup[]>;

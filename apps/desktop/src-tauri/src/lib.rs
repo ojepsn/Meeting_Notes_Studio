@@ -79,6 +79,14 @@ struct LocalBackupInfo {
     modified_ms: u64,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalBackupFile {
+    path: String,
+    modified_ms: u64,
+    bytes: Vec<u8>,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AgentSidecarReady {
@@ -429,6 +437,36 @@ fn find_latest_local_backup(backups_dir: &Path) -> Result<Option<(std::time::Sys
     Ok(latest_file)
 }
 
+fn find_recent_local_backups(
+    backups_dir: &Path,
+    limit: usize,
+) -> Result<Vec<(std::time::SystemTime, PathBuf)>, String> {
+    if !backups_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut files = Vec::new();
+    for entry in fs::read_dir(backups_dir).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or_default();
+        if !path.is_file() || (extension != "json" && extension != "zip") {
+            continue;
+        }
+
+        let modified = entry
+            .metadata()
+            .map_err(|error| error.to_string())?
+            .modified()
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        files.push((modified, path));
+    }
+
+    files.sort_by(|left, right| right.0.cmp(&left.0));
+    files.truncate(limit);
+    Ok(files)
+}
+
 #[tauri::command]
 fn load_latest_local_backup(app: tauri::AppHandle) -> Result<Option<Vec<u8>>, String> {
     let storage = prepare_storage(&app)?;
@@ -440,6 +478,32 @@ fn load_latest_local_backup(app: tauri::AppHandle) -> Result<Option<Vec<u8>>, St
             .map_err(|error| error.to_string()),
         None => Ok(None),
     }
+}
+
+#[tauri::command]
+fn load_recent_local_backups(
+    app: tauri::AppHandle,
+    limit: Option<u32>,
+) -> Result<Vec<LocalBackupFile>, String> {
+    let storage = prepare_storage(&app)?;
+    let backups_dir = PathBuf::from(storage.backups_dir);
+    let max_files = limit.unwrap_or(10).clamp(1, 50) as usize;
+
+    find_recent_local_backups(&backups_dir, max_files)?
+        .into_iter()
+        .map(|(modified, path)| {
+            let modified_ms = modified
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            let bytes = fs::read(&path).map_err(|error| error.to_string())?;
+            Ok(LocalBackupFile {
+                path: path.to_string_lossy().to_string(),
+                modified_ms,
+                bytes,
+            })
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -1052,6 +1116,7 @@ pub fn run() {
             write_backup_snapshot_zip,
             get_desktop_storage_info,
             load_latest_local_backup,
+            load_recent_local_backups,
             get_latest_local_backup_info,
             delete_persisted_file,
             open_path_in_file_manager,

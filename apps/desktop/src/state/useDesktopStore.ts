@@ -16,7 +16,7 @@ import {
 import { normalizeTaskRecord, taskToTodoRecord, todoToTaskRecord } from "../lib/tasks/model";
 import { removePersistedAttachment } from "../lib/files/attachmentStore";
 import { findSessionIdForActivity, findSessionIdForTodo, upsertEntityLink } from "../lib/links/entityLinks";
-import { loadLatestLocalSnapshotBackup } from "../lib/storage/desktopStorage";
+import { loadRecentLocalSnapshotBackups } from "../lib/storage/desktopStorage";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 import {
   formatStockholmDate as formatLocalDate,
@@ -452,6 +452,62 @@ const hasMeaningfulSnapshotData = (snapshot: Snapshot) =>
       Boolean(session.uploadedTranscript.trim()) ||
       Boolean(session.output.trim()),
   );
+
+const countMeaningfulSessions = (snapshot: Snapshot) =>
+  snapshot.sessions.filter(
+    (session) =>
+      !session.deletedAt &&
+      (
+        Boolean(session.title.trim()) ||
+        Boolean(session.participantText.trim()) ||
+        Boolean(session.project.trim()) ||
+        Boolean(session.domain.trim()) ||
+        Boolean(session.activity.trim()) ||
+        Boolean(session.tagsText.trim()) ||
+        Boolean(session.quickHighlights.trim()) ||
+        Boolean(richTextToPlainText(session.manualNotes)) ||
+        Boolean(session.liveTranscript.trim()) ||
+        Boolean(session.uploadedTranscript.trim()) ||
+        Boolean(session.output.trim())
+      ),
+  ).length;
+
+const buildSnapshotRichnessScore = (snapshot: Snapshot) =>
+  snapshot.todos.length * 8 +
+  snapshot.calendarItems.length * 8 +
+  snapshot.sessions.length * 6 +
+  snapshot.attachments.length * 5 +
+  snapshot.entityLinks.length * 4 +
+  snapshot.checklists.length * 4 +
+  snapshot.checklistTemplates.length * 2 +
+  snapshot.activities.length * 2 +
+  snapshot.timelogs.length;
+
+const isSuspiciouslyReducedSnapshot = (snapshot: Snapshot) => {
+  const meaningfulSessionCount = countMeaningfulSessions(snapshot);
+  return (
+    snapshot.timelogs.length > 0 &&
+    snapshot.activities.length > 0 &&
+    snapshot.todos.length === 0 &&
+    snapshot.calendarItems.length === 0 &&
+    snapshot.attachments.length === 0 &&
+    snapshot.entityLinks.length === 0 &&
+    snapshot.checklists.length === 0 &&
+    meaningfulSessionCount <= 1
+  );
+};
+
+const selectRecoverySnapshot = async (snapshot: Snapshot) => {
+  const currentScore = buildSnapshotRichnessScore(snapshot);
+  const backups = await loadRecentLocalSnapshotBackups(12);
+  return (
+    backups
+      .map((entry) => entry.snapshot)
+      .filter((candidate) => hasMeaningfulSnapshotData(candidate))
+      .filter((candidate) => !isSuspiciouslyReducedSnapshot(candidate))
+      .find((candidate) => buildSnapshotRichnessScore(candidate) > currentScore) ?? null
+  );
+};
 
 const buildTimeLog = (
   targetType: TimeLog["targetType"],
@@ -1083,11 +1139,11 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         get().repository.loadAITextCache(),
         get().repository.loadAIRequestHistory(),
       ]);
-      if (!hasMeaningfulSnapshotData(loadedSnapshot)) {
-        const latestBackupSnapshot = await loadLatestLocalSnapshotBackup();
-        if (latestBackupSnapshot && hasMeaningfulSnapshotData(latestBackupSnapshot)) {
-          loadedSnapshot = latestBackupSnapshot;
-          await get().repository.saveSnapshot(latestBackupSnapshot);
+      if (!hasMeaningfulSnapshotData(loadedSnapshot) || isSuspiciouslyReducedSnapshot(loadedSnapshot)) {
+        const recoverySnapshot = await selectRecoverySnapshot(loadedSnapshot);
+        if (recoverySnapshot) {
+          loadedSnapshot = recoverySnapshot;
+          await get().repository.saveSnapshot(recoverySnapshot);
         }
       }
       const nowMs = Date.now();
