@@ -393,6 +393,11 @@ export const AnalyticsWorkspace = ({
     [filteredLogs, timelineGranularity],
   );
 
+  const projectTimelineSeries = useMemo(
+    () => buildCategorizedTimelineSeries(filteredLogs, timelineGranularity, (log) => log.project || "No project"),
+    [filteredLogs, timelineGranularity],
+  );
+
   const privacyTimelineSeries = useMemo(
     () => buildBinaryTimelineSeries(filteredLogs, timelineGranularity, ["Private", "Business"], (log) => log.isPrivate),
     [filteredLogs, timelineGranularity],
@@ -410,6 +415,7 @@ export const AnalyticsWorkspace = ({
   );
 
   const activityMaxBucketMinutes = Math.max(1, ...activityTimelineSeries.buckets.map((entry) => entry.totalMinutes));
+  const projectMaxBucketMinutes = Math.max(1, ...projectTimelineSeries.buckets.map((entry) => entry.totalMinutes));
   const privacyMaxBucketMinutes = Math.max(1, ...privacyTimelineSeries.buckets.map((entry) => entry.totalMinutes));
   const baselineMaxBucketMinutes = Math.max(1, ...baselineTimelineSeries.buckets.map((entry) => entry.totalMinutes));
 
@@ -654,6 +660,90 @@ export const AnalyticsWorkspace = ({
               ))}
             </div>
           ) : null}
+        </div>
+
+        <div className="sidebar-card">
+          <div className="card-header">
+            <div>
+              <h3>Project time over time</h3>
+              <p className="muted">Tracked hours summarized by {timelineGranularity.slice(0, -2)} and split by the top projects in view.</p>
+            </div>
+          </div>
+          <div className="analytics-stacked-timeline">
+            {projectTimelineSeries.buckets.length ? (
+              projectTimelineSeries.buckets.map((bucket) => (
+                <div key={bucket.bucketKey} className="analytics-stacked-timeline-row">
+                  <span className="tiny-text analytics-bar-label">{bucket.label}</span>
+                  <div
+                    className="analytics-stacked-timeline-track"
+                    style={
+                      chartDisplayMode === "hours"
+                        ? { width: `${(bucket.totalMinutes / projectMaxBucketMinutes) * 100}%` }
+                        : undefined
+                    }
+                  >
+                    {projectTimelineSeries.labels.map((label, index) => {
+                      const minutes = bucket.series[label] || 0;
+                      const denominator = chartDisplayMode === "share" ? bucket.totalMinutes : projectMaxBucketMinutes;
+                      if (!minutes || !denominator) return null;
+                      return (
+                        <button
+                          key={`${bucket.bucketKey}-${label}`}
+                          type="button"
+                          className="analytics-segment-button"
+                          title={`${label}: ${formatMinutes(minutes)}`}
+                          style={{
+                            width: `${(minutes / denominator) * 100}%`,
+                            background: ANALYTICS_SERIES_COLORS[index % ANALYTICS_SERIES_COLORS.length],
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <strong>{formatMinutes(bucket.totalMinutes)}</strong>
+                </div>
+              ))
+            ) : (
+              <p className="muted">No project time data matches the current filters.</p>
+            )}
+          </div>
+          {projectTimelineSeries.labels.length ? (
+            <div className="analytics-series-legend">
+              {projectTimelineSeries.labels.map((label, index) => (
+                <span key={label} className="status-chip analytics-series-chip">
+                  <span
+                    className="analytics-series-chip-swatch"
+                    style={{ background: ANALYTICS_SERIES_COLORS[index % ANALYTICS_SERIES_COLORS.length] }}
+                  />
+                  {label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="sidebar-card">
+          <div className="card-header">
+            <div>
+              <h3>Timelogs time over time</h3>
+              <p className="muted">Total logged hours summarized by {timelineGranularity.slice(0, -2)} for the current filters.</p>
+            </div>
+          </div>
+          <div className="analytics-bar-chart">
+            {timelineBuckets.length ? (
+              timelineBuckets.map((entry) => (
+                <div key={entry.bucketKey} className="analytics-bar-row">
+                  <span className="tiny-text analytics-bar-label">{entry.label}</span>
+                  <div className="time-trend-bar analytics-bar-track">
+                    <span style={{ width: `${(entry.minutes / maxBucketMinutes) * 100}%` }} />
+                  </div>
+                  <strong>{formatMinutes(entry.minutes)}</strong>
+                </div>
+              ))
+            ) : (
+              <p className="muted">No timelog totals match the current filters.</p>
+            )}
+          </div>
         </div>
       </div>
 
