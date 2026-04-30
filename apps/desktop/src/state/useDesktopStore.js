@@ -20,11 +20,43 @@ const ROLLED_TODO_START_SLOT = 8 * SLOTS_PER_HOUR;
 const ROLLED_TODO_EARLY_MORNING_ROWS = 24;
 const ROLLED_TODO_MAX_PER_ROW = 2;
 const OTHER_STRUCTURE_VALUE = "Other";
-const BASELINE_WORK_ACTIVITY_LABEL = "Other";
+const LEGACY_BASELINE_WORK_ACTIVITY_LABEL = "Other";
+const BACKGROUND_STRUCTURE_VALUE = "Background";
+const BASELINE_WORK_ACTIVITY_LABEL = "Background log";
 const COMPLETED_TASK_PURGE_DAYS = 90;
 const COMPLETED_TASK_PURGE_MS = COMPLETED_TASK_PURGE_DAYS * 24 * 60 * 60 * 1000;
 const DEFAULT_CHECKLIST_TEMPLATE_CATEGORY = "General";
 const DEFAULT_CHECKLIST_RECURRENCE_CADENCE = "monthly";
+const isCurrentBaselineWorkActivity = (activity) => activity.type === "task" &&
+    activity.description === BASELINE_WORK_ACTIVITY_LABEL &&
+    activity.domain === BACKGROUND_STRUCTURE_VALUE &&
+    activity.project === BACKGROUND_STRUCTURE_VALUE &&
+    activity.activity === BACKGROUND_STRUCTURE_VALUE;
+const isLegacyBaselineWorkActivity = (activity) => activity.type === "task" &&
+    activity.description === LEGACY_BASELINE_WORK_ACTIVITY_LABEL &&
+    activity.domain === OTHER_STRUCTURE_VALUE &&
+    activity.project === OTHER_STRUCTURE_VALUE &&
+    activity.activity === OTHER_STRUCTURE_VALUE;
+const normalizeBaselineWorkActivity = (activity, actualTimeSpentMinutes = activity.actualTimeSpentMinutes) => normalizeActivityStructure({
+    ...activity,
+    type: "task",
+    parentActivityId: "",
+    description: BASELINE_WORK_ACTIVITY_LABEL,
+    isDone: false,
+    isPrivate: false,
+    comments: "",
+    domain: BACKGROUND_STRUCTURE_VALUE,
+    project: BACKGROUND_STRUCTURE_VALUE,
+    activity: BACKGROUND_STRUCTURE_VALUE,
+    doOn: "",
+    dueDate: "",
+    startTime: "",
+    endTime: "",
+    detailsHtml: "",
+    timeRequiredMinutes: 0,
+    actualTimeSpentMinutes,
+    sessionIds: [],
+});
 const stripChecklistDateSuffix = (value) => value.trim().replace(/\s*-\s*(?:\d{4}-\d{2}(?:-\d{2})?|\d{4}-W\d{2})$/, "").trim();
 const buildRecurringChecklistPeriodKey = (cadence, value = new Date()) => cadence === "weekly" ? formatLocalIsoWeek(value) : formatLocalMonth(value);
 const buildRecurringChecklistTitle = (title, cadence, value = new Date()) => {
@@ -267,27 +299,39 @@ const ensureBaselineWorkActivity = (snapshot) => {
         ? snapshot.activities.find((activity) => activity.id === snapshot.settings.baselineWorkActivityId)
         : null;
     if (configuredActivity) {
-        return { snapshot, activity: configuredActivity };
-    }
-    const existingActivity = snapshot.activities.find((activity) => activity.type === "task"
-        && activity.description === BASELINE_WORK_ACTIVITY_LABEL
-        && activity.domain === OTHER_STRUCTURE_VALUE
-        && activity.project === OTHER_STRUCTURE_VALUE
-        && activity.activity === OTHER_STRUCTURE_VALUE);
-    if (existingActivity) {
+        if (isCurrentBaselineWorkActivity(configuredActivity)) {
+            return { snapshot, activity: configuredActivity };
+        }
+        const normalizedActivity = normalizeBaselineWorkActivity(configuredActivity, computeTrackedMinutes(snapshot.timelogs, "activity", configuredActivity.id));
         return {
             snapshot: {
                 ...snapshot,
+                activities: upsertActivity(snapshot.activities, normalizedActivity),
+            },
+            activity: normalizedActivity,
+        };
+    }
+    const existingActivity = snapshot.activities.find((activity) => isCurrentBaselineWorkActivity(activity) || isLegacyBaselineWorkActivity(activity));
+    if (existingActivity) {
+        const normalizedActivity = isCurrentBaselineWorkActivity(existingActivity)
+            ? existingActivity
+            : normalizeBaselineWorkActivity(existingActivity, computeTrackedMinutes(snapshot.timelogs, "activity", existingActivity.id));
+        return {
+            snapshot: {
+                ...snapshot,
+                activities: isCurrentBaselineWorkActivity(existingActivity)
+                    ? snapshot.activities
+                    : upsertActivity(snapshot.activities, normalizedActivity),
                 settings: {
                     ...snapshot.settings,
                     baselineWorkActivityId: existingActivity.id,
                 },
             },
-            activity: existingActivity,
+            activity: normalizedActivity,
         };
     }
     const createdAt = new Date().toISOString();
-    const activity = normalizeActivityStructure({
+    const activity = normalizeBaselineWorkActivity({
         id: crypto.randomUUID(),
         type: "task",
         parentActivityId: "",
@@ -295,9 +339,9 @@ const ensureBaselineWorkActivity = (snapshot) => {
         isDone: false,
         isPrivate: false,
         comments: "",
-        domain: OTHER_STRUCTURE_VALUE,
-        project: OTHER_STRUCTURE_VALUE,
-        activity: OTHER_STRUCTURE_VALUE,
+        domain: BACKGROUND_STRUCTURE_VALUE,
+        project: BACKGROUND_STRUCTURE_VALUE,
+        activity: BACKGROUND_STRUCTURE_VALUE,
         doOn: "",
         dueDate: "",
         startTime: "",
@@ -1123,10 +1167,13 @@ export const useDesktopStore = create((set, get) => ({
         const snapshot = get().snapshot;
         if (!snapshot)
             return;
-        const nextActivity = normalizeActivityStructure({
-            ...activity,
-            actualTimeSpentMinutes: computeTrackedMinutes(snapshot.timelogs, "activity", activity.id),
-        });
+        const actualTimeSpentMinutes = computeTrackedMinutes(snapshot.timelogs, "activity", activity.id);
+        const nextActivity = snapshot.settings.baselineWorkActivityId === activity.id
+            ? normalizeBaselineWorkActivity(activity, actualTimeSpentMinutes)
+            : normalizeActivityStructure({
+                ...activity,
+                actualTimeSpentMinutes,
+            });
         let nextSnapshot = {
             ...snapshot,
             activities: upsertActivity(snapshot.activities, nextActivity),
@@ -1174,6 +1221,8 @@ export const useDesktopStore = create((set, get) => ({
     deleteActivity: async (id) => {
         const snapshot = get().snapshot;
         if (!snapshot)
+            return;
+        if (snapshot.settings.baselineWorkActivityId === id)
             return;
         const removedActivityIds = collectActivityDescendants(snapshot.activities, id);
         const todosToArchive = snapshot.todos.filter((todo) => removedActivityIds.has(todo.activityId));
@@ -1346,6 +1395,10 @@ export const useDesktopStore = create((set, get) => ({
         const snapshot = get().snapshot;
         if (!snapshot)
             return;
+        if (timeLog.targetType === "activity" &&
+            timeLog.targetId === snapshot.settings.baselineWorkActivityId) {
+            return;
+        }
         const nextTimeLog = buildTimeLog(timeLog.targetType, timeLog.targetId, {
             ...timeLog,
             updatedAt: new Date().toISOString(),
@@ -1363,6 +1416,12 @@ export const useDesktopStore = create((set, get) => ({
         const snapshot = get().snapshot;
         if (!snapshot)
             return;
+        const targetLog = snapshot.timelogs.find((entry) => entry.id === id);
+        if (targetLog &&
+            targetLog.targetType === "activity" &&
+            targetLog.targetId === snapshot.settings.baselineWorkActivityId) {
+            return;
+        }
         const nextTimeLogs = snapshot.timelogs.filter((entry) => entry.id !== id);
         const nextSnapshot = {
             ...snapshot,

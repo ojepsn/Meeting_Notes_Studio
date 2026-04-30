@@ -147,6 +147,11 @@ export const NowWorkspace = ({
   const [showBusinessItems, setShowBusinessItems] = useState(
     settings.calendarShowBusiness ?? (settings.calendarVisibilityFilter === "private" ? false : true),
   );
+  const [showTasks, setShowTasks] = useState(true);
+  const [showMeetings, setShowMeetings] = useState(true);
+  const [showActivities, setShowActivities] = useState(true);
+  const [showProjects, setShowProjects] = useState(true);
+  const [recentFilterQuery, setRecentFilterQuery] = useState("");
 
   useEffect(() => {
     const hasRunningLog = timeLogs.some((entry) => isTimeLogRunning(entry));
@@ -488,6 +493,21 @@ export const NowWorkspace = ({
     }));
   }, [commonActivities, commonProjects, recentTaskEntries, upcomingMeetings]);
 
+  const filteredRecentEntries = useMemo(() => {
+    const normalizedQuery = recentFilterQuery.trim().toLowerCase();
+    return recentEntries.filter((entry) => {
+      const kindVisible =
+        (entry.kind === "task" && showTasks) ||
+        (entry.kind === "meeting" && showMeetings) ||
+        (entry.kind === "activity" && showActivities) ||
+        (entry.kind === "project" && showProjects);
+      if (!kindVisible) return false;
+      if (!normalizedQuery) return true;
+      const haystack = [entry.title, entry.kind, ...entry.meta].join(" ").toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [recentEntries, recentFilterQuery, showActivities, showMeetings, showProjects, showTasks]);
+
   const openEntry = (entry: RecentEntry) => {
     if (entry.kind === "task" && entry.taskId) {
       onOpenTodoDetail(entry.taskId);
@@ -534,37 +554,32 @@ export const NowWorkspace = ({
   return (
     <div className="card now-workspace">
       <section className="sidebar-card now-running-card">
-        <div className="card-header">
-          <div className="now-section-copy">
-            <h3>Running now</h3>
-            <p className="muted">The current active timelog is always visible here.</p>
-          </div>
-        </div>
         {runningLogSummary ? (
-          <div className="now-running-card-body">
-            <div className="now-running-card-main">
-              <div className="now-running-title-row">
-                <span className="now-pill-kicker">{runningLogSummary.kind === "meeting" ? "Meeting" : runningLogSummary.kind === "activity" ? "Activity" : "Task"}</span>
+          <div className="now-running-inline">
+            <div className="now-running-inline-primary">
+              <span className="now-pill-kicker">Running now</span>
+              <span className="now-pill-kicker">{runningLogSummary.kind === "meeting" ? "Meeting" : runningLogSummary.kind === "activity" ? "Activity" : "Task"}</span>
+              <strong className="now-running-title">{runningLogSummary.title}</strong>
+              <div className="now-running-inline-status">
                 <span className="status-chip">Running - {runningLogSummary.elapsedLabel}</span>
               </div>
-              <strong className="now-running-title">{runningLogSummary.title}</strong>
-              <div className="now-running-grid">
-                <div className="now-running-detail">
-                  <span>Domain</span>
-                  <strong>{runningLogSummary.domain}</strong>
-                </div>
-                <div className="now-running-detail">
-                  <span>Project</span>
-                  <strong>{runningLogSummary.project}</strong>
-                </div>
-                <div className="now-running-detail">
-                  <span>Activity</span>
-                  <strong>{runningLogSummary.activity}</strong>
-                </div>
-                <div className="now-running-detail">
-                  <span>Text</span>
-                  <strong>{runningLogSummary.title}</strong>
-                </div>
+            </div>
+            <div className="now-running-inline-details">
+              <div className="now-running-inline-detail">
+                <span>Domain</span>
+                <strong>{runningLogSummary.domain}</strong>
+              </div>
+              <div className="now-running-inline-detail">
+                <span>Project</span>
+                <strong>{runningLogSummary.project}</strong>
+              </div>
+              <div className="now-running-inline-detail">
+                <span>Activity</span>
+                <strong>{runningLogSummary.activity}</strong>
+              </div>
+              <div className="now-running-inline-detail">
+                <span>Text</span>
+                <strong>{runningLogSummary.title}</strong>
               </div>
             </div>
             <div className="now-pill-actions">
@@ -591,9 +606,10 @@ export const NowWorkspace = ({
             </div>
           </div>
         ) : (
-          <div className="empty-state-card compact-empty-state">
-            <h3>No active timelog</h3>
-            <p>Start time from any recent task, meeting, or activity below and it will appear here.</p>
+          <div className="now-running-inline now-running-inline-empty">
+            <span className="now-pill-kicker">Running now</span>
+            <strong className="now-running-title">No active timelog</strong>
+            <span className="muted">Start time from any recent task, meeting, activity, or project context below.</span>
           </div>
         )}
       </section>
@@ -604,7 +620,25 @@ export const NowWorkspace = ({
             <h3>Recent</h3>
             <p className="muted">Tasks, meetings, activities, and projects are mixed together here for quick access.</p>
           </div>
+        </div>
+        <div className="page-actions now-filter-toolbar">
           <div className="page-actions now-visibility-actions">
+            <label className="compact-private-toggle calendar-top-filter-toggle">
+              <input type="checkbox" checked={showTasks} onChange={(event) => setShowTasks(event.target.checked)} />
+              <span>Tasks</span>
+            </label>
+            <label className="compact-private-toggle calendar-top-filter-toggle">
+              <input type="checkbox" checked={showMeetings} onChange={(event) => setShowMeetings(event.target.checked)} />
+              <span>Meetings</span>
+            </label>
+            <label className="compact-private-toggle calendar-top-filter-toggle">
+              <input type="checkbox" checked={showActivities} onChange={(event) => setShowActivities(event.target.checked)} />
+              <span>Activities</span>
+            </label>
+            <label className="compact-private-toggle calendar-top-filter-toggle">
+              <input type="checkbox" checked={showProjects} onChange={(event) => setShowProjects(event.target.checked)} />
+              <span>Projects</span>
+            </label>
             <label className="compact-private-toggle calendar-top-filter-toggle">
               <input type="checkbox" checked={showPrivateItems} onChange={(event) => setShowPrivateItems(event.target.checked)} />
               <span>Show private</span>
@@ -614,10 +648,19 @@ export const NowWorkspace = ({
               <span>Show business</span>
             </label>
           </div>
+          <label className="field now-filter-search">
+            <span className="sr-only">Filter recent items</span>
+            <input
+              type="search"
+              value={recentFilterQuery}
+              onChange={(event) => setRecentFilterQuery(event.target.value)}
+              placeholder="Filter recent items"
+            />
+          </label>
         </div>
         <div className="now-pill-cloud">
-          {recentEntries.length ? (
-            recentEntries.map((entry) => (
+          {filteredRecentEntries.length ? (
+            filteredRecentEntries.map((entry) => (
               <div
                 key={entry.key}
                 className={`now-pill-card${entry.kind === "project" ? " now-pill-card-project" : ""}`}
@@ -648,8 +691,8 @@ export const NowWorkspace = ({
             ))
           ) : (
             <div className="empty-state-card compact-empty-state">
-              <h3>Nothing recent yet</h3>
-              <p>Recent tasks, meetings, activities, and projects will gather here automatically as you work.</p>
+              <h3>No matching items</h3>
+              <p>Adjust the type or privacy filters, or clear the text search to see more recent items.</p>
             </div>
           )}
         </div>

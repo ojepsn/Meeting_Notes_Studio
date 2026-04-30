@@ -15,6 +15,7 @@ type TimeWorkspaceProps = {
   requestedDomain?: string | null;
   requestedProject?: string | null;
   reportPresets: TimeReportPreset[];
+  baselineWorkActivityId: string;
   isBaselineWorkEnabled: boolean;
   isBaselineWorkRunning: boolean;
   hasSpecificRunningTimeLog: boolean;
@@ -37,6 +38,7 @@ type EditableTimeLogRecord = TimeLogRecord & {
   title: string;
   contextLabel: string;
   isArchivedTarget?: boolean;
+  isSystemBackground?: boolean;
   resolvedDomain: string;
   resolvedProject: string;
   resolvedActivity: string;
@@ -148,6 +150,7 @@ export const TimeWorkspace = ({
   requestedDomain,
   requestedProject,
   reportPresets,
+  baselineWorkActivityId,
   isBaselineWorkEnabled,
   isBaselineWorkRunning,
   hasSpecificRunningTimeLog,
@@ -222,13 +225,21 @@ export const TimeWorkspace = ({
             };
           }
           const activity = activityLookup[log.targetId];
+          const isSystemBackground = Boolean(
+            baselineWorkActivityId &&
+            log.targetType === "activity" &&
+            log.targetId === baselineWorkActivityId,
+          );
           return {
             ...log,
-            title: activity?.description || "Deleted activity",
-            contextLabel: activity?.project || activity?.domain || (activity?.type === "meeting" ? "Meeting" : "Activity"),
-            resolvedDomain: activity?.domain || "",
-            resolvedProject: activity?.project || "",
-            resolvedActivity: activity?.activity || activity?.description || "",
+            title: isSystemBackground ? "Background log" : activity?.description || "Deleted activity",
+            contextLabel: isSystemBackground
+              ? "System-managed background work"
+              : activity?.project || activity?.domain || (activity?.type === "meeting" ? "Meeting" : "Activity"),
+            isSystemBackground,
+            resolvedDomain: isSystemBackground ? "Background" : activity?.domain || "",
+            resolvedProject: isSystemBackground ? "Background" : activity?.project || "",
+            resolvedActivity: isSystemBackground ? "Background" : activity?.activity || activity?.description || "",
           };
         })
         .sort((left, right) => {
@@ -237,7 +248,7 @@ export const TimeWorkspace = ({
           if (leftRunning !== rightRunning) return leftRunning ? -1 : 1;
           return `${right.date} ${right.startTime}`.localeCompare(`${left.date} ${left.startTime}`);
         }),
-    [activityLookup, archivedTaskLookup, timeLogs, todoLookup],
+    [activityLookup, archivedTaskLookup, baselineWorkActivityId, timeLogs, todoLookup],
   );
 
   const projectOptions = useMemo(
@@ -645,6 +656,10 @@ export const TimeWorkspace = ({
   const commitTimeLogDraft = (log: EditableTimeLogRecord) => {
     const draft = timeLogDrafts[log.id];
     if (!draft) return;
+    if (log.isSystemBackground) {
+      clearTimeLogDraft(log.id);
+      return;
+    }
     const nextTitle = draft.title.trim();
     const nextDate = draft.date || log.date;
     const nextStartTime = draft.startTime || log.startTime;
@@ -806,7 +821,7 @@ export const TimeWorkspace = ({
             <div className="card-header">
               <div>
                 <h3>Work mode</h3>
-                <p className="muted">Keeps a baseline Other / Other / Other timelog running whenever no specific timelog is active.</p>
+                <p className="muted">Keeps a system-managed Background log running whenever no specific timelog is active.</p>
               </div>
               <span className="status-chip">
                 {isBaselineWorkEnabled
@@ -824,7 +839,7 @@ export const TimeWorkspace = ({
                 <span className="tiny-text">
                   {isBaselineWorkEnabled
                     ? isBaselineWorkRunning
-                      ? "General work time is being logged to Other until a more specific timelog takes over."
+                      ? "General work time is being logged to Background until a more specific timelog takes over."
                       : hasSpecificRunningTimeLog
                         ? `A specific timelog is active${activeLog ? ` (${activeLog.title})` : ""}, so baseline work capture is paused and will resume automatically.`
                         : "Baseline work capture is armed and will run when no specific timelog is active."
@@ -865,17 +880,25 @@ export const TimeWorkspace = ({
                   </span>
                 </div>
                 <div className="timelog-active-actions">
-                  <button className="primary-button" type="button" onClick={() => onStopTracking(activeLog.targetType, activeLog.targetId)}>
-                    Stop
-                  </button>
-                  <button
-                    className="small-button"
-                    type="button"
-                    disabled={Boolean(activeLog.isArchivedTarget)}
-                    onClick={() => (activeLog.targetType === "todo" ? onOpenTodoDetail(activeLog.targetId) : onOpenActivityDetail(activeLog.targetId))}
-                  >
-                    {activeLog.isArchivedTarget ? "Archived" : "Open source"}
-                  </button>
+                  {activeLog.isSystemBackground ? (
+                    <button className="primary-button" type="button" onClick={onStopWorkBaseline}>
+                      Stop work
+                    </button>
+                  ) : (
+                    <>
+                      <button className="primary-button" type="button" onClick={() => onStopTracking(activeLog.targetType, activeLog.targetId)}>
+                        Stop
+                      </button>
+                      <button
+                        className="small-button"
+                        type="button"
+                        disabled={Boolean(activeLog.isArchivedTarget)}
+                        onClick={() => (activeLog.targetType === "todo" ? onOpenTodoDetail(activeLog.targetId) : onOpenActivityDetail(activeLog.targetId))}
+                      >
+                        {activeLog.isArchivedTarget ? "Archived" : "Open source"}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ) : (
@@ -952,7 +975,7 @@ export const TimeWorkspace = ({
                       onBlur={() => commitTimeLogDraft(log)}
                       onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
                       placeholder="Project"
-                      disabled={Boolean(log.isArchivedTarget)}
+                      disabled={Boolean(log.isArchivedTarget || log.isSystemBackground)}
                       aria-label="Timelog project"
                     />
                     <input
@@ -962,7 +985,7 @@ export const TimeWorkspace = ({
                       onBlur={() => commitTimeLogDraft(log)}
                       onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
                       placeholder="Activity"
-                      disabled={Boolean(log.isArchivedTarget)}
+                      disabled={Boolean(log.isArchivedTarget || log.isSystemBackground)}
                       aria-label="Timelog activity"
                     />
                     {log.targetType === "todo" && !log.isArchivedTarget ? (
@@ -972,13 +995,14 @@ export const TimeWorkspace = ({
                         onBlur={() => commitTimeLogDraft(log)}
                         onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
                         placeholder="Title"
+                        disabled={Boolean(log.isSystemBackground)}
                         aria-label="Timelog title"
                       />
                     ) : (
                       <button
                         type="button"
                         className="time-log-source-button"
-                        disabled={Boolean(log.isArchivedTarget)}
+                        disabled={Boolean(log.isArchivedTarget || log.isSystemBackground)}
                         onClick={() => (log.targetType === "todo" ? onOpenTodoDetail(log.targetId) : onOpenActivityDetail(log.targetId))}
                       >
                         <strong>{log.title}</strong>
@@ -990,6 +1014,7 @@ export const TimeWorkspace = ({
                       onChange={(event) => updateTimeLogDraft(log, { date: event.target.value })}
                       onBlur={() => commitTimeLogDraft(log)}
                       onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
+                      disabled={Boolean(log.isSystemBackground)}
                     />
                     <input
                       type="time"
@@ -998,6 +1023,7 @@ export const TimeWorkspace = ({
                       onChange={(event) => updateTimeLogDraft(log, { startTime: event.target.value })}
                       onBlur={() => commitTimeLogDraft(log)}
                       onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
+                      disabled={Boolean(log.isSystemBackground)}
                     />
                     <input
                       type="time"
@@ -1006,6 +1032,7 @@ export const TimeWorkspace = ({
                       onChange={(event) => updateTimeLogDraft(log, { endTime: event.target.value })}
                       onBlur={() => commitTimeLogDraft(log)}
                       onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
+                      disabled={Boolean(log.isSystemBackground)}
                     />
                     <span className="status-chip">{running ? `Running • ${formatTrackedMinutes(displayedMinutes)}` : formatMinutes(displayedMinutes)}</span>
                     <input
@@ -1014,14 +1041,21 @@ export const TimeWorkspace = ({
                       onBlur={() => commitTimeLogDraft(log)}
                       onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
                       placeholder="Comment"
+                      disabled={Boolean(log.isSystemBackground)}
                     />
                     <div className="time-log-inline-actions">
-                      <button className={`small-button${running ? " primary-button" : ""}`} type="button" onClick={() => (running ? onStopTracking(log.targetType, log.targetId) : onStartTracking(log.targetType, log.targetId))}>
-                        {running ? "Stop" : "Start"}
-                      </button>
-                      <button className="small-button danger-button" type="button" onClick={() => onDeleteTimeLog(log.id)}>
-                        Delete
-                      </button>
+                      {log.isSystemBackground ? (
+                        <span className="status-chip">Managed by Work mode</span>
+                      ) : (
+                        <>
+                          <button className={`small-button${running ? " primary-button" : ""}`} type="button" onClick={() => (running ? onStopTracking(log.targetType, log.targetId) : onStartTracking(log.targetType, log.targetId))}>
+                            {running ? "Stop" : "Start"}
+                          </button>
+                          <button className="small-button danger-button" type="button" onClick={() => onDeleteTimeLog(log.id)}>
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );

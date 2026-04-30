@@ -706,6 +706,10 @@ select {
   overflow: hidden;
 }
 
+.workspace-canvas-calendar > .calendar-workspace {
+  flex: 1 1 auto;
+}
+
 .notes-sessions-shelf {
   position: fixed;
   top: 5.6rem;
@@ -3666,6 +3670,9 @@ select {
 }
 
 .calendar-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -4029,9 +4036,12 @@ select {
 
 .calendar-scroll {
   position: relative;
+  flex: 1 1 auto;
   overflow: auto;
-  max-height: calc(100vh - 260px);
+  height: 100%;
+  max-height: none;
   min-height: 0;
+  scrollbar-gutter: stable both-edges;
   border: 1px solid var(--app-border);
   border-radius: 24px;
   background:
@@ -6050,54 +6060,62 @@ select {
 .now-running-card {
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 0.35rem;
 }
 
-.now-running-card-body {
+.now-running-inline {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 1rem;
-  align-items: start;
-}
-
-.now-running-card-main {
-  display: flex;
-  flex-direction: column;
+  grid-template-columns: minmax(280px, auto) minmax(0, 1fr) auto;
+  align-items: center;
   gap: 0.7rem;
   min-width: 0;
 }
 
-.now-running-title-row {
+.now-running-inline-primary {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
-  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.now-running-inline-status {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
 }
 
 .now-running-title {
-  font-size: 1.2rem;
+  min-width: 0;
+  font-size: 0.98rem;
   line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.now-running-grid {
+.now-running-inline-details {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.7rem;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
 }
 
-.now-running-detail {
+.now-running-inline-detail {
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.65rem 0.8rem;
-  border-radius: 18px;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.34rem 0.5rem;
+  border-radius: 999px;
   border: 1px solid var(--app-border);
   background: color-mix(in srgb, var(--app-surface) 86%, white 14%);
 }
 
-.now-running-detail span {
+.now-running-inline-detail span {
+  flex: 0 0 auto;
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -6105,11 +6123,17 @@ select {
   color: var(--app-muted);
 }
 
-.now-running-detail strong {
+.now-running-inline-detail strong {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.83rem;
+}
+
+.now-running-inline-empty {
+  grid-template-columns: auto minmax(0, auto) minmax(0, 1fr);
+  gap: 0.55rem;
 }
 
 .now-pill-card {
@@ -6233,8 +6257,32 @@ select {
   flex-wrap: wrap;
 }
 
+.now-filter-toolbar {
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.now-filter-search {
+  flex: 1 1 220px;
+  min-width: min(320px, 100%);
+  margin: 0;
+}
+
+.now-filter-search input {
+  min-height: 34px;
+  padding: 0.42rem 0.68rem;
+  font-size: 0.82rem;
+}
+
 @media (max-width: 1180px) {
-  .now-running-grid {
+  .now-running-inline {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .now-running-inline-details {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -6244,11 +6292,11 @@ select {
 }
 
 @media (max-width: 860px) {
-  .now-running-card-body {
-    grid-template-columns: 1fr;
+  .now-running-inline-primary {
+    flex-wrap: wrap;
   }
 
-  .now-running-grid {
+  .now-running-inline-details {
     grid-template-columns: 1fr;
   }
 
