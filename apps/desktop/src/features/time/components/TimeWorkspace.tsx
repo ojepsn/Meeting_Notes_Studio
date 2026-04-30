@@ -24,6 +24,7 @@ type TimeWorkspaceProps = {
   onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
   onStartWorkBaseline: () => void;
   onStopWorkBaseline: () => void;
+  onStartAdhocTimeLog: (options?: { domain?: string; project?: string; activity?: string }) => void;
   onOpenTodoDetail: (todoId: string) => void;
   onOpenActivityDetail: (activityId: string) => void;
   onSaveTodo: (todo: TodoRecord) => void;
@@ -41,6 +42,7 @@ type EditableTimeLogRecord = TimeLogRecord & {
   resolvedActivity: string;
 };
 type TimeLogEditDraft = {
+  title: string;
   date: string;
   startTime: string;
   endTime: string;
@@ -155,6 +157,7 @@ export const TimeWorkspace = ({
   onStopTracking,
   onStartWorkBaseline,
   onStopWorkBaseline,
+  onStartAdhocTimeLog,
   onOpenTodoDetail,
   onOpenActivityDetail,
   onSaveTodo,
@@ -611,6 +614,7 @@ export const TimeWorkspace = ({
 
   const getTimeLogDraft = (log: EditableTimeLogRecord): TimeLogEditDraft =>
     timeLogDrafts[log.id] ?? {
+      title: log.title,
       date: log.date,
       startTime: log.startTime,
       endTime: log.endTime,
@@ -641,6 +645,7 @@ export const TimeWorkspace = ({
   const commitTimeLogDraft = (log: EditableTimeLogRecord) => {
     const draft = timeLogDrafts[log.id];
     if (!draft) return;
+    const nextTitle = draft.title.trim();
     const nextDate = draft.date || log.date;
     const nextStartTime = draft.startTime || log.startTime;
     const draftEndTime = draft.endTime || log.endTime;
@@ -654,6 +659,7 @@ export const TimeWorkspace = ({
     const nextProject = draft.project.trim();
     const nextActivity = draft.activity.trim();
     const changed =
+      nextTitle !== log.title ||
       nextDate !== log.date ||
       nextStartTime !== log.startTime ||
       nextEndTime !== log.endTime ||
@@ -673,6 +679,7 @@ export const TimeWorkspace = ({
             nextProject === linkedActivity.project;
           onSaveTodo({
             ...todo,
+            description: nextTitle,
             project: nextProject,
             activity: nextActivity,
             activityId: keepLinkedActivity ? todo.activityId : "",
@@ -885,7 +892,22 @@ export const TimeWorkspace = ({
                 <h3>All time logs</h3>
                 <p className="muted">Most recent first. Edit date, start, stop, and comment inline.</p>
               </div>
-              <span className="status-chip">{visibleListLogs.length} visible</span>
+              <div className="timelog-card-header-actions">
+                <button
+                  className="small-button"
+                  type="button"
+                  onClick={() =>
+                    onStartAdhocTimeLog({
+                      domain: domainFilter === "all" ? "" : domainFilter,
+                      project: projectFilter === "all" ? "" : projectFilter,
+                      activity: activityFilter === "all" ? "" : activityFilter,
+                    })
+                  }
+                >
+                  New running log
+                </button>
+                <span className="status-chip">{visibleListLogs.length} visible</span>
+              </div>
             </div>
             <div ref={timeLogScrollAreaRef} className="time-log-editor-scroll-area" style={timeLogTableStyle}>
               <div className="time-log-sticky-controls">
@@ -943,15 +965,26 @@ export const TimeWorkspace = ({
                       disabled={Boolean(log.isArchivedTarget)}
                       aria-label="Timelog activity"
                     />
-                    <button
-                      type="button"
-                      className="time-log-source-button"
-                      disabled={Boolean(log.isArchivedTarget)}
-                      onClick={() => (log.targetType === "todo" ? onOpenTodoDetail(log.targetId) : onOpenActivityDetail(log.targetId))}
-                    >
-                      <strong>{log.title}</strong>
-                      <span className="tiny-text">{log.contextLabel}</span>
-                    </button>
+                    {log.targetType === "todo" && !log.isArchivedTarget ? (
+                      <input
+                        value={draft.title}
+                        onChange={(event) => updateTimeLogDraft(log, { title: event.target.value })}
+                        onBlur={() => commitTimeLogDraft(log)}
+                        onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
+                        placeholder="Title"
+                        aria-label="Timelog title"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="time-log-source-button"
+                        disabled={Boolean(log.isArchivedTarget)}
+                        onClick={() => (log.targetType === "todo" ? onOpenTodoDetail(log.targetId) : onOpenActivityDetail(log.targetId))}
+                      >
+                        <strong>{log.title}</strong>
+                        <span className="tiny-text">{log.contextLabel}</span>
+                      </button>
+                    )}
                     <DateInput
                       value={draft.date}
                       onChange={(event) => updateTimeLogDraft(log, { date: event.target.value })}

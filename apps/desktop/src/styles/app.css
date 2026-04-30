@@ -695,6 +695,13 @@ select {
   min-width: 0;
 }
 
+.workspace-canvas,
+.workspace-inspector {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 .notes-sessions-shelf {
   position: fixed;
   top: 5.6rem;
@@ -823,6 +830,14 @@ select {
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
+}
+
+.timelog-card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .workspace-header .card-header {

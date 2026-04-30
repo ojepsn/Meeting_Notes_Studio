@@ -66,6 +66,11 @@ interface DesktopState {
     stopTimeTracking: (targetType: TimeLog["targetType"], targetId: string) => Promise<void>;
     startWorkBaseline: () => Promise<void>;
     stopWorkBaseline: () => Promise<void>;
+    startAdhocTimeLog: (options?: {
+        domain?: string;
+        project?: string;
+        activity?: string;
+    }) => Promise<string | null>;
     createCalendarEntryFromText: (date: string, startSlot: number, value: string, options?: {
         activityId?: string;
         parentActivityId?: string;

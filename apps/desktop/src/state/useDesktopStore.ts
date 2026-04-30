@@ -1093,6 +1093,7 @@ interface DesktopState {
   stopTimeTracking: (targetType: TimeLog["targetType"], targetId: string) => Promise<void>;
   startWorkBaseline: () => Promise<void>;
   stopWorkBaseline: () => Promise<void>;
+  startAdhocTimeLog: (options?: { domain?: string; project?: string; activity?: string }) => Promise<string | null>;
   createCalendarEntryFromText: (
     date: string,
     startSlot: number,
@@ -1749,6 +1750,47 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     }
     set({ snapshot: nextSnapshot });
     await flushSnapshotPersist(get().repository, nextSnapshot, set);
+  },
+  startAdhocTimeLog: async (options) => {
+    const snapshot = get().snapshot;
+    if (!snapshot) return null;
+    const now = new Date();
+    const createdAt = now.toISOString();
+    const nextTask = normalizeTaskRecord({
+      id: crypto.randomUUID(),
+      description: "",
+      isDone: false,
+      completedAt: null,
+      isPrivate: false,
+      isPriority: false,
+      comments: "",
+      activityId: "",
+      domain: options?.domain || "",
+      project: options?.project || "",
+      activity: options?.activity || "",
+      doOn: formatLocalDate(now),
+      dueDate: "",
+      detailsHtml: "",
+      createdAt,
+      sessionIds: toSessionIds(get().activeSessionId),
+    });
+    const { nextTimeLogs: closedTimeLogs } = closeOpenTimeLogs(snapshot.timelogs, now);
+    const nextTimeLog = buildTimeLog("todo", nextTask.id, {
+      date: formatLocalDate(now),
+      startTime: formatLocalTime(now),
+      endTime: formatLocalTime(now),
+      createdAt,
+      updatedAt: createdAt,
+    });
+    const nextSnapshot = {
+      ...snapshot,
+      todos: [taskToTodoRecord(nextTask), ...snapshot.todos],
+      timelogs: [nextTimeLog, ...closedTimeLogs],
+      activities: recalculateActivitiesWithTimeLogs(snapshot.activities, [nextTimeLog, ...closedTimeLogs]),
+    };
+    set({ snapshot: nextSnapshot });
+    await flushSnapshotPersist(get().repository, nextSnapshot, set);
+    return nextTask.id;
   },
   startWorkBaseline: async () => {
     const snapshot = get().snapshot;

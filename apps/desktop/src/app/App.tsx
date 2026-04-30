@@ -170,7 +170,7 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
   { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: true },
   { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
   { id: "todos", label: "Tasks", description: "Focused follow-up management", available: true },
-  { id: "time", label: "Timelogs", description: "Active timers, dense logs, and reporting", available: true },
+  { id: "time", label: "Time", description: "Active timers, dense logs, and reporting", available: true },
   { id: "analytics", label: "Analytics", description: "Summaries and trends across your tracked work", available: true },
   { id: "structure", label: "Structure", description: "Domains and projects as operational views", available: true },
   { id: "assistant", label: "Assistant", description: "Agentic chat with NoteSmith data", available: true },
@@ -289,6 +289,7 @@ export const App = () => {
     stopTimeTracking,
     startWorkBaseline,
     stopWorkBaseline,
+    startAdhocTimeLog,
     createCalendarEntryFromText,
     rollForwardOverdueTodos,
     moveCalendarItem,
@@ -3503,6 +3504,7 @@ export const App = () => {
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
                 onStartWorkBaseline={() => void startWorkBaseline()}
                 onStopWorkBaseline={() => void stopWorkBaseline()}
+                onStartAdhocTimeLog={(options) => void startAdhocTimeLog(options)}
                 onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "time")}
                 onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "time")}
                 onSaveTodo={(todo) => void saveTodo(todo)}
