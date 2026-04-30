@@ -669,6 +669,10 @@ select {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.notes-shell-single-pane {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .notes-shell-calendar-fullscreen {
   grid-template-columns: minmax(0, 1fr);
   padding-top: 0.75rem;
@@ -5487,6 +5491,8 @@ select {
   max-height: min(60vh, 980px);
   overflow: auto;
   padding-right: 0.1rem;
+  --timelog-col-project: 160px;
+  --timelog-col-activity: 180px;
   --timelog-col-source: 300px;
   --timelog-col-date: 150px;
   --timelog-col-start: 110px;
@@ -5511,6 +5517,8 @@ select {
 .time-log-editor-header {
   display: grid;
   grid-template-columns:
+    minmax(128px, var(--timelog-col-project))
+    minmax(144px, var(--timelog-col-activity))
     minmax(180px, var(--timelog-col-source))
     minmax(150px, var(--timelog-col-date))
     minmax(104px, var(--timelog-col-start))
@@ -5556,6 +5564,8 @@ select {
 .time-log-editor-row {
   display: grid;
   grid-template-columns:
+    minmax(128px, var(--timelog-col-project))
+    minmax(144px, var(--timelog-col-activity))
     minmax(180px, var(--timelog-col-source))
     minmax(150px, var(--timelog-col-date))
     minmax(104px, var(--timelog-col-start))

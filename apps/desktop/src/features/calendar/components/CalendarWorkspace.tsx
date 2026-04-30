@@ -202,6 +202,7 @@ interface CalendarWorkspaceProps {
   timeLogs: import("@notesmith/domain").TimeLogRecord[];
   calendarItems: CalendarItemRecord[];
   settings: LocalAppSettings;
+  openRevision?: number;
   structureOptions: StructureOptions;
   linkedSessionStateByActivity: Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>;
   linkedSessionStateByTodo: Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>;
@@ -243,6 +244,7 @@ export const CalendarWorkspace = ({
   timeLogs,
   calendarItems,
   settings,
+  openRevision = 0,
   structureOptions,
   linkedSessionStateByActivity,
   linkedSessionStateByTodo,
@@ -278,7 +280,7 @@ export const CalendarWorkspace = ({
   const [slotHeight, setSlotHeight] = useState<typeof HEIGHTS[number]>(settings.calendarSlotHeight);
   const [isFullScreen] = useState(initialIsFullScreen);
   const [detailsPaneWidth, setDetailsPaneWidth] = useState(settings.calendarDetailsPaneWidth);
-  const [scrollTop, setScrollTop] = useState(settings.calendarScrollTop ?? 0);
+  const [scrollTop, setScrollTop] = useState(initialCalendarScrollTop(new Date(), settings.calendarSlotHeight));
   const [scrollLeft, setScrollLeft] = useState(settings.calendarScrollLeft ?? 0);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
@@ -527,6 +529,15 @@ export const CalendarWorkspace = ({
     });
     return () => window.cancelAnimationFrame(firstFrame);
   }, [dayColumnWidth]);
+
+  useEffect(() => {
+    if (!openRevision) return;
+    const currentDate = new Date();
+    const frameId = window.requestAnimationFrame(() => {
+      scrollToCurrentTime(currentDate);
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [openRevision, slotHeight]);
 
   useEffect(() => {
     const scroller = scrollRef.current;

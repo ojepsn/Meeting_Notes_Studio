@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import type { ActivityRecord, ArchivedTaskRecord, TimeLogRecord, TimeReportPreset, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
+import type { StructureOptions } from "../../../lib/structure/options";
 import { saveTextFile } from "../../../lib/storage/desktopStorage";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
 
@@ -10,6 +11,7 @@ type TimeWorkspaceProps = {
   archivedTasks: ArchivedTaskRecord[];
   activities: ActivityRecord[];
   timeLogs: TimeLogRecord[];
+  structureOptions: StructureOptions;
   requestedDomain?: string | null;
   requestedProject?: string | null;
   reportPresets: TimeReportPreset[];
@@ -24,24 +26,37 @@ type TimeWorkspaceProps = {
   onStopWorkBaseline: () => void;
   onOpenTodoDetail: (todoId: string) => void;
   onOpenActivityDetail: (activityId: string) => void;
+  onSaveTodo: (todo: TodoRecord) => void;
+  onSaveActivity: (activity: ActivityRecord) => void;
   onSaveReportPreset: (preset: Omit<TimeReportPreset, "id">) => void;
   onDeleteReportPreset: (presetId: string) => void;
 };
 
-type EditableTimeLogRecord = TimeLogRecord & { title: string; contextLabel: string; isArchivedTarget?: boolean };
+type EditableTimeLogRecord = TimeLogRecord & {
+  title: string;
+  contextLabel: string;
+  isArchivedTarget?: boolean;
+  resolvedDomain: string;
+  resolvedProject: string;
+  resolvedActivity: string;
+};
 type TimeLogEditDraft = {
   date: string;
   startTime: string;
   endTime: string;
   notes: string;
+  project: string;
+  activity: string;
 };
 type DatePreset = "today" | "this-week" | "this-month" | "custom";
-type TimeLogColumnKey = "source" | "date" | "start" | "stop" | "duration" | "comment" | "actions";
+type TimeLogColumnKey = "project" | "activity" | "source" | "date" | "start" | "stop" | "duration" | "comment" | "actions";
 type TimeLogColumnWidths = Record<TimeLogColumnKey, number>;
 const TIMelog_RECENT_DAYS = 7;
 const TIMELOG_OLDER_BATCH_SIZE = 30;
 
 const defaultTimeLogColumnWidths: TimeLogColumnWidths = {
+  project: 160,
+  activity: 180,
   source: 300,
   date: 150,
   start: 110,
@@ -52,6 +67,8 @@ const defaultTimeLogColumnWidths: TimeLogColumnWidths = {
 };
 
 const minTimeLogColumnWidths: TimeLogColumnWidths = {
+  project: 128,
+  activity: 144,
   source: 180,
   date: 150,
   start: 104,
@@ -125,6 +142,7 @@ export const TimeWorkspace = ({
   archivedTasks,
   activities,
   timeLogs,
+  structureOptions,
   requestedDomain,
   requestedProject,
   reportPresets,
@@ -139,6 +157,8 @@ export const TimeWorkspace = ({
   onStopWorkBaseline,
   onOpenTodoDetail,
   onOpenActivityDetail,
+  onSaveTodo,
+  onSaveActivity,
   onSaveReportPreset,
   onDeleteReportPreset,
 }: TimeWorkspaceProps) => {
@@ -193,6 +213,9 @@ export const TimeWorkspace = ({
                 archivedTask?.domain ||
                 "Archived task",
               isArchivedTarget: !todo && Boolean(archivedTask),
+              resolvedDomain: linkedActivity?.domain || todo?.domain || archivedTask?.domain || "",
+              resolvedProject: linkedActivity?.project || todo?.project || archivedTask?.project || "",
+              resolvedActivity: linkedActivity?.description || todo?.activity || archivedTask?.activity || "",
             };
           }
           const activity = activityLookup[log.targetId];
@@ -200,6 +223,9 @@ export const TimeWorkspace = ({
             ...log,
             title: activity?.description || "Deleted activity",
             contextLabel: activity?.project || activity?.domain || (activity?.type === "meeting" ? "Meeting" : "Activity"),
+            resolvedDomain: activity?.domain || "",
+            resolvedProject: activity?.project || "",
+            resolvedActivity: activity?.activity || activity?.description || "",
           };
         })
         .sort((left, right) => {
@@ -560,6 +586,8 @@ export const TimeWorkspace = ({
   };
 
   const timeLogTableStyle = {
+    "--timelog-col-project": `${timeLogColumnWidths.project}px`,
+    "--timelog-col-activity": `${timeLogColumnWidths.activity}px`,
     "--timelog-col-source": `${timeLogColumnWidths.source}px`,
     "--timelog-col-date": `${timeLogColumnWidths.date}px`,
     "--timelog-col-start": `${timeLogColumnWidths.start}px`,
@@ -570,6 +598,8 @@ export const TimeWorkspace = ({
   } as CSSProperties;
 
   const timeLogColumns: { key: TimeLogColumnKey; label: string; resizable?: boolean; align?: "right" }[] = [
+    { key: "project", label: "Project", resizable: true },
+    { key: "activity", label: "Activity", resizable: true },
     { key: "source", label: "Source", resizable: true },
     { key: "date", label: "Date", resizable: true },
     { key: "start", label: "Start", resizable: true },
@@ -585,6 +615,8 @@ export const TimeWorkspace = ({
       startTime: log.startTime,
       endTime: log.endTime,
       notes: log.notes,
+      project: log.resolvedProject,
+      activity: log.resolvedActivity,
     };
 
   const updateTimeLogDraft = (log: EditableTimeLogRecord, updates: Partial<TimeLogEditDraft>) => {
@@ -611,15 +643,52 @@ export const TimeWorkspace = ({
     if (!draft) return;
     const nextDate = draft.date || log.date;
     const nextStartTime = draft.startTime || log.startTime;
-    const nextEndTime = draft.endTime || log.endTime;
+    const draftEndTime = draft.endTime || log.endTime;
+    const running = log.startTime === log.endTime;
+    const keepRunning =
+      running &&
+      draftEndTime === log.endTime &&
+      (nextDate !== log.date || nextStartTime !== log.startTime);
+    const nextEndTime = keepRunning ? nextStartTime : draftEndTime;
     const nextNotes = draft.notes;
+    const nextProject = draft.project.trim();
+    const nextActivity = draft.activity.trim();
     const changed =
       nextDate !== log.date ||
       nextStartTime !== log.startTime ||
       nextEndTime !== log.endTime ||
-      nextNotes !== log.notes;
+      nextNotes !== log.notes ||
+      nextProject !== log.resolvedProject ||
+      nextActivity !== log.resolvedActivity;
     clearTimeLogDraft(log.id);
     if (!changed) return;
+    if (!log.isArchivedTarget) {
+      if (log.targetType === "todo") {
+        const todo = todoLookup[log.targetId];
+        if (todo) {
+          const linkedActivity = todo.activityId ? activityLookup[todo.activityId] : null;
+          const keepLinkedActivity =
+            linkedActivity &&
+            nextActivity === linkedActivity.description &&
+            nextProject === linkedActivity.project;
+          onSaveTodo({
+            ...todo,
+            project: nextProject,
+            activity: nextActivity,
+            activityId: keepLinkedActivity ? todo.activityId : "",
+          });
+        }
+      } else {
+        const activity = activityLookup[log.targetId];
+        if (activity) {
+          onSaveActivity({
+            ...activity,
+            project: nextProject,
+            activity: nextActivity,
+          });
+        }
+      }
+    }
     onSaveTimeLog({
       ...log,
       date: nextDate,
@@ -854,6 +923,26 @@ export const TimeWorkspace = ({
                 const draft = getTimeLogDraft(log);
                 return (
                   <div key={log.id} className={`time-log-editor-row${running ? " time-log-editor-row-active" : ""}`}>
+                    <input
+                      list="timelog-project-options"
+                      value={draft.project}
+                      onChange={(event) => updateTimeLogDraft(log, { project: event.target.value })}
+                      onBlur={() => commitTimeLogDraft(log)}
+                      onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
+                      placeholder="Project"
+                      disabled={Boolean(log.isArchivedTarget)}
+                      aria-label="Timelog project"
+                    />
+                    <input
+                      list="timelog-activity-options"
+                      value={draft.activity}
+                      onChange={(event) => updateTimeLogDraft(log, { activity: event.target.value })}
+                      onBlur={() => commitTimeLogDraft(log)}
+                      onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
+                      placeholder="Activity"
+                      disabled={Boolean(log.isArchivedTarget)}
+                      aria-label="Timelog activity"
+                    />
                     <button
                       type="button"
                       className="time-log-source-button"
@@ -909,6 +998,16 @@ export const TimeWorkspace = ({
                   Scroll down to load older timelogs. Showing the most recent 7 days first.
                 </div>
               ) : null}
+              <datalist id="timelog-project-options">
+                {structureOptions.projects.map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
+              <datalist id="timelog-activity-options">
+                {structureOptions.activities.map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
             </div>
             </div>
           </div>

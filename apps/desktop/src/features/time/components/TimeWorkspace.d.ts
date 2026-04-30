@@ -1,9 +1,11 @@
 import type { ActivityRecord, ArchivedTaskRecord, TimeLogRecord, TimeReportPreset, TodoRecord } from "@notesmith/domain";
+import type { StructureOptions } from "../../../lib/structure/options";
 type TimeWorkspaceProps = {
     todos: TodoRecord[];
     archivedTasks: ArchivedTaskRecord[];
     activities: ActivityRecord[];
     timeLogs: TimeLogRecord[];
+    structureOptions: StructureOptions;
     requestedDomain?: string | null;
     requestedProject?: string | null;
     reportPresets: TimeReportPreset[];
@@ -18,6 +20,8 @@ type TimeWorkspaceProps = {
     onStopWorkBaseline: () => void;
     onOpenTodoDetail: (todoId: string) => void;
     onOpenActivityDetail: (activityId: string) => void;
+    onSaveTodo: (todo: TodoRecord) => void;
+    onSaveActivity: (activity: ActivityRecord) => void;
     onSaveReportPreset: (preset: Omit<TimeReportPreset, "id">) => void;
     onDeleteReportPreset: (presetId: string) => void;
 };
@@ -34,5 +38,5 @@ export declare const getPresetRange: (preset: Exclude<DatePreset, "custom">, now
 export declare const calculateDurationMinutes: (date: string, startTime: string, endTime: string) => number;
 export declare const buildExportFilename: (kind: "csv" | "md", now?: Date) => string;
 export declare const buildJsonExportFilename: (now?: Date) => string;
-export declare const TimeWorkspace: ({ todos, archivedTasks, activities, timeLogs, requestedDomain, requestedProject, reportPresets, isBaselineWorkEnabled, isBaselineWorkRunning, hasSpecificRunningTimeLog, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onStartWorkBaseline, onStopWorkBaseline, onOpenTodoDetail, onOpenActivityDetail, onSaveReportPreset, onDeleteReportPreset, }: TimeWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const TimeWorkspace: ({ todos, archivedTasks, activities, timeLogs, structureOptions, requestedDomain, requestedProject, reportPresets, isBaselineWorkEnabled, isBaselineWorkRunning, hasSpecificRunningTimeLog, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onStartWorkBaseline, onStopWorkBaseline, onOpenTodoDetail, onOpenActivityDetail, onSaveTodo, onSaveActivity, onSaveReportPreset, onDeleteReportPreset, }: TimeWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

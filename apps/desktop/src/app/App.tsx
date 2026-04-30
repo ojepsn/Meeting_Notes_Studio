@@ -319,6 +319,7 @@ export const App = () => {
   const [linkedDetailReturnWorkspace, setLinkedDetailReturnWorkspace] = useState<AppWorkspace | null>(null);
   const [linkedCalendarReturnItemId, setLinkedCalendarReturnItemId] = useState<string | null>(null);
   const [isCalendarWorkspaceFullScreen, setIsCalendarWorkspaceFullScreen] = useState(false);
+  const [calendarOpenRevision, setCalendarOpenRevision] = useState(0);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [statusNote, setStatusNote] = useState("Ready.");
@@ -450,6 +451,12 @@ export const App = () => {
       setIsCalendarWorkspaceFullScreen(false);
     }
   }, [activeWorkspace, isCalendarWorkspaceFullScreen]);
+
+  useEffect(() => {
+    if (activeWorkspace === "calendar") {
+      setCalendarOpenRevision((current) => current + 1);
+    }
+  }, [activeWorkspace]);
 
   useEffect(() => {
     if (activeWorkspace !== "calendar" || !snapshot) {
@@ -3363,7 +3370,9 @@ export const App = () => {
         <main
           className={`notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}${
             activeWorkspace === "notes" && isNotesSessionsOpen ? " notes-shell-with-sessions" : ""
-          }${activeWorkspace === "notes" ? " notes-shell-notes-mode" : ""}`}
+          }${activeWorkspace === "notes" ? " notes-shell-notes-mode" : ""}${
+            activeWorkspace === "time" ? " notes-shell-single-pane" : ""
+          }`}
         >
           <section className="workspace-canvas">
             {activeWorkspace !== "notes" && !(activeWorkspace === "calendar") ? (
@@ -3418,6 +3427,7 @@ export const App = () => {
                 timeLogs={snapshot.timelogs}
                 calendarItems={snapshot.calendarItems ?? []}
                 settings={snapshot.settings}
+                openRevision={calendarOpenRevision}
                 structureOptions={structureOptions}
                 linkedSessionStateByActivity={linkedSessionStateByActivity}
                 linkedSessionStateByTodo={linkedSessionStateByTodo}
@@ -3480,6 +3490,7 @@ export const App = () => {
                 archivedTasks={snapshot.archivedTasks}
                 activities={snapshot.activities}
                 timeLogs={snapshot.timelogs}
+                structureOptions={structureOptions}
                 requestedDomain={requestedTimeDomain}
                 requestedProject={requestedTimeProject}
                 reportPresets={snapshot.settings.timeReportPresets}
@@ -3494,6 +3505,8 @@ export const App = () => {
                 onStopWorkBaseline={() => void stopWorkBaseline()}
                 onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "time")}
                 onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "time")}
+                onSaveTodo={(todo) => void saveTodo(todo)}
+                onSaveActivity={(activity) => void saveActivity(activity)}
                 onSaveReportPreset={(preset) =>
                   void saveSettings({
                     ...snapshot.settings,

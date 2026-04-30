@@ -132,7 +132,7 @@ export const layoutCalendarItems = (items) => {
     });
     return result.sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.lane - right.lane);
 };
-export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, calendarItems, settings, structureOptions, linkedSessionStateByActivity, linkedSessionStateByTodo, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onCreateChecklist, onSaveChecklist, onDeleteChecklist, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onCreateLinkedTaskSession, onPreviewSessionOutput, onFullScreenChange, }) => {
+export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, calendarItems, settings, openRevision = 0, structureOptions, linkedSessionStateByActivity, linkedSessionStateByTodo, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onCreateChecklist, onSaveChecklist, onDeleteChecklist, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onCreateLinkedTaskSession, onPreviewSessionOutput, onFullScreenChange, }) => {
     const today = getLocalDateString();
     const initialIsFullScreen = true;
     const [anchorDate, setAnchorDate] = useState(today);
@@ -140,7 +140,7 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
     const [slotHeight, setSlotHeight] = useState(settings.calendarSlotHeight);
     const [isFullScreen] = useState(initialIsFullScreen);
     const [detailsPaneWidth, setDetailsPaneWidth] = useState(settings.calendarDetailsPaneWidth);
-    const [scrollTop, setScrollTop] = useState(settings.calendarScrollTop ?? 0);
+    const [scrollTop, setScrollTop] = useState(initialCalendarScrollTop(new Date(), settings.calendarSlotHeight));
     const [scrollLeft, setScrollLeft] = useState(settings.calendarScrollLeft ?? 0);
     const [selectedItemId, setSelectedItemId] = useState(null);
     const [selectedItemIds, setSelectedItemIds] = useState([]);
@@ -362,6 +362,15 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
         });
         return () => window.cancelAnimationFrame(firstFrame);
     }, [dayColumnWidth]);
+    useEffect(() => {
+        if (!openRevision)
+            return;
+        const currentDate = new Date();
+        const frameId = window.requestAnimationFrame(() => {
+            scrollToCurrentTime(currentDate);
+        });
+        return () => window.cancelAnimationFrame(frameId);
+    }, [openRevision, slotHeight]);
     useEffect(() => {
         const scroller = scrollRef.current;
         if (!scroller)
