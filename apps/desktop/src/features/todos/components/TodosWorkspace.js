@@ -49,6 +49,7 @@ const emptyColumnFilters = {
     domain: "",
     project: "",
     activity: "",
+    doOn: "",
     dueDate: "",
     details: "",
 };
@@ -57,6 +58,7 @@ const defaultColumnWidths = {
     domain: 140,
     project: 140,
     activity: 140,
+    doOn: 130,
     dueDate: 130,
     details: 220,
 };
@@ -65,6 +67,7 @@ const minColumnWidths = {
     domain: 100,
     project: 100,
     activity: 100,
+    doOn: 110,
     dueDate: 110,
     details: 140,
 };
@@ -167,8 +170,10 @@ export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklis
                 return todo.project;
             case "activity":
                 return activityLookup[todo.activityId]?.description || todo.activity;
+            case "doOn":
+                return todo.doOn;
             case "dueDate":
-                return todo.dueDate || todo.doOn;
+                return todo.dueDate;
             case "details":
             default:
                 return stripHtmlToText(todo.detailsHtml || todo.comments || "");
@@ -200,8 +205,10 @@ export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklis
                     return normalizeValue(todo.project);
                 case "activity":
                     return normalizeValue(activityLookup[todo.activityId]?.description || todo.activity);
+                case "doOn":
+                    return todo.doOn || "9999-99-99";
                 case "dueDate":
-                    return todo.dueDate || todo.doOn || "9999-99-99";
+                    return todo.dueDate || "9999-99-99";
                 case "details":
                 default:
                     return normalizeValue(stripHtmlToText(todo.detailsHtml || todo.comments || ""));
@@ -489,6 +496,7 @@ export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklis
         "--todo-col-domain": `${columnWidths.domain}px`,
         "--todo-col-project": `${columnWidths.project}px`,
         "--todo-col-activity": `${columnWidths.activity}px`,
+        "--todo-col-doOn": `${columnWidths.doOn}px`,
         "--todo-col-dueDate": `${columnWidths.dueDate}px`,
         "--todo-col-details": `${columnWidths.details}px`,
     };
@@ -497,6 +505,7 @@ export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklis
         { key: "domain", label: "Domain", placeholder: "Filter domain" },
         { key: "project", label: "Project", placeholder: "Filter project" },
         { key: "activity", label: "Activity", placeholder: "Filter activity" },
+        { key: "doOn", label: "Do on", placeholder: "Filter date" },
         { key: "dueDate", label: "Due date", placeholder: "Filter date" },
         { key: "details", label: "Details", placeholder: "Filter details" },
     ];
@@ -524,7 +533,8 @@ export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklis
                                                     : "";
                                                 const activityLabel = activityLookup[todo.activityId]?.description || todo.activity || "";
                                                 const detailsText = stripHtmlToText(todo.detailsHtml || todo.comments || "");
-                                                const dueDateLabel = todo.dueDate || todo.doOn || "";
+                                                const doOnLabel = todo.doOn || "";
+                                                const dueDateLabel = todo.dueDate || "";
                                                 return (_jsxs("tr", { className: `${selectedTodoId === todo.id ? "todos-dense-row-selected" : ""}${todo.isDone ? " todos-dense-row-done" : ""}`, onClick: () => setSelectedTodoId(todo.id), onDoubleClick: () => openTodoDetail(todo.id), tabIndex: 0, onKeyDown: (event) => {
                                                         if (event.key === "Enter") {
                                                             event.preventDefault();
@@ -533,7 +543,7 @@ export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklis
                                                     }, children: [_jsx("td", { children: _jsxs("div", { className: "todos-dense-title-cell", children: [_jsx("input", { type: "checkbox", "aria-label": `Mark ${todo.description} ${todo.isDone ? "open" : "done"}`, checked: todo.isDone, onChange: (event) => {
                                                                             event.stopPropagation();
                                                                             onToggle({ ...todo, isDone: !todo.isDone });
-                                                                        } }), _jsxs("div", { className: "todos-dense-title-copy", children: [_jsx("input", { className: "todos-inline-title-input", "aria-label": "Task title", value: todo.description, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { description: event.target.value }), placeholder: "Untitled task" }), _jsx("span", { children: running ? `Running • ${elapsedLabel}` : totalMinutes ? formatTrackedMinutes(totalMinutes) : "No time logged" })] })] }) }), _jsx("td", { children: _jsx("input", { className: "todos-inline-cell-input", "aria-label": "Task domain", value: todo.domain, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { domain: event.target.value }), placeholder: "Domain" }) }), _jsx("td", { children: _jsx("input", { className: "todos-inline-cell-input", "aria-label": "Task project", value: todo.project, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { project: event.target.value }), placeholder: "Project" }) }), _jsx("td", { children: _jsx("input", { className: "todos-inline-cell-input", "aria-label": "Task activity", value: activityLabel, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { activity: event.target.value, activityId: "" }), placeholder: "Activity" }) }), _jsx("td", { children: _jsx(DateInput, { id: `todo-dense-due-${todo.id}`, className: "todos-inline-date-input", "aria-label": "Task due date", value: dueDateLabel, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { dueDate: event.target.value }) }) }), _jsx("td", { children: _jsx("div", { className: "todos-dense-details-cell", children: _jsx("input", { className: "todos-inline-cell-input", "aria-label": "Task details", value: detailsText, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { detailsHtml: textToDetailsHtml(event.target.value) }), placeholder: "No details" }) }) }), _jsx("td", { children: _jsxs("div", { className: "todos-dense-actions-cell", children: [_jsx("button", { className: `small-button${running ? " primary-button" : ""}`, type: "button", onClick: (event) => {
+                                                                        } }), _jsxs("div", { className: "todos-dense-title-copy", children: [_jsx("input", { className: "todos-inline-title-input", "aria-label": "Task title", value: todo.description, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { description: event.target.value }), placeholder: "Untitled task" }), _jsx("span", { children: running ? `Running • ${elapsedLabel}` : totalMinutes ? formatTrackedMinutes(totalMinutes) : "No time logged" })] })] }) }), _jsx("td", { children: _jsx("input", { className: "todos-inline-cell-input", "aria-label": "Task domain", value: todo.domain, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { domain: event.target.value }), placeholder: "Domain" }) }), _jsx("td", { children: _jsx("input", { className: "todos-inline-cell-input", "aria-label": "Task project", value: todo.project, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { project: event.target.value }), placeholder: "Project" }) }), _jsx("td", { children: _jsx("input", { className: "todos-inline-cell-input", "aria-label": "Task activity", value: activityLabel, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { activity: event.target.value, activityId: "" }), placeholder: "Activity" }) }), _jsx("td", { children: _jsx(DateInput, { id: `todo-dense-do-on-${todo.id}`, className: "todos-inline-date-input", "aria-label": "Task do on date", value: doOnLabel, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { doOn: event.target.value }) }) }), _jsx("td", { children: _jsx(DateInput, { id: `todo-dense-due-${todo.id}`, className: "todos-inline-date-input", "aria-label": "Task due date", value: dueDateLabel, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { dueDate: event.target.value }) }) }), _jsx("td", { children: _jsx("div", { className: "todos-dense-details-cell", children: _jsx("input", { className: "todos-inline-cell-input", "aria-label": "Task details", value: detailsText, onClick: stopTableEditPropagation, onDoubleClick: stopTableEditPropagation, onKeyDown: stopTableEditPropagation, onChange: (event) => saveTodoPatch(todo, { detailsHtml: textToDetailsHtml(event.target.value) }), placeholder: "No details" }) }) }), _jsx("td", { children: _jsxs("div", { className: "todos-dense-actions-cell", children: [_jsx("button", { className: `small-button${running ? " primary-button" : ""}`, type: "button", onClick: (event) => {
                                                                             event.stopPropagation();
                                                                             if (running) {
                                                                                 onStopTracking("todo", todo.id);

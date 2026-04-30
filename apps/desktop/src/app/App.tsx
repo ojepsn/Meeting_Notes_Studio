@@ -184,6 +184,8 @@ const DAILY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.filter((item) => item.id === "now"
 const SECONDARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.filter(
   (item) => !["calendar", "notes", "now", "todos"].includes(item.id),
 );
+const SINGLE_PANE_WORKSPACES: AppWorkspace[] = ["todos", "time", "now", "analytics", "structure"];
+const HIDE_SHARED_INSPECTOR_WORKSPACES: AppWorkspace[] = ["notes", "todos", "time", "analytics", "now", "structure"];
 
 const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
   recordAIRequestHistory(event);
@@ -3397,11 +3399,11 @@ export const App = () => {
           className={`notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}${
             activeWorkspace === "notes" && isNotesSessionsOpen ? " notes-shell-with-sessions" : ""
           }${activeWorkspace === "notes" ? " notes-shell-notes-mode" : ""}${
-            activeWorkspace === "time" || activeWorkspace === "todos" || activeWorkspace === "now" ? " notes-shell-single-pane" : ""
+            SINGLE_PANE_WORKSPACES.includes(activeWorkspace) ? " notes-shell-single-pane" : ""
           }`}
         >
           <section className={`workspace-canvas${activeWorkspace === "calendar" ? " workspace-canvas-calendar" : ""}`}>
-            {activeWorkspace !== "notes" && !(activeWorkspace === "calendar") ? (
+            {activeWorkspace !== "notes" && !(activeWorkspace === "calendar" || activeWorkspace === "now") ? (
             <div className="workspace-header card">
               <div className="card-header">
                 <div>
@@ -3451,6 +3453,7 @@ export const App = () => {
                 activities={snapshot.activities}
                 timeLogs={snapshot.timelogs}
                 calendarItems={snapshot.calendarItems ?? []}
+                settings={snapshot.settings}
                 onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
                 onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "now")}
@@ -3463,6 +3466,7 @@ export const App = () => {
                     status: `Opened ${project} in Time.`,
                   })
                 }
+                onSaveSettings={(nextSettings) => void saveSettings(nextSettings)}
               />
             ) : activeWorkspace === "calendar" ? (
               <CalendarWorkspace
@@ -3824,7 +3828,7 @@ export const App = () => {
             )}
           </section>
 
-        {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && activeWorkspace !== "notes" && activeWorkspace !== "todos" && activeWorkspace !== "time" && activeWorkspace !== "analytics" && activeWorkspace !== "now" ? (
+        {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && !HIDE_SHARED_INSPECTOR_WORKSPACES.includes(activeWorkspace) ? (
           <aside className="workspace-inspector stack">
             <div className="sidebar-card">
               <div>

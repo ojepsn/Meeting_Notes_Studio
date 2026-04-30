@@ -741,6 +741,35 @@ const syncCalendarItemForMeeting = (
   };
 };
 
+const syncCalendarItemForTodo = (
+  snapshot: DesktopAppSnapshot,
+  todo: DesktopAppSnapshot["todos"][number],
+) => {
+  const matchingItem = snapshot.calendarItems.find(
+    (item) => item.targetType === "todo" && item.targetId === todo.id,
+  );
+  const nextDate = todo.doOn || matchingItem?.date || "";
+  if (!nextDate) {
+    return snapshot;
+  }
+
+  const nextItem = {
+    id: matchingItem?.id ?? crypto.randomUUID(),
+    targetType: "todo" as const,
+    targetId: todo.id,
+    date: nextDate,
+    startSlot: matchingItem?.startSlot ?? findNearestAvailableTodoSlot(snapshot.calendarItems, nextDate),
+    durationSlots: 1,
+    createdAt: matchingItem?.createdAt ?? new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  return {
+    ...snapshot,
+    calendarItems: upsertCalendarItem(snapshot.calendarItems, nextItem),
+  };
+};
+
 const buildChecklistRecord = (
   ownerType: ChecklistRecord["ownerType"],
   ownerId: string,
@@ -1341,7 +1370,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       ...snapshot,
       todos: upsertTodo(snapshot.todos, nextTodo),
     };
-    const syncedSnapshot = syncLinkedSessionForTodo(nextSnapshot, nextTodo);
+    const calendarSyncedSnapshot = syncCalendarItemForTodo(nextSnapshot, nextTodo);
+    const syncedSnapshot = syncLinkedSessionForTodo(calendarSyncedSnapshot, nextTodo);
     set({ snapshot: syncedSnapshot });
     scheduleSnapshotPersist(get().repository, syncedSnapshot, set);
   },

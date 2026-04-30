@@ -1613,7 +1613,7 @@ export const CalendarWorkspace = ({
               </div>
               {editorDraft.isMeeting ? (
                 <div className="field">
-                  <label htmlFor="calendar-edit-date">Date</label>
+                  <label htmlFor="calendar-edit-date">{editorDraft.isMeeting ? "Date" : "Do on"}</label>
                   <DateInput
                     id="calendar-edit-date"
                     value={editorDraft.doOn}
@@ -1625,7 +1625,7 @@ export const CalendarWorkspace = ({
                   <summary>Schedule details</summary>
                   <div className="workspace-disclosure-body">
                     <div className="field">
-                      <label htmlFor="calendar-edit-date">Date</label>
+                      <label htmlFor="calendar-edit-date">{editorDraft.isMeeting ? "Date" : "Do on"}</label>
                       <DateInput
                         id="calendar-edit-date"
                         value={editorDraft.doOn}
