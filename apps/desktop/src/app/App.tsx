@@ -9,6 +9,7 @@ import { TodosRailCard } from "../features/todos/components/TodosRailCard";
 import { TodosWorkspace } from "../features/todos/components/TodosWorkspace";
 import { TimeWorkspace } from "../features/time/components/TimeWorkspace";
 import { AnalyticsWorkspace } from "../features/analytics/components/AnalyticsWorkspace";
+import { NowWorkspace } from "../features/now/components/NowWorkspace";
 import { StructureWorkspace } from "../features/structure/components/StructureWorkspace";
 import { AssistantWorkspace } from "../features/assistant/components/AssistantWorkspace";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
@@ -83,7 +84,7 @@ import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "
 import { parseTokenList } from "../components/peoplePickerUtils";
 import { formatStockholmDate as getStockholmDateKey } from "../lib/time/stockholm";
 
-type AppWorkspace = "notes" | "todos" | "calendar" | "time" | "analytics" | "structure" | "assistant" | "files";
+type AppWorkspace = "notes" | "now" | "todos" | "calendar" | "time" | "analytics" | "structure" | "assistant" | "files";
 type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | "instructions" | null;
 type CommandAction = {
   id: string;
@@ -169,6 +170,7 @@ const isStructuredHeading = (line: string) => {
 const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: string; available: boolean }> = [
   { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: true },
   { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
+  { id: "now", label: "Now", description: "Quick access to recent work, meetings, and active context", available: true },
   { id: "todos", label: "Tasks", description: "Focused follow-up management", available: true },
   { id: "time", label: "Time", description: "Active timers, dense logs, and reporting", available: true },
   { id: "analytics", label: "Analytics", description: "Summaries and trends across your tracked work", available: true },
@@ -177,8 +179,11 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
   { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
 ];
 
-const PRIMARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(0, 2);
-const SECONDARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.slice(3);
+const PRIMARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.filter((item) => item.id === "calendar" || item.id === "notes");
+const DAILY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.filter((item) => item.id === "now");
+const SECONDARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.filter(
+  (item) => !["calendar", "notes", "now", "todos"].includes(item.id),
+);
 
 const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
   recordAIRequestHistory(event);
@@ -2518,7 +2523,7 @@ export const App = () => {
       setLinkedCalendarReturnItemId(null);
     }
     setActiveWorkspace(nextWorkspace);
-    setStatusNote(`Returned to ${nextWorkspace === "time" ? "Time" : nextWorkspace === "calendar" ? "Calendar" : "the previous workspace"}.`);
+    setStatusNote(`Returned to ${nextWorkspace === "time" ? "Time" : nextWorkspace === "calendar" ? "Calendar" : nextWorkspace === "now" ? "Now" : "the previous workspace"}.`);
   };
   const openCalendarOutputPreview = (sessionId: string) => {
     setCalendarOutputPreviewSessionId(sessionId);
@@ -2601,6 +2606,13 @@ export const App = () => {
         description: "Schedule tasks and meetings across time.",
         keywords: ["calendar schedule plan meeting"],
         action: () => setActiveWorkspace("calendar"),
+      },
+      {
+        id: "now",
+        label: "Open Now",
+        description: "Jump into recent tasks, upcoming meetings, and common work context.",
+        keywords: ["now quick access recent tasks launchpad meetings"],
+        action: () => setActiveWorkspace("now"),
       },
       {
         id: "time",
@@ -3240,6 +3252,19 @@ export const App = () => {
               <small>{item.available ? item.description : "Coming later"}</small>
             </button>
           ))}
+          {DAILY_WORKSPACE_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="workspace-nav-button"
+              data-active={activeWorkspace === item.id}
+              data-available={item.available}
+              onClick={() => handleWorkspaceSelection(item.id, item.available)}
+            >
+              <span>{item.label}</span>
+              <small>{item.available ? item.description : "Coming later"}</small>
+            </button>
+          ))}
           <TodosRailCard active={activeWorkspace === "todos"} onOpen={() => setActiveWorkspace("todos")} />
           {SECONDARY_WORKSPACE_ITEMS.map((item) => (
             <button
@@ -3372,10 +3397,10 @@ export const App = () => {
           className={`notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}${
             activeWorkspace === "notes" && isNotesSessionsOpen ? " notes-shell-with-sessions" : ""
           }${activeWorkspace === "notes" ? " notes-shell-notes-mode" : ""}${
-            activeWorkspace === "time" ? " notes-shell-single-pane" : ""
+            activeWorkspace === "time" || activeWorkspace === "todos" || activeWorkspace === "now" ? " notes-shell-single-pane" : ""
           }`}
         >
-          <section className="workspace-canvas">
+          <section className={`workspace-canvas${activeWorkspace === "calendar" ? " workspace-canvas-calendar" : ""}`}>
             {activeWorkspace !== "notes" && !(activeWorkspace === "calendar") ? (
             <div className="workspace-header card">
               <div className="card-header">
@@ -3419,6 +3444,25 @@ export const App = () => {
                 onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
                 onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "todos")}
+              />
+            ) : activeWorkspace === "now" ? (
+              <NowWorkspace
+                todos={snapshot.todos}
+                activities={snapshot.activities}
+                timeLogs={snapshot.timelogs}
+                calendarItems={snapshot.calendarItems ?? []}
+                onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
+                onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
+                onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "now")}
+                onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "now")}
+                onOpenProject={(project) =>
+                  openLinkedDestination({
+                    workspace: "time",
+                    timeProject: project,
+                    returnWorkspace: "now",
+                    status: `Opened ${project} in Time.`,
+                  })
+                }
               />
             ) : activeWorkspace === "calendar" ? (
               <CalendarWorkspace
@@ -3648,7 +3692,7 @@ export const App = () => {
                 {linkedDetailReturnWorkspace ? (
                   <div className="notes-pwa-toolbar">
                     <button className="shell-button" type="button" onClick={returnFromLinkedDetail}>
-                      Back to {linkedDetailReturnWorkspace === "calendar" ? "Calendar" : linkedDetailReturnWorkspace === "time" ? "Time" : linkedDetailReturnWorkspace === "structure" ? "Structure" : "previous workspace"}
+                      Back to {linkedDetailReturnWorkspace === "calendar" ? "Calendar" : linkedDetailReturnWorkspace === "time" ? "Time" : linkedDetailReturnWorkspace === "now" ? "Now" : linkedDetailReturnWorkspace === "structure" ? "Structure" : "previous workspace"}
                     </button>
                     {activeLinkedActivity ? (
                       <button className="shell-button" type="button" onClick={() => openActivityFromLink(activeLinkedActivity.id, "notes")}>
@@ -3780,7 +3824,7 @@ export const App = () => {
             )}
           </section>
 
-        {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && activeWorkspace !== "notes" && activeWorkspace !== "todos" && activeWorkspace !== "time" && activeWorkspace !== "analytics" ? (
+        {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && activeWorkspace !== "notes" && activeWorkspace !== "todos" && activeWorkspace !== "time" && activeWorkspace !== "analytics" && activeWorkspace !== "now" ? (
           <aside className="workspace-inspector stack">
             <div className="sidebar-card">
               <div>
