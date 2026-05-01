@@ -4383,6 +4383,29 @@ select {
   opacity: 0.8;
 }
 
+.calendar-item-structure-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.12rem;
+  width: 100%;
+}
+
+.calendar-item-structure-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.08rem 0.28rem;
+  border: 1px solid color-mix(in srgb, var(--app-accent-border) 72%, transparent 28%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-surface) 84%, var(--app-accent-soft) 16%);
+  color: var(--app-text);
+  font-size: 0.58rem;
+  line-height: 1.1;
+}
+
+.calendar-item-structure-input::placeholder {
+  color: var(--app-muted);
+}
+
 .calendar-item-launcher-row {
   display: flex;
   flex-wrap: wrap;
@@ -4730,6 +4753,15 @@ select {
   margin-top: 0;
 }
 
+.calendar-item-block-short-meeting .calendar-item-structure-row {
+  gap: 0.08rem;
+}
+
+.calendar-item-block-short-meeting .calendar-item-structure-input {
+  padding: 0.04rem 0.2rem;
+  font-size: 0.48rem;
+}
+
 .calendar-item-block-micro-meeting {
   padding: 0.02rem 0.12rem;
   gap: 0;
@@ -4771,6 +4803,16 @@ select {
   font-size: 0.28rem;
   font-weight: 400;
   line-height: 0.78;
+}
+
+.calendar-item-block-micro-meeting .calendar-item-structure-row {
+  gap: 0.04rem;
+}
+
+.calendar-item-block-micro-meeting .calendar-item-structure-input {
+  padding: 0.01rem 0.1rem;
+  font-size: 0.26rem;
+  line-height: 0.9;
 }
 
 .calendar-item-block-meeting::before {

@@ -925,11 +925,13 @@ export const CalendarWorkspace = ({
     if (draft.targetType === "todo") {
       const todo = todos.find((entry) => entry.id === draft.targetId);
       if (!todo) return;
-      onSaveTodo({ ...todo, description: draft.title.trim() || todo.description, activityId: draft.activityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone, isPriority: draft.isPriority });
+      const nextDescription = draft.title.trim().length ? draft.title : todo.description;
+      onSaveTodo({ ...todo, description: nextDescription, activityId: draft.activityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone, isPriority: draft.isPriority });
     } else {
       const activity = activities.find((entry) => entry.id === draft.targetId);
       if (!activity) return;
-      onSaveActivity({ ...activity, description: draft.title.trim() || activity.description, parentActivityId: draft.parentActivityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone, startTime: draft.startTime, endTime: draft.endTime });
+      const nextDescription = draft.title.trim().length ? draft.title : activity.description;
+      onSaveActivity({ ...activity, description: nextDescription, parentActivityId: draft.parentActivityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone, startTime: draft.startTime, endTime: draft.endTime });
     }
     onUpdateCalendarItem(draft.itemId, { date: draft.doOn, startSlot, durationSlots });
   };
@@ -937,6 +939,55 @@ export const CalendarWorkspace = ({
   const updateEditorDraft = (draft: EditorDraft) => {
     setEditorDraft(draft);
     persistEditorDraft(draft);
+  };
+
+  const saveMeetingStructure = (
+    activityId: string,
+    updates: Pick<ActivityRecord, "domain" | "project" | "activity">,
+  ) => {
+    const meeting = activityLookup[activityId];
+    if (!meeting) return;
+    onSaveActivity({ ...meeting, ...updates });
+    setEditorDraft((current) =>
+      current?.targetType === "activity" && current.targetId === activityId
+        ? { ...current, ...updates }
+        : current,
+    );
+  };
+
+  const handleMeetingCardDomainChange = (activityId: string, domain: string) => {
+    const meeting = activityLookup[activityId];
+    if (!meeting) return;
+    const nextProjects = getProjectsForDomain(structureOptions, domain);
+    const nextProject = nextProjects.includes(meeting.project) ? meeting.project : "";
+    const nextActivities = getActivitiesForSelection(structureOptions, domain, nextProject);
+    const nextActivity = nextActivities.includes(meeting.activity) ? meeting.activity : "";
+    saveMeetingStructure(activityId, { domain, project: nextProject, activity: nextActivity });
+  };
+
+  const handleMeetingCardProjectChange = (activityId: string, project: string) => {
+    const meeting = activityLookup[activityId];
+    if (!meeting) return;
+    const nextActivities = getActivitiesForSelection(structureOptions, meeting.domain, project);
+    const nextActivity = nextActivities.includes(meeting.activity) ? meeting.activity : "";
+    saveMeetingStructure(activityId, { domain: meeting.domain, project, activity: nextActivity });
+  };
+
+  const handleMeetingCardActivityChange = (activityId: string, activity: string) => {
+    const meeting = activityLookup[activityId];
+    if (!meeting) return;
+    saveMeetingStructure(activityId, { domain: meeting.domain, project: meeting.project, activity });
+  };
+
+  const handleMeetingCardTitleChange = (activityId: string, description: string) => {
+    const meeting = activityLookup[activityId];
+    if (!meeting) return;
+    onSaveActivity({ ...meeting, description });
+    setEditorDraft((current) =>
+      current?.targetType === "activity" && current.targetId === activityId
+        ? { ...current, title: description }
+        : current,
+    );
   };
 
   const saveChecklistItems = (checklist: ChecklistRecord, items: ChecklistRecord["items"]) => {
@@ -1265,6 +1316,9 @@ export const CalendarWorkspace = ({
                     const isSelected = selectedItemIds.includes(item.id) || selectedItemId === item.id;
                     const isPastCalendarItem =
                       slotToDateTime(item.date, startSlot + Math.max(1, durationSlots)) < now;
+                    const meetingRecord = item.isMeeting && item.targetType === "activity" ? activityLookup[item.targetId] : null;
+                    const meetingProjectOptions = meetingRecord ? getProjectsForDomain(structureOptions, meetingRecord.domain) : [];
+                    const meetingActivityOptions = meetingRecord ? getActivitiesForSelection(structureOptions, meetingRecord.domain, meetingRecord.project) : [];
                     const sizeClass = [
                       visualHeight <= 22 ? "calendar-item-block-tiny" : visualHeight <= 54 ? "calendar-item-block-compact" : "",
                       item.targetType === "todo" && durationSlots <= 1 ? "calendar-item-block-single-row-todo" : "",
@@ -1276,7 +1330,7 @@ export const CalendarWorkspace = ({
                     const isSingleRowTodo = item.targetType === "todo" && durationSlots <= 1;
                     return <div key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${item.targetType === "todo" && item.isPriority ? " calendar-item-block-priority-todo" : ""}${item.targetType === "todo" && item.isDone ? " calendar-item-block-completed-todo" : ""}${isPastCalendarItem ? " calendar-item-block-past" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${inlineTodoEditForItem ? " calendar-item-block-inline-editing" : ""}${sizeClass}`} role="button" tabIndex={0} style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
                       const target = event.target as HTMLElement;
-                      if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle") || target.closest(".calendar-item-title-input")) return;
+                      if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle") || target.closest(".calendar-item-title-input") || target.closest(".calendar-item-structure-input")) return;
                       event.preventDefault();
                       pointerDragCandidateRef.current = { itemId: item.id, startX: event.clientX, startY: event.clientY };
                       draggedGroupRef.current = { anchorId: item.id, itemIds: itemIdsForDrag(item.id) };
@@ -1388,13 +1442,67 @@ export const CalendarWorkspace = ({
                             }
                           }}
                         />
+                      ) : item.isMeeting && isSelected && meetingRecord ? (
+                        <input
+                          className="calendar-item-title calendar-item-title-input"
+                          value={meetingRecord.description}
+                          placeholder="Meeting title"
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={(event) => handleMeetingCardTitleChange(item.targetId, event.target.value)}
+                        />
                       ) : (
                         <strong className="calendar-item-title">{item.isMeeting ? `${slotToTime(startSlot)} ${item.title}` : item.title}</strong>
                       )) : null}
                       {!isSingleRowTodo ? (
                         <>
                           <span className="calendar-item-meta">{item.isMeeting ? durationLabel(durationSlots) : item.label}{runningLog ? ` • Running ${runningLabel}` : ""}</span>
-                          {linkedSessionState?.sessionId ? (
+                          {item.isMeeting && isSelected && meetingRecord ? (
+                            <div className="calendar-item-structure-row">
+                              <input
+                                className="calendar-item-structure-input"
+                                value={meetingRecord.domain}
+                                list={`calendar-meeting-domain-options-${item.id}`}
+                                placeholder="Domain"
+                                onMouseDown={(event) => event.stopPropagation()}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => handleMeetingCardDomainChange(item.targetId, event.target.value)}
+                              />
+                              <datalist id={`calendar-meeting-domain-options-${item.id}`}>
+                                {structureOptions.domains.map((entry) => (
+                                  <option key={entry} value={entry} />
+                                ))}
+                              </datalist>
+                              <input
+                                className="calendar-item-structure-input"
+                                value={meetingRecord.project}
+                                list={`calendar-meeting-project-options-${item.id}`}
+                                placeholder="Project"
+                                onMouseDown={(event) => event.stopPropagation()}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => handleMeetingCardProjectChange(item.targetId, event.target.value)}
+                              />
+                              <datalist id={`calendar-meeting-project-options-${item.id}`}>
+                                {meetingProjectOptions.map((entry) => (
+                                  <option key={entry} value={entry} />
+                                ))}
+                              </datalist>
+                              <input
+                                className="calendar-item-structure-input"
+                                value={meetingRecord.activity}
+                                list={`calendar-meeting-activity-options-${item.id}`}
+                                placeholder="Activity"
+                                onMouseDown={(event) => event.stopPropagation()}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => handleMeetingCardActivityChange(item.targetId, event.target.value)}
+                              />
+                              <datalist id={`calendar-meeting-activity-options-${item.id}`}>
+                                {meetingActivityOptions.map((entry) => (
+                                  <option key={entry} value={entry} />
+                                ))}
+                              </datalist>
+                            </div>
+                          ) : linkedSessionState?.sessionId ? (
                             <span className={`calendar-item-link-state${linkedSessionState.hasOutput ? " calendar-item-link-state-output" : ""}`}>
                               {linkedSessionState.hasOutput ? "Output ready" : "Session linked"}
                             </span>
