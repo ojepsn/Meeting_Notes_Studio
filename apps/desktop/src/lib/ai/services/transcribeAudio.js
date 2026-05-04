@@ -5,6 +5,10 @@ const MAX_SINGLE_TRANSCRIPTION_DURATION_SECONDS = 12 * 60;
 const TRANSCRIPTION_CHUNK_DURATION_SECONDS = 10 * 60;
 const PCM_16_BIT_MAX = 0x7fff;
 const PCM_16_BIT_MIN = -0x8000;
+const SILENCE_PEAK_THRESHOLD = 0.0035;
+const SILENCE_AVERAGE_THRESHOLD = 0.0007;
+const NEAR_SILENCE_PEAK_THRESHOLD = 0.01;
+const NEAR_SILENCE_AVERAGE_THRESHOLD = 0.0018;
 const inferTranscriptionMimeType = (filename) => {
     const extension = filename.split(".").pop()?.toLowerCase();
     if (extension === "mp3" || extension === "mpeg" || extension === "mpga")
@@ -76,6 +80,21 @@ const mixToMono = (audioBuffer, startFrame, endFrame) => {
     }
     return mono;
 };
+const analyzeSamples = (samples) => {
+    let peakAmplitude = 0;
+    let totalAmplitude = 0;
+    for (let index = 0; index < samples.length; index += 1) {
+        const amplitude = Math.abs(samples[index]);
+        peakAmplitude = Math.max(peakAmplitude, amplitude);
+        totalAmplitude += amplitude;
+    }
+    const averageAmplitude = samples.length ? totalAmplitude / samples.length : 0;
+    return {
+        peakAmplitude,
+        averageAmplitude,
+        isLikelySilent: peakAmplitude < SILENCE_PEAK_THRESHOLD && averageAmplitude < SILENCE_AVERAGE_THRESHOLD,
+    };
+};
 const encodeMonoWav = (samples, sampleRate) => {
     const buffer = new ArrayBuffer(44 + samples.length * 2);
     const view = new DataView(buffer);
@@ -115,11 +134,18 @@ const buildChunkedAudioFiles = (sourceFile, audioBuffer) => {
         const startFrame = chunkIndex * chunkFrameLength;
         const endFrame = Math.min(audioBuffer.length, startFrame + chunkFrameLength);
         const monoSamples = mixToMono(audioBuffer, startFrame, endFrame);
+        const analysis = analyzeSamples(monoSamples);
         const wavBuffer = encodeMonoWav(monoSamples, audioBuffer.sampleRate);
         const paddedChunkIndex = String(chunkIndex + 1).padStart(2, "0");
-        chunkFiles.push(new File([wavBuffer], `${baseName}-part-${paddedChunkIndex}.wav`, {
-            type: "audio/wav",
-        }));
+        chunkFiles.push({
+            file: new File([wavBuffer], `${baseName}-part-${paddedChunkIndex}.wav`, {
+                type: "audio/wav",
+            }),
+            durationSeconds: monoSamples.length / audioBuffer.sampleRate,
+            peakAmplitude: analysis.peakAmplitude,
+            averageAmplitude: analysis.averageAmplitude,
+            isLikelySilent: analysis.isLikelySilent,
+        });
     }
     return chunkFiles;
 };
@@ -145,11 +171,27 @@ const transcribeInChunks = async ({ file, decodedAudio, settings, onEvent, }) =>
     }
     const transcripts = [];
     for (const chunkFile of chunkFiles) {
-        const chunkTranscript = await transcribeSingleFile({
-            file: chunkFile,
-            settings,
-            onEvent,
-        });
+        if (chunkFile.isLikelySilent) {
+            continue;
+        }
+        let chunkTranscript;
+        try {
+            chunkTranscript = await transcribeSingleFile({
+                file: chunkFile.file,
+                settings,
+                onEvent,
+            });
+        }
+        catch (error) {
+            if (error instanceof AIRequestError &&
+                error.code === "invalid-response" &&
+                chunkFile.durationSeconds <= 90 &&
+                chunkFile.peakAmplitude < NEAR_SILENCE_PEAK_THRESHOLD &&
+                chunkFile.averageAmplitude < NEAR_SILENCE_AVERAGE_THRESHOLD) {
+                continue;
+            }
+            throw error;
+        }
         const trimmedTranscript = chunkTranscript.trim();
         if (trimmedTranscript) {
             transcripts.push(trimmedTranscript);
