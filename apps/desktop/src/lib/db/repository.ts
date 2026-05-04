@@ -29,6 +29,7 @@ import {
 import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, normalizeOutputLayoutPresetId } from "../export/outputLayouts";
 import { isTauriRuntime } from "../storage/environment";
 import { getDesktopStorageInfo } from "../storage/desktopStorage";
+import { formatStockholmDate, formatStockholmTime } from "../time/stockholm";
 import { sqliteBootstrapStatements } from "./schema";
 
 const STORAGE_KEYS = {
@@ -51,6 +52,8 @@ const STORAGE_KEYS = {
 };
 
 const now = () => new Date().toISOString();
+const today = (value = new Date()) => formatStockholmDate(value);
+const stockholmTime = (value = new Date()) => formatStockholmTime(value);
 
 const normalizeDetailLevel = (value: number | undefined) => {
   const parsed = Number(value);
@@ -225,7 +228,7 @@ const normalizeActivityRecord = (activity: ActivityRecord): ActivityRecord => ({
 const normalizeTimeLogRecord = (timeLog: TimeLogRecord): TimeLogRecord => ({
   ...timeLog,
   targetType: timeLog.targetType === "activity" ? "activity" : "todo",
-  date: typeof timeLog.date === "string" ? timeLog.date : now().slice(0, 10),
+  date: typeof timeLog.date === "string" ? timeLog.date : today(),
   startTime: typeof timeLog.startTime === "string" ? timeLog.startTime : "",
   endTime: typeof timeLog.endTime === "string" ? timeLog.endTime : "",
   durationMinutes: Number.isFinite(Number(timeLog.durationMinutes)) ? Math.max(0, Math.round(Number(timeLog.durationMinutes))) : 0,
@@ -235,12 +238,21 @@ const normalizeTimeLogRecord = (timeLog: TimeLogRecord): TimeLogRecord => ({
 const normalizeCalendarItemRecord = (item: CalendarItemRecord): CalendarItemRecord => ({
   ...item,
   targetType: item.targetType === "activity" ? "activity" : "todo",
-  date: typeof item.date === "string" ? item.date : now().slice(0, 10),
+  date: typeof item.date === "string" ? item.date : today(),
   startSlot: Number.isFinite(Number(item.startSlot)) ? Math.max(0, Math.min(287, Math.round(Number(item.startSlot)))) : 0,
   durationSlots: Number.isFinite(Number(item.durationSlots))
     ? Math.max(1, Math.min(288, Math.round(Number(item.durationSlots))))
     : 1,
 });
+
+const parsePayload = <T>(payload: string): Partial<T> => {
+  try {
+    const parsed = JSON.parse(payload) as Partial<T>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
 
 const normalizeEntityLinkRecord = (link: EntityLinkRecord): EntityLinkRecord => ({
   ...link,
@@ -980,8 +992,38 @@ class TauriSqliteRepository implements AppRepository {
 
   async loadTimeLogs() {
     const db = await this.getDb();
-    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM timelogs ORDER BY updated_at DESC");
-    return rows.map((row) => normalizeTimeLogRecord(JSON.parse(row.payload_json) as TimeLogRecord));
+    const rows = await db.select<{
+      id: string;
+      payload_json: string;
+      target_type: string;
+      target_id: string;
+      log_date: string;
+      start_time: string;
+      end_time: string;
+      duration_minutes: number;
+      created_at: string;
+      updated_at: string;
+    }>("SELECT id, payload_json, target_type, target_id, log_date, start_time, end_time, duration_minutes, created_at, updated_at FROM timelogs ORDER BY updated_at DESC");
+    return rows.map((row) => {
+      const payload = parsePayload<TimeLogRecord>(row.payload_json);
+      return normalizeTimeLogRecord({
+        ...payload,
+        id: row.id || (typeof payload.id === "string" && payload.id ? payload.id : crypto.randomUUID()),
+        targetType: row.target_type === "activity" ? "activity" : "todo",
+        targetId: row.target_id || (typeof payload.targetId === "string" ? payload.targetId : ""),
+        date: row.log_date || (typeof payload.date === "string" ? payload.date : today()),
+        startTime: row.start_time || (typeof payload.startTime === "string" ? payload.startTime : ""),
+        endTime: row.end_time || (typeof payload.endTime === "string" ? payload.endTime : ""),
+        durationMinutes: Number.isFinite(Number(row.duration_minutes))
+          ? Number(row.duration_minutes)
+          : Number.isFinite(Number(payload.durationMinutes))
+            ? Number(payload.durationMinutes)
+            : 0,
+        notes: typeof payload.notes === "string" ? payload.notes : "",
+        createdAt: row.created_at || (typeof payload.createdAt === "string" ? payload.createdAt : now()),
+        updatedAt: row.updated_at || (typeof payload.updatedAt === "string" ? payload.updatedAt : now()),
+      });
+    });
   }
 
   async saveTimeLogs(records: TimeLogRecord[]) {
@@ -1010,8 +1052,39 @@ class TauriSqliteRepository implements AppRepository {
 
   async loadCalendarItems() {
     const db = await this.getDb();
-    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM calendar_items ORDER BY updated_at DESC");
-    return rows.map((row) => normalizeCalendarItemRecord(JSON.parse(row.payload_json) as CalendarItemRecord));
+    const rows = await db.select<{
+      id: string;
+      payload_json: string;
+      target_type: string;
+      target_id: string;
+      schedule_date: string;
+      start_slot: number;
+      duration_slots: number;
+      created_at: string;
+      updated_at: string;
+    }>("SELECT id, payload_json, target_type, target_id, schedule_date, start_slot, duration_slots, created_at, updated_at FROM calendar_items ORDER BY updated_at DESC");
+    return rows.map((row) => {
+      const payload = parsePayload<CalendarItemRecord>(row.payload_json);
+      return normalizeCalendarItemRecord({
+        ...payload,
+        id: row.id || (typeof payload.id === "string" && payload.id ? payload.id : crypto.randomUUID()),
+        targetType: row.target_type === "activity" ? "activity" : "todo",
+        targetId: row.target_id || (typeof payload.targetId === "string" ? payload.targetId : ""),
+        date: row.schedule_date || (typeof payload.date === "string" ? payload.date : today()),
+        startSlot: Number.isFinite(Number(row.start_slot))
+          ? Number(row.start_slot)
+          : Number.isFinite(Number(payload.startSlot))
+            ? Number(payload.startSlot)
+            : 0,
+        durationSlots: Number.isFinite(Number(row.duration_slots))
+          ? Number(row.duration_slots)
+          : Number.isFinite(Number(payload.durationSlots))
+            ? Number(payload.durationSlots)
+            : 1,
+        createdAt: row.created_at || (typeof payload.createdAt === "string" ? payload.createdAt : now()),
+        updatedAt: row.updated_at || (typeof payload.updatedAt === "string" ? payload.updatedAt : now()),
+      });
+    });
   }
 
   async saveCalendarItems(records: CalendarItemRecord[]) {
@@ -1229,8 +1302,8 @@ export const createSessionRecord = (
   captureMode: CaptureMode = "meeting-note",
 ): SessionRecord => {
   const timestamp = new Date();
-  const isoDate = timestamp.toISOString().slice(0, 10);
-  const isoTime = timestamp.toTimeString().slice(0, 5);
+  const isoDate = today(timestamp);
+  const isoTime = stockholmTime(timestamp);
   const defaultTitle =
     captureMode === "meeting-note"
       ? ""

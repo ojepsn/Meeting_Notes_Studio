@@ -365,7 +365,9 @@ export const App = () => {
     const deltaY = getWheelScrollDelta(event, "y", boundary.clientHeight);
     if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
 
-    const scrollTarget = findWheelScrollTarget(target, boundary, deltaX, deltaY);
+    const scrollTarget =
+      findWheelScrollTarget(target, boundary, deltaX, deltaY) ||
+      (canElementScroll(boundary, deltaX, deltaY) ? boundary : null);
     if (!scrollTarget) return;
 
     scrollTarget.scrollBy({
@@ -3458,14 +3460,16 @@ export const App = () => {
         ) : null}
 
         <main
-          onWheelCapture={handleWorkspaceWheel}
           className={`notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}${
             activeWorkspace === "notes" && isNotesSessionsOpen ? " notes-shell-with-sessions" : ""
           }${activeWorkspace === "notes" ? " notes-shell-notes-mode" : ""}${
             SINGLE_PANE_WORKSPACES.includes(activeWorkspace) ? " notes-shell-single-pane" : ""
           }`}
         >
-          <section className={`workspace-canvas${activeWorkspace === "calendar" ? " workspace-canvas-calendar" : ""}`}>
+          <section
+            onWheelCapture={handleWorkspaceWheel}
+            className={`workspace-canvas${activeWorkspace === "calendar" ? " workspace-canvas-calendar" : ""}`}
+          >
             {activeWorkspace !== "notes" && !(activeWorkspace === "calendar" || activeWorkspace === "now") ? (
             <div className="workspace-header card">
               <div className="card-header">
@@ -3893,7 +3897,7 @@ export const App = () => {
           </section>
 
         {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && !HIDE_SHARED_INSPECTOR_WORKSPACES.includes(activeWorkspace) ? (
-          <aside className="workspace-inspector stack">
+          <aside className="workspace-inspector stack" onWheelCapture={handleWorkspaceWheel}>
             <div className="sidebar-card">
               <div>
                 <h3>Notes status</h3>
@@ -3923,7 +3927,7 @@ export const App = () => {
           </aside>
           ) : null}
           {activeWorkspace === "notes" && isNotesSessionsOpen ? (
-            <aside className="notes-sessions-shelf stack">
+              <aside className="notes-sessions-shelf stack" onWheelCapture={handleWorkspaceWheel}>
               <SessionsSidebar
                 sessions={snapshot.sessions}
                 activeSessionId={activeSession.id}

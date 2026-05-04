@@ -1208,23 +1208,31 @@ export const CalendarWorkspace = ({
         </div>
       </div>
 
-      <div className="calendar-controls calendar-controls-compact calendar-controls-dense">
-        <div className="calendar-calendar-summary">
-          <div className="status-chip">{filteredItems.length} scheduled items</div>
-          <div className="capture-density-toggle">{DAYS.map((option) => <button key={`days-${option}`} className="segment-button" type="button" data-active={option === daysInView} onClick={() => setDaysInView(option)}>{option} days</button>)}</div>
-          <div className="capture-density-toggle">{HEIGHTS.map((option) => <button key={`height-${option}`} className="segment-button" type="button" data-active={option === slotHeight} onClick={() => setSlotHeight(option)}>{option === 12 ? "Compact" : option === 16 ? "Default" : "Large"}</button>)}</div>
-        </div>
-        <details className="workspace-disclosure calendar-secondary-controls">
-          <summary>More calendar controls</summary>
-          <div className="workspace-disclosure-body">
-            <div className="calendar-toolbar calendar-toolbar-dense">
-              <div className="field"><label htmlFor="calendar-jump-date">Jump</label><DateInput id="calendar-jump-date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} /></div>
-              <button className="shell-button" type="button" onClick={() => jumpToCalendarDate(jumpDate || today)}>Go</button>
-              <div className="field field-wide"><label htmlFor="calendar-search">Search</label><input id="calendar-search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search title" /></div>
-              <div className="field"><label htmlFor="calendar-type-filter">Type</label><select id="calendar-type-filter" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | "task" | "meeting")}><option value="all">All</option><option value="task">Tasks</option><option value="meeting">Meetings</option></select></div>
-              <label className="compact-private-toggle calendar-top-filter-toggle">
-                <input
-                  type="checkbox"
+        <div className="calendar-controls calendar-controls-compact calendar-controls-dense">
+          <div className="calendar-calendar-summary">
+            <div className="status-chip">{filteredItems.length} scheduled items</div>
+            <div className="field calendar-inline-filter">
+              <label htmlFor="calendar-search">Filter</label>
+              <input
+                id="calendar-search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Filter calendar items"
+              />
+            </div>
+            <div className="capture-density-toggle">{DAYS.map((option) => <button key={`days-${option}`} className="segment-button" type="button" data-active={option === daysInView} onClick={() => setDaysInView(option)}>{option} days</button>)}</div>
+            <div className="capture-density-toggle">{HEIGHTS.map((option) => <button key={`height-${option}`} className="segment-button" type="button" data-active={option === slotHeight} onClick={() => setSlotHeight(option)}>{option === 12 ? "Compact" : option === 16 ? "Default" : "Large"}</button>)}</div>
+          </div>
+          <details className="workspace-disclosure calendar-secondary-controls">
+            <summary>More calendar controls</summary>
+            <div className="workspace-disclosure-body">
+              <div className="calendar-toolbar calendar-toolbar-dense">
+                <div className="field"><label htmlFor="calendar-jump-date">Jump</label><DateInput id="calendar-jump-date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} /></div>
+                <button className="shell-button" type="button" onClick={() => jumpToCalendarDate(jumpDate || today)}>Go</button>
+                <div className="field"><label htmlFor="calendar-type-filter">Type</label><select id="calendar-type-filter" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | "task" | "meeting")}><option value="all">All</option><option value="task">Tasks</option><option value="meeting">Meetings</option></select></div>
+                <label className="compact-private-toggle calendar-top-filter-toggle">
+                  <input
+                    type="checkbox"
                   checked={showPrivateItems}
                   onChange={(event) => setShowPrivateItems(event.target.checked)}
                 />

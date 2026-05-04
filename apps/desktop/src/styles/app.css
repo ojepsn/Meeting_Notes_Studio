@@ -3601,6 +3601,25 @@ select {
   align-items: center;
 }
 
+.calendar-inline-filter {
+  flex: 1 1 260px;
+  min-width: min(320px, 100%);
+  max-width: 420px;
+  gap: 0.16rem;
+}
+
+.calendar-inline-filter label {
+  margin-bottom: 0;
+  font-size: 0.68rem;
+  color: var(--app-muted);
+}
+
+.calendar-inline-filter input {
+  min-height: 34px;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.8rem;
+}
+
 .calendar-controls-dense .status-chip {
   padding: 0.26rem 0.5rem;
   font-size: 0.74rem;
@@ -4075,6 +4094,11 @@ select {
 .calendar-workspace-fullscreen .calendar-toolbar .field select {
   min-height: 44px;
   padding: 0.68rem 0.85rem;
+}
+
+.calendar-workspace-fullscreen .calendar-inline-filter input {
+  min-height: 40px;
+  padding: 0.6rem 0.78rem;
 }
 
 .calendar-workspace-header .page-actions {
