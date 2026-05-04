@@ -5,6 +5,7 @@ type NowWorkspaceProps = {
     timeLogs: TimeLogRecord[];
     calendarItems: CalendarItemRecord[];
     settings: LocalAppSettings;
+    onToggleTodo: (todo: TodoRecord) => void;
     onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
     onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
     onOpenTodoDetail: (todoId: string) => void;
@@ -12,5 +13,5 @@ type NowWorkspaceProps = {
     onOpenProject: (project: string) => void;
     onSaveSettings: (settings: LocalAppSettings) => void;
 };
-export declare const NowWorkspace: ({ todos, activities, timeLogs, calendarItems, settings, onStartTracking, onStopTracking, onOpenTodoDetail, onOpenActivityDetail, onOpenProject, onSaveSettings, }: NowWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const NowWorkspace: ({ todos, activities, timeLogs, calendarItems, settings, onToggleTodo, onStartTracking, onStopTracking, onOpenTodoDetail, onOpenActivityDetail, onOpenProject, onSaveSettings, }: NowWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

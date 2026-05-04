@@ -387,6 +387,31 @@ export const TodosWorkspace = ({
     setChecklistRecurrenceCadence("monthly");
   }, [selectedTodoId]);
 
+  useEffect(() => {
+    if (!selectedTodoId) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      const todo = todos.find((entry) => entry.id === selectedTodoId);
+      if (!todo) return;
+      if (!event.repeat && event.key.toLowerCase() === "x") {
+        event.preventDefault();
+        onToggle({ ...todo, isDone: !todo.isDone });
+        return;
+      }
+      if (event.key === "Delete") {
+        event.preventDefault();
+        onDelete(todo.id);
+        setSelectedTodoId(null);
+        setIsDetailOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onDelete, onToggle, selectedTodoId, todos]);
+
   const submitDraft = () => {
     const nextValue = draft.trim();
     if (!nextValue) return;
@@ -735,7 +760,7 @@ export const TodosWorkspace = ({
             <button className="small-button danger-button" type="button" onClick={deleteSelectedTodo} disabled={!selectedTodoId}>
               Delete selected
             </button>
-            <span className="muted">Click a row to select. Double-click to open the full task card.</span>
+            <span className="muted">Click a row to select. Double-click to open the full task card. Press X to toggle done. Press Delete to remove.</span>
           </div>
 
           {runningTodos.length ? (

@@ -36,7 +36,7 @@ const scoreToSize = (rank, total, running) => {
 };
 const safeTitle = (value, fallback) => value?.trim() || fallback;
 const buildRecentEntryMeta = (parts) => parts.filter((part) => Boolean(part && part.trim()));
-export const NowWorkspace = ({ todos, activities, timeLogs, calendarItems, settings, onStartTracking, onStopTracking, onOpenTodoDetail, onOpenActivityDetail, onOpenProject, onSaveSettings, }) => {
+export const NowWorkspace = ({ todos, activities, timeLogs, calendarItems, settings, onToggleTodo, onStartTracking, onStopTracking, onOpenTodoDetail, onOpenActivityDetail, onOpenProject, onSaveSettings, }) => {
     const [now, setNow] = useState(() => new Date());
     const [showPrivateItems, setShowPrivateItems] = useState(settings.calendarShowPrivate ?? (settings.calendarVisibilityFilter === "public" ? false : true));
     const [showBusinessItems, setShowBusinessItems] = useState(settings.calendarShowBusiness ?? (settings.calendarVisibilityFilter === "private" ? false : true));
@@ -45,6 +45,7 @@ export const NowWorkspace = ({ todos, activities, timeLogs, calendarItems, setti
     const [showActivities, setShowActivities] = useState(true);
     const [showProjects, setShowProjects] = useState(true);
     const [recentFilterQuery, setRecentFilterQuery] = useState("");
+    const [selectedRecentTaskId, setSelectedRecentTaskId] = useState(null);
     useEffect(() => {
         const hasRunningLog = timeLogs.some((entry) => isTimeLogRunning(entry));
         if (!hasRunningLog)
@@ -74,6 +75,13 @@ export const NowWorkspace = ({ todos, activities, timeLogs, calendarItems, setti
                         : settings.calendarVisibilityFilter ?? "all",
         });
     }, [onSaveSettings, settings, showBusinessItems, showPrivateItems]);
+    useEffect(() => {
+        if (!selectedRecentTaskId)
+            return;
+        if (todos.some((todo) => todo.id === selectedRecentTaskId && !todo.isDone))
+            return;
+        setSelectedRecentTaskId(null);
+    }, [selectedRecentTaskId, todos]);
     const today = formatStockholmDate(now);
     const activityLookup = useMemo(() => Object.fromEntries(activities.map((activity) => [activity.id, activity])), [activities]);
     const todoLookup = useMemo(() => Object.fromEntries(todos.map((todo) => [todo.id, todo])), [todos]);
@@ -370,6 +378,36 @@ export const NowWorkspace = ({ todos, activities, timeLogs, calendarItems, setti
             return haystack.includes(normalizedQuery);
         });
     }, [recentEntries, recentFilterQuery, showActivities, showMeetings, showProjects, showTasks]);
+    useEffect(() => {
+        if (!selectedRecentTaskId)
+            return;
+        if (filteredRecentEntries.some((entry) => entry.kind === "task" && entry.taskId === selectedRecentTaskId))
+            return;
+        setSelectedRecentTaskId(null);
+    }, [filteredRecentEntries, selectedRecentTaskId]);
+    useEffect(() => {
+        if (!selectedRecentTaskId)
+            return;
+        const handleKeyDown = (event) => {
+            const target = event.target;
+            if (target?.closest("input, textarea, select, [contenteditable='true']"))
+                return;
+            if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)
+                return;
+            if (event.repeat || event.key.toLowerCase() !== "x")
+                return;
+            const todo = todoLookup[selectedRecentTaskId];
+            if (!todo)
+                return;
+            event.preventDefault();
+            onToggleTodo({ ...todo, isDone: !todo.isDone });
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [onToggleTodo, selectedRecentTaskId, todoLookup]);
+    const selectRecentEntry = (entry) => {
+        setSelectedRecentTaskId(entry.kind === "task" ? entry.taskId ?? null : null);
+    };
     const openEntry = (entry) => {
         if (entry.kind === "task" && entry.taskId) {
             onOpenTodoDetail(entry.taskId);
@@ -405,7 +443,7 @@ export const NowWorkspace = ({ todos, activities, timeLogs, calendarItems, setti
                                             return;
                                         }
                                         onOpenActivityDetail(runningLogSummary.targetId);
-                                    }, children: "Open" })] })] })) : (_jsxs("div", { className: "now-running-inline now-running-inline-empty", children: [_jsx("span", { className: "now-pill-kicker", children: "Running now" }), _jsx("strong", { className: "now-running-title", children: "No active timelog" }), _jsx("span", { className: "muted", children: "Start time from any recent task, meeting, activity, or project context below." })] })) }), _jsxs("section", { className: "sidebar-card now-section-card", children: [_jsx("div", { className: "card-header", children: _jsxs("div", { className: "now-section-copy", children: [_jsx("h3", { children: "Recent" }), _jsx("p", { className: "muted", children: "Tasks, meetings, activities, and projects are mixed together here for quick access." })] }) }), _jsxs("div", { className: "page-actions now-filter-toolbar", children: [_jsxs("div", { className: "page-actions now-visibility-actions", children: [_jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showTasks, onChange: (event) => setShowTasks(event.target.checked) }), _jsx("span", { children: "Tasks" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showMeetings, onChange: (event) => setShowMeetings(event.target.checked) }), _jsx("span", { children: "Meetings" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showActivities, onChange: (event) => setShowActivities(event.target.checked) }), _jsx("span", { children: "Activities" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showProjects, onChange: (event) => setShowProjects(event.target.checked) }), _jsx("span", { children: "Projects" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showPrivateItems, onChange: (event) => setShowPrivateItems(event.target.checked) }), _jsx("span", { children: "Show private" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showBusinessItems, onChange: (event) => setShowBusinessItems(event.target.checked) }), _jsx("span", { children: "Show business" })] })] }), _jsxs("label", { className: "field now-filter-search", children: [_jsx("span", { className: "sr-only", children: "Filter recent items" }), _jsx("input", { type: "search", value: recentFilterQuery, onChange: (event) => setRecentFilterQuery(event.target.value), placeholder: "Filter recent items" })] })] }), _jsx("div", { className: "now-pill-cloud", children: filteredRecentEntries.length ? (filteredRecentEntries.map((entry) => (_jsxs("div", { className: `now-pill-card${entry.kind === "project" ? " now-pill-card-project" : ""}`, "data-kind": entry.kind, "data-size": entry.size, "data-running": entry.running, "data-priority": entry.isPriority, children: [_jsxs("button", { type: "button", className: "now-pill-main", onClick: () => openEntry(entry), children: [_jsx("span", { className: "now-pill-kicker", children: entry.kind === "task"
+                                    }, children: "Open" })] })] })) : (_jsxs("div", { className: "now-running-inline now-running-inline-empty", children: [_jsx("span", { className: "now-pill-kicker", children: "Running now" }), _jsx("strong", { className: "now-running-title", children: "No active timelog" }), _jsx("span", { className: "muted", children: "Start time from any recent task, meeting, activity, or project context below." })] })) }), _jsxs("section", { className: "sidebar-card now-section-card", children: [_jsx("div", { className: "card-header", children: _jsxs("div", { className: "now-section-copy", children: [_jsx("h3", { children: "Recent" }), _jsx("p", { className: "muted", children: "Tasks, meetings, activities, and projects are mixed together here for quick access. Focus a task card and press X to toggle done." })] }) }), _jsxs("div", { className: "page-actions now-filter-toolbar", children: [_jsxs("div", { className: "page-actions now-visibility-actions", children: [_jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showTasks, onChange: (event) => setShowTasks(event.target.checked) }), _jsx("span", { children: "Tasks" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showMeetings, onChange: (event) => setShowMeetings(event.target.checked) }), _jsx("span", { children: "Meetings" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showActivities, onChange: (event) => setShowActivities(event.target.checked) }), _jsx("span", { children: "Activities" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showProjects, onChange: (event) => setShowProjects(event.target.checked) }), _jsx("span", { children: "Projects" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showPrivateItems, onChange: (event) => setShowPrivateItems(event.target.checked) }), _jsx("span", { children: "Show private" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showBusinessItems, onChange: (event) => setShowBusinessItems(event.target.checked) }), _jsx("span", { children: "Show business" })] })] }), _jsxs("label", { className: "field now-filter-search", children: [_jsx("span", { className: "sr-only", children: "Filter recent items" }), _jsx("input", { type: "search", value: recentFilterQuery, onChange: (event) => setRecentFilterQuery(event.target.value), placeholder: "Filter recent items" })] })] }), _jsx("div", { className: "now-pill-cloud", children: filteredRecentEntries.length ? (filteredRecentEntries.map((entry) => (_jsxs("div", { className: `now-pill-card${entry.kind === "project" ? " now-pill-card-project" : ""}`, "data-kind": entry.kind, "data-size": entry.size, "data-running": entry.running, "data-priority": entry.isPriority, "data-selected": entry.kind === "task" && entry.taskId === selectedRecentTaskId, onMouseDown: () => selectRecentEntry(entry), onFocusCapture: () => selectRecentEntry(entry), children: [_jsxs("button", { type: "button", className: "now-pill-main", onClick: () => openEntry(entry), children: [_jsx("span", { className: "now-pill-kicker", children: entry.kind === "task"
                                                 ? "Task"
                                                 : entry.kind === "meeting"
                                                     ? "Meeting"

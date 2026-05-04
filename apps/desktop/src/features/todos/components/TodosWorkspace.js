@@ -273,6 +273,33 @@ export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklis
         setChecklistTemplateId("");
         setChecklistRecurrenceCadence("monthly");
     }, [selectedTodoId]);
+    useEffect(() => {
+        if (!selectedTodoId)
+            return;
+        const handleKeyDown = (event) => {
+            const target = event.target;
+            if (target?.closest("input, textarea, select, [contenteditable='true']"))
+                return;
+            if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)
+                return;
+            const todo = todos.find((entry) => entry.id === selectedTodoId);
+            if (!todo)
+                return;
+            if (!event.repeat && event.key.toLowerCase() === "x") {
+                event.preventDefault();
+                onToggle({ ...todo, isDone: !todo.isDone });
+                return;
+            }
+            if (event.key === "Delete") {
+                event.preventDefault();
+                onDelete(todo.id);
+                setSelectedTodoId(null);
+                setIsDetailOpen(false);
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [onDelete, onToggle, selectedTodoId, todos]);
     const submitDraft = () => {
         const nextValue = draft.trim();
         if (!nextValue)
@@ -517,7 +544,7 @@ export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklis
                                         event.preventDefault();
                                         submitDraft();
                                     }
-                                }, placeholder: "Add a focused next action" })] }), _jsx("button", { className: "primary-button", type: "submit", children: "Add" })] }), _jsxs("div", { className: "todos-hub-shell", children: [_jsxs("section", { className: "todos-hub-list-panel todos-table-panel", children: [_jsxs("div", { className: "todos-table-summary", children: [_jsxs("span", { className: "status-chip", children: [filteredTodos.length, " shown"] }), _jsxs("span", { className: "status-chip", children: [openTodos.length, " open"] }), _jsxs("span", { className: "status-chip", children: [todos.length - openTodos.length, " completed"] }), _jsxs("label", { className: "todos-visibility-control", children: [_jsx("span", { children: "Show" }), _jsxs("select", { value: visibilityFilter, onChange: (event) => setVisibilityFilter(event.target.value), children: [_jsx("option", { value: "open", children: "Open only" }), _jsx("option", { value: "all", children: "All tasks" }), _jsx("option", { value: "done", children: "Done only" })] })] }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: deleteSelectedTodo, disabled: !selectedTodoId, children: "Delete selected" }), _jsx("span", { className: "muted", children: "Click a row to select. Double-click to open the full task card." })] }), runningTodos.length ? (_jsxs("div", { className: "todos-running-strip", children: [_jsx("strong", { children: "Running now" }), _jsx("div", { className: "todos-running-list", children: runningTodos.map((todo) => {
+                                }, placeholder: "Add a focused next action" })] }), _jsx("button", { className: "primary-button", type: "submit", children: "Add" })] }), _jsxs("div", { className: "todos-hub-shell", children: [_jsxs("section", { className: "todos-hub-list-panel todos-table-panel", children: [_jsxs("div", { className: "todos-table-summary", children: [_jsxs("span", { className: "status-chip", children: [filteredTodos.length, " shown"] }), _jsxs("span", { className: "status-chip", children: [openTodos.length, " open"] }), _jsxs("span", { className: "status-chip", children: [todos.length - openTodos.length, " completed"] }), _jsxs("label", { className: "todos-visibility-control", children: [_jsx("span", { children: "Show" }), _jsxs("select", { value: visibilityFilter, onChange: (event) => setVisibilityFilter(event.target.value), children: [_jsx("option", { value: "open", children: "Open only" }), _jsx("option", { value: "all", children: "All tasks" }), _jsx("option", { value: "done", children: "Done only" })] })] }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: deleteSelectedTodo, disabled: !selectedTodoId, children: "Delete selected" }), _jsx("span", { className: "muted", children: "Click a row to select. Double-click to open the full task card. Press X to toggle done. Press Delete to remove." })] }), runningTodos.length ? (_jsxs("div", { className: "todos-running-strip", children: [_jsx("strong", { children: "Running now" }), _jsx("div", { className: "todos-running-list", children: runningTodos.map((todo) => {
                                             const runningLog = getRunningTimeLog(timeLogsByTodoId.get(todo.id) || []);
                                             const elapsedLabel = runningLog
                                                 ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now))

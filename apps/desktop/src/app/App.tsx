@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type CaptureMode, type RuleSuggestionRecord, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
@@ -206,50 +206,8 @@ const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
 
 const NOTES_PANEL_MIN_WIDTH = 300;
 const NOTES_PANEL_MAX_WIDTH = 980;
-const WHEEL_SCROLL_LINE_HEIGHT = 18;
-
-const OVERFLOW_SCROLL_VALUES = new Set(["auto", "scroll", "overlay"]);
-
 const clampNotesCapturePaneWidth = (value: number, maxWidth = NOTES_PANEL_MAX_WIDTH) =>
   Math.min(maxWidth, Math.max(NOTES_PANEL_MIN_WIDTH, Math.round(value)));
-
-const getWheelScrollDelta = (event: ReactWheelEvent<HTMLElement>, axis: "x" | "y", pageSize: number) => {
-  const rawDelta = axis === "x" ? event.deltaX : event.deltaY;
-  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
-    return rawDelta * WHEEL_SCROLL_LINE_HEIGHT;
-  }
-  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
-    return rawDelta * Math.max(pageSize, 1);
-  }
-  return rawDelta;
-};
-
-const canElementScroll = (element: HTMLElement, deltaX: number, deltaY: number) => {
-  const style = window.getComputedStyle(element);
-  const canScrollY =
-    OVERFLOW_SCROLL_VALUES.has(style.overflowY) &&
-    element.scrollHeight > element.clientHeight + 1 &&
-    ((deltaY < 0 && element.scrollTop > 0) ||
-      (deltaY > 0 && element.scrollTop + element.clientHeight < element.scrollHeight - 1));
-  const canScrollX =
-    OVERFLOW_SCROLL_VALUES.has(style.overflowX) &&
-    element.scrollWidth > element.clientWidth + 1 &&
-    ((deltaX < 0 && element.scrollLeft > 0) ||
-      (deltaX > 0 && element.scrollLeft + element.clientWidth < element.scrollWidth - 1));
-  return canScrollX || canScrollY;
-};
-
-const findWheelScrollTarget = (start: HTMLElement | null, boundary: HTMLElement, deltaX: number, deltaY: number) => {
-  let node = start;
-  while (node) {
-    if (canElementScroll(node, deltaX, deltaY)) {
-      return node;
-    }
-    if (node === boundary) break;
-    node = node.parentElement;
-  }
-  return null;
-};
 
 const normalizeOutputVersionHistory = (
   outputVersions: OutputVersionRecord[] | undefined,
@@ -355,28 +313,6 @@ export const App = () => {
     saveAttachments,
   } = useDesktopStore();
 
-  const handleWorkspaceWheel = (event: ReactWheelEvent<HTMLElement>) => {
-    if (event.defaultPrevented) return;
-    const boundary = event.currentTarget;
-    const target = event.target instanceof HTMLElement ? event.target : null;
-    if (!target) return;
-
-    const deltaX = getWheelScrollDelta(event, "x", boundary.clientWidth);
-    const deltaY = getWheelScrollDelta(event, "y", boundary.clientHeight);
-    if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
-
-    const scrollTarget =
-      findWheelScrollTarget(target, boundary, deltaX, deltaY) ||
-      (canElementScroll(boundary, deltaX, deltaY) ? boundary : null);
-    if (!scrollTarget) return;
-
-    scrollTarget.scrollBy({
-      left: deltaX,
-      top: deltaY,
-      behavior: "auto",
-    });
-    event.preventDefault();
-  };
   const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("calendar");
   const [openPanel, setOpenPanel] = useState<OverlayPanel>(null);
   const [isNotesSessionsOpen, setIsNotesSessionsOpen] = useState(false);
@@ -3467,7 +3403,6 @@ export const App = () => {
           }`}
         >
           <section
-            onWheelCapture={handleWorkspaceWheel}
             className={`workspace-canvas${activeWorkspace === "calendar" ? " workspace-canvas-calendar" : ""}`}
           >
             {activeWorkspace !== "notes" && !(activeWorkspace === "calendar" || activeWorkspace === "now") ? (
@@ -3521,6 +3456,7 @@ export const App = () => {
                 timeLogs={snapshot.timelogs}
                 calendarItems={snapshot.calendarItems ?? []}
                 settings={snapshot.settings}
+                onToggleTodo={(todo) => void saveTodo(todo)}
                 onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
                 onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "now")}
@@ -3897,7 +3833,7 @@ export const App = () => {
           </section>
 
         {!(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && !HIDE_SHARED_INSPECTOR_WORKSPACES.includes(activeWorkspace) ? (
-          <aside className="workspace-inspector stack" onWheelCapture={handleWorkspaceWheel}>
+          <aside className="workspace-inspector stack">
             <div className="sidebar-card">
               <div>
                 <h3>Notes status</h3>
@@ -3927,7 +3863,7 @@ export const App = () => {
           </aside>
           ) : null}
           {activeWorkspace === "notes" && isNotesSessionsOpen ? (
-              <aside className="notes-sessions-shelf stack" onWheelCapture={handleWorkspaceWheel}>
+              <aside className="notes-sessions-shelf stack">
               <SessionsSidebar
                 sessions={snapshot.sessions}
                 activeSessionId={activeSession.id}

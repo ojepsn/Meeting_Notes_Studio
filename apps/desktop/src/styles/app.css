@@ -403,6 +403,7 @@ select {
   min-height: 100vh;
   max-height: 100vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 1.5rem 1rem;
   border-right: 1px solid var(--app-border);
   background: var(--app-surface-strong);
@@ -746,7 +747,8 @@ select {
   display: grid;
   grid-template-columns: minmax(300px, 1.15fr) minmax(300px, 0.85fr);
   gap: 1.15rem;
-  align-items: start;
+  align-items: stretch;
+  min-height: 0;
 }
 
 .notes-pwa-grid-resizable {
@@ -756,6 +758,11 @@ select {
 .notes-pwa-capture,
 .notes-pwa-output {
   min-width: 0;
+  min-height: 0;
+  max-height: calc(100vh - 7rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .session-editor-pwa,
@@ -3024,7 +3031,8 @@ select {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
   gap: 1.25rem;
-  align-items: start;
+  align-items: stretch;
+  min-height: 0;
 }
 
 .assistant-chat-card {
@@ -3032,6 +3040,7 @@ select {
   display: grid;
   grid-template-rows: auto auto minmax(260px, 1fr) auto;
   gap: 1rem;
+  min-width: 0;
 }
 
 .assistant-workspace-header {
@@ -3169,6 +3178,11 @@ select {
 .assistant-side-panel {
   display: grid;
   gap: 1rem;
+  min-height: 0;
+  max-height: min(760px, calc(100vh - 190px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .assistant-env-preview {

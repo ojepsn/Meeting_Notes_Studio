@@ -9,6 +9,7 @@ type NowWorkspaceProps = {
   timeLogs: TimeLogRecord[];
   calendarItems: CalendarItemRecord[];
   settings: LocalAppSettings;
+  onToggleTodo: (todo: TodoRecord) => void;
   onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
   onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
   onOpenTodoDetail: (todoId: string) => void;
@@ -133,6 +134,7 @@ export const NowWorkspace = ({
   timeLogs,
   calendarItems,
   settings,
+  onToggleTodo,
   onStartTracking,
   onStopTracking,
   onOpenTodoDetail,
@@ -152,6 +154,7 @@ export const NowWorkspace = ({
   const [showActivities, setShowActivities] = useState(true);
   const [showProjects, setShowProjects] = useState(true);
   const [recentFilterQuery, setRecentFilterQuery] = useState("");
+  const [selectedRecentTaskId, setSelectedRecentTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     const hasRunningLog = timeLogs.some((entry) => isTimeLogRunning(entry));
@@ -186,6 +189,12 @@ export const NowWorkspace = ({
               : settings.calendarVisibilityFilter ?? "all",
     });
   }, [onSaveSettings, settings, showBusinessItems, showPrivateItems]);
+
+  useEffect(() => {
+    if (!selectedRecentTaskId) return;
+    if (todos.some((todo) => todo.id === selectedRecentTaskId && !todo.isDone)) return;
+    setSelectedRecentTaskId(null);
+  }, [selectedRecentTaskId, todos]);
 
   const today = formatStockholmDate(now);
 
@@ -508,6 +517,33 @@ export const NowWorkspace = ({
     });
   }, [recentEntries, recentFilterQuery, showActivities, showMeetings, showProjects, showTasks]);
 
+  useEffect(() => {
+    if (!selectedRecentTaskId) return;
+    if (filteredRecentEntries.some((entry) => entry.kind === "task" && entry.taskId === selectedRecentTaskId)) return;
+    setSelectedRecentTaskId(null);
+  }, [filteredRecentEntries, selectedRecentTaskId]);
+
+  useEffect(() => {
+    if (!selectedRecentTaskId) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      if (event.repeat || event.key.toLowerCase() !== "x") return;
+      const todo = todoLookup[selectedRecentTaskId];
+      if (!todo) return;
+      event.preventDefault();
+      onToggleTodo({ ...todo, isDone: !todo.isDone });
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onToggleTodo, selectedRecentTaskId, todoLookup]);
+
+  const selectRecentEntry = (entry: RecentEntry) => {
+    setSelectedRecentTaskId(entry.kind === "task" ? entry.taskId ?? null : null);
+  };
+
   const openEntry = (entry: RecentEntry) => {
     if (entry.kind === "task" && entry.taskId) {
       onOpenTodoDetail(entry.taskId);
@@ -618,7 +654,7 @@ export const NowWorkspace = ({
         <div className="card-header">
           <div className="now-section-copy">
             <h3>Recent</h3>
-            <p className="muted">Tasks, meetings, activities, and projects are mixed together here for quick access.</p>
+            <p className="muted">Tasks, meetings, activities, and projects are mixed together here for quick access. Focus a task card and press X to toggle done.</p>
           </div>
         </div>
         <div className="page-actions now-filter-toolbar">
@@ -668,6 +704,9 @@ export const NowWorkspace = ({
                 data-size={entry.size}
                 data-running={entry.running}
                 data-priority={entry.isPriority}
+                data-selected={entry.kind === "task" && entry.taskId === selectedRecentTaskId}
+                onMouseDown={() => selectRecentEntry(entry)}
+                onFocusCapture={() => selectRecentEntry(entry)}
               >
                 <button type="button" className="now-pill-main" onClick={() => openEntry(entry)}>
                   <span className="now-pill-kicker">

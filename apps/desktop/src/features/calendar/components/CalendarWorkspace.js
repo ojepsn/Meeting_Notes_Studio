@@ -413,7 +413,7 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
     }, [dayColumnWidth]);
     useEffect(() => {
         const handleKeyDown = (event) => {
-            if (event.key !== "Delete" || !selectedItem) {
+            if (event.key !== "Delete" || (!selectedItem && !selectedItemIds.length)) {
                 return;
             }
             const activeElement = document.activeElement;
@@ -426,19 +426,27 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
                 return;
             }
             event.preventDefault();
-            if (selectedItem.targetType === "todo") {
-                onDeleteTodo(selectedItem.targetId);
-            }
-            else {
-                onDeleteActivity(selectedItem.targetId);
-            }
+            const idsToDelete = selectedItemIds.length ? selectedItemIds : selectedItem ? [selectedItem.id] : [];
+            const targets = new Map();
+            idsToDelete.forEach((itemId) => {
+                const item = items.find((entry) => entry.id === itemId);
+                if (item)
+                    targets.set(`${item.targetType}:${item.targetId}`, item);
+            });
+            targets.forEach((item) => {
+                if (item.targetType === "todo") {
+                    onDeleteTodo(item.targetId);
+                    return;
+                }
+                onDeleteActivity(item.targetId);
+            });
             setSelectedItemId(null);
             setSelectedItemIds([]);
             setEditorDraft(null);
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [onDeleteActivity, onDeleteTodo, selectedItem]);
+    }, [items, onDeleteActivity, onDeleteTodo, selectedItem, selectedItemIds]);
     useEffect(() => {
         if (!selectedItemId) {
             setEditorDraft(null);
@@ -520,18 +528,18 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
             const todo = todos.find((entry) => entry.id === selectedItem.targetId);
             if (!todo)
                 return;
-            if (event.key === "x") {
+            if (!event.repeat && event.key.toLowerCase() === "x") {
                 event.preventDefault();
-                const nextTodo = { ...todo, isDone: true };
+                const nextTodo = { ...todo, isDone: !todo.isDone };
                 onSaveTodo(nextTodo);
-                setEditorDraft((current) => current?.itemId === selectedItem.id ? { ...current, isDone: true } : current);
+                setEditorDraft((current) => current?.itemId === selectedItem.id ? { ...current, isDone: nextTodo.isDone } : current);
                 return;
             }
             if (event.key.length === 1) {
                 event.preventDefault();
                 setInlineTodoEdit({ itemId: selectedItem.id, todoId: todo.id, value: event.key });
             }
-            else if (event.key === "Backspace" || event.key === "Delete") {
+            else if (event.key === "Backspace") {
                 event.preventDefault();
                 setInlineTodoEdit({ itemId: selectedItem.id, todoId: todo.id, value: "" });
             }
