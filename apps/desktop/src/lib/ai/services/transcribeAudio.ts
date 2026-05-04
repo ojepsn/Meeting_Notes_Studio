@@ -31,6 +31,8 @@ const createTranscriptionFormData = (file: File, settings: LocalAppSettings) => 
   const formData = new FormData();
   formData.append("file", file, file.name);
   formData.append("model", settings.transcriptionModel);
+  formData.append("response_format", "json");
+  formData.append("chunking_strategy", "auto");
   if (!settings.transcriptionModel.includes("diarize")) {
     formData.append("prompt", "Transcribe faithfully and clearly.");
   }

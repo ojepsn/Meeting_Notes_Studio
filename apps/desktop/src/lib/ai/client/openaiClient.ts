@@ -43,6 +43,18 @@ interface OpenAITextResponse {
     }>;
   }>;
   text?: string;
+  transcript?: string;
+  segments?: Array<{
+    text?: string;
+  }>;
+  results?: Array<{
+    text?: string;
+    transcript?: string;
+    alternatives?: Array<{
+      text?: string;
+      transcript?: string;
+    }>;
+  }>;
   status?: string;
   incomplete_details?: {
     reason?: string;
@@ -264,7 +276,36 @@ export const extractResponseText = (response: OpenAITextResponse) => {
     return nestedText;
   }
 
-  return response.text?.trim() || "";
+  const directText = response.text?.trim() || response.transcript?.trim();
+  if (directText) {
+    return directText;
+  }
+
+  const segmentText = response.segments
+    ?.map((segment) => segment.text?.trim() || "")
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  if (segmentText) {
+    return segmentText;
+  }
+
+  const resultText = response.results
+    ?.flatMap((result) => {
+      const direct = [result.text?.trim() || "", result.transcript?.trim() || ""].filter(Boolean);
+      const alternatives =
+        result.alternatives
+          ?.flatMap((alternative) => [alternative.text?.trim() || "", alternative.transcript?.trim() || ""])
+          .filter(Boolean) || [];
+      return [...direct, ...alternatives];
+    })
+    .join("\n")
+    .trim();
+  if (resultText) {
+    return resultText;
+  }
+
+  return "";
 };
 
 export const callResponsesApi = async ({

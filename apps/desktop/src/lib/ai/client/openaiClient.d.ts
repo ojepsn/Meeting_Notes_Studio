@@ -37,6 +37,18 @@ interface OpenAITextResponse {
         }>;
     }>;
     text?: string;
+    transcript?: string;
+    segments?: Array<{
+        text?: string;
+    }>;
+    results?: Array<{
+        text?: string;
+        transcript?: string;
+        alternatives?: Array<{
+            text?: string;
+            transcript?: string;
+        }>;
+    }>;
     status?: string;
     incomplete_details?: {
         reason?: string;
