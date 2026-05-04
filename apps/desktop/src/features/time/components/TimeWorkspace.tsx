@@ -656,10 +656,6 @@ export const TimeWorkspace = ({
   const commitTimeLogDraft = (log: EditableTimeLogRecord) => {
     const draft = timeLogDrafts[log.id];
     if (!draft) return;
-    if (log.isSystemBackground) {
-      clearTimeLogDraft(log.id);
-      return;
-    }
     const nextTitle = draft.title.trim();
     const nextDate = draft.date || log.date;
     const nextStartTime = draft.startTime || log.startTime;
@@ -1023,7 +1019,6 @@ export const TimeWorkspace = ({
                       onChange={(event) => updateTimeLogDraft(log, { startTime: event.target.value })}
                       onBlur={() => commitTimeLogDraft(log)}
                       onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
-                      disabled={Boolean(log.isSystemBackground)}
                     />
                     <input
                       type="time"
@@ -1032,7 +1027,6 @@ export const TimeWorkspace = ({
                       onChange={(event) => updateTimeLogDraft(log, { endTime: event.target.value })}
                       onBlur={() => commitTimeLogDraft(log)}
                       onKeyDown={(event) => handleTimeLogDraftKeyDown(event, log)}
-                      disabled={Boolean(log.isSystemBackground)}
                     />
                     <span className="status-chip">{running ? `Running • ${formatTrackedMinutes(displayedMinutes)}` : formatMinutes(displayedMinutes)}</span>
                     <input
@@ -1045,7 +1039,12 @@ export const TimeWorkspace = ({
                     />
                     <div className="time-log-inline-actions">
                       {log.isSystemBackground ? (
-                        <span className="status-chip">Managed by Work mode</span>
+                        <>
+                          <span className="status-chip">Managed by Work mode</span>
+                          <button className="small-button danger-button" type="button" onClick={() => onDeleteTimeLog(log.id)}>
+                            Delete
+                          </button>
+                        </>
                       ) : (
                         <>
                           <button className={`small-button${running ? " primary-button" : ""}`} type="button" onClick={() => (running ? onStopTracking(log.targetType, log.targetId) : onStartTracking(log.targetType, log.targetId))}>

@@ -1755,12 +1755,6 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   saveTimeLog: async (timeLog) => {
     const snapshot = get().snapshot;
     if (!snapshot) return;
-    if (
-      timeLog.targetType === "activity" &&
-      timeLog.targetId === snapshot.settings.baselineWorkActivityId
-    ) {
-      return;
-    }
     const nextTimeLog = buildTimeLog(timeLog.targetType, timeLog.targetId, {
       ...timeLog,
       updatedAt: new Date().toISOString(),
@@ -1777,14 +1771,6 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   deleteTimeLog: async (id) => {
     const snapshot = get().snapshot;
     if (!snapshot) return;
-    const targetLog = snapshot.timelogs.find((entry) => entry.id === id);
-    if (
-      targetLog &&
-      targetLog.targetType === "activity" &&
-      targetLog.targetId === snapshot.settings.baselineWorkActivityId
-    ) {
-      return;
-    }
     const nextTimeLogs = snapshot.timelogs.filter((entry) => entry.id !== id);
     const nextSnapshot = {
       ...snapshot,
