@@ -1,11 +1,18 @@
 import type { LocalAppSettings } from "@notesmith/domain";
+import { AIRequestError } from "../client/openaiClient";
 import { AI_PROMPT_PROFILE_VERSION } from "../prompts";
 import type { AIRuntimeEvent } from "../runtime";
 import { executeAITranscriptionOperation } from "../runtime";
-import { AIRequestError } from "../client/openaiClient";
 
+const MAX_TRANSCRIPTION_UPLOAD_BYTES = 24 * 1024 * 1024;
 const MAX_SINGLE_TRANSCRIPTION_DURATION_SECONDS = 12 * 60;
-const TRANSCRIPTION_CHUNK_DURATION_SECONDS = 10 * 60;
+const MAX_PREFERRED_CHUNK_DURATION_SECONDS = 8 * 60;
+const TRANSCRIPTION_SUBCHUNK_DURATION_SECONDS = 2 * 60;
+const TRANSCRIPTION_OVERLAP_SECONDS = 1.5;
+const TRANSCRIPTION_BOUNDARY_SEARCH_SECONDS = 20;
+const MIN_PRIMARY_CHUNK_DURATION_SECONDS = 15;
+const MIN_SPEECH_AWARE_CHUNK_DURATION_SECONDS = 45;
+const MIN_RECURSIVE_CHUNK_DURATION_SECONDS = 18;
 const PCM_16_BIT_MAX = 0x7fff;
 const PCM_16_BIT_MIN = -0x8000;
 const SILENCE_PEAK_THRESHOLD = 0.0035;
@@ -39,15 +46,36 @@ const normalizeTranscriptionFile = (file: File) =>
     ? new File([file], file.name, { type: inferTranscriptionMimeType(file.name) })
     : file;
 
-const createTranscriptionFormData = (file: File, settings: LocalAppSettings) => {
+const resolvePreferredTranscriptionModel = (settings: LocalAppSettings) =>
+  settings.transcriptionModel === "gpt-4o-transcribe-diarize" ? "gpt-4o-transcribe" : settings.transcriptionModel;
+
+const getFallbackTranscriptionModels = (model: string) => (model === "gpt-4o-mini-transcribe" ? ["gpt-4o-transcribe"] : []);
+
+const resolveTranscriptionModels = ({
+  preferredModel,
+  useChunking,
+}: {
+  preferredModel: string;
+  useChunking: boolean;
+}) => {
+  if (useChunking) {
+    return ["gpt-4o-transcribe"];
+  }
+
+  return [preferredModel, ...getFallbackTranscriptionModels(preferredModel)];
+};
+
+const createTranscriptionFormData = ({
+  file,
+  model,
+}: {
+  file: File;
+  model: string;
+}) => {
   const formData = new FormData();
   formData.append("file", file, file.name);
-  formData.append("model", settings.transcriptionModel);
+  formData.append("model", model);
   formData.append("response_format", "json");
-  formData.append("chunking_strategy", "auto");
-  if (!settings.transcriptionModel.includes("diarize")) {
-    formData.append("prompt", "Transcribe faithfully and clearly.");
-  }
   return formData;
 };
 
@@ -95,22 +123,65 @@ const mixToMono = (audioBuffer: AudioBuffer, startFrame: number, endFrame: numbe
   return mono;
 };
 
-const analyzeSamples = (samples: Float32Array) => {
+const analyzeSampleWindow = (samples: Float32Array, startIndex: number, length: number) => {
   let peakAmplitude = 0;
   let totalAmplitude = 0;
 
-  for (let index = 0; index < samples.length; index += 1) {
-    const amplitude = Math.abs(samples[index]);
+  for (let index = 0; index < length; index += 1) {
+    const amplitude = Math.abs(samples[startIndex + index] || 0);
     peakAmplitude = Math.max(peakAmplitude, amplitude);
     totalAmplitude += amplitude;
   }
 
-  const averageAmplitude = samples.length ? totalAmplitude / samples.length : 0;
+  return {
+    peakAmplitude,
+    averageAmplitude: length ? totalAmplitude / length : 0,
+  };
+};
+
+const analyzeSamples = (samples: Float32Array) => {
+  const { peakAmplitude, averageAmplitude } = analyzeSampleWindow(samples, 0, samples.length);
   return {
     peakAmplitude,
     averageAmplitude,
     isLikelySilent: peakAmplitude < SILENCE_PEAK_THRESHOLD && averageAmplitude < SILENCE_AVERAGE_THRESHOLD,
   };
+};
+
+const estimateMaxChunkDurationSeconds = (sampleRate: number) =>
+  Math.max(
+    MIN_PRIMARY_CHUNK_DURATION_SECONDS,
+    Math.floor((MAX_TRANSCRIPTION_UPLOAD_BYTES - 44) / Math.max(1, sampleRate * 2)),
+  );
+
+const findSpeechAwareCutFrame = ({
+  audioBuffer,
+  desiredEndFrame,
+  minEndFrame,
+}: {
+  audioBuffer: AudioBuffer;
+  desiredEndFrame: number;
+  minEndFrame: number;
+}) => {
+  const sampleRate = audioBuffer.sampleRate;
+  const searchFrames = Math.max(1, Math.floor(sampleRate * TRANSCRIPTION_BOUNDARY_SEARCH_SECONDS));
+  const silenceWindowFrames = Math.max(1, Math.floor(sampleRate * 0.28));
+  const stepFrames = Math.max(1, Math.floor(sampleRate * 0.05));
+  const searchStartFrame = Math.max(minEndFrame, desiredEndFrame - searchFrames);
+  const searchSamples = mixToMono(audioBuffer, searchStartFrame, desiredEndFrame);
+
+  for (let localStart = Math.max(0, searchSamples.length - silenceWindowFrames); localStart >= 0; localStart -= stepFrames) {
+    const { peakAmplitude, averageAmplitude } = analyzeSampleWindow(
+      searchSamples,
+      localStart,
+      Math.min(silenceWindowFrames, searchSamples.length - localStart),
+    );
+    if (peakAmplitude < SILENCE_PEAK_THRESHOLD && averageAmplitude < SILENCE_AVERAGE_THRESHOLD) {
+      return Math.max(minEndFrame, searchStartFrame + localStart);
+    }
+  }
+
+  return desiredEndFrame;
 };
 
 const encodeMonoWav = (samples: Float32Array, sampleRate: number) => {
@@ -149,15 +220,50 @@ const encodeMonoWav = (samples: Float32Array, sampleRate: number) => {
   return buffer;
 };
 
-const buildChunkedAudioFiles = (sourceFile: File, audioBuffer: AudioBuffer) => {
-  const chunkFrameLength = Math.max(1, Math.floor(audioBuffer.sampleRate * TRANSCRIPTION_CHUNK_DURATION_SECONDS));
+const buildChunkedAudioFiles = ({
+  sourceFile,
+  audioBuffer,
+  chunkDurationSeconds,
+  speechAwareBoundaries,
+  overlapSeconds,
+}: {
+  sourceFile: File;
+  audioBuffer: AudioBuffer;
+  chunkDurationSeconds: number;
+  speechAwareBoundaries: boolean;
+  overlapSeconds: number;
+}) => {
+  const chunkFrameLength = Math.max(1, Math.floor(audioBuffer.sampleRate * chunkDurationSeconds));
+  const overlapFrames = Math.max(0, Math.floor(audioBuffer.sampleRate * overlapSeconds));
+  const minChunkFrames = Math.max(
+    1,
+    Math.floor(
+      audioBuffer.sampleRate *
+        Math.min(MIN_SPEECH_AWARE_CHUNK_DURATION_SECONDS, Math.max(15, chunkDurationSeconds * 0.65)),
+    ),
+  );
   const chunkFiles: ChunkedAudioFile[] = [];
   const baseName = stripFileExtension(sourceFile.name);
-  const totalChunks = Math.max(1, Math.ceil(audioBuffer.length / chunkFrameLength));
 
-  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
-    const startFrame = chunkIndex * chunkFrameLength;
-    const endFrame = Math.min(audioBuffer.length, startFrame + chunkFrameLength);
+  let startFrame = 0;
+  let chunkIndex = 0;
+  while (startFrame < audioBuffer.length) {
+    const desiredEndFrame = Math.min(audioBuffer.length, startFrame + chunkFrameLength);
+    const minEndFrame = Math.min(audioBuffer.length, startFrame + minChunkFrames);
+    let endFrame = desiredEndFrame;
+
+    if (speechAwareBoundaries && desiredEndFrame < audioBuffer.length && desiredEndFrame > minEndFrame) {
+      endFrame = findSpeechAwareCutFrame({
+        audioBuffer,
+        desiredEndFrame,
+        minEndFrame,
+      });
+    }
+
+    if (endFrame <= startFrame) {
+      endFrame = desiredEndFrame;
+    }
+
     const monoSamples = mixToMono(audioBuffer, startFrame, endFrame);
     const analysis = analyzeSamples(monoSamples);
     const wavBuffer = encodeMonoWav(monoSamples, audioBuffer.sampleRate);
@@ -171,6 +277,14 @@ const buildChunkedAudioFiles = (sourceFile: File, audioBuffer: AudioBuffer) => {
       averageAmplitude: analysis.averageAmplitude,
       isLikelySilent: analysis.isLikelySilent,
     });
+
+    if (endFrame >= audioBuffer.length) {
+      break;
+    }
+
+    const nextStartFrame = Math.max(startFrame + 1, Math.max(0, endFrame - overlapFrames));
+    startFrame = nextStartFrame <= startFrame ? endFrame : nextStartFrame;
+    chunkIndex += 1;
   }
 
   return chunkFiles;
@@ -182,75 +296,219 @@ const shouldRetryAsChunks = (error: unknown) =>
   error.status === 400 &&
   /instructions\s*\+\s*audio|audio is too large for this model|too large for this model/i.test(error.message);
 
+const shouldRetryInvalidResponseAsChunks = ({
+  error,
+  decodedDurationSeconds,
+}: {
+  error: unknown;
+  decodedDurationSeconds: number;
+}) =>
+  error instanceof AIRequestError &&
+  error.code === "invalid-response" &&
+  Number.isFinite(decodedDurationSeconds) &&
+  decodedDurationSeconds > 60;
+
 const transcribeSingleFile = async ({
   file,
   settings,
   onEvent,
+  model,
 }: {
   file: File;
   settings: LocalAppSettings;
   onEvent?: (event: AIRuntimeEvent) => void;
+  model: string;
 }) =>
   executeAITranscriptionOperation({
     settings,
-    formData: createTranscriptionFormData(file, settings),
+    formData: createTranscriptionFormData({ file, model }),
     operation: "transcribe-audio",
     promptVersion: AI_PROMPT_PROFILE_VERSION,
     onEvent,
   });
+
+const shouldSkipChunkError = (error: unknown, chunkFile: ChunkedAudioFile) =>
+  error instanceof AIRequestError &&
+  error.code === "invalid-response" &&
+  chunkFile.durationSeconds <= 90 &&
+  chunkFile.peakAmplitude < NEAR_SILENCE_PEAK_THRESHOLD &&
+  chunkFile.averageAmplitude < NEAR_SILENCE_AVERAGE_THRESHOLD;
+
+const normalizeTranscriptWords = (text: string) =>
+  text
+    .split(/\s+/)
+    .map((word) => word.replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase())
+    .filter(Boolean);
+
+const appendTranscriptWithOverlap = (existing: string, next: string) => {
+  const trimmedExisting = existing.trim();
+  const trimmedNext = next.trim();
+  if (!trimmedExisting) return trimmedNext;
+  if (!trimmedNext) return trimmedExisting;
+
+  const nextWords = trimmedNext.split(/\s+/);
+  const normalizedPreviousWords = normalizeTranscriptWords(trimmedExisting);
+  const normalizedNextWords = normalizeTranscriptWords(trimmedNext);
+  const maxOverlap = Math.min(30, normalizedPreviousWords.length, normalizedNextWords.length);
+
+  for (let overlapLength = maxOverlap; overlapLength >= 5; overlapLength -= 1) {
+    const previousSlice = normalizedPreviousWords.slice(-overlapLength).join(" ");
+    const nextSlice = normalizedNextWords.slice(0, overlapLength).join(" ");
+    if (previousSlice && previousSlice === nextSlice) {
+      return [trimmedExisting, nextWords.slice(overlapLength).join(" ").trim()].filter(Boolean).join("\n\n").trim();
+    }
+  }
+
+  return `${trimmedExisting}\n\n${trimmedNext}`.trim();
+};
+
+const transcribeFileWithModelFallback = async ({
+  file,
+  settings,
+  onEvent,
+  models,
+}: {
+  file: File;
+  settings: LocalAppSettings;
+  onEvent?: (event: AIRuntimeEvent) => void;
+  models: string[];
+}) => {
+  let lastError: unknown = null;
+
+  for (const model of models) {
+    try {
+      return await transcribeSingleFile({
+        file,
+        settings,
+        onEvent,
+        model,
+      });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+};
+
+const transcribeDecodedAudioInChunks = async ({
+  sourceFile,
+  audioBuffer,
+  settings,
+  onEvent,
+  chunkDurationSeconds,
+  models,
+}: {
+  sourceFile: File;
+  audioBuffer: AudioBuffer;
+  settings: LocalAppSettings;
+  onEvent?: (event: AIRuntimeEvent) => void;
+  chunkDurationSeconds: number;
+  models: string[];
+}) => {
+  const chunkFiles = buildChunkedAudioFiles({
+    sourceFile,
+    audioBuffer,
+    chunkDurationSeconds,
+    speechAwareBoundaries: true,
+    overlapSeconds: TRANSCRIPTION_OVERLAP_SECONDS,
+  });
+
+  if (chunkFiles.length <= 1) {
+    return transcribeFileWithModelFallback({ file: sourceFile, settings, onEvent, models });
+  }
+
+  let mergedTranscript = "";
+  for (const chunkFile of chunkFiles) {
+    if (chunkFile.isLikelySilent) {
+      continue;
+    }
+
+    let chunkTranscript: string;
+    try {
+      chunkTranscript = await transcribeFileWithModelFallback({
+        file: chunkFile.file,
+        settings,
+        onEvent,
+        models,
+      });
+    } catch (error) {
+      if (shouldSkipChunkError(error, chunkFile)) {
+        continue;
+      }
+
+      if (error instanceof AIRequestError && chunkFile.durationSeconds > MIN_RECURSIVE_CHUNK_DURATION_SECONDS) {
+        const nestedAudio = await decodeAudioFile(chunkFile.file);
+        if (!nestedAudio) {
+          throw error;
+        }
+        const nextChunkDurationSeconds = Math.max(
+          MIN_PRIMARY_CHUNK_DURATION_SECONDS,
+          Math.min(TRANSCRIPTION_SUBCHUNK_DURATION_SECONDS, Math.floor(chunkFile.durationSeconds / 2)),
+        );
+        chunkTranscript = await transcribeDecodedAudioInChunks({
+          sourceFile: chunkFile.file,
+          audioBuffer: nestedAudio,
+          settings,
+          onEvent,
+          chunkDurationSeconds: nextChunkDurationSeconds,
+          models,
+        });
+      } else {
+        throw error;
+      }
+    }
+
+    const trimmedTranscript = chunkTranscript.trim();
+    if (trimmedTranscript) {
+      mergedTranscript = appendTranscriptWithOverlap(mergedTranscript, trimmedTranscript);
+    }
+  }
+
+  const finalTranscript = mergedTranscript.trim();
+  if (finalTranscript) {
+    return finalTranscript;
+  }
+
+  throw new AIRequestError({
+    message: "OpenAI returned chunk transcripts without readable text.",
+    code: "invalid-response",
+    operation: "transcribe-audio",
+    retryable: false,
+  });
+};
 
 const transcribeInChunks = async ({
   file,
   decodedAudio,
   settings,
   onEvent,
+  models,
 }: {
   file: File;
   decodedAudio?: AudioBuffer | null;
   settings: LocalAppSettings;
   onEvent?: (event: AIRuntimeEvent) => void;
+  models: string[];
 }) => {
   const resolvedAudio = decodedAudio ?? (await decodeAudioFile(file));
   if (!resolvedAudio) {
     throw new Error("This runtime could not decode the audio file for chunked transcription.");
   }
 
-  const chunkFiles = buildChunkedAudioFiles(file, resolvedAudio);
-  if (chunkFiles.length <= 1) {
-    return transcribeSingleFile({ file, settings, onEvent });
-  }
+  const maxChunkDurationSeconds = Math.min(
+    MAX_PREFERRED_CHUNK_DURATION_SECONDS,
+    estimateMaxChunkDurationSeconds(resolvedAudio.sampleRate),
+  );
 
-  const transcripts: string[] = [];
-  for (const chunkFile of chunkFiles) {
-    if (chunkFile.isLikelySilent) {
-      continue;
-    }
-    let chunkTranscript: string;
-    try {
-      chunkTranscript = await transcribeSingleFile({
-        file: chunkFile.file,
-        settings,
-        onEvent,
-      });
-    } catch (error) {
-      if (
-        error instanceof AIRequestError &&
-        error.code === "invalid-response" &&
-        chunkFile.durationSeconds <= 90 &&
-        chunkFile.peakAmplitude < NEAR_SILENCE_PEAK_THRESHOLD &&
-        chunkFile.averageAmplitude < NEAR_SILENCE_AVERAGE_THRESHOLD
-      ) {
-        continue;
-      }
-      throw error;
-    }
-    const trimmedTranscript = chunkTranscript.trim();
-    if (trimmedTranscript) {
-      transcripts.push(trimmedTranscript);
-    }
-  }
-
-  return transcripts.join("\n\n").trim();
+  return transcribeDecodedAudioInChunks({
+    sourceFile: file,
+    audioBuffer: resolvedAudio,
+    settings,
+    onEvent,
+    chunkDurationSeconds: maxChunkDurationSeconds,
+    models,
+  });
 };
 
 export const transcribeAudio = async ({
@@ -264,28 +522,43 @@ export const transcribeAudio = async ({
 }) => {
   const normalizedFile = normalizeTranscriptionFile(file);
   const decodedAudio = await decodeAudioFile(normalizedFile).catch(() => null);
+  const primaryModel = resolvePreferredTranscriptionModel(settings);
+  const decodedDurationSeconds = decodedAudio ? decodedAudio.duration : 0;
+  const shouldChunk =
+    Boolean(decodedAudio) &&
+    ((Number.isFinite(decodedDurationSeconds) && decodedDurationSeconds > MAX_SINGLE_TRANSCRIPTION_DURATION_SECONDS) ||
+      normalizedFile.size > MAX_TRANSCRIPTION_UPLOAD_BYTES);
+  const models = resolveTranscriptionModels({
+    preferredModel: primaryModel,
+    useChunking: shouldChunk,
+  });
 
-  if (
-    decodedAudio &&
-    Number.isFinite(decodedAudio.duration) &&
-    decodedAudio.duration > MAX_SINGLE_TRANSCRIPTION_DURATION_SECONDS
-  ) {
+  if (decodedAudio && shouldChunk) {
     return transcribeInChunks({
       file: normalizedFile,
       decodedAudio,
       settings,
       onEvent,
+      models,
     });
   }
 
   try {
-    return await transcribeSingleFile({
+    return await transcribeFileWithModelFallback({
       file: normalizedFile,
       settings,
       onEvent,
+      models,
     });
   } catch (error) {
-    if (!shouldRetryAsChunks(error)) {
+    const shouldRetryWithChunks =
+      shouldRetryAsChunks(error) ||
+      shouldRetryInvalidResponseAsChunks({
+        error,
+        decodedDurationSeconds,
+      });
+
+    if (!shouldRetryWithChunks) {
       throw error;
     }
     return transcribeInChunks({
@@ -293,6 +566,7 @@ export const transcribeAudio = async ({
       decodedAudio,
       settings,
       onEvent,
+      models,
     });
   }
 };

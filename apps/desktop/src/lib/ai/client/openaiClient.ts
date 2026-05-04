@@ -44,8 +44,16 @@ interface OpenAITextResponse {
   }>;
   text?: string;
   transcript?: string;
+  alternatives?: Array<{
+    text?: string;
+    transcript?: string;
+  }>;
   segments?: Array<{
     text?: string;
+    alternatives?: Array<{
+      text?: string;
+      transcript?: string;
+    }>;
   }>;
   results?: Array<{
     text?: string;
@@ -281,8 +289,24 @@ export const extractResponseText = (response: OpenAITextResponse) => {
     return directText;
   }
 
+  const alternativeText = response.alternatives
+    ?.flatMap((alternative) => [alternative.text?.trim() || "", alternative.transcript?.trim() || ""])
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  if (alternativeText) {
+    return alternativeText;
+  }
+
   const segmentText = response.segments
-    ?.map((segment) => segment.text?.trim() || "")
+    ?.flatMap((segment) => {
+      const direct = segment.text?.trim() || "";
+      const alternatives =
+        segment.alternatives
+          ?.flatMap((alternative) => [alternative.text?.trim() || "", alternative.transcript?.trim() || ""])
+          .filter(Boolean) || [];
+      return [direct, ...alternatives].filter(Boolean);
+    })
     .filter(Boolean)
     .join("\n")
     .trim();

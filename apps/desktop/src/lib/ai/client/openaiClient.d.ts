@@ -38,8 +38,16 @@ interface OpenAITextResponse {
     }>;
     text?: string;
     transcript?: string;
+    alternatives?: Array<{
+        text?: string;
+        transcript?: string;
+    }>;
     segments?: Array<{
         text?: string;
+        alternatives?: Array<{
+            text?: string;
+            transcript?: string;
+        }>;
     }>;
     results?: Array<{
         text?: string;
