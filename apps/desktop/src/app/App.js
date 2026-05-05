@@ -1,6 +1,9 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode } from "@notesmith/domain";
+import { DateInput } from "../components/DateInput";
+import { PeoplePicker } from "../components/PeoplePicker";
+import { TokenPicker } from "../components/TokenPicker";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
@@ -32,10 +35,10 @@ import { fileToAttachmentRecord, loadPersistedAttachmentFile, pickAudioFile, pic
 import { buildRecordingFilename, getSupportedRecordingMimeType, getSystemAudioDisplayOptions, RECORDING_MODE_LABELS, } from "../lib/files/recording";
 import { createLocalSnapshotBackup, downloadInstallerToDownloads, downloadInstallerToDownloadsAndOpen, exportSnapshotBackup, exportSnapshotBackupToDownloads, getDesktopBundleType, getDesktopAppVersion, getDesktopStorageInfo, getLatestLocalBackupInfo, importSnapshotBackup, mergeImportedPwaSnapshot, openDesktopPath, openDesktopUrl, revealDesktopPath, } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW } from "../lib/metadata/review";
-import { findActivityIdForSession, findSessionIdForActivity, findSessionIdForTodo } from "../lib/links/entityLinks";
+import { findActivityIdForSession, findSessionIdForActivity, findSessionIdForTodo, findTodoIdForSession } from "../lib/links/entityLinks";
 import { polishNonAiNotesText } from "../lib/output/manualPolish";
 import { acceptRuleSuggestion, collectRuleSuggestionObservations, ignoreRuleSuggestion, mergeRuleSuggestionObservations } from "../lib/output/ruleSuggestions";
-import { buildStructureOptions, createEmptyStructureOptions } from "../lib/structure/options";
+import { buildStructureOptions, createEmptyStructureOptions, getActivitiesForSelection, getProjectsForDomain } from "../lib/structure/options";
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
 import { formatStockholmDate as getStockholmDateKey } from "../lib/time/stockholm";
@@ -128,6 +131,7 @@ const logAIRuntimeEvent = (event) => {
 };
 const NOTES_PANEL_MIN_WIDTH = 300;
 const NOTES_PANEL_MAX_WIDTH = 980;
+const STANDARD_TEMPLATE_FIELD_KEYS = ["title", "participants", "date", "startTime", "endTime", "agenda"];
 const clampNotesCapturePaneWidth = (value, maxWidth = NOTES_PANEL_MAX_WIDTH) => Math.min(maxWidth, Math.max(NOTES_PANEL_MIN_WIDTH, Math.round(value)));
 const normalizeOutputVersionHistory = (outputVersions, currentOutput, updatedAt) => {
     const normalized = Array.isArray(outputVersions)
@@ -178,6 +182,8 @@ export const App = () => {
     const [requestedTimeProject, setRequestedTimeProject] = useState(null);
     const [linkedDetailReturnWorkspace, setLinkedDetailReturnWorkspace] = useState(null);
     const [linkedCalendarReturnItemId, setLinkedCalendarReturnItemId] = useState(null);
+    const [calendarSessionOverlay, setCalendarSessionOverlay] = useState(null);
+    const [calendarSessionOverlayTab, setCalendarSessionOverlayTab] = useState("capture");
     const [isCalendarWorkspaceFullScreen, setIsCalendarWorkspaceFullScreen] = useState(false);
     const [calendarOpenRevision, setCalendarOpenRevision] = useState(0);
     const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -635,6 +641,19 @@ export const App = () => {
     useEffect(() => {
         activeSessionDraftRef.current = activeSession;
     }, [activeSession]);
+    useEffect(() => {
+        if (activeWorkspace !== "calendar" && calendarSessionOverlay) {
+            setCalendarSessionOverlay(null);
+        }
+    }, [activeWorkspace, calendarSessionOverlay]);
+    useEffect(() => {
+        if (!calendarSessionOverlay) {
+            return;
+        }
+        if (!activeSession || activeSession.id !== calendarSessionOverlay.sessionId) {
+            setCalendarSessionOverlay(null);
+        }
+    }, [activeSession, calendarSessionOverlay]);
     const activeTemplate = useMemo(() => activeSession && snapshot
         ? getTemplatesForCaptureMode(snapshot.templates, activeSession.captureMode).find((template) => template.id === activeSession.templateId) ??
             getTemplatesForCaptureMode(snapshot.templates, activeSession.captureMode)[0] ??
@@ -657,6 +676,13 @@ export const App = () => {
         }
         const activityId = findActivityIdForSession(snapshot.entityLinks, activeSession.id);
         return snapshot.activities.find((entry) => entry.id === activityId) ?? null;
+    }, [activeSession, snapshot]);
+    const activeLinkedTodo = useMemo(() => {
+        if (!snapshot || !activeSession) {
+            return null;
+        }
+        const todoId = findTodoIdForSession(snapshot.entityLinks, activeSession.id);
+        return snapshot.todos.find((entry) => entry.id === todoId) ?? null;
     }, [activeSession, snapshot]);
     const getMeetingTodoDefaults = () => {
         if (!activeSession) {
@@ -1923,12 +1949,33 @@ export const App = () => {
             setStatusNote(status);
         }
     };
-    const openSessionFromLink = (sessionId, returnWorkspace = null, calendarItemId = null) => openNotesTarget({
+    const openCalendarSessionTarget = ({ sessionId, calendarItemId = null, tab = "capture", status, }) => {
+        clearRequestedFilters();
+        setOpenPanel(null);
+        setCalendarOutputPreviewSessionId(null);
+        setLinkedDetailReturnWorkspace(null);
+        setLinkedCalendarReturnItemId(calendarItemId);
+        setSelectedOutputVersionId(null);
+        setActiveSessionId(sessionId);
+        setActiveWorkspace("calendar");
+        setCalendarSessionOverlay({ sessionId, calendarItemId });
+        setCalendarSessionOverlayTab(tab);
+        if (status) {
+            setStatusNote(status);
+        }
+    };
+    const findCalendarItemIdForSession = (sessionId) => snapshot?.calendarItems.find((item) => {
+        if (item.targetType === "activity") {
+            return linkedSessionStateByActivity[item.targetId]?.sessionId === sessionId;
+        }
+        return linkedSessionStateByTodo[item.targetId]?.sessionId === sessionId;
+    })?.id ?? null;
+    const findCalendarItemIdForSource = (targetType, targetId) => snapshot?.calendarItems.find((item) => item.targetType === targetType && item.targetId === targetId)?.id ?? null;
+    const openSessionFromCalendar = (sessionId, calendarItemId = null) => openCalendarSessionTarget({
         sessionId,
-        view: "capture",
-        returnWorkspace,
         calendarItemId,
-        status: returnWorkspace === "calendar" ? "Opened linked session from Calendar. Return to Calendar when you are done." : "Opened linked session.",
+        tab: "capture",
+        status: "Opened linked session in Calendar.",
     });
     const openActivityFromLink = (activityId, returnWorkspace = null) => (() => {
         const linkedActivity = snapshot?.activities.find((entry) => entry.id === activityId) ?? null;
@@ -1961,8 +2008,12 @@ export const App = () => {
         setStatusNote(`Returned to ${nextWorkspace === "time" ? "Time" : nextWorkspace === "calendar" ? "Calendar" : nextWorkspace === "now" ? "Now" : "the previous workspace"}.`);
     };
     const openCalendarOutputPreview = (sessionId) => {
-        setCalendarOutputPreviewSessionId(sessionId);
-        setOpenPanel("calendar-output-preview");
+        openCalendarSessionTarget({
+            sessionId,
+            calendarItemId: findCalendarItemIdForSession(sessionId),
+            tab: "output",
+            status: "Opened linked session output in Calendar.",
+        });
     };
     const openOverlay = (panel) => setOpenPanel(panel);
     const closeOverlay = () => {
@@ -2166,6 +2217,158 @@ export const App = () => {
             return commandActions;
         return commandActions.filter((command) => [command.label, command.description, ...command.keywords].join(" ").toLowerCase().includes(query));
     })();
+    const closeCalendarSessionOverlay = () => {
+        setCalendarSessionOverlay(null);
+        setCalendarSessionOverlayTab("capture");
+        setSelectedOutputVersionId(null);
+        setStatusNote("Closed calendar session overlay.");
+    };
+    const openCalendarOverlaySessionInNotes = () => {
+        if (!calendarSessionOverlay || !activeSession) {
+            return;
+        }
+        const nextView = calendarSessionOverlayTab === "output" ? "output" : "capture";
+        setCalendarSessionOverlay(null);
+        openNotesTarget({
+            sessionId: activeSession.id,
+            view: nextView,
+            returnWorkspace: "calendar",
+            calendarItemId: calendarSessionOverlay.calendarItemId,
+            status: "Opened linked session in Notes.",
+        });
+    };
+    const handleCalendarOverlayDomainChange = (domain) => {
+        if (!activeSession) {
+            return;
+        }
+        const nextProjects = getProjectsForDomain(structureOptions, domain);
+        const nextProject = nextProjects.includes(activeSession.project) ? activeSession.project : "";
+        const nextActivities = getActivitiesForSelection(structureOptions, domain, nextProject);
+        const nextActivity = nextActivities.includes(activeSession.activity) ? activeSession.activity : "";
+        handleCaptureSessionChange({
+            ...activeSession,
+            domain,
+            project: nextProject,
+            activity: nextActivity,
+        });
+    };
+    const handleCalendarOverlayProjectChange = (project) => {
+        if (!activeSession) {
+            return;
+        }
+        const nextActivities = getActivitiesForSelection(structureOptions, activeSession.domain, project);
+        const nextActivity = nextActivities.includes(activeSession.activity) ? activeSession.activity : "";
+        handleCaptureSessionChange({
+            ...activeSession,
+            project,
+            activity: nextActivity,
+        });
+    };
+    const handleCalendarOverlayTemplateChange = (templateId) => {
+        if (!activeSession || !snapshot) {
+            return;
+        }
+        const nextTemplate = snapshot.templates.find((template) => template.id === templateId);
+        const nextCaptureMode = nextTemplate ? getPrimaryCaptureMode(nextTemplate) : activeSession.captureMode;
+        const nextFieldValues = Object.fromEntries((nextTemplate?.fields ?? [])
+            .filter((field) => field.enabled &&
+            !STANDARD_TEMPLATE_FIELD_KEYS.includes(field.key))
+            .map((field) => [field.id, activeSession.customFieldValues[field.id] ?? ""]));
+        handleCaptureSessionChange({
+            ...activeSession,
+            captureMode: nextCaptureMode,
+            templateId,
+            customFieldValues: nextFieldValues,
+            excludedSectionIds: [],
+        });
+    };
+    const renderCalendarSessionOverlay = () => {
+        if (!calendarSessionOverlay || !activeSession || !snapshot) {
+            return null;
+        }
+        const linkedSourceType = activeLinkedActivity
+            ? activeLinkedActivity.type === "meeting"
+                ? "Meeting"
+                : "Activity"
+            : activeLinkedTodo
+                ? "Task"
+                : "Session";
+        const linkedSourceTitle = activeLinkedActivity?.description || activeLinkedTodo?.description || "";
+        const linkedSourceKey = activeLinkedActivity
+            ? { targetType: "activity", targetId: activeLinkedActivity.id }
+            : activeLinkedTodo
+                ? { targetType: "todo", targetId: activeLinkedTodo.id }
+                : null;
+        const linkedSourceRunning = linkedSourceKey
+            ? openTimeLogs.some((entry) => entry.targetType === linkedSourceKey.targetType && entry.targetId === linkedSourceKey.targetId)
+            : false;
+        const detailTemplateOptions = getTemplatesForCaptureMode(snapshot.templates, activeSession.captureMode);
+        const detailProjectOptions = getProjectsForDomain(structureOptions, activeSession.domain);
+        const detailActivityOptions = getActivitiesForSelection(structureOptions, activeSession.domain, activeSession.project);
+        const detailProjectPickerOptions = detailProjectOptions.length
+            ? detailProjectOptions
+            : snapshot.settings.savedProjects;
+        const detailActivityPickerOptions = detailActivityOptions.length
+            ? detailActivityOptions
+            : snapshot.settings.savedActivities;
+        const detailProjectSet = new Set(detailProjectPickerOptions);
+        const detailActivitySet = new Set(detailActivityPickerOptions);
+        const detailSuggestedProjects = suggestedProjects.filter((project) => detailProjectSet.has(project));
+        const detailSuggestedActivities = suggestedActivities.filter((activity) => detailActivitySet.has(activity));
+        const detailCustomFields = activeTemplate?.fields.filter((field) => field.enabled &&
+            !STANDARD_TEMPLATE_FIELD_KEYS.includes(field.key)) ?? [];
+        return (_jsx("div", { className: "calendar-session-overlay-backdrop", role: "presentation", onClick: closeCalendarSessionOverlay, children: _jsxs("div", { className: "calendar-session-overlay-surface", role: "dialog", "aria-modal": "true", "aria-label": "Session overlay", onClick: (event) => event.stopPropagation(), children: [_jsxs("div", { className: "calendar-session-overlay-header", children: [_jsxs("div", { className: "calendar-session-overlay-header-copy", children: [_jsxs("div", { className: "calendar-session-overlay-header-eyebrow", children: [_jsx("span", { className: "status-chip", children: linkedSourceType }), linkedSourceTitle ? _jsx("span", { className: "tiny-text", children: linkedSourceTitle }) : null] }), _jsx("h2", { children: activeSession.title || "Untitled session" }), _jsxs("div", { className: "calendar-session-overlay-header-meta", children: [activeSession.domain ? _jsx("span", { className: "status-chip", children: activeSession.domain }) : null, activeSession.project ? _jsx("span", { className: "status-chip", children: activeSession.project }) : null, activeSession.activity ? _jsx("span", { className: "status-chip", children: activeSession.activity }) : null, linkedSourceRunning ? _jsx("span", { className: "status-chip", children: "Running" }) : null] })] }), _jsxs("div", { className: "calendar-session-overlay-header-actions", children: [linkedSourceKey ? (_jsx("button", { className: linkedSourceRunning ? "primary-button" : "shell-button", type: "button", onClick: () => {
+                                            if (linkedSourceRunning) {
+                                                void stopTimeTracking(linkedSourceKey.targetType, linkedSourceKey.targetId);
+                                                return;
+                                            }
+                                            void startTimeTracking(linkedSourceKey.targetType, linkedSourceKey.targetId);
+                                        }, children: linkedSourceRunning ? "Stop" : "Start" })) : null, _jsx("button", { className: "shell-button", type: "button", onClick: openCalendarOverlaySessionInNotes, children: "Open in Notes" }), _jsx("button", { className: "small-button", type: "button", onClick: closeCalendarSessionOverlay, children: "Close" })] })] }), _jsx("div", { className: "calendar-session-overlay-tabs", role: "tablist", "aria-label": "Session workspace tabs", children: ["capture", "output", "details"].map((tab) => (_jsx("button", { className: "calendar-session-overlay-tab", type: "button", role: "tab", "data-active": calendarSessionOverlayTab === tab, "aria-selected": calendarSessionOverlayTab === tab, onClick: () => setCalendarSessionOverlayTab(tab), children: tab === "capture" ? "Capture" : tab === "output" ? "Output" : "Details" }, tab))) }), _jsxs("div", { className: "calendar-session-overlay-body", children: [calendarSessionOverlayTab === "capture" ? (_jsx(SessionEditor, { session: activeSession, templates: snapshot.templates, attachments: activeAttachments, presentation: "minimal", showPresentationActions: false, showPanelHeading: false, showQuickStartTemplates: false, savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, structureOptions: structureOptions, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isTranscribingAudio: isTranscribingAudio, recordingMode: recordingMode, isRecordingAudio: isRecordingAudio, recordingStatusNote: recordingStatusNote, generationLog: generationLog, onClearGenerationLog: () => setGenerationLog([]), onChange: handleCaptureSessionChange, onImportImage: () => void handleImportImage(), onCreateInlineImageAttachment: (file) => handleCreateInlineImageAttachment(file), onImportAudio: () => void handleImportAudio(), onTranscribeAudio: () => void handleTranscribeAudio(), onChangeRecordingMode: setRecordingMode, onStartRecording: (mode) => void handleStartRecording(mode), onStopRecording: () => void handleStopRecording(), onImportTranscript: () => void handleImportTranscript(), onRemoveAttachment: (attachmentId) => void handleRemoveAttachment(attachmentId), onUpdateAttachment: (attachment) => void handleUpdateAttachment(attachment), onCreateSessionFromTemplate: (templateId) => void handleCreateSessionFromTemplate(templateId), onOpenInstructions: () => openOverlay("instructions") })) : null, calendarSessionOverlayTab === "output" ? (_jsx(OutputWorkspace, { session: activeSession, template: activeTemplate, displayedOutput: displayedOutput, outputVersions: activeOutputVersions, selectedOutputVersionId: selectedOutputVersionId, attachments: activeAttachments, presentation: "minimal", showPresentationActions: false, showPanelHeading: false, showDetailsSection: false, onChange: (session) => void handleOutputWorkspaceChange(session), savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, savedProjects: snapshot.settings.savedProjects, suggestedProjects: suggestedProjects, savedDomains: snapshot.settings.savedDomains, suggestedDomains: suggestedDomains, savedActivities: snapshot.settings.savedActivities, suggestedActivities: suggestedActivities, structureOptions: structureOptions, savedTags: snapshot.settings.savedTags, suggestedTags: suggestedTags, isPrimaryActionRunning: outputActionConfig.isPrimaryRunning, isSecondaryActionRunning: outputActionConfig.isSecondaryRunning, isRevising: isRevising, onPrimaryAction: outputActionConfig.onPrimary, onSecondaryAction: outputActionConfig.onSecondary, onCopyOutput: () => void handleCopyOutput(), onTranslate: () => void handleTranslate(), onRevise: (instructions) => void handleRevise(instructions), onRevertOutputVersion: handleRevertOutputVersion, onOpenOutputVersion: handleOpenOutputVersion, onOpenLatestOutputVersion: handleOpenLatestOutputVersion, onExportText: () => exportOutputAsText({ title: activeSession.title, output: displayedOutput }), onExportMarkdown: () => exportOutputAsMarkdown({ title: activeSession.title, output: displayedOutput }), onExportHtml: () => exportOutputAsHtml({
+                                    title: activeSession.title,
+                                    output: displayedOutput,
+                                    attachments: activeAttachments,
+                                    layoutPresetId: snapshot.settings.outputLayoutPresetId,
+                                }), onExportDocx: () => void exportOutputAsDocx({
+                                    title: activeSession.title,
+                                    output: displayedOutput,
+                                    attachments: activeAttachments,
+                                    layoutPresetId: snapshot.settings.outputLayoutPresetId,
+                                }), onExportPdf: () => void exportOutputAsPdf({
+                                    title: activeSession.title,
+                                    output: displayedOutput,
+                                    attachments: activeAttachments,
+                                    layoutPresetId: snapshot.settings.outputLayoutPresetId,
+                                }), ruleSuggestions: visibleRuleSuggestions.filter((entry) => !dismissedRuleSuggestionIds.includes(entry.id)), onAcceptRuleSuggestion: (suggestionId) => void handleAcceptVisibleRuleSuggestion(suggestionId), onDismissRuleSuggestion: handleDismissVisibleRuleSuggestion, onIgnoreRuleSuggestion: (suggestionId) => void handleIgnoreVisibleRuleSuggestion(suggestionId), primaryActionLabel: outputActionConfig.primaryLabel, secondaryActionLabel: outputActionConfig.secondaryLabel, emptyStatePrimaryLabel: outputActionConfig.emptyStatePrimaryLabel, emptyStateSecondaryLabel: outputActionConfig.emptyStateSecondaryLabel, linkedActivity: activeLinkedActivity, onOpenLinkedActivity: (activityId) => openActivityFromLink(activityId, "calendar"), onAddFollowUpTodo: (description, options) => void addTodo(description, {
+                                    ...getMeetingTodoDefaults(),
+                                    ...options,
+                                }), onAddFollowUpMeeting: (description, options) => void addActivity(description, "meeting", options) })) : null, calendarSessionOverlayTab === "details" ? (_jsx("div", { className: "card calendar-session-details-card", children: _jsxs("div", { className: "calendar-session-details-grid", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "calendar-overlay-session-title", children: "Title" }), _jsx("input", { id: "calendar-overlay-session-title", value: activeSession.title, onChange: (event) => handleCaptureSessionChange({ ...activeSession, title: event.target.value }), placeholder: "Session title" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-overlay-template", children: "Template" }), _jsx("select", { id: "calendar-overlay-template", value: activeTemplate?.id ?? "", onChange: (event) => handleCalendarOverlayTemplateChange(event.target.value), children: detailTemplateOptions.map((template) => (_jsx("option", { value: template.id, children: template.name }, template.id))) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-overlay-date", children: "Date" }), _jsx(DateInput, { id: "calendar-overlay-date", value: activeSession.date, onChange: (event) => handleCaptureSessionChange({ ...activeSession, date: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-overlay-start", children: "Start" }), _jsx("input", { id: "calendar-overlay-start", type: "time", value: activeSession.startTime, onChange: (event) => handleCaptureSessionChange({ ...activeSession, startTime: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-overlay-end", children: "End" }), _jsx("input", { id: "calendar-overlay-end", type: "time", value: activeSession.endTime, onChange: (event) => handleCaptureSessionChange({ ...activeSession, endTime: event.target.value }) })] }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "calendar-overlay-people", children: "People" }), _jsx(PeoplePicker, { value: activeSession.participantText, savedPeople: snapshot.settings.savedParticipants, suggestedPeople: suggestedPeople, onChange: (value) => handleCaptureSessionChange({ ...activeSession, participantText: value }), placeholder: "Search or add people" })] }), _jsx("div", { className: "field field-wide metadata-triplet", children: _jsxs("div", { className: "metadata-triplet-grid", children: [_jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-overlay-domain", children: "Domain" }), _jsx(TokenPicker, { value: activeSession.domain, savedOptions: structureOptions.domains.length
+                                                                    ? structureOptions.domains
+                                                                    : snapshot.settings.savedDomains, suggestedOptions: suggestedDomains, placeholder: "Search or add domain", suggestionSummary: "Recent domains", suggestionBadgeText: "From saved Domains", mode: "single", onChange: handleCalendarOverlayDomainChange })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-overlay-project", children: "Project" }), _jsx(TokenPicker, { value: activeSession.project, savedOptions: detailProjectPickerOptions, suggestedOptions: detailSuggestedProjects, placeholder: "Search or add project", suggestionSummary: "Recent projects", suggestionBadgeText: "From saved Projects", mode: "single", onChange: handleCalendarOverlayProjectChange })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "calendar-overlay-activity", children: "Activity" }), _jsx(TokenPicker, { value: activeSession.activity, savedOptions: detailActivityPickerOptions, suggestedOptions: detailSuggestedActivities, placeholder: "Search or add activity", suggestionSummary: "Recent activities", suggestionBadgeText: "From saved Activities", mode: "single", onChange: (value) => handleCaptureSessionChange({ ...activeSession, activity: value }) })] })] }) }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "calendar-overlay-tags", children: "Tags" }), _jsx(TokenPicker, { value: activeSession.tagsText, savedOptions: snapshot.settings.savedTags, suggestedOptions: suggestedTags, placeholder: "Add tags", suggestionSummary: "Recent tags", suggestionBadgeText: "From saved Tags", onChange: (value) => handleCaptureSessionChange({ ...activeSession, tagsText: value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-overlay-output-language", children: "Output language" }), _jsxs("select", { id: "calendar-overlay-output-language", value: activeSession.outputLanguage, onChange: (event) => handleCaptureSessionChange({
+                                                        ...activeSession,
+                                                        outputLanguage: event.target.value,
+                                                    }), children: [_jsx("option", { value: "same", children: "Same as notes" }), _jsx("option", { value: "sv", children: "Swedish" }), _jsx("option", { value: "en", children: "English" })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-overlay-detail-level", children: "Detail level" }), _jsx("select", { id: "calendar-overlay-detail-level", value: String(activeSession.detailLevel), onChange: (event) => handleCaptureSessionChange({
+                                                        ...activeSession,
+                                                        detailLevel: Number(event.target.value),
+                                                    }), children: [1, 2, 3, 4, 5].map((level) => (_jsx("option", { value: String(level), children: level }, level))) })] }), _jsxs("div", { className: "field calendar-session-details-toggle", children: [_jsx("span", { children: "Privacy" }), _jsxs("label", { className: "compact-private-toggle", children: [_jsx("input", { type: "checkbox", checked: activeSession.isPrivate, onChange: (event) => handleCaptureSessionChange({
+                                                                ...activeSession,
+                                                                isPrivate: event.target.checked,
+                                                            }) }), _jsx("span", { children: "Private" })] })] }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "calendar-overlay-instructions", children: "Additional LLM instructions" }), _jsx("textarea", { id: "calendar-overlay-instructions", rows: 4, value: activeSession.additionalInstructions, onChange: (event) => handleCaptureSessionChange({
+                                                        ...activeSession,
+                                                        additionalInstructions: event.target.value,
+                                                    }), placeholder: "Example: Focus more on risks and decisions." })] }), detailCustomFields.map((field) => (_jsxs("div", { className: field.type === "textarea" ? "field field-wide" : "field", children: [_jsx("label", { htmlFor: `calendar-overlay-custom-${field.id}`, children: field.label }), field.type === "textarea" ? (_jsx("textarea", { id: `calendar-overlay-custom-${field.id}`, rows: 4, value: activeSession.customFieldValues[field.id] ?? "", onChange: (event) => handleCaptureSessionChange({
+                                                        ...activeSession,
+                                                        customFieldValues: {
+                                                            ...activeSession.customFieldValues,
+                                                            [field.id]: event.target.value,
+                                                        },
+                                                    }) })) : (_jsx("input", { id: `calendar-overlay-custom-${field.id}`, type: field.type === "number" ? "number" : field.type, value: activeSession.customFieldValues[field.id] ?? "", onChange: (event) => handleCaptureSessionChange({
+                                                        ...activeSession,
+                                                        customFieldValues: {
+                                                            ...activeSession.customFieldValues,
+                                                            [field.id]: event.target.value,
+                                                        },
+                                                    }) }))] }, field.id)))] }) })) : null] })] }) }));
+    };
     const renderOverlayContent = () => {
         switch (openPanel) {
             case "capture-details":
@@ -2284,20 +2487,25 @@ export const App = () => {
                                             endTime: options.endTime,
                                         }), onUpdateCalendarItem: (id, updates) => void updateCalendarItem(id, updates), onStartTracking: (targetType, targetId) => void startTimeTracking(targetType, targetId), onStopTracking: (targetType, targetId) => void stopTimeTracking(targetType, targetId), onOpenTodoWorkspace: () => setActiveWorkspace("todos"), onOpenTodoDetail: (todoId) => openTodoDetailFromLink(todoId, "calendar"), onOpenActivityWorkspace: (activityId) => openActivityFromLink(activityId, "calendar"), onOpenActivityDetail: (activityId) => openActivityFromLink(activityId, "calendar"), onOpenSession: (sessionId, openedCalendarItemId) => {
                                             const calendarItemId = openedCalendarItemId ??
-                                                snapshot.calendarItems.find((item) => {
-                                                    if (item.targetType === "activity") {
-                                                        return linkedSessionStateByActivity[item.targetId]?.sessionId === sessionId;
-                                                    }
-                                                    return linkedSessionStateByTodo[item.targetId]?.sessionId === sessionId;
-                                                })?.id ?? null;
-                                            openSessionFromLink(sessionId, "calendar", calendarItemId);
+                                                findCalendarItemIdForSession(sessionId);
+                                            openSessionFromCalendar(sessionId, calendarItemId);
                                         }, highlightedItemId: linkedCalendarReturnItemId, onCreateLinkedMeetingSession: (activityId) => void ensureSessionForActivity(activityId).then((sessionId) => {
                                             if (sessionId) {
-                                                setStatusNote("Created linked meeting session.");
+                                                openCalendarSessionTarget({
+                                                    sessionId,
+                                                    calendarItemId: findCalendarItemIdForSource("activity", activityId),
+                                                    tab: "capture",
+                                                    status: "Created linked meeting session in Calendar.",
+                                                });
                                             }
                                         }), onCreateLinkedTaskSession: (todoId) => void ensureSessionForTodo(todoId).then((sessionId) => {
                                             if (sessionId) {
-                                                setStatusNote("Created linked task note.");
+                                                openCalendarSessionTarget({
+                                                    sessionId,
+                                                    calendarItemId: findCalendarItemIdForSource("todo", todoId),
+                                                    tab: "capture",
+                                                    status: "Created linked task note in Calendar.",
+                                                });
                                             }
                                         }), onPreviewSessionOutput: openCalendarOutputPreview, onFullScreenChange: setIsCalendarWorkspaceFullScreen })) : activeWorkspace === "time" ? (_jsx(TimeWorkspace, { todos: snapshot.todos, archivedTasks: snapshot.archivedTasks, activities: snapshot.activities, timeLogs: snapshot.timelogs, structureOptions: structureOptions, requestedDomain: requestedTimeDomain, requestedProject: requestedTimeProject, reportPresets: snapshot.settings.timeReportPresets, baselineWorkActivityId: baselineWorkActivityId, isBaselineWorkEnabled: isBaselineWorkEnabled, isBaselineWorkRunning: isBaselineWorkRunning, hasSpecificRunningTimeLog: hasSpecificRunningTimeLog, onSaveTimeLog: (timeLog) => void saveTimeLog(timeLog), onDeleteTimeLog: (id) => void deleteTimeLog(id), onStartTracking: (targetType, targetId) => void startTimeTracking(targetType, targetId), onStopTracking: (targetType, targetId) => void stopTimeTracking(targetType, targetId), onStartWorkBaseline: () => void startWorkBaseline(), onStopWorkBaseline: () => void stopWorkBaseline(), onStartAdhocTimeLog: (options) => void startAdhocTimeLog(options), onOpenTodoDetail: (todoId) => openTodoDetailFromLink(todoId, "time"), onOpenActivityDetail: (activityId) => openActivityFromLink(activityId, "time"), onSaveTodo: (todo) => void saveTodo(todo), onSaveActivity: (activity) => void saveActivity(activity), onSaveReportPreset: (preset) => void saveSettings({
                                             ...snapshot.settings,
@@ -2360,7 +2568,7 @@ export const App = () => {
                                                             }), onAddFollowUpMeeting: (description, options) => void addActivity(description, "meeting", options) }) })] })] }))] }), !(activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen) && !HIDE_SHARED_INSPECTOR_WORKSPACES.includes(activeWorkspace) ? (_jsxs("aside", { className: "workspace-inspector stack", children: [_jsxs("div", { className: "sidebar-card", children: [_jsx("div", { children: _jsx("h3", { children: "Notes status" }) }), activeWorkspace === "calendar" ? (_jsxs("div", { className: "sidebar-actions", children: [_jsx("button", { className: "primary-button", type: "button", onClick: () => setActiveWorkspace("notes"), children: "Back to Notes" }), _jsx("button", { className: "small-button", type: "button", onClick: openCommandPalette, children: "Command palette" })] })) : (_jsx("p", { className: "tiny-text", children: "This inspector area will hold the primary tools for this workspace once it is implemented." }))] }), _jsxs("div", { className: "sidebar-card", children: [_jsx("div", { children: _jsx("h3", { children: "Status" }) }), _jsx("span", { className: `status-chip status-chip-${saveState}`, children: saveStatusLabel }), updateStatusNote ? _jsx("span", { className: "tiny-text topbar-status-note", children: updateStatusNote }) : null] })] })) : null, activeWorkspace === "notes" && isNotesSessionsOpen ? (_jsx("aside", { className: "notes-sessions-shelf stack", children: _jsx(SessionsSidebar, { sessions: snapshot.sessions, activeSessionId: activeSession.id, onSelect: (id) => setActiveSessionId(id), onCreate: () => openOverlay("new-note"), onClose: () => setIsNotesSessionsOpen(false), onDelete: (id) => void deleteSession(id), onRestore: (id) => void restoreSession(id), onDeleteForever: (id) => void permanentlyDeleteSession(id), compact: true, title: "Sessions" }) })) : null] })] }), isCommandPaletteOpen ? (_jsx("div", { className: "overlay-backdrop", role: "presentation", onClick: closeCommandPalette, children: _jsxs("div", { className: "overlay-surface command-palette-surface", role: "dialog", "aria-modal": "true", onClick: (event) => event.stopPropagation(), children: [_jsxs("div", { className: "overlay-header", children: [_jsxs("div", { children: [_jsx("strong", { children: "Command palette" }), _jsx("p", { className: "tiny-text", children: "Search sessions, settings, tools, and future workspaces. Keyboard first by design." })] }), _jsx("button", { className: "small-button", type: "button", onClick: closeCommandPalette, children: "Close" })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "command-query", children: "Search actions" }), _jsx("input", { id: "command-query", autoFocus: true, value: commandQuery, onChange: (event) => setCommandQuery(event.target.value), placeholder: "Try: sessions, AI settings, translate, themes, upload image" })] }), _jsxs("div", { className: "command-palette-list", children: [filteredCommandActions.slice(0, 14).map((command) => (_jsxs("button", { type: "button", className: "command-palette-item", onClick: () => {
                                         closeCommandPalette();
                                         command.action();
-                                    }, children: [_jsxs("div", { children: [_jsx("strong", { children: command.label }), _jsx("p", { children: command.description })] }), command.shortcut ? _jsx("span", { className: "tiny-text", children: command.shortcut }) : null] }, command.id))), !filteredCommandActions.length ? (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "No matching actions" }), _jsx("span", { className: "muted", children: "Try searching by workspace, setting, or action name." })] })) : null] })] }) })) : null, openPanel ? (_jsx("div", { className: "overlay-backdrop", role: "presentation", onClick: closeOverlay, children: _jsxs("div", { className: "overlay-surface", role: "dialog", "aria-modal": "true", onClick: (event) => event.stopPropagation(), children: [_jsxs("div", { className: "overlay-header", children: [_jsxs("div", { children: [_jsx("strong", { children: openPanel === "capture-details"
+                                    }, children: [_jsxs("div", { children: [_jsx("strong", { children: command.label }), _jsx("p", { children: command.description })] }), command.shortcut ? _jsx("span", { className: "tiny-text", children: command.shortcut }) : null] }, command.id))), !filteredCommandActions.length ? (_jsxs("div", { className: "list-item", children: [_jsx("strong", { children: "No matching actions" }), _jsx("span", { className: "muted", children: "Try searching by workspace, setting, or action name." })] })) : null] })] }) })) : null, renderCalendarSessionOverlay(), openPanel ? (_jsx("div", { className: "overlay-backdrop", role: "presentation", onClick: closeOverlay, children: _jsxs("div", { className: "overlay-surface", role: "dialog", "aria-modal": "true", onClick: (event) => event.stopPropagation(), children: [_jsxs("div", { className: "overlay-header", children: [_jsxs("div", { children: [_jsx("strong", { children: openPanel === "capture-details"
                                                 ? "Capture details"
                                                 : openPanel === "output-details"
                                                     ? "Output details"

@@ -263,6 +263,76 @@ export const findNearestAvailableTodoSlot = (
 
   return normalizedPreferredSlot;
 };
+
+export const reconcileCalendarBackedScheduleFields = (snapshot: Snapshot) => {
+  const todoCalendarByTargetId = new Map(
+    snapshot.calendarItems
+      .filter((item) => item.targetType === "todo")
+      .map((item) => [item.targetId, item] as const),
+  );
+  const activityCalendarByTargetId = new Map(
+    snapshot.calendarItems
+      .filter((item) => item.targetType === "activity")
+      .map((item) => [item.targetId, item] as const),
+  );
+
+  let changed = false;
+
+  const nextTodos = snapshot.todos.map((todo) => {
+    const calendarItem = todoCalendarByTargetId.get(todo.id);
+    if (!calendarItem || todo.doOn === calendarItem.date) {
+      return todo;
+    }
+    changed = true;
+    return {
+      ...todo,
+      doOn: calendarItem.date,
+    };
+  });
+
+  const nextActivities = snapshot.activities.map((activity) => {
+    const calendarItem = activityCalendarByTargetId.get(activity.id);
+    if (!calendarItem) {
+      return activity;
+    }
+
+    const nextDoOn = calendarItem.date;
+    const nextStartTime =
+      activity.type === "meeting" ? slotToTime(calendarItem.startSlot) : activity.startTime;
+    const nextEndTime =
+      activity.type === "meeting"
+        ? slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots))
+        : activity.endTime;
+
+    if (
+      activity.doOn === nextDoOn &&
+      activity.startTime === nextStartTime &&
+      activity.endTime === nextEndTime
+    ) {
+      return activity;
+    }
+
+    changed = true;
+    return {
+      ...activity,
+      doOn: nextDoOn,
+      startTime: nextStartTime,
+      endTime: nextEndTime,
+    };
+  });
+
+  return {
+    snapshot: changed
+      ? {
+          ...snapshot,
+          todos: nextTodos,
+          activities: nextActivities,
+        }
+      : snapshot,
+    changed,
+  };
+};
+
 export const rollForwardOverdueCalendarTodos = (snapshot: Snapshot, today = formatLocalDate()) => {
   const todosById = new Map(snapshot.todos.map((todo) => [todo.id, todo]));
   const overdueTodoItems = snapshot.calendarItems
@@ -1252,6 +1322,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         attachments: nextAttachments,
         activities: recalculateActivitiesWithTimeLogs(loadedSnapshot.activities, loadedSnapshot.timelogs),
       };
+      const scheduleReconciliation = reconcileCalendarBackedScheduleFields(snapshot);
+      snapshot = scheduleReconciliation.snapshot;
       snapshot = applyRecurringChecklistInstantiation(snapshot);
       snapshot = applyCompletedTaskCleanup(snapshot);
       const rolloverResult = rollForwardOverdueCalendarTodos(snapshot);
@@ -1265,7 +1337,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
           sessions: [replacement, ...snapshot.sessions],
         };
       }
-      if (expiredSessionIds.size || rolloverResult.changed) {
+      if (expiredSessionIds.size || scheduleReconciliation.changed || rolloverResult.changed) {
         await get().repository.saveSnapshot(snapshot);
       }
       configureAITextCachePersistence({

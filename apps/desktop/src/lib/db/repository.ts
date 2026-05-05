@@ -725,6 +725,14 @@ class TauriSqliteRepository implements AppRepository {
         await db.execute("ALTER TABLE sessions ADD COLUMN transcribe_only INTEGER NOT NULL DEFAULT 0").catch(() => {});
         await db.execute("ALTER TABLE sessions ADD COLUMN output_language TEXT NOT NULL DEFAULT 'same'").catch(() => {});
         await db.execute("ALTER TABLE sessions ADD COLUMN additional_instructions TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE todos ADD COLUMN do_on TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE todos ADD COLUMN due_date TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE activities ADD COLUMN activity_type TEXT NOT NULL DEFAULT 'task'").catch(() => {});
+        await db.execute("ALTER TABLE activities ADD COLUMN parent_activity_id TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE activities ADD COLUMN do_on TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE activities ADD COLUMN due_date TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE activities ADD COLUMN start_time TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE activities ADD COLUMN end_time TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE attachments ADD COLUMN caption TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE attachments ADD COLUMN include_in_output INTEGER NOT NULL DEFAULT 0").catch(() => {});
         await db.execute("ALTER TABLE attachments ADD COLUMN output_position INTEGER NOT NULL DEFAULT 0").catch(() => {});
@@ -878,8 +886,42 @@ class TauriSqliteRepository implements AppRepository {
 
   async loadTodos() {
     const db = await this.getDb();
-    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM todos ORDER BY created_at DESC");
-    return rows.map((row) => normalizeTodoRecord(JSON.parse(row.payload_json) as TodoRecord));
+    const rows = await db.select<{
+      payload_json: string;
+      description: string;
+      is_done: number;
+      comments: string;
+      do_on: string;
+      due_date: string;
+      created_at: string;
+    }>("SELECT payload_json, description, is_done, comments, do_on, due_date, created_at FROM todos ORDER BY created_at DESC");
+    return rows.map((row) => {
+      const payload = parsePayload<TodoRecord>(row.payload_json);
+      return normalizeTodoRecord({
+        ...payload,
+        id: typeof payload.id === "string" && payload.id ? payload.id : crypto.randomUUID(),
+        description: row.description || (typeof payload.description === "string" ? payload.description : ""),
+        completedAt: typeof payload.completedAt === "string" ? payload.completedAt : null,
+        isDone: Boolean(row.is_done ?? payload.isDone),
+        isPrivate: Boolean(payload.isPrivate),
+        isPriority: Boolean(payload.isPriority),
+        comments: row.comments || (typeof payload.comments === "string" ? payload.comments : ""),
+        activityId: typeof payload.activityId === "string" ? payload.activityId : "",
+        domain: typeof payload.domain === "string" ? payload.domain : "",
+        project: typeof payload.project === "string" ? payload.project : "",
+        activity: typeof payload.activity === "string" ? payload.activity : "",
+        doOn: row.do_on || (typeof payload.doOn === "string" ? payload.doOn : ""),
+        dueDate: row.due_date || (typeof payload.dueDate === "string" ? payload.dueDate : ""),
+        detailsHtml:
+          typeof payload.detailsHtml === "string"
+            ? payload.detailsHtml
+            : typeof payload.comments === "string"
+              ? payload.comments
+              : "",
+        createdAt: row.created_at || (typeof payload.createdAt === "string" ? payload.createdAt : now()),
+        sessionIds: Array.isArray(payload.sessionIds) ? payload.sessionIds.filter((value): value is string => typeof value === "string") : [],
+      });
+    });
   }
 
   async saveTodos(records: TodoRecord[]) {
@@ -888,8 +930,17 @@ class TauriSqliteRepository implements AppRepository {
     await Promise.all(
       records.map((record) =>
         db.execute(
-          "INSERT INTO todos (id, description, is_done, comments, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
-          [record.id, record.description, record.isDone ? 1 : 0, record.comments, record.createdAt, JSON.stringify(record)],
+          "INSERT INTO todos (id, description, is_done, comments, do_on, due_date, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          [
+            record.id,
+            record.description,
+            record.isDone ? 1 : 0,
+            record.comments,
+            record.doOn,
+            record.dueDate,
+            record.createdAt,
+            JSON.stringify(record),
+          ],
         ),
       ),
     );
@@ -954,8 +1005,50 @@ class TauriSqliteRepository implements AppRepository {
 
   async loadActivities() {
     const db = await this.getDb();
-    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM activities ORDER BY created_at DESC");
-    return rows.map((row) => normalizeActivityRecord(JSON.parse(row.payload_json) as ActivityRecord));
+    const rows = await db.select<{
+      payload_json: string;
+      description: string;
+      activity_type: string;
+      parent_activity_id: string;
+      is_done: number;
+      comments: string;
+      do_on: string;
+      due_date: string;
+      start_time: string;
+      end_time: string;
+      created_at: string;
+    }>("SELECT payload_json, description, activity_type, parent_activity_id, is_done, comments, do_on, due_date, start_time, end_time, created_at FROM activities ORDER BY created_at DESC");
+    return rows.map((row) => {
+      const payload = parsePayload<ActivityRecord>(row.payload_json);
+      return normalizeActivityRecord({
+        ...payload,
+        id: typeof payload.id === "string" && payload.id ? payload.id : crypto.randomUUID(),
+        description: row.description || (typeof payload.description === "string" ? payload.description : ""),
+        type: row.activity_type === "meeting" ? "meeting" : (payload.type === "meeting" ? "meeting" : "task"),
+        parentActivityId:
+          row.parent_activity_id || (typeof payload.parentActivityId === "string" ? payload.parentActivityId : ""),
+        isDone: Boolean(row.is_done ?? payload.isDone),
+        isPrivate: Boolean(payload.isPrivate),
+        comments: row.comments || (typeof payload.comments === "string" ? payload.comments : ""),
+        domain: typeof payload.domain === "string" ? payload.domain : "",
+        project: typeof payload.project === "string" ? payload.project : "",
+        activity: typeof payload.activity === "string" ? payload.activity : "",
+        doOn: row.do_on || (typeof payload.doOn === "string" ? payload.doOn : ""),
+        dueDate: row.due_date || (typeof payload.dueDate === "string" ? payload.dueDate : ""),
+        startTime: row.start_time || (typeof payload.startTime === "string" ? payload.startTime : ""),
+        endTime: row.end_time || (typeof payload.endTime === "string" ? payload.endTime : ""),
+        detailsHtml:
+          typeof payload.detailsHtml === "string"
+            ? payload.detailsHtml
+            : typeof payload.comments === "string"
+              ? payload.comments
+              : "",
+        timeRequiredMinutes: Number.isFinite(Number(payload.timeRequiredMinutes)) ? Number(payload.timeRequiredMinutes) : 0,
+        actualTimeSpentMinutes: Number.isFinite(Number(payload.actualTimeSpentMinutes)) ? Number(payload.actualTimeSpentMinutes) : 0,
+        createdAt: row.created_at || (typeof payload.createdAt === "string" ? payload.createdAt : now()),
+        sessionIds: Array.isArray(payload.sessionIds) ? payload.sessionIds.filter((value): value is string => typeof value === "string") : [],
+      });
+    });
   }
 
   async loadArchivedTasks() {
@@ -983,8 +1076,21 @@ class TauriSqliteRepository implements AppRepository {
     await Promise.all(
       records.map((record) =>
         db.execute(
-          "INSERT INTO activities (id, description, is_done, comments, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
-          [record.id, record.description, record.isDone ? 1 : 0, record.comments, record.createdAt, JSON.stringify(record)],
+          "INSERT INTO activities (id, description, activity_type, parent_activity_id, is_done, comments, do_on, due_date, start_time, end_time, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [
+            record.id,
+            record.description,
+            record.type,
+            record.parentActivityId,
+            record.isDone ? 1 : 0,
+            record.comments,
+            record.doOn,
+            record.dueDate,
+            record.startTime,
+            record.endTime,
+            record.createdAt,
+            JSON.stringify(record),
+          ],
         ),
       ),
     );

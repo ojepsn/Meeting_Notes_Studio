@@ -35,14 +35,22 @@ export const sqliteBootstrapStatements = [
     description TEXT NOT NULL,
     is_done INTEGER NOT NULL,
     comments TEXT NOT NULL,
+    do_on TEXT NOT NULL DEFAULT '',
+    due_date TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     payload_json TEXT NOT NULL
   );`,
     `CREATE TABLE IF NOT EXISTS activities (
     id TEXT PRIMARY KEY,
     description TEXT NOT NULL,
+    activity_type TEXT NOT NULL DEFAULT 'task',
+    parent_activity_id TEXT NOT NULL DEFAULT '',
     is_done INTEGER NOT NULL,
     comments TEXT NOT NULL,
+    do_on TEXT NOT NULL DEFAULT '',
+    due_date TEXT NOT NULL DEFAULT '',
+    start_time TEXT NOT NULL DEFAULT '',
+    end_time TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     payload_json TEXT NOT NULL
   );`,

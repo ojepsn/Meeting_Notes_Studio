@@ -67,6 +67,8 @@ interface OutputWorkspaceProps {
   attachments: AttachmentRecord[];
   presentation?: CaptureWorkspaceDensity;
   showPresentationActions?: boolean;
+  showPanelHeading?: boolean;
+  showDetailsSection?: boolean;
   onChange: (session: SessionRecord) => void;
   savedPeople: string[];
   suggestedPeople: string[];
@@ -118,6 +120,8 @@ export const OutputWorkspace = ({
   attachments,
   presentation = "full",
   showPresentationActions = true,
+  showPanelHeading = true,
+  showDetailsSection = true,
   onChange,
   savedPeople,
   suggestedPeople,
@@ -330,11 +334,13 @@ export const OutputWorkspace = ({
   if (isMinimal) {
     return (
       <div className="card output-workspace output-workspace-minimal output-workspace-pwa">
-        <div className="panel-heading output-workspace-pwa-heading">
-          <div className="panel-heading-copy">
-            <p className="section-label">Output</p>
+        {showPanelHeading ? (
+          <div className="panel-heading output-workspace-pwa-heading">
+            <div className="panel-heading-copy">
+              <p className="section-label">Output</p>
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <div className="panel-actions panel-actions-output-top output-actions-row-pwa">
           <div className="panel-actions-page">
@@ -553,78 +559,80 @@ export const OutputWorkspace = ({
 
             {renderVersionHistory()}
 
-            <details className="workspace-disclosure pwa-disclosure-card">
-              <summary>Details</summary>
-              <div className="workspace-disclosure-body form-grid">
-                <div className="field field-wide">
-                  <label htmlFor="output-title">Title</label>
-                  <input
-                    className="minimal-title-input"
-                    id="output-title"
-                    value={session.title}
-                    onChange={(event) => onChange({ ...session, title: event.target.value })}
-                    placeholder={isMeetingNote ? "Weekly project meeting" : "Note title"}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="output-date">Date</label>
-                  <DateInput id="output-date" value={session.date} onChange={(event) => onChange({ ...session, date: event.target.value })} />
-                </div>
-                <div className="field">
-                  <label htmlFor="output-people">People</label>
-                  <PeoplePicker
-                    value={session.participantText}
-                    savedPeople={savedPeople}
-                    suggestedPeople={suggestedPeople}
-                    onChange={(value) => onChange({ ...session, participantText: value })}
-                    placeholder={isMeetingNote ? "Search or add people" : "Search or add optional context"}
-                  />
-                </div>
-                <div className="field field-wide metadata-triplet">
-                  <div className="metadata-triplet-grid">
-                    <div className="field metadata-subfield">
-                      <label htmlFor="output-domain">Domain</label>
-                      <TokenPicker
-                        value={session.domain}
-                        savedOptions={structureOptions.domains.length ? structureOptions.domains : savedDomains}
-                        suggestedOptions={suggestedDomains}
-                        placeholder="Search or add domain"
-                        suggestionSummary="Recent domains"
-                        suggestionBadgeText="From saved Domains"
-                        mode="single"
-                        onChange={handleDomainChange}
-                      />
-                    </div>
-                    <div className="field metadata-subfield">
-                      <label htmlFor="output-project">Project</label>
-                      <TokenPicker
-                        value={session.project}
-                        savedOptions={projectPickerOptions}
-                        suggestedOptions={suggestedProjectsForSelection}
-                        placeholder="Search or add project"
-                        suggestionSummary="Recent projects"
-                        suggestionBadgeText="From saved Projects"
-                        mode="single"
-                        onChange={handleProjectChange}
-                      />
-                    </div>
-                    <div className="field metadata-subfield">
-                      <label htmlFor="output-activity">Activity</label>
-                      <TokenPicker
-                        value={session.activity}
-                        savedOptions={activityPickerOptions}
-                        suggestedOptions={suggestedActivitiesForSelection}
-                        placeholder="Search or add activity"
-                        suggestionSummary="Recent activities"
-                        suggestionBadgeText="From saved Activities"
-                        mode="single"
-                        onChange={(value) => onChange({ ...session, activity: value })}
-                      />
+            {showDetailsSection ? (
+              <details className="workspace-disclosure pwa-disclosure-card">
+                <summary>Details</summary>
+                <div className="workspace-disclosure-body form-grid">
+                  <div className="field field-wide">
+                    <label htmlFor="output-title">Title</label>
+                    <input
+                      className="minimal-title-input"
+                      id="output-title"
+                      value={session.title}
+                      onChange={(event) => onChange({ ...session, title: event.target.value })}
+                      placeholder={isMeetingNote ? "Weekly project meeting" : "Note title"}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="output-date">Date</label>
+                    <DateInput id="output-date" value={session.date} onChange={(event) => onChange({ ...session, date: event.target.value })} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="output-people">People</label>
+                    <PeoplePicker
+                      value={session.participantText}
+                      savedPeople={savedPeople}
+                      suggestedPeople={suggestedPeople}
+                      onChange={(value) => onChange({ ...session, participantText: value })}
+                      placeholder={isMeetingNote ? "Search or add people" : "Search or add optional context"}
+                    />
+                  </div>
+                  <div className="field field-wide metadata-triplet">
+                    <div className="metadata-triplet-grid">
+                      <div className="field metadata-subfield">
+                        <label htmlFor="output-domain">Domain</label>
+                        <TokenPicker
+                          value={session.domain}
+                          savedOptions={structureOptions.domains.length ? structureOptions.domains : savedDomains}
+                          suggestedOptions={suggestedDomains}
+                          placeholder="Search or add domain"
+                          suggestionSummary="Recent domains"
+                          suggestionBadgeText="From saved Domains"
+                          mode="single"
+                          onChange={handleDomainChange}
+                        />
+                      </div>
+                      <div className="field metadata-subfield">
+                        <label htmlFor="output-project">Project</label>
+                        <TokenPicker
+                          value={session.project}
+                          savedOptions={projectPickerOptions}
+                          suggestedOptions={suggestedProjectsForSelection}
+                          placeholder="Search or add project"
+                          suggestionSummary="Recent projects"
+                          suggestionBadgeText="From saved Projects"
+                          mode="single"
+                          onChange={handleProjectChange}
+                        />
+                      </div>
+                      <div className="field metadata-subfield">
+                        <label htmlFor="output-activity">Activity</label>
+                        <TokenPicker
+                          value={session.activity}
+                          savedOptions={activityPickerOptions}
+                          suggestedOptions={suggestedActivitiesForSelection}
+                          placeholder="Search or add activity"
+                          suggestionSummary="Recent activities"
+                          suggestionBadgeText="From saved Activities"
+                          mode="single"
+                          onChange={(value) => onChange({ ...session, activity: value })}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </details>
+              </details>
+            ) : null}
 
             {linkedActivity ? (
               <details className="workspace-disclosure pwa-disclosure-card">
@@ -1038,9 +1046,10 @@ export const OutputWorkspace = ({
         />
       </div>
       {renderVersionHistory()}
-      <details className="field field-wide workspace-disclosure">
-        <summary>Details</summary>
-        <div className="workspace-disclosure-body form-grid">
+      {showDetailsSection ? (
+        <details className="field field-wide workspace-disclosure">
+          <summary>Details</summary>
+          <div className="workspace-disclosure-body form-grid">
           <div className={`field field-wide${isMinimal ? " capture-title-field-minimal" : ""}`}>
             <label htmlFor="output-title">Title</label>
             <input
@@ -1166,8 +1175,9 @@ export const OutputWorkspace = ({
               </label>
             </div>
           </div>
-        </div>
-      </details>
+          </div>
+        </details>
+      ) : null}
       {includedImages.length ? (
         <div className="field field-wide">
           <label>Images marked for polished output</label>

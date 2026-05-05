@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type CaptureMode, type RuleSuggestionRecord, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
+import { DateInput } from "../components/DateInput";
+import { PeoplePicker } from "../components/PeoplePicker";
+import { TokenPicker } from "../components/TokenPicker";
 import { useDesktopStore } from "../state/useDesktopStore";
 import { SessionEditor } from "../features/sessions/components/SessionEditor";
 import { SessionsSidebar } from "../features/sessions/components/SessionsSidebar";
@@ -76,16 +79,17 @@ import {
   type DesktopStorageInfo,
 } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW, type MetadataReviewState } from "../lib/metadata/review";
-import { findActivityIdForSession, findSessionIdForActivity, findSessionIdForTodo } from "../lib/links/entityLinks";
+import { findActivityIdForSession, findSessionIdForActivity, findSessionIdForTodo, findTodoIdForSession } from "../lib/links/entityLinks";
 import { polishNonAiNotesText } from "../lib/output/manualPolish";
 import { acceptRuleSuggestion, collectRuleSuggestionObservations, ignoreRuleSuggestion, mergeRuleSuggestionObservations } from "../lib/output/ruleSuggestions";
-import { buildStructureOptions, createEmptyStructureOptions } from "../lib/structure/options";
+import { buildStructureOptions, createEmptyStructureOptions, getActivitiesForSelection, getProjectsForDomain } from "../lib/structure/options";
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
 import { formatStockholmDate as getStockholmDateKey } from "../lib/time/stockholm";
 
 type AppWorkspace = "notes" | "now" | "todos" | "calendar" | "time" | "analytics" | "structure" | "assistant" | "files";
 type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | "instructions" | null;
+type CalendarSessionOverlayTab = "capture" | "output" | "details";
 type CommandAction = {
   id: string;
   label: string;
@@ -206,6 +210,7 @@ const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
 
 const NOTES_PANEL_MIN_WIDTH = 300;
 const NOTES_PANEL_MAX_WIDTH = 980;
+const STANDARD_TEMPLATE_FIELD_KEYS = ["title", "participants", "date", "startTime", "endTime", "agenda"] as const;
 const clampNotesCapturePaneWidth = (value: number, maxWidth = NOTES_PANEL_MAX_WIDTH) =>
   Math.min(maxWidth, Math.max(NOTES_PANEL_MIN_WIDTH, Math.round(value)));
 
@@ -326,6 +331,11 @@ export const App = () => {
   const [requestedTimeProject, setRequestedTimeProject] = useState<string | null>(null);
   const [linkedDetailReturnWorkspace, setLinkedDetailReturnWorkspace] = useState<AppWorkspace | null>(null);
   const [linkedCalendarReturnItemId, setLinkedCalendarReturnItemId] = useState<string | null>(null);
+  const [calendarSessionOverlay, setCalendarSessionOverlay] = useState<{
+    sessionId: string;
+    calendarItemId: string | null;
+  } | null>(null);
+  const [calendarSessionOverlayTab, setCalendarSessionOverlayTab] = useState<CalendarSessionOverlayTab>("capture");
   const [isCalendarWorkspaceFullScreen, setIsCalendarWorkspaceFullScreen] = useState(false);
   const [calendarOpenRevision, setCalendarOpenRevision] = useState(0);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -849,6 +859,21 @@ export const App = () => {
     activeSessionDraftRef.current = activeSession;
   }, [activeSession]);
 
+  useEffect(() => {
+    if (activeWorkspace !== "calendar" && calendarSessionOverlay) {
+      setCalendarSessionOverlay(null);
+    }
+  }, [activeWorkspace, calendarSessionOverlay]);
+
+  useEffect(() => {
+    if (!calendarSessionOverlay) {
+      return;
+    }
+    if (!activeSession || activeSession.id !== calendarSessionOverlay.sessionId) {
+      setCalendarSessionOverlay(null);
+    }
+  }, [activeSession, calendarSessionOverlay]);
+
   const activeTemplate = useMemo(
     () =>
       activeSession && snapshot
@@ -881,6 +906,13 @@ export const App = () => {
     }
     const activityId = findActivityIdForSession(snapshot.entityLinks, activeSession.id);
     return snapshot.activities.find((entry) => entry.id === activityId) ?? null;
+  }, [activeSession, snapshot]);
+  const activeLinkedTodo = useMemo(() => {
+    if (!snapshot || !activeSession) {
+      return null;
+    }
+    const todoId = findTodoIdForSession(snapshot.entityLinks, activeSession.id);
+    return snapshot.todos.find((entry) => entry.id === todoId) ?? null;
   }, [activeSession, snapshot]);
   const getMeetingTodoDefaults = () => {
     if (!activeSession) {
@@ -2487,13 +2519,46 @@ export const App = () => {
       setStatusNote(status);
     }
   };
-  const openSessionFromLink = (sessionId: string, returnWorkspace: AppWorkspace | null = null, calendarItemId: string | null = null) =>
-    openNotesTarget({
+  const openCalendarSessionTarget = ({
+    sessionId,
+    calendarItemId = null,
+    tab = "capture",
+    status,
+  }: {
+    sessionId: string;
+    calendarItemId?: string | null;
+    tab?: CalendarSessionOverlayTab;
+    status?: string;
+  }) => {
+    clearRequestedFilters();
+    setOpenPanel(null);
+    setCalendarOutputPreviewSessionId(null);
+    setLinkedDetailReturnWorkspace(null);
+    setLinkedCalendarReturnItemId(calendarItemId);
+    setSelectedOutputVersionId(null);
+    setActiveSessionId(sessionId);
+    setActiveWorkspace("calendar");
+    setCalendarSessionOverlay({ sessionId, calendarItemId });
+    setCalendarSessionOverlayTab(tab);
+    if (status) {
+      setStatusNote(status);
+    }
+  };
+  const findCalendarItemIdForSession = (sessionId: string) =>
+    snapshot?.calendarItems.find((item) => {
+      if (item.targetType === "activity") {
+        return linkedSessionStateByActivity[item.targetId]?.sessionId === sessionId;
+      }
+      return linkedSessionStateByTodo[item.targetId]?.sessionId === sessionId;
+    })?.id ?? null;
+  const findCalendarItemIdForSource = (targetType: "activity" | "todo", targetId: string) =>
+    snapshot?.calendarItems.find((item) => item.targetType === targetType && item.targetId === targetId)?.id ?? null;
+  const openSessionFromCalendar = (sessionId: string, calendarItemId: string | null = null) =>
+    openCalendarSessionTarget({
       sessionId,
-      view: "capture",
-      returnWorkspace,
       calendarItemId,
-      status: returnWorkspace === "calendar" ? "Opened linked session from Calendar. Return to Calendar when you are done." : "Opened linked session.",
+      tab: "capture",
+      status: "Opened linked session in Calendar.",
     });
   const openActivityFromLink = (activityId: string, returnWorkspace: AppWorkspace | null = null) =>
     (() => {
@@ -2528,8 +2593,12 @@ export const App = () => {
     setStatusNote(`Returned to ${nextWorkspace === "time" ? "Time" : nextWorkspace === "calendar" ? "Calendar" : nextWorkspace === "now" ? "Now" : "the previous workspace"}.`);
   };
   const openCalendarOutputPreview = (sessionId: string) => {
-    setCalendarOutputPreviewSessionId(sessionId);
-    setOpenPanel("calendar-output-preview");
+    openCalendarSessionTarget({
+      sessionId,
+      calendarItemId: findCalendarItemIdForSession(sessionId),
+      tab: "output",
+      status: "Opened linked session output in Calendar.",
+    });
   };
 
   const openOverlay = (panel: OverlayPanel) => setOpenPanel(panel);
@@ -2738,6 +2807,552 @@ export const App = () => {
       [command.label, command.description, ...command.keywords].join(" ").toLowerCase().includes(query),
     );
   })();
+
+  const closeCalendarSessionOverlay = () => {
+    setCalendarSessionOverlay(null);
+    setCalendarSessionOverlayTab("capture");
+    setSelectedOutputVersionId(null);
+    setStatusNote("Closed calendar session overlay.");
+  };
+
+  const openCalendarOverlaySessionInNotes = () => {
+    if (!calendarSessionOverlay || !activeSession) {
+      return;
+    }
+    const nextView = calendarSessionOverlayTab === "output" ? "output" : "capture";
+    setCalendarSessionOverlay(null);
+    openNotesTarget({
+      sessionId: activeSession.id,
+      view: nextView,
+      returnWorkspace: "calendar",
+      calendarItemId: calendarSessionOverlay.calendarItemId,
+      status: "Opened linked session in Notes.",
+    });
+  };
+
+  const handleCalendarOverlayDomainChange = (domain: string) => {
+    if (!activeSession) {
+      return;
+    }
+    const nextProjects = getProjectsForDomain(structureOptions, domain);
+    const nextProject = nextProjects.includes(activeSession.project) ? activeSession.project : "";
+    const nextActivities = getActivitiesForSelection(structureOptions, domain, nextProject);
+    const nextActivity = nextActivities.includes(activeSession.activity) ? activeSession.activity : "";
+    handleCaptureSessionChange({
+      ...activeSession,
+      domain,
+      project: nextProject,
+      activity: nextActivity,
+    });
+  };
+
+  const handleCalendarOverlayProjectChange = (project: string) => {
+    if (!activeSession) {
+      return;
+    }
+    const nextActivities = getActivitiesForSelection(structureOptions, activeSession.domain, project);
+    const nextActivity = nextActivities.includes(activeSession.activity) ? activeSession.activity : "";
+    handleCaptureSessionChange({
+      ...activeSession,
+      project,
+      activity: nextActivity,
+    });
+  };
+
+  const handleCalendarOverlayTemplateChange = (templateId: string) => {
+    if (!activeSession || !snapshot) {
+      return;
+    }
+    const nextTemplate = snapshot.templates.find((template) => template.id === templateId);
+    const nextCaptureMode = nextTemplate ? getPrimaryCaptureMode(nextTemplate) : activeSession.captureMode;
+    const nextFieldValues = Object.fromEntries(
+      (nextTemplate?.fields ?? [])
+        .filter(
+          (field) =>
+            field.enabled &&
+            !STANDARD_TEMPLATE_FIELD_KEYS.includes(field.key as (typeof STANDARD_TEMPLATE_FIELD_KEYS)[number]),
+        )
+        .map((field) => [field.id, activeSession.customFieldValues[field.id] ?? ""]),
+    );
+    handleCaptureSessionChange({
+      ...activeSession,
+      captureMode: nextCaptureMode,
+      templateId,
+      customFieldValues: nextFieldValues,
+      excludedSectionIds: [],
+    });
+  };
+
+  const renderCalendarSessionOverlay = () => {
+    if (!calendarSessionOverlay || !activeSession || !snapshot) {
+      return null;
+    }
+
+    const linkedSourceType = activeLinkedActivity
+      ? activeLinkedActivity.type === "meeting"
+        ? "Meeting"
+        : "Activity"
+      : activeLinkedTodo
+        ? "Task"
+        : "Session";
+    const linkedSourceTitle = activeLinkedActivity?.description || activeLinkedTodo?.description || "";
+    const linkedSourceKey = activeLinkedActivity
+      ? { targetType: "activity" as const, targetId: activeLinkedActivity.id }
+      : activeLinkedTodo
+        ? { targetType: "todo" as const, targetId: activeLinkedTodo.id }
+        : null;
+    const linkedSourceRunning = linkedSourceKey
+      ? openTimeLogs.some(
+          (entry) => entry.targetType === linkedSourceKey.targetType && entry.targetId === linkedSourceKey.targetId,
+        )
+      : false;
+    const detailTemplateOptions = getTemplatesForCaptureMode(snapshot.templates, activeSession.captureMode);
+    const detailProjectOptions = getProjectsForDomain(structureOptions, activeSession.domain);
+    const detailActivityOptions = getActivitiesForSelection(
+      structureOptions,
+      activeSession.domain,
+      activeSession.project,
+    );
+    const detailProjectPickerOptions = detailProjectOptions.length
+      ? detailProjectOptions
+      : snapshot.settings.savedProjects;
+    const detailActivityPickerOptions = detailActivityOptions.length
+      ? detailActivityOptions
+      : snapshot.settings.savedActivities;
+    const detailProjectSet = new Set(detailProjectPickerOptions);
+    const detailActivitySet = new Set(detailActivityPickerOptions);
+    const detailSuggestedProjects = suggestedProjects.filter((project) => detailProjectSet.has(project));
+    const detailSuggestedActivities = suggestedActivities.filter((activity) => detailActivitySet.has(activity));
+    const detailCustomFields =
+      activeTemplate?.fields.filter(
+        (field) =>
+          field.enabled &&
+          !STANDARD_TEMPLATE_FIELD_KEYS.includes(field.key as (typeof STANDARD_TEMPLATE_FIELD_KEYS)[number]),
+      ) ?? [];
+
+    return (
+      <div className="calendar-session-overlay-backdrop" role="presentation" onClick={closeCalendarSessionOverlay}>
+        <div
+          className="calendar-session-overlay-surface"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Session overlay"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="calendar-session-overlay-header">
+            <div className="calendar-session-overlay-header-copy">
+              <div className="calendar-session-overlay-header-eyebrow">
+                <span className="status-chip">{linkedSourceType}</span>
+                {linkedSourceTitle ? <span className="tiny-text">{linkedSourceTitle}</span> : null}
+              </div>
+              <h2>{activeSession.title || "Untitled session"}</h2>
+              <div className="calendar-session-overlay-header-meta">
+                {activeSession.domain ? <span className="status-chip">{activeSession.domain}</span> : null}
+                {activeSession.project ? <span className="status-chip">{activeSession.project}</span> : null}
+                {activeSession.activity ? <span className="status-chip">{activeSession.activity}</span> : null}
+                {linkedSourceRunning ? <span className="status-chip">Running</span> : null}
+              </div>
+            </div>
+            <div className="calendar-session-overlay-header-actions">
+              {linkedSourceKey ? (
+                <button
+                  className={linkedSourceRunning ? "primary-button" : "shell-button"}
+                  type="button"
+                  onClick={() => {
+                    if (linkedSourceRunning) {
+                      void stopTimeTracking(linkedSourceKey.targetType, linkedSourceKey.targetId);
+                      return;
+                    }
+                    void startTimeTracking(linkedSourceKey.targetType, linkedSourceKey.targetId);
+                  }}
+                >
+                  {linkedSourceRunning ? "Stop" : "Start"}
+                </button>
+              ) : null}
+              <button className="shell-button" type="button" onClick={openCalendarOverlaySessionInNotes}>
+                Open in Notes
+              </button>
+              <button className="small-button" type="button" onClick={closeCalendarSessionOverlay}>
+                Close
+              </button>
+            </div>
+          </div>
+
+          <div className="calendar-session-overlay-tabs" role="tablist" aria-label="Session workspace tabs">
+            {(["capture", "output", "details"] as const).map((tab) => (
+              <button
+                key={tab}
+                className="calendar-session-overlay-tab"
+                type="button"
+                role="tab"
+                data-active={calendarSessionOverlayTab === tab}
+                aria-selected={calendarSessionOverlayTab === tab}
+                onClick={() => setCalendarSessionOverlayTab(tab)}
+              >
+                {tab === "capture" ? "Capture" : tab === "output" ? "Output" : "Details"}
+              </button>
+            ))}
+          </div>
+
+          <div className="calendar-session-overlay-body">
+            {calendarSessionOverlayTab === "capture" ? (
+              <SessionEditor
+                session={activeSession}
+                templates={snapshot.templates}
+                attachments={activeAttachments}
+                presentation="minimal"
+                showPresentationActions={false}
+                showPanelHeading={false}
+                showQuickStartTemplates={false}
+                savedPeople={snapshot.settings.savedParticipants}
+                suggestedPeople={suggestedPeople}
+                savedProjects={snapshot.settings.savedProjects}
+                suggestedProjects={suggestedProjects}
+                savedDomains={snapshot.settings.savedDomains}
+                suggestedDomains={suggestedDomains}
+                savedActivities={snapshot.settings.savedActivities}
+                suggestedActivities={suggestedActivities}
+                structureOptions={structureOptions}
+                savedTags={snapshot.settings.savedTags}
+                suggestedTags={suggestedTags}
+                isTranscribingAudio={isTranscribingAudio}
+                recordingMode={recordingMode}
+                isRecordingAudio={isRecordingAudio}
+                recordingStatusNote={recordingStatusNote}
+                generationLog={generationLog}
+                onClearGenerationLog={() => setGenerationLog([])}
+                onChange={handleCaptureSessionChange}
+                onImportImage={() => void handleImportImage()}
+                onCreateInlineImageAttachment={(file) => handleCreateInlineImageAttachment(file)}
+                onImportAudio={() => void handleImportAudio()}
+                onTranscribeAudio={() => void handleTranscribeAudio()}
+                onChangeRecordingMode={setRecordingMode}
+                onStartRecording={(mode) => void handleStartRecording(mode)}
+                onStopRecording={() => void handleStopRecording()}
+                onImportTranscript={() => void handleImportTranscript()}
+                onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
+                onUpdateAttachment={(attachment) => void handleUpdateAttachment(attachment)}
+                onCreateSessionFromTemplate={(templateId) => void handleCreateSessionFromTemplate(templateId)}
+                onOpenInstructions={() => openOverlay("instructions")}
+              />
+            ) : null}
+
+            {calendarSessionOverlayTab === "output" ? (
+              <OutputWorkspace
+                session={activeSession}
+                template={activeTemplate}
+                displayedOutput={displayedOutput}
+                outputVersions={activeOutputVersions}
+                selectedOutputVersionId={selectedOutputVersionId}
+                attachments={activeAttachments}
+                presentation="minimal"
+                showPresentationActions={false}
+                showPanelHeading={false}
+                showDetailsSection={false}
+                onChange={(session) => void handleOutputWorkspaceChange(session)}
+                savedPeople={snapshot.settings.savedParticipants}
+                suggestedPeople={suggestedPeople}
+                savedProjects={snapshot.settings.savedProjects}
+                suggestedProjects={suggestedProjects}
+                savedDomains={snapshot.settings.savedDomains}
+                suggestedDomains={suggestedDomains}
+                savedActivities={snapshot.settings.savedActivities}
+                suggestedActivities={suggestedActivities}
+                structureOptions={structureOptions}
+                savedTags={snapshot.settings.savedTags}
+                suggestedTags={suggestedTags}
+                isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
+                isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
+                isRevising={isRevising}
+                onPrimaryAction={outputActionConfig.onPrimary}
+                onSecondaryAction={outputActionConfig.onSecondary}
+                onCopyOutput={() => void handleCopyOutput()}
+                onTranslate={() => void handleTranslate()}
+                onRevise={(instructions) => void handleRevise(instructions)}
+                onRevertOutputVersion={handleRevertOutputVersion}
+                onOpenOutputVersion={handleOpenOutputVersion}
+                onOpenLatestOutputVersion={handleOpenLatestOutputVersion}
+                onExportText={() => exportOutputAsText({ title: activeSession.title, output: displayedOutput })}
+                onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: displayedOutput })}
+                onExportHtml={() =>
+                  exportOutputAsHtml({
+                    title: activeSession.title,
+                    output: displayedOutput,
+                    attachments: activeAttachments,
+                    layoutPresetId: snapshot.settings.outputLayoutPresetId,
+                  })}
+                onExportDocx={() =>
+                  void exportOutputAsDocx({
+                    title: activeSession.title,
+                    output: displayedOutput,
+                    attachments: activeAttachments,
+                    layoutPresetId: snapshot.settings.outputLayoutPresetId,
+                  })}
+                onExportPdf={() =>
+                  void exportOutputAsPdf({
+                    title: activeSession.title,
+                    output: displayedOutput,
+                    attachments: activeAttachments,
+                    layoutPresetId: snapshot.settings.outputLayoutPresetId,
+                  })}
+                ruleSuggestions={visibleRuleSuggestions.filter((entry) => !dismissedRuleSuggestionIds.includes(entry.id))}
+                onAcceptRuleSuggestion={(suggestionId) => void handleAcceptVisibleRuleSuggestion(suggestionId)}
+                onDismissRuleSuggestion={handleDismissVisibleRuleSuggestion}
+                onIgnoreRuleSuggestion={(suggestionId) => void handleIgnoreVisibleRuleSuggestion(suggestionId)}
+                primaryActionLabel={outputActionConfig.primaryLabel}
+                secondaryActionLabel={outputActionConfig.secondaryLabel}
+                emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
+                emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
+                linkedActivity={activeLinkedActivity}
+                onOpenLinkedActivity={(activityId) => openActivityFromLink(activityId, "calendar")}
+                onAddFollowUpTodo={(description, options) =>
+                  void addTodo(description, {
+                    ...getMeetingTodoDefaults(),
+                    ...options,
+                  })}
+                onAddFollowUpMeeting={(description, options) => void addActivity(description, "meeting", options)}
+              />
+            ) : null}
+
+            {calendarSessionOverlayTab === "details" ? (
+              <div className="card calendar-session-details-card">
+                <div className="calendar-session-details-grid">
+                  <div className="field field-wide">
+                    <label htmlFor="calendar-overlay-session-title">Title</label>
+                    <input
+                      id="calendar-overlay-session-title"
+                      value={activeSession.title}
+                      onChange={(event) => handleCaptureSessionChange({ ...activeSession, title: event.target.value })}
+                      placeholder="Session title"
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="calendar-overlay-template">Template</label>
+                    <select
+                      id="calendar-overlay-template"
+                      value={activeTemplate?.id ?? ""}
+                      onChange={(event) => handleCalendarOverlayTemplateChange(event.target.value)}
+                    >
+                      {detailTemplateOptions.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="calendar-overlay-date">Date</label>
+                    <DateInput
+                      id="calendar-overlay-date"
+                      value={activeSession.date}
+                      onChange={(event) => handleCaptureSessionChange({ ...activeSession, date: event.target.value })}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="calendar-overlay-start">Start</label>
+                    <input
+                      id="calendar-overlay-start"
+                      type="time"
+                      value={activeSession.startTime}
+                      onChange={(event) =>
+                        handleCaptureSessionChange({ ...activeSession, startTime: event.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="calendar-overlay-end">End</label>
+                    <input
+                      id="calendar-overlay-end"
+                      type="time"
+                      value={activeSession.endTime}
+                      onChange={(event) =>
+                        handleCaptureSessionChange({ ...activeSession, endTime: event.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="field field-wide">
+                    <label htmlFor="calendar-overlay-people">People</label>
+                    <PeoplePicker
+                      value={activeSession.participantText}
+                      savedPeople={snapshot.settings.savedParticipants}
+                      suggestedPeople={suggestedPeople}
+                      onChange={(value) => handleCaptureSessionChange({ ...activeSession, participantText: value })}
+                      placeholder="Search or add people"
+                    />
+                  </div>
+                  <div className="field field-wide metadata-triplet">
+                    <div className="metadata-triplet-grid">
+                      <div className="field metadata-subfield">
+                        <label htmlFor="calendar-overlay-domain">Domain</label>
+                        <TokenPicker
+                          value={activeSession.domain}
+                          savedOptions={
+                            structureOptions.domains.length
+                              ? structureOptions.domains
+                              : snapshot.settings.savedDomains
+                          }
+                          suggestedOptions={suggestedDomains}
+                          placeholder="Search or add domain"
+                          suggestionSummary="Recent domains"
+                          suggestionBadgeText="From saved Domains"
+                          mode="single"
+                          onChange={handleCalendarOverlayDomainChange}
+                        />
+                      </div>
+                      <div className="field metadata-subfield">
+                        <label htmlFor="calendar-overlay-project">Project</label>
+                        <TokenPicker
+                          value={activeSession.project}
+                          savedOptions={detailProjectPickerOptions}
+                          suggestedOptions={detailSuggestedProjects}
+                          placeholder="Search or add project"
+                          suggestionSummary="Recent projects"
+                          suggestionBadgeText="From saved Projects"
+                          mode="single"
+                          onChange={handleCalendarOverlayProjectChange}
+                        />
+                      </div>
+                      <div className="field metadata-subfield">
+                        <label htmlFor="calendar-overlay-activity">Activity</label>
+                        <TokenPicker
+                          value={activeSession.activity}
+                          savedOptions={detailActivityPickerOptions}
+                          suggestedOptions={detailSuggestedActivities}
+                          placeholder="Search or add activity"
+                          suggestionSummary="Recent activities"
+                          suggestionBadgeText="From saved Activities"
+                          mode="single"
+                          onChange={(value) => handleCaptureSessionChange({ ...activeSession, activity: value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="field field-wide">
+                    <label htmlFor="calendar-overlay-tags">Tags</label>
+                    <TokenPicker
+                      value={activeSession.tagsText}
+                      savedOptions={snapshot.settings.savedTags}
+                      suggestedOptions={suggestedTags}
+                      placeholder="Add tags"
+                      suggestionSummary="Recent tags"
+                      suggestionBadgeText="From saved Tags"
+                      onChange={(value) => handleCaptureSessionChange({ ...activeSession, tagsText: value })}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="calendar-overlay-output-language">Output language</label>
+                    <select
+                      id="calendar-overlay-output-language"
+                      value={activeSession.outputLanguage}
+                      onChange={(event) =>
+                        handleCaptureSessionChange({
+                          ...activeSession,
+                          outputLanguage: event.target.value as SessionRecord["outputLanguage"],
+                        })
+                      }
+                    >
+                      <option value="same">Same as notes</option>
+                      <option value="sv">Swedish</option>
+                      <option value="en">English</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="calendar-overlay-detail-level">Detail level</label>
+                    <select
+                      id="calendar-overlay-detail-level"
+                      value={String(activeSession.detailLevel)}
+                      onChange={(event) =>
+                        handleCaptureSessionChange({
+                          ...activeSession,
+                          detailLevel: Number(event.target.value),
+                        })
+                      }
+                    >
+                      {[1, 2, 3, 4, 5].map((level) => (
+                        <option key={level} value={String(level)}>
+                          {level}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field calendar-session-details-toggle">
+                    <span>Privacy</span>
+                    <label className="compact-private-toggle">
+                      <input
+                        type="checkbox"
+                        checked={activeSession.isPrivate}
+                        onChange={(event) =>
+                          handleCaptureSessionChange({
+                            ...activeSession,
+                            isPrivate: event.target.checked,
+                          })
+                        }
+                      />
+                      <span>Private</span>
+                    </label>
+                  </div>
+                  <div className="field field-wide">
+                    <label htmlFor="calendar-overlay-instructions">Additional LLM instructions</label>
+                    <textarea
+                      id="calendar-overlay-instructions"
+                      rows={4}
+                      value={activeSession.additionalInstructions}
+                      onChange={(event) =>
+                        handleCaptureSessionChange({
+                          ...activeSession,
+                          additionalInstructions: event.target.value,
+                        })
+                      }
+                      placeholder="Example: Focus more on risks and decisions."
+                    />
+                  </div>
+                  {detailCustomFields.map((field) => (
+                    <div
+                      key={field.id}
+                      className={field.type === "textarea" ? "field field-wide" : "field"}
+                    >
+                      <label htmlFor={`calendar-overlay-custom-${field.id}`}>{field.label}</label>
+                      {field.type === "textarea" ? (
+                        <textarea
+                          id={`calendar-overlay-custom-${field.id}`}
+                          rows={4}
+                          value={activeSession.customFieldValues[field.id] ?? ""}
+                          onChange={(event) =>
+                            handleCaptureSessionChange({
+                              ...activeSession,
+                              customFieldValues: {
+                                ...activeSession.customFieldValues,
+                                [field.id]: event.target.value,
+                              },
+                            })
+                          }
+                        />
+                      ) : (
+                        <input
+                          id={`calendar-overlay-custom-${field.id}`}
+                          type={field.type === "number" ? "number" : field.type}
+                          value={activeSession.customFieldValues[field.id] ?? ""}
+                          onChange={(event) =>
+                            handleCaptureSessionChange({
+                              ...activeSession,
+                              customFieldValues: {
+                                ...activeSession.customFieldValues,
+                                [field.id]: event.target.value,
+                              },
+                            })
+                          }
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderOverlayContent = () => {
     switch (openPanel) {
@@ -3510,26 +4125,31 @@ export const App = () => {
                 onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "calendar")}
                 onOpenSession={(sessionId, openedCalendarItemId) => {
                   const calendarItemId = openedCalendarItemId ??
-                    snapshot.calendarItems.find((item) => {
-                      if (item.targetType === "activity") {
-                        return linkedSessionStateByActivity[item.targetId]?.sessionId === sessionId;
-                      }
-                      return linkedSessionStateByTodo[item.targetId]?.sessionId === sessionId;
-                    })?.id ?? null;
-                  openSessionFromLink(sessionId, "calendar", calendarItemId);
+                    findCalendarItemIdForSession(sessionId);
+                  openSessionFromCalendar(sessionId, calendarItemId);
                 }}
                 highlightedItemId={linkedCalendarReturnItemId}
                 onCreateLinkedMeetingSession={(activityId) =>
                   void ensureSessionForActivity(activityId).then((sessionId) => {
                     if (sessionId) {
-                      setStatusNote("Created linked meeting session.");
+                      openCalendarSessionTarget({
+                        sessionId,
+                        calendarItemId: findCalendarItemIdForSource("activity", activityId),
+                        tab: "capture",
+                        status: "Created linked meeting session in Calendar.",
+                      });
                     }
                   })
                 }
                 onCreateLinkedTaskSession={(todoId) =>
                   void ensureSessionForTodo(todoId).then((sessionId) => {
                     if (sessionId) {
-                      setStatusNote("Created linked task note.");
+                      openCalendarSessionTarget({
+                        sessionId,
+                        calendarItemId: findCalendarItemIdForSource("todo", todoId),
+                        tab: "capture",
+                        status: "Created linked task note in Calendar.",
+                      });
                     }
                   })
                 }
@@ -3931,6 +4551,8 @@ export const App = () => {
           </div>
         </div>
       ) : null}
+
+      {renderCalendarSessionOverlay()}
 
       {openPanel ? (
         <div className="overlay-backdrop" role="presentation" onClick={closeOverlay}>

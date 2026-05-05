@@ -1,5 +1,5 @@
 import { createDefaultSnapshot } from "../lib/db/repository";
-import { findNearestAvailableTodoSlot, rollForwardOverdueCalendarTodos } from "./useDesktopStore";
+import { findNearestAvailableTodoSlot, reconcileCalendarBackedScheduleFields, rollForwardOverdueCalendarTodos } from "./useDesktopStore";
 const buildTodo = (id, description, doOn, isDone = false) => ({
     id,
     description,
@@ -35,6 +35,27 @@ const buildCalendarActivity = (id, date, startSlot, durationSlots) => ({
     durationSlots,
     createdAt: "2026-04-18T08:00:00.000Z",
     updatedAt: "2026-04-18T08:00:00.000Z",
+});
+const buildActivity = (id, description, doOn, startTime = "09:00", endTime = "10:00") => ({
+    id,
+    type: "meeting",
+    parentActivityId: "",
+    description,
+    isDone: false,
+    isPrivate: false,
+    comments: "",
+    domain: "",
+    project: "",
+    activity: "",
+    doOn,
+    dueDate: "",
+    startTime,
+    endTime,
+    detailsHtml: "",
+    timeRequiredMinutes: 0,
+    actualTimeSpentMinutes: 0,
+    createdAt: "2026-04-18T08:00:00.000Z",
+    sessionIds: [],
 });
 describe("rollForwardOverdueCalendarTodos", () => {
     it("moves overdue scheduled todos to today from 08:00 onwards and updates doOn", () => {
@@ -105,5 +126,32 @@ describe("findNearestAvailableTodoSlot", () => {
             buildCalendarTodo("later-todo", "todo-later", "2026-04-22", 122),
         ];
         expect(findNearestAvailableTodoSlot(calendarItems, "2026-04-22", 120)).toBe(119);
+    });
+});
+describe("reconcileCalendarBackedScheduleFields", () => {
+    it("realigns todo do-on dates from authoritative calendar items", () => {
+        const snapshot = createDefaultSnapshot();
+        snapshot.todos = [buildTodo("todo-1", "Mismatch", "2026-04-23")];
+        snapshot.calendarItems = [buildCalendarTodo("calendar-1", "todo-1", "2026-04-22", 120)];
+        const result = reconcileCalendarBackedScheduleFields(snapshot);
+        expect(result.changed).toBe(true);
+        expect(result.snapshot.todos[0]?.doOn).toBe("2026-04-22");
+    });
+    it("realigns meeting dates and times from authoritative calendar items", () => {
+        const snapshot = createDefaultSnapshot();
+        snapshot.activities = [buildActivity("activity-1", "Meeting", "2026-04-23", "09:00", "10:00")];
+        snapshot.calendarItems = [
+            {
+                ...buildCalendarActivity("activity-1", "2026-04-22", 132, 18),
+                targetId: "activity-1",
+            },
+        ];
+        const result = reconcileCalendarBackedScheduleFields(snapshot);
+        expect(result.changed).toBe(true);
+        expect(result.snapshot.activities[0]).toMatchObject({
+            doOn: "2026-04-22",
+            startTime: "11:00",
+            endTime: "12:30",
+        });
     });
 });

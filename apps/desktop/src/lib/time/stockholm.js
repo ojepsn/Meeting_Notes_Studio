@@ -3,7 +3,19 @@ const STOCKHOLM_DST_OFFSET_MINUTES = 120;
 const STOCKHOLM_DST_START_HOUR_UTC = 1;
 const STOCKHOLM_DST_END_HOUR_UTC = 1;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
 const pad = (value) => `${value}`.padStart(2, "0");
+const stockholmPartsFormatter = typeof Intl !== "undefined"
+    ? new Intl.DateTimeFormat("en-CA", {
+        timeZone: STOCKHOLM_TIME_ZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+    })
+    : null;
 const getLastSundayOfMonthUtc = (year, monthIndex) => {
     const value = new Date(Date.UTC(year, monthIndex + 1, 0));
     value.setUTCDate(value.getUTCDate() - value.getUTCDay());
@@ -21,7 +33,7 @@ export const getStockholmOffsetMinutes = (value = new Date()) => {
         : STOCKHOLM_STANDARD_OFFSET_MINUTES;
 };
 const toStockholmClock = (value = new Date()) => new Date(value.getTime() + getStockholmOffsetMinutes(value) * 60 * 1000);
-export const getStockholmDateTimeParts = (value = new Date()) => {
+const getLegacyStockholmDateTimeParts = (value = new Date()) => {
     const stockholmClock = toStockholmClock(value);
     return {
         year: stockholmClock.getUTCFullYear(),
@@ -29,7 +41,45 @@ export const getStockholmDateTimeParts = (value = new Date()) => {
         day: stockholmClock.getUTCDate(),
         hours: stockholmClock.getUTCHours(),
         minutes: stockholmClock.getUTCMinutes(),
-        weekday: stockholmClock.getUTCDay(),
+    };
+};
+const readPart = (parts, type) => {
+    const value = parts.find((part) => part.type === type)?.value;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+export const getStockholmDateTimeParts = (value = new Date()) => {
+    if (stockholmPartsFormatter) {
+        try {
+            const parts = stockholmPartsFormatter.formatToParts(value);
+            const year = readPart(parts, "year");
+            const month = readPart(parts, "month");
+            const day = readPart(parts, "day");
+            const hours = readPart(parts, "hour");
+            const minutes = readPart(parts, "minute");
+            if (year !== null &&
+                month !== null &&
+                day !== null &&
+                hours !== null &&
+                minutes !== null) {
+                return {
+                    year,
+                    month,
+                    day,
+                    hours,
+                    minutes,
+                    weekday: new Date(Date.UTC(year, month - 1, day)).getUTCDay(),
+                };
+            }
+        }
+        catch {
+            // Fall through to the legacy offset-based fallback below.
+        }
+    }
+    const legacy = getLegacyStockholmDateTimeParts(value);
+    return {
+        ...legacy,
+        weekday: new Date(Date.UTC(legacy.year, legacy.month - 1, legacy.day)).getUTCDay(),
     };
 };
 export const formatStockholmDateParts = (year, month, day) => `${year}-${pad(month)}-${pad(day)}`;

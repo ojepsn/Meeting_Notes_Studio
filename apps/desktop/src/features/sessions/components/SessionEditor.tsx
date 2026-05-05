@@ -199,6 +199,8 @@ interface SessionEditorProps {
   attachments: AttachmentRecord[];
   presentation?: CaptureWorkspaceDensity;
   showPresentationActions?: boolean;
+  showPanelHeading?: boolean;
+  showQuickStartTemplates?: boolean;
   savedPeople: string[];
   suggestedPeople: string[];
   savedProjects: string[];
@@ -285,7 +287,7 @@ const CAPTURE_MODE_META = {
 } as const;
 
 export const SessionEditor = ({
-  session, templates, attachments, presentation = "full", showPresentationActions = true,
+  session, templates, attachments, presentation = "full", showPresentationActions = true, showPanelHeading = true, showQuickStartTemplates = true,
   savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities,
   suggestedActivities, structureOptions, savedTags, suggestedTags, isTranscribingAudio, recordingMode,
   isRecordingAudio, recordingStatusNote, generationLog = [], onClearGenerationLog, onChange, onImportTranscript, onImportAudio, onImportImage,
@@ -705,37 +707,41 @@ export const SessionEditor = ({
   if (isMinimal) {
     return (
       <div className="card session-editor session-editor-minimal session-editor-pwa">
-        <div className="panel-heading session-editor-pwa-heading">
-          <div className="panel-heading-copy">
-            <p className="section-label">Capture</p>
-            <h2>{session.title || "Untitled session"}</h2>
-          </div>
-          <div className="panel-actions panel-actions-capture-top">
-            <div className="panel-actions-shared">
-              {onOpenInstructions ? (
-                <button className="shell-button" type="button" onClick={onOpenInstructions}>
-                  Instructions
-                </button>
-              ) : null}
+        {showPanelHeading ? (
+          <div className="panel-heading session-editor-pwa-heading">
+            <div className="panel-heading-copy">
+              <p className="section-label">Capture</p>
+              <h2>{session.title || "Untitled session"}</h2>
+            </div>
+            <div className="panel-actions panel-actions-capture-top">
+              <div className="panel-actions-shared">
+                {onOpenInstructions ? (
+                  <button className="shell-button" type="button" onClick={onOpenInstructions}>
+                    Instructions
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
 
-        <div className="editor-header-row session-editor-pwa-template-row">
-          <div className="template-quick-selectors template-quick-selectors-desktop">
-            {quickStartTemplates.map((template) => (
-              <button
-                key={template.id}
-                className="ghost-button session-template-pill-pwa"
-                type="button"
-                onClick={() => onCreateSessionFromTemplate?.(template.id)}
-                disabled={!onCreateSessionFromTemplate}
-              >
-                {`New ${template.name}`}
-              </button>
-            ))}
+        {showQuickStartTemplates ? (
+          <div className="editor-header-row session-editor-pwa-template-row">
+            <div className="template-quick-selectors template-quick-selectors-desktop">
+              {quickStartTemplates.map((template) => (
+                <button
+                  key={template.id}
+                  className="ghost-button session-template-pill-pwa"
+                  type="button"
+                  onClick={() => onCreateSessionFromTemplate?.(template.id)}
+                  disabled={!onCreateSessionFromTemplate}
+                >
+                  {`New ${template.name}`}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <div className="editor-layout session-editor-pwa-layout">
           <div className="editor-main">
