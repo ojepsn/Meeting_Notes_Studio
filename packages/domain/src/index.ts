@@ -69,6 +69,7 @@ export interface SessionRecord {
 export interface TodoRecord {
   id: string;
   description: string;
+  participantText?: string;
   isDone: boolean;
   completedAt?: string | null;
   isPrivate: boolean;
@@ -82,6 +83,7 @@ export interface TodoRecord {
   dueDate: string;
   detailsHtml: string;
   createdAt: string;
+  updatedAt?: string;
   sessionIds: string[];
 }
 
@@ -105,6 +107,7 @@ export interface ActivityRecord {
   type: "task" | "meeting";
   parentActivityId: string;
   description: string;
+  participantText?: string;
   isDone: boolean;
   isPrivate: boolean;
   comments: string;
@@ -119,6 +122,7 @@ export interface ActivityRecord {
   timeRequiredMinutes: number;
   actualTimeSpentMinutes: number;
   createdAt: string;
+  updatedAt?: string;
   sessionIds: string[];
 }
 
@@ -154,6 +158,7 @@ export interface EntityLinkRecord {
   toId: string;
   relation: "has_session";
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface PromptBlock {
@@ -247,6 +252,25 @@ export interface AttachmentRecord {
   includeInOutput: boolean;
   outputPosition: number;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export type DeletedEntityType =
+  | "session"
+  | "todo"
+  | "activity"
+  | "timelog"
+  | "calendarItem"
+  | "entityLink"
+  | "attachment"
+  | "checklist"
+  | "checklistTemplate"
+  | "checklistRecurrence";
+
+export interface DeletedEntityRecord {
+  entityType: DeletedEntityType;
+  entityId: string;
+  deletedAt: string;
 }
 
 export interface PreferredParticipantName {
@@ -297,6 +321,7 @@ export interface LocalAppSettings {
   calendarVisibilityFilter?: "all" | "public" | "private";
   calendarShowPrivate?: boolean;
   calendarShowBusiness?: boolean;
+  calendarShowPriorityOnly?: boolean;
   baselineWorkEnabled: boolean;
   baselineWorkActivityId: string;
   apiKey: string;
@@ -329,6 +354,7 @@ export interface DesktopAppSnapshot {
   calendarItems: CalendarItemRecord[];
   entityLinks: EntityLinkRecord[];
   attachments: AttachmentRecord[];
+  deletedEntities?: DeletedEntityRecord[];
   settings: LocalAppSettings;
 }
 

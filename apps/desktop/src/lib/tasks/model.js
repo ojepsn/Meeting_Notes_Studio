@@ -2,6 +2,7 @@ const normalizeText = (value) => value?.trim?.() ?? "";
 export const normalizeTaskRecord = (task) => ({
     id: task.id,
     description: normalizeText(task.description),
+    participantText: task.participantText ?? "",
     isDone: Boolean(task.isDone),
     completedAt: typeof task.completedAt === "string" ? task.completedAt : null,
     isPrivate: Boolean(task.isPrivate),
@@ -15,6 +16,7 @@ export const normalizeTaskRecord = (task) => ({
     dueDate: task.dueDate ?? "",
     detailsHtml: task.detailsHtml ?? "",
     createdAt: task.createdAt,
+    updatedAt: task.updatedAt ?? task.createdAt,
     sessionIds: Array.isArray(task.sessionIds) ? task.sessionIds : [],
 });
 export const todoToTaskRecord = (todo) => normalizeTaskRecord({ ...todo });

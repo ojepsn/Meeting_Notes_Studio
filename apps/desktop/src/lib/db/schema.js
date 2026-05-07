@@ -1,4 +1,4 @@
-export const APP_SCHEMA_VERSION = 4;
+export const APP_SCHEMA_VERSION = 5;
 export const sqliteBootstrapStatements = [
     `CREATE TABLE IF NOT EXISTS settings_local (
     key TEXT PRIMARY KEY,
@@ -33,16 +33,19 @@ export const sqliteBootstrapStatements = [
     `CREATE TABLE IF NOT EXISTS todos (
     id TEXT PRIMARY KEY,
     description TEXT NOT NULL,
+    participant_text TEXT NOT NULL DEFAULT '',
     is_done INTEGER NOT NULL,
     comments TEXT NOT NULL,
     do_on TEXT NOT NULL DEFAULT '',
     due_date TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
     payload_json TEXT NOT NULL
   );`,
     `CREATE TABLE IF NOT EXISTS activities (
     id TEXT PRIMARY KEY,
     description TEXT NOT NULL,
+    participant_text TEXT NOT NULL DEFAULT '',
     activity_type TEXT NOT NULL DEFAULT 'task',
     parent_activity_id TEXT NOT NULL DEFAULT '',
     is_done INTEGER NOT NULL,
@@ -52,6 +55,7 @@ export const sqliteBootstrapStatements = [
     start_time TEXT NOT NULL DEFAULT '',
     end_time TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
     payload_json TEXT NOT NULL
   );`,
     `CREATE TABLE IF NOT EXISTS timelogs (
@@ -109,6 +113,7 @@ export const sqliteBootstrapStatements = [
     to_id TEXT NOT NULL,
     relation TEXT NOT NULL,
     created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
     payload_json TEXT NOT NULL
   );`,
     `CREATE TABLE IF NOT EXISTS attachments (
@@ -122,6 +127,13 @@ export const sqliteBootstrapStatements = [
     caption TEXT NOT NULL DEFAULT '',
     include_in_output INTEGER NOT NULL DEFAULT 0,
     output_position INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );`,
+    `CREATE TABLE IF NOT EXISTS deleted_entities (
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    deleted_at TEXT NOT NULL,
+    PRIMARY KEY (entity_type, entity_id)
   );`
 ];

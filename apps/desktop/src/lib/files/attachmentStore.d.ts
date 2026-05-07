@@ -1,4 +1,5 @@
 import type { AttachmentRecord } from "@notesmith/domain";
+import type { DesktopBackupAttachmentFile } from "../storage/desktopStorage";
 type SelectedAttachment = {
     file: File;
     sourcePath?: string;
@@ -15,6 +16,10 @@ export declare const persistGeneratedAttachment: ({ sessionId, file, }: {
     file: File;
 }) => Promise<string>;
 export declare const removePersistedAttachment: (filePath: string) => Promise<void>;
+export declare const restoreImportedAttachmentFiles: ({ attachments, attachmentFiles, }: {
+    attachments: AttachmentRecord[];
+    attachmentFiles: DesktopBackupAttachmentFile[];
+}) => Promise<AttachmentRecord[]>;
 export declare const createAttachmentPreviewUrl: ({ filePath, mimeType, }: {
     filePath: string;
     mimeType: string;

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ActivityRecord, ArchivedTaskRecord, CaptureMode, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, DesktopAppSnapshot, TaskRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, ArchivedTaskRecord, CaptureMode, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, DeletedEntityRecord, DesktopAppSnapshot, TaskRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCaptureMode } from "@notesmith/domain";
 import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
 import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
@@ -50,6 +50,27 @@ type Todo = TodoRecord;
 type Task = TaskRecord;
 type Activity = ActivityRecord;
 type TimeLog = TimeLogRecord;
+
+const recordDeletedEntity = (
+  deletedEntities: DeletedEntityRecord[] | undefined,
+  entityType: DeletedEntityRecord["entityType"],
+  entityId: string,
+  deletedAt = new Date().toISOString(),
+) => {
+  const currentDeletedEntities = deletedEntities ?? [];
+  const nextRecord: DeletedEntityRecord = { entityType, entityId, deletedAt };
+  return currentDeletedEntities.some((entry) => entry.entityType === entityType && entry.entityId === entityId)
+    ? currentDeletedEntities.map((entry) =>
+        entry.entityType === entityType && entry.entityId === entityId ? nextRecord : entry,
+      )
+    : [nextRecord, ...currentDeletedEntities];
+};
+
+const clearDeletedEntity = (
+  deletedEntities: DeletedEntityRecord[] | undefined,
+  entityType: DeletedEntityRecord["entityType"],
+  entityId: string,
+) => (deletedEntities ?? []).filter((entry) => !(entry.entityType === entityType && entry.entityId === entityId));
 
 const isCurrentBaselineWorkActivity = (activity: ActivityRecord) =>
   activity.type === "task" &&
@@ -203,6 +224,65 @@ const durationFromTimes = (startTime: string, endTime: string) => {
   const endSlot = timeToSlot(endTime);
   return Math.max(1, endSlot - startSlot || DEFAULT_MEETING_DURATION_SLOTS);
 };
+const calendarItemIdentityKey = (item: Snapshot["calendarItems"][number]) =>
+  `${item.targetType}:${item.targetId}`;
+const getCalendarItemFreshness = (item: Snapshot["calendarItems"][number]) =>
+  Date.parse(item.updatedAt || item.createdAt || "") || 0;
+const getExpectedMeetingDurationSlots = (activity: ActivityRecord) => {
+  const startSlot = timeToSlot(activity.startTime || "09:00");
+  return durationFromTimes(
+    activity.startTime || slotToTime(startSlot),
+    activity.endTime || slotToTime(startSlot + DEFAULT_MEETING_DURATION_SLOTS),
+  );
+};
+const pickPreferredCalendarItem = (
+  snapshot: Snapshot,
+  group: Snapshot["calendarItems"],
+) => {
+  const sorted = [...group].sort((left, right) => {
+    const freshnessDelta = getCalendarItemFreshness(right) - getCalendarItemFreshness(left);
+    if (freshnessDelta !== 0) return freshnessDelta;
+    return right.id.localeCompare(left.id);
+  });
+  const sample = sorted[0];
+  if (!sample) return null;
+
+  if (sample.targetType === "todo") {
+    const todo = snapshot.todos.find((entry) => entry.id === sample.targetId);
+    if (todo?.doOn) {
+      const matchingSourceDate = sorted.find((item) => item.date === todo.doOn);
+      if (matchingSourceDate) {
+        return matchingSourceDate;
+      }
+    }
+    return sorted[0];
+  }
+
+  const activity = snapshot.activities.find((entry) => entry.id === sample.targetId);
+  if (!activity) {
+    return sorted[0];
+  }
+  if (activity.type === "meeting" && activity.doOn && activity.startTime) {
+    const expectedStartSlot = timeToSlot(activity.startTime);
+    const expectedDurationSlots = getExpectedMeetingDurationSlots(activity);
+    const matchingMeetingSchedule = sorted.find(
+      (item) =>
+        item.date === activity.doOn &&
+        item.startSlot === expectedStartSlot &&
+        Math.max(1, item.durationSlots) === expectedDurationSlots,
+    );
+    if (matchingMeetingSchedule) {
+      return matchingMeetingSchedule;
+    }
+  }
+  if (activity.doOn) {
+    const matchingDate = sorted.find((item) => item.date === activity.doOn);
+    if (matchingDate) {
+      return matchingDate;
+    }
+  }
+  return sorted[0];
+};
 const getRolloverSlots = () =>
   Array.from({ length: ROLLED_TODO_EARLY_MORNING_ROWS }, (_, index) =>
     clampSlotIndex(ROLLED_TODO_START_SLOT + index),
@@ -265,29 +345,48 @@ export const findNearestAvailableTodoSlot = (
 };
 
 export const reconcileCalendarBackedScheduleFields = (snapshot: Snapshot) => {
+  const groupedCalendarItems = new Map<string, Snapshot["calendarItems"]>();
+  snapshot.calendarItems.forEach((item) => {
+    const key = calendarItemIdentityKey(item);
+    const existing = groupedCalendarItems.get(key) ?? [];
+    existing.push(item);
+    groupedCalendarItems.set(key, existing);
+  });
+
+  let changed = false;
+  const dedupedCalendarItems = Array.from(groupedCalendarItems.values())
+    .map((group) => {
+      if (group.length > 1) {
+        changed = true;
+      }
+      return pickPreferredCalendarItem(snapshot, group);
+    })
+    .filter((item): item is Snapshot["calendarItems"][number] => item !== null);
+
   const todoCalendarByTargetId = new Map(
-    snapshot.calendarItems
+    dedupedCalendarItems
       .filter((item) => item.targetType === "todo")
       .map((item) => [item.targetId, item] as const),
   );
   const activityCalendarByTargetId = new Map(
-    snapshot.calendarItems
+    dedupedCalendarItems
       .filter((item) => item.targetType === "activity")
       .map((item) => [item.targetId, item] as const),
   );
 
-  let changed = false;
-
   const nextTodos = snapshot.todos.map((todo) => {
     const calendarItem = todoCalendarByTargetId.get(todo.id);
-    if (!calendarItem || todo.doOn === calendarItem.date) {
+    if (!calendarItem) {
       return todo;
     }
-    changed = true;
-    return {
-      ...todo,
-      doOn: calendarItem.date,
-    };
+    if (!todo.doOn && calendarItem.date) {
+      changed = true;
+      return {
+        ...todo,
+        doOn: calendarItem.date,
+      };
+    }
+    return todo;
   });
 
   const nextActivities = snapshot.activities.map((activity) => {
@@ -296,13 +395,22 @@ export const reconcileCalendarBackedScheduleFields = (snapshot: Snapshot) => {
       return activity;
     }
 
-    const nextDoOn = calendarItem.date;
-    const nextStartTime =
-      activity.type === "meeting" ? slotToTime(calendarItem.startSlot) : activity.startTime;
+    if (activity.type !== "meeting") {
+      if (!activity.doOn && calendarItem.date) {
+        changed = true;
+        return {
+          ...activity,
+          doOn: calendarItem.date,
+        };
+      }
+      return activity;
+    }
+
+    const nextDoOn = activity.doOn || calendarItem.date;
+    const nextStartTime = activity.startTime || slotToTime(calendarItem.startSlot);
     const nextEndTime =
-      activity.type === "meeting"
-        ? slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots))
-        : activity.endTime;
+      activity.endTime ||
+      slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots));
 
     if (
       activity.doOn === nextDoOn &&
@@ -321,12 +429,64 @@ export const reconcileCalendarBackedScheduleFields = (snapshot: Snapshot) => {
     };
   });
 
+  const nextCalendarItems = dedupedCalendarItems.map((item) => {
+    if (item.targetType === "todo") {
+      const todo = nextTodos.find((entry) => entry.id === item.targetId);
+      if (!todo?.doOn || item.date === todo.doOn) {
+        return item;
+      }
+      changed = true;
+      return {
+        ...item,
+        date: todo.doOn,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    const activity = nextActivities.find((entry) => entry.id === item.targetId);
+    if (!activity) {
+      return item;
+    }
+
+    if (activity.type === "meeting" && activity.doOn && activity.startTime) {
+      const expectedStartSlot = timeToSlot(activity.startTime);
+      const expectedDurationSlots = getExpectedMeetingDurationSlots(activity);
+      if (
+        item.date === activity.doOn &&
+        item.startSlot === expectedStartSlot &&
+        Math.max(1, item.durationSlots) === expectedDurationSlots
+      ) {
+        return item;
+      }
+      changed = true;
+      return {
+        ...item,
+        date: activity.doOn,
+        startSlot: expectedStartSlot,
+        durationSlots: expectedDurationSlots,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    if (activity.doOn && item.date !== activity.doOn) {
+      changed = true;
+      return {
+        ...item,
+        date: activity.doOn,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    return item;
+  });
+
   return {
     snapshot: changed
       ? {
           ...snapshot,
           todos: nextTodos,
           activities: nextActivities,
+          calendarItems: nextCalendarItems,
         }
       : snapshot,
     changed,
@@ -745,6 +905,7 @@ const applySessionStructure = <
     domain?: string;
     project?: string;
     activity?: string;
+    participantText?: string;
     isPrivate?: boolean;
   },
 >(
@@ -753,36 +914,94 @@ const applySessionStructure = <
 ) => ({
   ...session,
   isPrivate: typeof source.isPrivate === "boolean" ? source.isPrivate : session.isPrivate,
+  participantText: typeof source.participantText === "string" ? source.participantText : session.participantText,
   project: typeof source.project === "string" ? source.project : session.project,
   domain: typeof source.domain === "string" ? source.domain : session.domain,
   activity: typeof source.activity === "string" ? source.activity : session.activity,
 });
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const plainTextToHtml = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return `<p>${escapeHtml(trimmed).replace(/\r?\n/g, "<br>")}</p>`;
+};
+
+const getAgendaFieldId = (snapshot: DesktopAppSnapshot, templateId: string) =>
+  snapshot.templates.find((template) => template.id === templateId)?.fields.find((field) => field.enabled && field.key === "agenda")?.id ?? null;
+
+const getSourceDetailHtml = (
+  source: Pick<ActivityRecord, "detailsHtml" | "comments"> | Pick<TodoRecord, "detailsHtml" | "comments">,
+) => {
+  const detailsHtml = typeof source.detailsHtml === "string" ? source.detailsHtml.trim() : "";
+  if (detailsHtml && detailsHtml !== "<p></p>") {
+    return detailsHtml;
+  }
+  return plainTextToHtml(typeof source.comments === "string" ? source.comments : "");
+};
+
+const applyLinkedSourceDetails = (
+  snapshot: DesktopAppSnapshot,
+  session: DesktopAppSnapshot["sessions"][number],
+  source: Pick<ActivityRecord, "detailsHtml" | "comments"> | Pick<TodoRecord, "detailsHtml" | "comments">,
+) => {
+  const sourceDetailHtml = getSourceDetailHtml(source);
+  if (!sourceDetailHtml) {
+    return session;
+  }
+
+  const agendaFieldId = getAgendaFieldId(snapshot, session.templateId);
+  if (agendaFieldId) {
+    return {
+      ...session,
+      customFieldValues: {
+        ...session.customFieldValues,
+        [agendaFieldId]: sourceDetailHtml,
+      },
+    };
+  }
+
+  return {
+    ...session,
+    manualNotes: sourceDetailHtml,
+  };
+};
+
 const buildLinkedMeetingSession = (
+  snapshot: DesktopAppSnapshot,
   activity: DesktopAppSnapshot["activities"][number],
   preferredTemplateId: string,
 ) => {
   const session = createSessionRecord(preferredTemplateId || "meeting", "meeting-note");
   const meetingDate = activity.doOn || activity.dueDate || session.date;
-  return {
+  return applyLinkedSourceDetails(snapshot, {
     ...applySessionStructure(session, activity),
     title: activity.description,
     date: meetingDate,
     startTime: activity.startTime || session.startTime,
     endTime: activity.endTime || session.endTime,
     updatedAt: new Date().toISOString(),
-  };
+  }, activity);
 };
 
-const buildLinkedTaskSession = (todo: DesktopAppSnapshot["todos"][number]) => {
+const buildLinkedTaskSession = (snapshot: DesktopAppSnapshot, todo: DesktopAppSnapshot["todos"][number]) => {
   const session = createSessionRecord("personal-note", "quick-note");
   const taskDate = todo.doOn || todo.dueDate || session.date;
-  return {
+  return applyLinkedSourceDetails(snapshot, {
     ...applySessionStructure(session, todo),
     title: todo.description,
     date: taskDate,
     updatedAt: new Date().toISOString(),
-  };
+  }, todo);
 };
 
 const syncLinkedSessionForMeeting = (
@@ -1320,6 +1539,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         ...loadedSnapshot,
         sessions: remainingSessions,
         attachments: nextAttachments,
+        deletedEntities: Array.isArray(loadedSnapshot.deletedEntities) ? loadedSnapshot.deletedEntities : [],
         activities: recalculateActivitiesWithTimeLogs(loadedSnapshot.activities, loadedSnapshot.timelogs),
       };
       const scheduleReconciliation = reconcileCalendarBackedScheduleFields(snapshot);
@@ -1441,6 +1661,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     const restoreTimestamp = new Date().toISOString();
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "session", id),
       sessions: snapshot.sessions.map((session) =>
         session.id === id
           ? {
@@ -1457,6 +1678,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   permanentlyDeleteSession: async (id) => {
     const snapshot = get().snapshot;
     if (!snapshot) return;
+    const deletionTimestamp = new Date().toISOString();
     const removedAttachments = snapshot.attachments.filter((attachment) => attachment.sessionId === id);
     if (removedAttachments.length) {
       await Promise.all(removedAttachments.map((attachment) => removePersistedAttachment(attachment.filePath)));
@@ -1472,8 +1694,19 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     }
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: removedAttachments.reduce(
+        (current, attachment) => recordDeletedEntity(current, "attachment", attachment.id, deletionTimestamp),
+        recordDeletedEntity(snapshot.deletedEntities, "session", id, deletionTimestamp),
+      ),
       sessions: remainingSessions,
       attachments: snapshot.attachments.filter((attachment) => attachment.sessionId !== id),
+      entityLinks: snapshot.entityLinks.filter(
+        (entry) =>
+          !(
+            (entry.fromType === "session" && entry.fromId === id) ||
+            (entry.toType === "session" && entry.toId === id)
+          ),
+      ),
     };
     set({
       snapshot: nextSnapshot,
@@ -1495,9 +1728,13 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         activityId: todo.activityId,
       }),
     } as Task);
-    const nextTodo = normalizeCompletionState(existingTodo, taskToTodoRecord(normalizedTask));
+    const nextTodo = normalizeCompletionState(existingTodo, taskToTodoRecord({
+      ...normalizedTask,
+      updatedAt: new Date().toISOString(),
+    }));
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "todo", nextTodo.id),
       todos: upsertTodo(snapshot.todos, nextTodo),
     };
     const calendarSyncedSnapshot = syncCalendarItemForTodo(nextSnapshot, nextTodo);
@@ -1522,6 +1759,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     const nextTask = normalizeTaskRecord({
       id: todoId,
       description: description.trim(),
+      participantText: "",
       isDone: false,
       completedAt: null,
       isPrivate: false,
@@ -1535,10 +1773,12 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       dueDate: "",
       detailsHtml: "",
       createdAt,
+      updatedAt: createdAt,
       sessionIds: toSessionIds(get().activeSessionId),
     });
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "todo", todoId),
       todos: [taskToTodoRecord(nextTask), ...snapshot.todos],
       calendarItems: upsertCalendarItem(snapshot.calendarItems, {
         id: calendarItemId,
@@ -1557,12 +1797,14 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   deleteTodo: async (id) => {
     const snapshot = get().snapshot;
     if (!snapshot) return;
+    const deletionTimestamp = new Date().toISOString();
     const todoToArchive = snapshot.todos.find((todo) => todo.id === id);
     const nextArchivedTasks = todoToArchive
       ? archiveTodoRecord(snapshot.archivedTasks, todoToArchive)
       : snapshot.archivedTasks;
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "todo", id, deletionTimestamp),
       archivedTasks: nextArchivedTasks,
       todos: snapshot.todos.filter((todo) => todo.id !== id),
       checklists: snapshot.checklists.filter(
@@ -1593,9 +1835,11 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         : normalizeActivityStructure({
             ...activity,
             actualTimeSpentMinutes,
+            updatedAt: new Date().toISOString(),
           });
     let nextSnapshot: DesktopAppSnapshot = {
       ...snapshot,
+      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "activity", nextActivity.id),
       activities: upsertActivity(snapshot.activities, nextActivity),
     };
     if (nextActivity.type === "meeting") {
@@ -1614,6 +1858,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       type,
       parentActivityId: options?.parentActivityId || "",
       description: description.trim(),
+      participantText: "",
       isDone: false,
       isPrivate: false,
       comments: options?.comments || "",
@@ -1628,10 +1873,12 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       timeRequiredMinutes: 0,
       actualTimeSpentMinutes: 0,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       sessionIds: toSessionIds(get().activeSessionId),
     });
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "activity", nextActivity.id),
       activities: [nextActivity, ...snapshot.activities],
     };
     set({ snapshot: nextSnapshot });
@@ -1641,6 +1888,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     const snapshot = get().snapshot;
     if (!snapshot) return;
     if (snapshot.settings.baselineWorkActivityId === id) return;
+    const deletionTimestamp = new Date().toISOString();
     const removedActivityIds = collectActivityDescendants(snapshot.activities, id);
     const todosToArchive = snapshot.todos.filter((todo) => removedActivityIds.has(todo.activityId));
     const removedTodoIds = new Set(todosToArchive.map((todo) => todo.id));
@@ -1655,6 +1903,15 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     );
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: Array.from(removedActivityIds).reduce(
+        (current, activityId) => recordDeletedEntity(current, "activity", activityId, deletionTimestamp),
+        removedTodoIds.size
+          ? Array.from(removedTodoIds).reduce(
+              (current, todoId) => recordDeletedEntity(current, "todo", todoId, deletionTimestamp),
+              snapshot.deletedEntities,
+            )
+          : snapshot.deletedEntities,
+      ),
       archivedTasks: nextArchivedTasks,
       activities: snapshot.activities.filter((activity) => !removedActivityIds.has(activity.id)),
       todos: snapshot.todos.filter((todo) => !removedActivityIds.has(todo.activityId)),
@@ -1695,6 +1952,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     });
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklist", nextChecklist.id),
       checklists: upsertChecklist(snapshot.checklists, nextChecklist),
     };
     set({ snapshot: nextSnapshot });
@@ -1708,6 +1966,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     const nextChecklist = buildChecklistRecord(ownerType, nextOwnerId, nextTitle);
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklist", nextChecklist.id),
       checklists: [nextChecklist, ...snapshot.checklists],
     };
     set({ snapshot: nextSnapshot });
@@ -1718,6 +1977,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     if (!snapshot) return;
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "checklist", id),
       checklists: snapshot.checklists.filter((checklist) => checklist.id !== id),
     };
     set({ snapshot: nextSnapshot });
@@ -1732,6 +1992,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     });
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklistTemplate", nextTemplate.id),
       checklistTemplates: upsertChecklistTemplate(snapshot.checklistTemplates, nextTemplate),
     };
     set({ snapshot: nextSnapshot });
@@ -1751,6 +2012,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     const nextTemplate = buildChecklistTemplateRecord(nextTitle, category, normalizedItems);
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklistTemplate", nextTemplate.id),
       checklistTemplates: [nextTemplate, ...snapshot.checklistTemplates],
     };
     set({ snapshot: nextSnapshot });
@@ -1761,6 +2023,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     if (!snapshot) return;
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "checklistTemplate", id),
       checklistTemplates: snapshot.checklistTemplates.filter((template) => template.id !== id),
       checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => rule.templateId !== id),
     };
@@ -1807,6 +2070,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     const nextSnapshot = applyRecurringChecklistInstantiation(
       {
         ...snapshot,
+        deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklistRecurrence", nextRule.id),
         checklistRecurrences: upsertChecklistRecurrence(snapshot.checklistRecurrences, nextRule),
       },
       new Date(),
@@ -1819,6 +2083,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     if (!snapshot) return;
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "checklistRecurrence", id),
       checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => rule.id !== id),
     };
     set({ snapshot: nextSnapshot });
@@ -1846,6 +2111,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     const nextTimeLogs = snapshot.timelogs.filter((entry) => entry.id !== id);
     const nextSnapshot = {
       ...snapshot,
+      deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "timelog", id),
       timelogs: nextTimeLogs,
       activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
     };
@@ -1929,6 +2195,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       isPrivate: false,
       isPriority: false,
       comments: "",
+      participantText: "",
       activityId: "",
       domain: options?.domain || "",
       project: options?.project || "",
@@ -1937,6 +2204,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       dueDate: "",
       detailsHtml: "",
       createdAt,
+      updatedAt: createdAt,
       sessionIds: toSessionIds(get().activeSessionId),
     });
     const { nextTimeLogs: closedTimeLogs } = closeOpenTimeLogs(snapshot.timelogs, now);
@@ -2032,6 +2300,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       const todo = {
         id: crypto.randomUUID(),
         description: parsed.description,
+        participantText: "",
         isDone: false,
         completedAt: null,
         isPrivate: false,
@@ -2045,6 +2314,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         dueDate: "",
         detailsHtml: "",
         createdAt,
+        updatedAt: createdAt,
         sessionIds: toSessionIds(get().activeSessionId),
       };
       const normalizedTodo = taskToTodoRecord(normalizeTaskRecord({
@@ -2081,6 +2351,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         type: "meeting",
         parentActivityId: options?.parentActivityId || options?.activityId || "",
         description: parsed.description,
+        participantText: "",
         isDone: false,
         isPrivate: false,
         comments: "",
@@ -2095,6 +2366,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         timeRequiredMinutes: 0,
         actualTimeSpentMinutes: 0,
         createdAt,
+        updatedAt: createdAt,
         sessionIds: toSessionIds(get().activeSessionId),
       });
       createdCalendarItemId = crypto.randomUUID();
@@ -2300,7 +2572,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     if (existingSessionId) {
       return existingSessionId;
     }
-    const linkedSession = buildLinkedMeetingSession(activity, snapshot.settings.preferredDesktopTemplateId);
+    const linkedSession = buildLinkedMeetingSession(snapshot, activity, snapshot.settings.preferredDesktopTemplateId);
     const nextSnapshot = {
       ...snapshot,
       sessions: [linkedSession, ...snapshot.sessions],
@@ -2312,6 +2584,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         toId: linkedSession.id,
         relation: "has_session",
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       }),
     };
     set({ snapshot: nextSnapshot, activeSessionId: linkedSession.id });
@@ -2327,7 +2600,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     if (existingSessionId) {
       return existingSessionId;
     }
-    const linkedSession = buildLinkedTaskSession(todo);
+    const linkedSession = buildLinkedTaskSession(snapshot, todo);
     const nextSnapshot = {
       ...snapshot,
       sessions: [linkedSession, ...snapshot.sessions],
@@ -2339,6 +2612,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         toId: linkedSession.id,
         relation: "has_session",
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       }),
     };
     set({ snapshot: nextSnapshot, activeSessionId: linkedSession.id });
@@ -2362,9 +2636,11 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       sessions: snapshot.sessions.map((session) =>
         session.domain === previous ? { ...session, domain: next, updatedAt: new Date().toISOString() } : session,
       ),
-      todos: snapshot.todos.map((todo) => (todo.domain === previous ? { ...todo, domain: next } : todo)),
+      todos: snapshot.todos.map((todo) =>
+        todo.domain === previous ? { ...todo, domain: next, updatedAt: new Date().toISOString() } : todo,
+      ),
       activities: snapshot.activities.map((activity) =>
-        activity.domain === previous ? { ...activity, domain: next } : activity,
+        activity.domain === previous ? { ...activity, domain: next, updatedAt: new Date().toISOString() } : activity,
       ),
       settings: {
         ...snapshot.settings,
@@ -2392,7 +2668,9 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       sessions: snapshot.sessions.map((session) =>
         session.project === previous ? { ...session, project: next, updatedAt: new Date().toISOString() } : session,
       ),
-      todos: snapshot.todos.map((todo) => (todo.project === previous ? { ...todo, project: next } : todo)),
+      todos: snapshot.todos.map((todo) =>
+        todo.project === previous ? { ...todo, project: next, updatedAt: new Date().toISOString() } : todo,
+      ),
       checklists: snapshot.checklists.map((checklist) =>
         checklist.ownerType === "project" && checklist.ownerId === previous
           ? { ...checklist, ownerId: next, updatedAt: new Date().toISOString() }
@@ -2404,7 +2682,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
           : rule,
       ),
       activities: snapshot.activities.map((activity) =>
-        activity.project === previous ? { ...activity, project: next } : activity,
+        activity.project === previous ? { ...activity, project: next, updatedAt: new Date().toISOString() } : activity,
       ),
       settings: {
         ...snapshot.settings,
@@ -2449,7 +2727,19 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   saveAttachments: async (attachments) => {
     const snapshot = get().snapshot;
     if (!snapshot) return;
-    const nextSnapshot = { ...snapshot, attachments };
+    const nowIso = new Date().toISOString();
+    const nextAttachments = attachments.map((attachment) => ({
+      ...attachment,
+      updatedAt: attachment.updatedAt || nowIso,
+    }));
+    const nextSnapshot = {
+      ...snapshot,
+      deletedEntities: nextAttachments.reduce(
+        (current, attachment) => clearDeletedEntity(current, "attachment", attachment.id),
+        snapshot.deletedEntities,
+      ),
+      attachments: nextAttachments,
+    };
     set({ snapshot: nextSnapshot });
     scheduleSnapshotPersist(get().repository, nextSnapshot, set);
   },
@@ -2485,6 +2775,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
           : [],
       archivedTasks: Array.isArray(snapshot.archivedTasks) ? snapshot.archivedTasks : [],
       activities: recalculateActivitiesWithTimeLogs(snapshot.activities ?? [], snapshot.timelogs ?? []),
+      deletedEntities: Array.isArray(snapshot.deletedEntities) ? snapshot.deletedEntities : [],
     } as DesktopAppSnapshot);
     set({
       snapshot: nextSnapshot,

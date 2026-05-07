@@ -14,6 +14,150 @@ export const buildSnapshotBackupFilename = (date = new Date()) => {
     return `notesmith-desktop-backup-${datePart}.zip`;
 };
 export const buildSnapshotBackupJsonFilename = (date = new Date()) => buildSnapshotBackupFilename(date).replace(/\.zip$/, ".json");
+const encodeBytesToBase64 = (bytes) => {
+    let binary = "";
+    bytes.forEach((byte) => {
+        binary += String.fromCharCode(byte);
+    });
+    return btoa(binary);
+};
+const uniqueBy = (items, getKey) => {
+    const map = new Map();
+    items.forEach((item) => map.set(getKey(item), item));
+    return Array.from(map.values());
+};
+const compareTimestamps = (left, right) => (left || "").localeCompare(right || "");
+const mergeByIdWithUpdatedAt = (current, imported) => {
+    const merged = new Map(current.map((item) => [item.id, item]));
+    imported.forEach((item) => {
+        const existing = merged.get(item.id);
+        const itemTimestamp = item.updatedAt || item.createdAt || "";
+        const existingTimestamp = existing?.updatedAt || existing?.createdAt || "";
+        if (!existing || compareTimestamps(itemTimestamp, existingTimestamp) >= 0) {
+            merged.set(item.id, item);
+        }
+    });
+    return Array.from(merged.values());
+};
+const mergeDeletedEntities = (current, imported) => {
+    const merged = new Map(current.map((entry) => [`${entry.entityType}::${entry.entityId}`, entry]));
+    imported.forEach((entry) => {
+        const key = `${entry.entityType}::${entry.entityId}`;
+        const existing = merged.get(key);
+        if (!existing || compareTimestamps(entry.deletedAt, existing.deletedAt) >= 0) {
+            merged.set(key, entry);
+        }
+    });
+    return Array.from(merged.values());
+};
+const mergeArchivedTasks = (current, imported) => {
+    const merged = new Map(current.map((item) => [item.id, item]));
+    imported.forEach((item) => {
+        const existing = merged.get(item.id);
+        if (!existing || compareTimestamps(item.deletedAt, existing.deletedAt) >= 0) {
+            merged.set(item.id, item);
+        }
+    });
+    return Array.from(merged.values());
+};
+const mergeEntityLinks = (current, imported) => {
+    const merged = new Map();
+    [...current, ...imported].forEach((link) => {
+        const key = `${link.fromType}::${link.fromId}::${link.toType}::${link.toId}::${link.relation}`;
+        const existing = merged.get(key);
+        if (!existing || compareTimestamps(link.updatedAt, existing.updatedAt) >= 0) {
+            merged.set(key, link);
+        }
+    });
+    return Array.from(merged.values());
+};
+const mergeTemplates = (current, imported) => {
+    const merged = new Map(current.map((template) => [template.id, template]));
+    imported.forEach((template) => merged.set(template.id, template));
+    return Array.from(merged.values());
+};
+const mergeSettings = (current, imported) => ({
+    ...current,
+    apiKey: current.apiKey || imported.apiKey,
+    outputLanguage: current.outputLanguage || imported.outputLanguage,
+    preferredDesktopTemplateId: current.preferredDesktopTemplateId || imported.preferredDesktopTemplateId,
+    textModel: current.textModel || imported.textModel,
+    transcriptionModel: current.transcriptionModel || imported.transcriptionModel,
+    savedParticipants: Array.from(new Set([...(current.savedParticipants || []), ...(imported.savedParticipants || [])])).sort(),
+    savedProjects: Array.from(new Set([...(current.savedProjects || []), ...(imported.savedProjects || [])])).sort(),
+    savedDomains: Array.from(new Set([...(current.savedDomains || []), ...(imported.savedDomains || [])])).sort(),
+    savedActivities: Array.from(new Set([...(current.savedActivities || []), ...(imported.savedActivities || [])])).sort(),
+    savedTags: Array.from(new Set([...(current.savedTags || []), ...(imported.savedTags || [])])).sort(),
+    projectLinks: uniqueBy([...(current.projectLinks || []), ...(imported.projectLinks || [])], (entry) => `${entry.project}::${entry.domain}`),
+    timeReportPresets: uniqueBy([...(current.timeReportPresets || []), ...(imported.timeReportPresets || [])], (entry) => entry.id),
+    abbreviations: uniqueBy([...(current.abbreviations || []), ...(imported.abbreviations || [])], (entry) => entry.id || `${entry.shortForm}::${entry.fullForm}`),
+    preferredParticipantNames: uniqueBy([...(current.preferredParticipantNames || []), ...(imported.preferredParticipantNames || [])], (entry) => entry.id || `${entry.shortForm}::${entry.fullName}`),
+    ruleSuggestions: uniqueBy([...(current.ruleSuggestions || []), ...(imported.ruleSuggestions || [])], (entry) => entry.id),
+    assistantQueryMemories: uniqueBy([...(current.assistantQueryMemories || []), ...(imported.assistantQueryMemories || [])], (entry) => entry.id),
+    promptProfile: imported.promptProfile ?? current.promptProfile,
+});
+const applyDeletedEntities = (snapshot) => {
+    const deletedEntities = snapshot.deletedEntities ?? [];
+    const deletedMap = new Map(deletedEntities.map((entry) => [`${entry.entityType}::${entry.entityId}`, entry]));
+    const shouldKeepUpdatedRecord = (entityType, entityId, updatedAt) => {
+        const deleted = deletedMap.get(`${entityType}::${entityId}`);
+        return !deleted || compareTimestamps(updatedAt || "", deleted.deletedAt) > 0;
+    };
+    const sessions = snapshot.sessions.filter((entry) => shouldKeepUpdatedRecord("session", entry.id, entry.updatedAt));
+    const todos = snapshot.todos.filter((entry) => shouldKeepUpdatedRecord("todo", entry.id, entry.updatedAt));
+    const activities = snapshot.activities.filter((entry) => shouldKeepUpdatedRecord("activity", entry.id, entry.updatedAt));
+    const timelogs = snapshot.timelogs.filter((entry) => shouldKeepUpdatedRecord("timelog", entry.id, entry.updatedAt));
+    const calendarItems = snapshot.calendarItems.filter((entry) => shouldKeepUpdatedRecord("calendarItem", entry.id, entry.updatedAt));
+    const checklists = snapshot.checklists.filter((entry) => shouldKeepUpdatedRecord("checklist", entry.id, entry.updatedAt));
+    const checklistTemplates = snapshot.checklistTemplates.filter((entry) => shouldKeepUpdatedRecord("checklistTemplate", entry.id, entry.updatedAt));
+    const checklistRecurrences = snapshot.checklistRecurrences.filter((entry) => shouldKeepUpdatedRecord("checklistRecurrence", entry.id, entry.updatedAt));
+    const entityLinks = snapshot.entityLinks.filter((entry) => shouldKeepUpdatedRecord("entityLink", entry.id, entry.updatedAt));
+    const attachments = snapshot.attachments.filter((entry) => shouldKeepUpdatedRecord("attachment", entry.id, entry.updatedAt));
+    const existingSessionIds = new Set(sessions.map((entry) => entry.id));
+    const existingTodoIds = new Set(todos.map((entry) => entry.id));
+    const existingActivityIds = new Set(activities.map((entry) => entry.id));
+    const existingChecklistTemplateIds = new Set(checklistTemplates.map((entry) => entry.id));
+    const cleanedCalendarItems = calendarItems.filter((entry) => entry.targetType === "todo" ? existingTodoIds.has(entry.targetId) : existingActivityIds.has(entry.targetId));
+    const cleanedChecklists = checklists.filter((entry) => entry.ownerType === "project" ? true : existingTodoIds.has(entry.ownerId));
+    const cleanedChecklistRecurrences = checklistRecurrences.filter((entry) => (entry.ownerType === "project" || existingTodoIds.has(entry.ownerId)) && existingChecklistTemplateIds.has(entry.templateId));
+    const cleanedEntityLinks = entityLinks.filter((entry) => {
+        const fromExists = entry.fromType === "session" ? existingSessionIds.has(entry.fromId) : entry.fromType === "todo" ? existingTodoIds.has(entry.fromId) : existingActivityIds.has(entry.fromId);
+        const toExists = entry.toType === "session" ? existingSessionIds.has(entry.toId) : entry.toType === "todo" ? existingTodoIds.has(entry.toId) : existingActivityIds.has(entry.toId);
+        return fromExists && toExists;
+    });
+    const cleanedAttachments = attachments.filter((entry) => existingSessionIds.has(entry.sessionId));
+    const survivingDeletionKeys = new Set();
+    const markSurvivingDeletion = (entityType, entityId, updatedAt) => {
+        const deleted = deletedMap.get(`${entityType}::${entityId}`);
+        if (deleted && compareTimestamps(updatedAt || "", deleted.deletedAt) > 0) {
+            survivingDeletionKeys.add(`${entityType}::${entityId}`);
+        }
+    };
+    sessions.forEach((entry) => markSurvivingDeletion("session", entry.id, entry.updatedAt));
+    todos.forEach((entry) => markSurvivingDeletion("todo", entry.id, entry.updatedAt));
+    activities.forEach((entry) => markSurvivingDeletion("activity", entry.id, entry.updatedAt));
+    timelogs.forEach((entry) => markSurvivingDeletion("timelog", entry.id, entry.updatedAt));
+    calendarItems.forEach((entry) => markSurvivingDeletion("calendarItem", entry.id, entry.updatedAt));
+    checklists.forEach((entry) => markSurvivingDeletion("checklist", entry.id, entry.updatedAt));
+    checklistTemplates.forEach((entry) => markSurvivingDeletion("checklistTemplate", entry.id, entry.updatedAt));
+    checklistRecurrences.forEach((entry) => markSurvivingDeletion("checklistRecurrence", entry.id, entry.updatedAt));
+    entityLinks.forEach((entry) => markSurvivingDeletion("entityLink", entry.id, entry.updatedAt));
+    attachments.forEach((entry) => markSurvivingDeletion("attachment", entry.id, entry.updatedAt));
+    return {
+        ...snapshot,
+        sessions,
+        todos,
+        activities,
+        timelogs,
+        calendarItems: cleanedCalendarItems,
+        checklists: cleanedChecklists,
+        checklistTemplates,
+        checklistRecurrences: cleanedChecklistRecurrences,
+        entityLinks: cleanedEntityLinks,
+        attachments: cleanedAttachments,
+        deletedEntities: deletedEntities.filter((entry) => !survivingDeletionKeys.has(`${entry.entityType}::${entry.entityId}`)),
+    };
+};
 const getZipCrcTable = () => {
     if (zipCrcTable) {
         return zipCrcTable;
@@ -280,6 +424,51 @@ export const getDesktopBundleType = async () => {
     const app = await import("@tauri-apps/api/app");
     return app.getBundleType();
 };
+export const withDesktopBackupAttachmentFiles = async (bundle) => {
+    if (!isTauriRuntime()) {
+        return bundle;
+    }
+    const attachmentFiles = await Promise.all((bundle.snapshot.attachments || []).map(async (attachment) => {
+        if (!attachment.filePath) {
+            return null;
+        }
+        try {
+            const bytes = await invoke("read_file_bytes", { path: attachment.filePath });
+            return {
+                attachmentId: attachment.id,
+                filename: attachment.filename,
+                base64: encodeBytesToBase64(Uint8Array.from(bytes)),
+            };
+        }
+        catch {
+            return null;
+        }
+    }));
+    return {
+        ...bundle,
+        attachmentFiles: attachmentFiles.filter((entry) => Boolean(entry)),
+    };
+};
+export const mergeDesktopSnapshot = (current, imported) => {
+    const mergedSnapshot = {
+        ...current,
+        sessions: mergeByIdWithUpdatedAt(current.sessions, imported.sessions).sort((left, right) => (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || "")),
+        templates: mergeTemplates(current.templates, imported.templates),
+        todos: mergeByIdWithUpdatedAt(current.todos, imported.todos).sort((left, right) => (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || "")),
+        checklists: mergeByIdWithUpdatedAt(current.checklists, imported.checklists).sort((left, right) => (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || "")),
+        checklistTemplates: mergeByIdWithUpdatedAt(current.checklistTemplates, imported.checklistTemplates).sort((left, right) => (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || "")),
+        checklistRecurrences: mergeByIdWithUpdatedAt(current.checklistRecurrences, imported.checklistRecurrences).sort((left, right) => (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || "")),
+        archivedTasks: mergeArchivedTasks(current.archivedTasks, imported.archivedTasks).sort((left, right) => (right.deletedAt || "").localeCompare(left.deletedAt || "")),
+        activities: mergeByIdWithUpdatedAt(current.activities, imported.activities).sort((left, right) => (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || "")),
+        timelogs: mergeByIdWithUpdatedAt(current.timelogs, imported.timelogs).sort((left, right) => (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || "")),
+        calendarItems: mergeByIdWithUpdatedAt(current.calendarItems, imported.calendarItems).sort((left, right) => (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || "")),
+        entityLinks: mergeEntityLinks(current.entityLinks, imported.entityLinks).sort((left, right) => (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || "")),
+        attachments: mergeByIdWithUpdatedAt(current.attachments, imported.attachments).sort((left, right) => (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || "")),
+        deletedEntities: mergeDeletedEntities(current.deletedEntities || [], imported.deletedEntities || []).sort((left, right) => (right.deletedAt || "").localeCompare(left.deletedAt || "")),
+        settings: mergeSettings(current.settings, imported.settings),
+    };
+    return applyDeletedEntities(mergedSnapshot);
+};
 export const exportSnapshotBackup = async (bundle) => {
     const content = JSON.stringify(bundle, null, 2);
     if (!isTauriRuntime()) {
@@ -365,7 +554,7 @@ const isDesktopBackupBundle = (value) => {
     }
     const candidate = value;
     return (candidate.kind === "notesmith-desktop-backup" &&
-        Number(candidate.version) === 2 &&
+        Number(candidate.version) >= 2 &&
         isDesktopSnapshotLike(candidate.snapshot));
 };
 const parseLocalSnapshotBackupContent = (content) => {
@@ -503,6 +692,7 @@ export const importSnapshotBackup = async () => {
             aiTextCache: Array.isArray(parsed.aiTextCache) ? parsed.aiTextCache : [],
             aiRequestHistory: Array.isArray(parsed.aiRequestHistory) ? parsed.aiRequestHistory : [],
             aiModelPricing: parsed.aiModelPricing ?? null,
+            attachmentFiles: Array.isArray(parsed.attachmentFiles) ? parsed.attachmentFiles : [],
         };
     }
     if (isDesktopSnapshotLike(parsed)) {

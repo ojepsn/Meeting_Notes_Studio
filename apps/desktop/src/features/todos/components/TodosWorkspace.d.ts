@@ -12,6 +12,8 @@ interface TodosWorkspaceProps {
     requestedDomain?: string | null;
     requestedProject?: string | null;
     onEditorClose?: () => void;
+    savedPeople: string[];
+    suggestedPeople: string[];
     onToggle: (todo: TaskRecord) => void;
     onAdd: (description: string, options?: {
         activityId?: string;
@@ -34,5 +36,5 @@ interface TodosWorkspaceProps {
     onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
     onOpenActivityDetail?: (activityId: string) => void;
 }
-export declare const TodosWorkspace: ({ todos, checklists, checklistTemplates, checklistRecurrences, activities, timeLogs, structureOptions, requestedTodoId, requestedDomain, requestedProject, onEditorClose, onToggle, onAdd, onSave, onDelete, onCreateChecklist, onCreateChecklistFromTemplate, onCreateChecklistRecurrence, onSaveChecklist, onDeleteChecklist, onCreateChecklistTemplate, onSaveChecklistTemplate, onDeleteChecklistTemplate, onDeleteChecklistRecurrence, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }: TodosWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const TodosWorkspace: ({ todos, checklists, checklistTemplates, checklistRecurrences, activities, timeLogs, structureOptions, requestedTodoId, requestedDomain, requestedProject, onEditorClose, savedPeople, suggestedPeople, onToggle, onAdd, onSave, onDelete, onCreateChecklist, onCreateChecklistFromTemplate, onCreateChecklistRecurrence, onSaveChecklist, onDeleteChecklist, onCreateChecklistTemplate, onSaveChecklistTemplate, onDeleteChecklistTemplate, onDeleteChecklistRecurrence, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }: TodosWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

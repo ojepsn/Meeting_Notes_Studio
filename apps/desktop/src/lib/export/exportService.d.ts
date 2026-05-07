@@ -25,6 +25,7 @@ type StructuredOutputEntry = {
     order: number | null;
 };
 export declare const buildStructuredOutput: (output: string) => StructuredOutputEntry[];
+export declare const buildHtmlMarkup: (entries: StructuredOutputEntry[]) => string;
 export declare const exportOutputAsText: ({ title, output }: ExportPayload) => void;
 export declare const exportOutputAsMarkdown: ({ title, output }: ExportPayload) => void;
 export declare const exportOutputAsHtml: ({ title, output, attachments, layoutPresetId }: ExportPayload) => void;

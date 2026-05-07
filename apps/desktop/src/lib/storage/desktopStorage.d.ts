@@ -28,10 +28,16 @@ export interface ImportedSnapshotResult {
     }>;
     aiRequestHistory?: AIRequestHistoryEntry[];
     aiModelPricing?: AIModelPricingSnapshot | null;
+    attachmentFiles?: DesktopBackupAttachmentFile[];
+}
+export interface DesktopBackupAttachmentFile {
+    attachmentId: string;
+    filename: string;
+    base64: string;
 }
 export interface DesktopBackupBundle {
     kind: "notesmith-desktop-backup";
-    version: 2;
+    version: 3;
     exportedAt: string;
     snapshot: DesktopAppSnapshot;
     aiTextCache: Array<{
@@ -42,6 +48,7 @@ export interface DesktopBackupBundle {
     }>;
     aiRequestHistory: AIRequestHistoryEntry[];
     aiModelPricing: AIModelPricingSnapshot | null;
+    attachmentFiles?: DesktopBackupAttachmentFile[];
 }
 export declare const buildSnapshotBackupFilename: (date?: Date) => string;
 export declare const buildSnapshotBackupJsonFilename: (date?: Date) => string;
@@ -70,6 +77,8 @@ export declare const downloadInstallerToDownloadsAndOpen: (url: string, version:
 }>;
 export declare const getDesktopAppVersion: () => Promise<string | null>;
 export declare const getDesktopBundleType: () => Promise<import("@tauri-apps/api/app").BundleType | null>;
+export declare const withDesktopBackupAttachmentFiles: (bundle: DesktopBackupBundle) => Promise<DesktopBackupBundle>;
+export declare const mergeDesktopSnapshot: (current: DesktopAppSnapshot, imported: DesktopAppSnapshot) => DesktopAppSnapshot;
 export declare const exportSnapshotBackup: (bundle: DesktopBackupBundle) => Promise<{
     path: string;
     savedOutsideAppData: boolean;

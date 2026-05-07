@@ -132,6 +132,42 @@ export const removePersistedAttachment = async (filePath) => {
     }
     await invoke("delete_persisted_file", { path: filePath });
 };
+const decodeBase64ToBytes = (base64) => {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+    }
+    return Array.from(bytes);
+};
+export const restoreImportedAttachmentFiles = async ({ attachments, attachmentFiles, }) => {
+    if (!isTauriRuntime() || !attachmentFiles.length) {
+        return attachments;
+    }
+    const fileMap = new Map(attachmentFiles.map((entry) => [entry.attachmentId, entry]));
+    return Promise.all(attachments.map(async (attachment) => {
+        const fileEntry = fileMap.get(attachment.id);
+        if (!fileEntry) {
+            return attachment;
+        }
+        try {
+            const filePath = await invoke("write_bytes_into_app_data", {
+                sessionId: attachment.sessionId,
+                filename: fileEntry.filename || attachment.filename,
+                bytes: decodeBase64ToBytes(fileEntry.base64),
+            });
+            return {
+                ...attachment,
+                filename: fileEntry.filename || attachment.filename,
+                filePath,
+                updatedAt: new Date().toISOString(),
+            };
+        }
+        catch {
+            return attachment;
+        }
+    }));
+};
 export const createAttachmentPreviewUrl = async ({ filePath, mimeType, }) => {
     if (!filePath) {
         return null;
@@ -157,19 +193,23 @@ export const loadPersistedAttachmentFile = async (attachment) => {
     }
     return null;
 };
-export const fileToAttachmentRecord = ({ file, sessionId, kind, filePath = "", }) => ({
-    id: crypto.randomUUID(),
-    sessionId,
-    kind,
-    filename: file.name,
-    mimeType: file.type || "application/octet-stream",
-    filePath,
-    sizeBytes: file.size,
-    caption: "",
-    includeInOutput: kind === "image",
-    outputPosition: 0,
-    createdAt: new Date().toISOString(),
-});
+export const fileToAttachmentRecord = ({ file, sessionId, kind, filePath = "", }) => {
+    const timestamp = new Date().toISOString();
+    return {
+        id: crypto.randomUUID(),
+        sessionId,
+        kind,
+        filename: file.name,
+        mimeType: file.type || "application/octet-stream",
+        filePath,
+        sizeBytes: file.size,
+        caption: "",
+        includeInOutput: kind === "image",
+        outputPosition: 0,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+    };
+};
 export const readTranscriptFile = async (file) => {
     const extension = file.name.split(".").pop()?.toLowerCase() || "";
     if (extension === "doc") {

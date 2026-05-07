@@ -141,7 +141,7 @@ export const buildStructuredOutput = (output: string): StructuredOutputEntry[] =
       .filter((entry): entry is StructuredOutputEntry => Boolean(entry)),
   );
 
-const buildHtmlMarkup = (entries: StructuredOutputEntry[]) => {
+export const buildHtmlMarkup = (entries: StructuredOutputEntry[]) => {
   const parts: string[] = [];
   let activeList: "ul" | "ol" | null = null;
 

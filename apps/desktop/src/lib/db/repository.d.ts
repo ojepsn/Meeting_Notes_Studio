@@ -1,4 +1,4 @@
-import { type AttachmentRecord, type ArchivedTaskRecord, type ActivityRecord, type CalendarItemRecord, type ChecklistRecord, type ChecklistRecurrenceRecord, type ChecklistTemplateRecord, type CaptureMode, type DesktopAppSnapshot, type EntityLinkRecord, type LocalAppSettings, type SessionRecord, type TemplateDefinition, type TimeLogRecord, type TodoRecord } from "@notesmith/domain";
+import { type AttachmentRecord, type ArchivedTaskRecord, type ActivityRecord, type CalendarItemRecord, type ChecklistRecord, type ChecklistRecurrenceRecord, type ChecklistTemplateRecord, type CaptureMode, type DesktopAppSnapshot, type DeletedEntityRecord, type EntityLinkRecord, type LocalAppSettings, type SessionRecord, type TemplateDefinition, type TimeLogRecord, type TodoRecord } from "@notesmith/domain";
 import type { AIRequestHistoryEntry } from "../ai/history";
 import { type AIModelPricingSnapshot } from "../ai/modelPricing";
 export declare const createDefaultSettings: () => LocalAppSettings;
@@ -28,6 +28,8 @@ export interface EntityRepository {
     saveEntityLinks(records: EntityLinkRecord[]): Promise<void>;
     loadAttachments(): Promise<AttachmentRecord[]>;
     saveAttachments(records: AttachmentRecord[]): Promise<void>;
+    loadDeletedEntities(): Promise<DeletedEntityRecord[]>;
+    saveDeletedEntities(records: DeletedEntityRecord[]): Promise<void>;
     loadSettings(): Promise<LocalAppSettings>;
     saveSettings(record: LocalAppSettings): Promise<void>;
     loadAITextCache(): Promise<Array<{

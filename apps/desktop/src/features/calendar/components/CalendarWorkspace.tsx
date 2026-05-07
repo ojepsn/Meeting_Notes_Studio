@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ActivityRecord, CalendarItemRecord, ChecklistRecord, LocalAppSettings, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
+import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
@@ -23,6 +24,8 @@ const MAX_PANE = 520;
 const HORIZONTAL_BUFFER_DAYS = 28;
 const HORIZONTAL_EXTEND_DAYS = 14;
 const HORIZONTAL_EDGE_DAYS = 7;
+const DRAG_SCROLL_EDGE_PX = 56;
+const DRAG_SCROLL_STEP_PX = 18;
 export const addDays = addDaysIso;
 export const daysBetween = daysBetweenIso;
 export const clampSlot = (slot: number) => Math.max(0, Math.min(TOTAL_SLOTS - 1, slot));
@@ -180,6 +183,7 @@ type EditorDraft = {
   targetType: "todo" | "activity";
   targetId: string;
   title: string;
+  participantText: string;
   activityId: string;
   parentActivityId: string;
   doOn: string;
@@ -195,6 +199,25 @@ type EditorDraft = {
   isMeeting: boolean;
 };
 
+type CalendarItemPosition = {
+  id: string;
+  date: string;
+  startSlot: number;
+  durationSlots: number;
+};
+
+type CalendarUndoEntry = {
+  items: CalendarItemPosition[];
+};
+
+type MarqueeSelectionState = {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+  additive: boolean;
+};
+
 interface CalendarWorkspaceProps {
   todos: TodoRecord[];
   checklists: ChecklistRecord[];
@@ -206,6 +229,7 @@ interface CalendarWorkspaceProps {
   structureOptions: StructureOptions;
   linkedSessionStateByActivity: Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>;
   linkedSessionStateByTodo: Record<string, { sessionId: string | null; hasOutput: boolean; sessionTitle: string }>;
+  savedPeople: string[];
   onSaveSettings: (settings: LocalAppSettings) => void;
   onCreateFromText: (
     date: string,
@@ -248,6 +272,7 @@ export const CalendarWorkspace = ({
   structureOptions,
   linkedSessionStateByActivity,
   linkedSessionStateByTodo,
+  savedPeople,
   onSaveSettings,
   onCreateFromText,
   onMoveItem,
@@ -293,11 +318,13 @@ export const CalendarWorkspace = ({
   const [typeFilter, setTypeFilter] = useState<"all" | "task" | "meeting">("all");
   const [showPrivateItems, setShowPrivateItems] = useState(settings.calendarShowPrivate ?? (settings.calendarVisibilityFilter === "public" ? false : true));
   const [showBusinessItems, setShowBusinessItems] = useState(settings.calendarShowBusiness ?? (settings.calendarVisibilityFilter === "private" ? false : true));
+  const [showPriorityOnly, setShowPriorityOnly] = useState(Boolean(settings.calendarShowPriorityOnly));
   const [hideCompletedTodos, setHideCompletedTodos] = useState(false);
   const [checklistDraft, setChecklistDraft] = useState("");
   const [checklistItemDrafts, setChecklistItemDrafts] = useState<Record<string, string>>({});
   const [inlineTodoEdit, setInlineTodoEdit] = useState<{ itemId: string; todoId: string; value: string } | null>(null);
   const [resizeState, setResizeState] = useState<null | { itemId: string; edge: "start" | "end"; date: string; startSlot: number; durationSlots: number }>(null);
+  const [marqueeSelection, setMarqueeSelection] = useState<MarqueeSelectionState | null>(null);
   const [now, setNow] = useState(() => new Date());
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -313,6 +340,13 @@ export const CalendarWorkspace = ({
   const pointerDragCandidateRef = useRef<null | { itemId: string; startX: number; startY: number }>(null);
   const pointerDraggingItemRef = useRef<string | null>(null);
   const suppressClickItemIdRef = useRef<string | null>(null);
+  const suppressColumnClickRef = useRef(false);
+  const marqueeCandidateRef = useRef<null | { startX: number; startY: number; additive: boolean }>(null);
+  const marqueeStateRef = useRef<MarqueeSelectionState | null>(null);
+  const undoStackRef = useRef<CalendarUndoEntry[]>([]);
+  const selectedItemIdsRef = useRef<string[]>([]);
+  const dragPointerClientRef = useRef<{ x: number; y: number } | null>(null);
+  const autoScrollFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     onFullScreenChange?.(isFullScreen);
@@ -329,7 +363,8 @@ export const CalendarWorkspace = ({
       settings.calendarScrollTop !== scrollTop ||
       settings.calendarScrollLeft !== scrollLeft ||
       settings.calendarShowPrivate !== showPrivateItems ||
-      settings.calendarShowBusiness !== showBusinessItems
+      settings.calendarShowBusiness !== showBusinessItems ||
+      settings.calendarShowPriorityOnly !== showPriorityOnly
     ) {
       onSaveSettings({
         ...settings,
@@ -343,9 +378,10 @@ export const CalendarWorkspace = ({
         calendarVisibilityFilter: showPrivateItems && showBusinessItems ? "all" : showPrivateItems ? "private" : showBusinessItems ? "public" : "all",
         calendarShowPrivate: showPrivateItems,
         calendarShowBusiness: showBusinessItems,
+        calendarShowPriorityOnly: showPriorityOnly,
       });
     }
-  }, [daysInView, detailsPaneWidth, isFullScreen, onSaveSettings, scrollLeft, scrollTop, settings, showBusinessItems, showPrivateItems, slotHeight]);
+  }, [daysInView, detailsPaneWidth, isFullScreen, onSaveSettings, scrollLeft, scrollTop, settings, showBusinessItems, showPriorityOnly, showPrivateItems, slotHeight]);
 
   const visibleDates = useMemo(
     () =>
@@ -408,12 +444,14 @@ export const CalendarWorkspace = ({
       if (typeFilter === "meeting" && !item.isMeeting) return false;
       if (!showPrivateItems && item.isPrivate) return false;
       if (!showBusinessItems && !item.isPrivate) return false;
+      if (showPriorityOnly && item.targetType === "todo" && !item.isPriority) return false;
+      if (showPriorityOnly && item.targetType === "activity") return false;
       if (hideCompletedTodos && item.targetType === "todo" && item.isDone) return false;
       if (!query) return true;
       return `${item.title} ${item.label}`.toLowerCase().includes(query);
     });
     return layoutCalendarItems(repositionTodaySingleRowTodos(visibleItems, today, now));
-  }, [hideCompletedTodos, items, now, searchQuery, showBusinessItems, showPrivateItems, today, typeFilter]);
+  }, [hideCompletedTodos, items, now, searchQuery, showBusinessItems, showPriorityOnly, showPrivateItems, today, typeFilter]);
 
   const itemsByDate = useMemo(() => {
     const grouped = new Map<string, Item[]>();
@@ -618,6 +656,37 @@ export const CalendarWorkspace = ({
   }, [items, onDeleteActivity, onDeleteTodo, selectedItem, selectedItemIds]);
 
   useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.repeat) {
+        return;
+      }
+      if (event.key.toLowerCase() !== "z") {
+        return;
+      }
+      const activeElement = document.activeElement as HTMLElement | null;
+      const tagName = activeElement?.tagName?.toLowerCase();
+      const isTextInput =
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select" ||
+        Boolean(activeElement?.isContentEditable);
+      if (isTextInput) {
+        return;
+      }
+      const [latestUndo, ...remaining] = undoStackRef.current;
+      if (!latestUndo) {
+        return;
+      }
+      event.preventDefault();
+      undoStackRef.current = remaining;
+      applyUndoEntry(latestUndo);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onUpdateCalendarItem]);
+
+  useEffect(() => {
     if (!selectedItemId) {
       setEditorDraft(null);
       return;
@@ -630,13 +699,14 @@ export const CalendarWorkspace = ({
     if (calendarItem.targetType === "todo") {
       const todo = todos.find((entry) => entry.id === calendarItem.targetId);
       if (!todo) return;
-      const nextDraft = { itemId: calendarItem.id, targetType: "todo" as const, targetId: todo.id, title: todo.description, activityId: todo.activityId, parentActivityId: "", doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: Boolean(todo.isPriority), isMeeting: false };
+      const nextDraft = { itemId: calendarItem.id, targetType: "todo" as const, targetId: todo.id, title: todo.description, participantText: todo.participantText ?? "", activityId: todo.activityId, parentActivityId: "", doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: Boolean(todo.isPriority), isMeeting: false };
       if (
         editorDraft &&
         editorDraft.itemId === nextDraft.itemId &&
         editorDraft.targetType === nextDraft.targetType &&
         editorDraft.targetId === nextDraft.targetId &&
         editorDraft.title === nextDraft.title &&
+        editorDraft.participantText === nextDraft.participantText &&
         editorDraft.activityId === nextDraft.activityId &&
         editorDraft.parentActivityId === nextDraft.parentActivityId &&
         editorDraft.doOn === nextDraft.doOn &&
@@ -658,13 +728,14 @@ export const CalendarWorkspace = ({
     }
     const activity = activities.find((entry) => entry.id === calendarItem.targetId);
     if (!activity) return;
-    const nextDraft = { itemId: calendarItem.id, targetType: "activity" as const, targetId: activity.id, title: activity.description, activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, isMeeting: activity.type === "meeting" };
+    const nextDraft = { itemId: calendarItem.id, targetType: "activity" as const, targetId: activity.id, title: activity.description, participantText: activity.participantText ?? "", activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, isMeeting: activity.type === "meeting" };
     if (
       editorDraft &&
       editorDraft.itemId === nextDraft.itemId &&
       editorDraft.targetType === nextDraft.targetType &&
       editorDraft.targetId === nextDraft.targetId &&
       editorDraft.title === nextDraft.title &&
+      editorDraft.participantText === nextDraft.participantText &&
       editorDraft.activityId === nextDraft.activityId &&
       editorDraft.parentActivityId === nextDraft.parentActivityId &&
       editorDraft.doOn === nextDraft.doOn &&
@@ -726,6 +797,140 @@ export const CalendarWorkspace = ({
   }, [items]);
 
   useEffect(() => {
+    selectedItemIdsRef.current = selectedItemIds;
+  }, [selectedItemIds]);
+
+  const getSelectedItemIntersection = (itemIds: string[]) => {
+    const nextSet = new Set(itemIds);
+    const existingSet = new Set(selectedItemIdsRef.current);
+    const unchanged =
+      nextSet.size === existingSet.size &&
+      [...nextSet].every((itemId) => existingSet.has(itemId));
+    if (unchanged) {
+      return selectedItemIdsRef.current;
+    }
+    return itemIds;
+  };
+
+  const applySelectedItemIds = (itemIds: string[]) => {
+    const nextSelected = getSelectedItemIntersection(itemIds);
+    setSelectedItemIds(nextSelected);
+    const nextPrimary = nextSelected[0] ?? null;
+    setSelectedItemId(nextPrimary);
+    if (!nextPrimary) {
+      setEditorDraft(null);
+    }
+  };
+
+  const captureCalendarPositions = (itemIds: string[]): CalendarItemPosition[] =>
+    itemIds
+      .map((itemId) => items.find((entry) => entry.id === itemId))
+      .filter((item): item is Item => item !== undefined)
+      .map((item) => ({
+        id: item.id,
+        date: item.date,
+        startSlot: item.startSlot,
+        durationSlots: Math.max(1, item.durationSlots),
+      }));
+
+  const pushUndoEntry = (entry: CalendarUndoEntry) => {
+    if (!entry.items.length) return;
+    undoStackRef.current = [entry, ...undoStackRef.current].slice(0, 50);
+  };
+
+  const applyUndoEntry = (entry: CalendarUndoEntry) => {
+    entry.items.forEach((item) => {
+      onUpdateCalendarItem(item.id, {
+        date: item.date,
+        startSlot: item.startSlot,
+        durationSlots: item.durationSlots,
+      });
+    });
+    applySelectedItemIds(entry.items.map((item) => item.id));
+  };
+
+  const getMarqueeRect = (selection: MarqueeSelectionState) => ({
+    left: Math.min(selection.startX, selection.currentX),
+    right: Math.max(selection.startX, selection.currentX),
+    top: Math.min(selection.startY, selection.currentY),
+    bottom: Math.max(selection.startY, selection.currentY),
+  });
+
+  const applyMarqueeSelection = (selection: MarqueeSelectionState) => {
+    const rect = getMarqueeRect(selection);
+    const selectedByRect = Array.from(
+      scrollRef.current?.querySelectorAll<HTMLElement>(".calendar-item-block[data-item-id]") ?? [],
+    )
+      .filter((element) => {
+        const itemRect = element.getBoundingClientRect();
+        return !(
+          itemRect.right < rect.left ||
+          itemRect.left > rect.right ||
+          itemRect.bottom < rect.top ||
+          itemRect.top > rect.bottom
+        );
+      })
+      .map((element) => element.dataset.itemId)
+      .filter((itemId): itemId is string => Boolean(itemId));
+
+    if (selection.additive) {
+      const combined = Array.from(new Set([...selectedItemIdsRef.current, ...selectedByRect]));
+      applySelectedItemIds(combined);
+      return;
+    }
+
+    applySelectedItemIds(selectedByRect);
+  };
+
+  const stopAutoScrollLoop = () => {
+    if (autoScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+    }
+  };
+
+  const tickAutoScroll = () => {
+    const pointer = dragPointerClientRef.current;
+    const scroller = scrollRef.current;
+    const isDraggingItems = Boolean(pointerDraggingItemRef.current);
+    const isMarqueeSelecting = Boolean(marqueeStateRef.current);
+    if (!pointer || !scroller || (!isDraggingItems && !isMarqueeSelecting)) {
+      stopAutoScrollLoop();
+      return;
+    }
+
+    const rect = scroller.getBoundingClientRect();
+    let deltaX = 0;
+    let deltaY = 0;
+
+    if (pointer.x < rect.left + DRAG_SCROLL_EDGE_PX) {
+      deltaX = -DRAG_SCROLL_STEP_PX;
+    } else if (pointer.x > rect.right - DRAG_SCROLL_EDGE_PX) {
+      deltaX = DRAG_SCROLL_STEP_PX;
+    }
+
+    if (pointer.y < rect.top + DRAG_SCROLL_EDGE_PX) {
+      deltaY = -DRAG_SCROLL_STEP_PX;
+    } else if (pointer.y > rect.bottom - DRAG_SCROLL_EDGE_PX) {
+      deltaY = DRAG_SCROLL_STEP_PX;
+    }
+
+    if (deltaX || deltaY) {
+      scroller.scrollBy({ left: deltaX, top: deltaY });
+      if (marqueeStateRef.current) {
+        applyMarqueeSelection(marqueeStateRef.current);
+      }
+    }
+
+    autoScrollFrameRef.current = window.requestAnimationFrame(tickAutoScroll);
+  };
+
+  const ensureAutoScrollLoop = () => {
+    if (autoScrollFrameRef.current !== null) return;
+    autoScrollFrameRef.current = window.requestAnimationFrame(tickAutoScroll);
+  };
+
+  useEffect(() => {
     if (!highlightedItemId) {
       appliedHighlightedItemIdRef.current = null;
       return;
@@ -747,18 +952,17 @@ export const CalendarWorkspace = ({
 
   const selectCalendarItem = (itemId: string, additive: boolean) => {
     setDraftCell(null);
-    setSelectedItemId(itemId);
     if (!additive) {
-      setSelectedItemIds([itemId]);
+      applySelectedItemIds([itemId]);
       return;
     }
-    setSelectedItemIds((current) => {
-      if (current.includes(itemId)) {
-        const next = current.filter((id) => id !== itemId);
-        return next.length ? next : [itemId];
-      }
-      return [...current, itemId];
-    });
+    const current = selectedItemIdsRef.current;
+    if (current.includes(itemId)) {
+      const next = current.filter((id) => id !== itemId);
+      applySelectedItemIds(next.length ? next : [itemId]);
+      return;
+    }
+    applySelectedItemIds([...current, itemId]);
   };
 
   const itemIdsForDrag = (itemId: string) => (selectedItemIds.includes(itemId) ? selectedItemIds : [itemId]);
@@ -768,13 +972,27 @@ export const CalendarWorkspace = ({
     if (!anchorItem) return;
     const dateDelta = daysBetween(anchorItem.date, targetDate);
     const slotDelta = targetSlot - anchorItem.startSlot;
+    const previousPositions = captureCalendarPositions(itemIds);
+    const nextPositions = previousPositions.map((item) => ({
+      ...item,
+      date: addDays(item.date, dateDelta),
+      startSlot: clampSlot(item.startSlot + slotDelta),
+    }));
+    const hasChanged = nextPositions.some(
+      (item, index) =>
+        item.date !== previousPositions[index]?.date ||
+        item.startSlot !== previousPositions[index]?.startSlot,
+    );
+    if (!hasChanged) {
+      return;
+    }
+    pushUndoEntry({ items: previousPositions });
     itemIds.forEach((itemId) => {
       const item = items.find((entry) => entry.id === itemId);
       if (!item) return;
       onMoveItem(item.id, addDays(item.date, dateDelta), clampSlot(item.startSlot + slotDelta));
     });
-    setSelectedItemIds(itemIds);
-    setSelectedItemId(anchorId);
+    applySelectedItemIds(itemIds);
   };
 
   const getCalendarDropTarget = (clientX: number, clientY: number) => {
@@ -793,7 +1011,10 @@ export const CalendarWorkspace = ({
 
   useEffect(() => {
     if (!resizeState) return;
+    const previousPosition = captureCalendarPositions([resizeState.itemId])[0] ?? null;
     const handleMouseMove = (event: MouseEvent) => {
+      dragPointerClientRef.current = { x: event.clientX, y: event.clientY };
+      ensureAutoScrollLoop();
       const deltaSlots = Math.round(event.movementY / slotHeight);
       if (deltaSlots === 0) return;
       setResizeState((current) => {
@@ -805,8 +1026,20 @@ export const CalendarWorkspace = ({
       });
     };
     const handleMouseUp = () => {
+      dragPointerClientRef.current = null;
+      stopAutoScrollLoop();
       setResizeState((current) => {
-        if (current) onUpdateCalendarItem(current.itemId, { date: current.date, startSlot: current.startSlot, durationSlots: current.durationSlots });
+        if (current) {
+          if (
+            previousPosition &&
+            (previousPosition.date !== current.date ||
+              previousPosition.startSlot !== current.startSlot ||
+              previousPosition.durationSlots !== current.durationSlots)
+          ) {
+            pushUndoEntry({ items: [previousPosition] });
+          }
+          onUpdateCalendarItem(current.itemId, { date: current.date, startSlot: current.startSlot, durationSlots: current.durationSlots });
+        }
         return null;
       });
     };
@@ -815,6 +1048,8 @@ export const CalendarWorkspace = ({
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      dragPointerClientRef.current = null;
+      stopAutoScrollLoop();
     };
   }, [onUpdateCalendarItem, resizeState, slotHeight]);
 
@@ -838,13 +1073,60 @@ export const CalendarWorkspace = ({
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
+      const candidate = marqueeCandidateRef.current;
+      if (!candidate) return;
+      const deltaX = Math.abs(event.clientX - candidate.startX);
+      const deltaY = Math.abs(event.clientY - candidate.startY);
+      if (!marqueeStateRef.current && deltaX < 5 && deltaY < 5) {
+        return;
+      }
+      const nextSelection: MarqueeSelectionState = {
+        startX: candidate.startX,
+        startY: candidate.startY,
+        currentX: event.clientX,
+        currentY: event.clientY,
+        additive: candidate.additive,
+      };
+      dragPointerClientRef.current = { x: event.clientX, y: event.clientY };
+      marqueeStateRef.current = nextSelection;
+      suppressColumnClickRef.current = true;
+      document.body.classList.add("calendar-selection-dragging");
+      setMarqueeSelection(nextSelection);
+      applyMarqueeSelection(nextSelection);
+      ensureAutoScrollLoop();
+    };
+
+    const handleMouseUp = () => {
+      marqueeCandidateRef.current = null;
+      marqueeStateRef.current = null;
+      dragPointerClientRef.current = null;
+      stopAutoScrollLoop();
+      setMarqueeSelection(null);
+      window.setTimeout(() => {
+        document.body.classList.remove("calendar-selection-dragging");
+      }, 0);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      document.body.classList.remove("calendar-selection-dragging");
+    };
+  }, [items]);
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
       const candidate = pointerDragCandidateRef.current;
       if (!candidate) return;
       const deltaX = Math.abs(event.clientX - candidate.startX);
       const deltaY = Math.abs(event.clientY - candidate.startY);
       if (deltaX < 5 && deltaY < 5) return;
       pointerDraggingItemRef.current = candidate.itemId;
+      dragPointerClientRef.current = { x: event.clientX, y: event.clientY };
       document.body.classList.add("calendar-pointer-dragging");
+      ensureAutoScrollLoop();
     };
 
     const handleMouseUp = (event: MouseEvent) => {
@@ -854,6 +1136,8 @@ export const CalendarWorkspace = ({
       pointerDragCandidateRef.current = null;
       pointerDraggingItemRef.current = null;
       draggedGroupRef.current = null;
+      dragPointerClientRef.current = null;
+      stopAutoScrollLoop();
       document.body.classList.remove("calendar-pointer-dragging");
       if (!candidate || !draggingItemId) return;
       const dropTarget = getCalendarDropTarget(event.clientX, event.clientY);
@@ -870,9 +1154,11 @@ export const CalendarWorkspace = ({
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      dragPointerClientRef.current = null;
+      stopAutoScrollLoop();
       document.body.classList.remove("calendar-pointer-dragging");
     };
-  }, [items, onMoveItem, selectedItemIds, slotHeight]);
+  }, [items, slotHeight]);
 
   const moveDraftCell = (deltaDays: number, deltaSlots: number) => {
     if (!draftCell) return;
@@ -934,12 +1220,12 @@ export const CalendarWorkspace = ({
       const todo = todos.find((entry) => entry.id === draft.targetId);
       if (!todo) return;
       const nextDescription = draft.title.trim().length ? draft.title : todo.description;
-      onSaveTodo({ ...todo, description: nextDescription, activityId: draft.activityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone, isPriority: draft.isPriority });
+      onSaveTodo({ ...todo, description: nextDescription, participantText: draft.participantText, activityId: draft.activityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone, isPriority: draft.isPriority });
     } else {
       const activity = activities.find((entry) => entry.id === draft.targetId);
       if (!activity) return;
       const nextDescription = draft.title.trim().length ? draft.title : activity.description;
-      onSaveActivity({ ...activity, description: nextDescription, parentActivityId: draft.parentActivityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone, startTime: draft.startTime, endTime: draft.endTime });
+      onSaveActivity({ ...activity, description: nextDescription, participantText: draft.participantText, parentActivityId: draft.parentActivityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone, startTime: draft.startTime, endTime: draft.endTime });
     }
     onUpdateCalendarItem(draft.itemId, { date: draft.doOn, startSlot, durationSlots });
   };
@@ -1207,6 +1493,14 @@ export const CalendarWorkspace = ({
             />
             <span>Show business</span>
           </label>
+          <label className="compact-private-toggle calendar-top-private-toggle calendar-top-filter-toggle">
+            <input
+              type="checkbox"
+              checked={showPriorityOnly}
+              onChange={(event) => setShowPriorityOnly(event.target.checked)}
+            />
+            <span>Prio</span>
+          </label>
           <button className="small-button danger-button" type="button" onClick={deleteSelectedCalendarItems} disabled={!selectedItemId && !selectedItemIds.length}>
             Delete selected
           </button>
@@ -1241,20 +1535,28 @@ export const CalendarWorkspace = ({
                 <label className="compact-private-toggle calendar-top-filter-toggle">
                   <input
                     type="checkbox"
-                  checked={showPrivateItems}
-                  onChange={(event) => setShowPrivateItems(event.target.checked)}
-                />
-                <span>Show private</span>
-              </label>
-              <label className="compact-private-toggle calendar-top-filter-toggle">
-                <input
-                  type="checkbox"
-                  checked={showBusinessItems}
-                  onChange={(event) => setShowBusinessItems(event.target.checked)}
-                />
-                <span>Show business</span>
-              </label>
-              <div className="field calendar-context-field">
+                    checked={showPrivateItems}
+                    onChange={(event) => setShowPrivateItems(event.target.checked)}
+                  />
+                  <span>Show private</span>
+                </label>
+                <label className="compact-private-toggle calendar-top-filter-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showBusinessItems}
+                    onChange={(event) => setShowBusinessItems(event.target.checked)}
+                  />
+                  <span>Show business</span>
+                </label>
+                <label className="compact-private-toggle calendar-top-filter-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showPriorityOnly}
+                    onChange={(event) => setShowPriorityOnly(event.target.checked)}
+                  />
+                  <span>Prio</span>
+                </label>
+                <div className="field calendar-context-field">
                 <label htmlFor="calendar-creation-context">Attach new entries</label>
                 <select
                   id="calendar-creation-context"
@@ -1292,6 +1594,10 @@ export const CalendarWorkspace = ({
                 const dayItems = itemsByDate.get(date) ?? [];
                 const active = draftCell?.date === date ? draftCell : null;
                 return <div key={`col-${date}`} data-date={date} className="calendar-day-column" style={{ gridColumn: `${index + 2} / ${index + 3}`, gridRow: `2 / span ${TOTAL_SLOTS}`, height: `calc(var(--calendar-slot-height) * ${TOTAL_SLOTS})` }} onClick={(event) => {
+                  if (suppressColumnClickRef.current) {
+                    suppressColumnClickRef.current = false;
+                    return;
+                  }
                   if (event.detail > 1) return;
                   const target = event.target as HTMLElement;
                   if (target.closest(".calendar-item-block") || target.closest(".calendar-cell-input")) return;
@@ -1303,6 +1609,15 @@ export const CalendarWorkspace = ({
                   cancelPendingTodoDraft();
                   const rect = event.currentTarget.getBoundingClientRect();
                   void createMeetingFromGrid(date, Math.floor((event.clientY - rect.top) / slotHeight));
+                }} onMouseDown={(event) => {
+                  if (event.button !== 0) return;
+                  const target = event.target as HTMLElement;
+                  if (target.closest(".calendar-item-block") || target.closest(".calendar-cell-input")) return;
+                  marqueeCandidateRef.current = {
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    additive: event.metaKey || event.ctrlKey || event.shiftKey,
+                  };
                 }}>
                   <div className="calendar-day-interaction-layer" />
                   {active ? <div className="calendar-active-cell" style={{ top: `calc(var(--calendar-slot-height) * ${active.slot})`, height: "var(--calendar-slot-height)" }}><input className="calendar-cell-input" autoFocus value={draftText} onChange={(event) => setDraftText(event.target.value)} onBlur={commitDraftCell} onKeyDown={(event) => {
@@ -1344,10 +1659,11 @@ export const CalendarWorkspace = ({
                     ].filter(Boolean).map((className) => ` ${className}`).join("");
                     const inlineTodoEditForItem = inlineTodoEdit?.itemId === item.id ? inlineTodoEdit : null;
                     const isSingleRowTodo = item.targetType === "todo" && durationSlots <= 1;
-                    return <div key={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${item.targetType === "todo" && item.isPriority ? " calendar-item-block-priority-todo" : ""}${item.targetType === "todo" && item.isDone ? " calendar-item-block-completed-todo" : ""}${isPastCalendarItem ? " calendar-item-block-past" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${inlineTodoEditForItem ? " calendar-item-block-inline-editing" : ""}${sizeClass}`} role="button" tabIndex={0} style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
+                    return <div key={item.id} data-item-id={item.id} className={`calendar-item-block calendar-item-block-${item.targetType}${item.isMeeting ? " calendar-item-block-meeting" : ""}${item.targetType === "todo" && item.isPriority ? " calendar-item-block-priority-todo" : ""}${item.targetType === "todo" && item.isDone ? " calendar-item-block-completed-todo" : ""}${isPastCalendarItem ? " calendar-item-block-past" : ""}${isSelected ? " calendar-item-block-selected" : ""}${selectedItemIds.length > 1 && selectedItemIds.includes(item.id) ? " calendar-item-block-multi-selected" : ""}${inlineTodoEditForItem ? " calendar-item-block-inline-editing" : ""}${sizeClass}`} role="button" tabIndex={0} style={{ top: `calc(var(--calendar-slot-height) * ${startSlot} + 2px)`, height: `${visualHeight}px`, width: `calc(${laneWidth}% - 8px)`, left: `calc(${item.lane * laneWidth}% + 4px)`, right: "auto" }} onMouseDown={(event) => {
                       const target = event.target as HTMLElement;
                       if (target.closest(".calendar-item-inline-action") || target.closest(".calendar-resize-handle") || target.closest(".calendar-item-title-input") || target.closest(".calendar-item-structure-input")) return;
                       event.preventDefault();
+                      marqueeCandidateRef.current = null;
                       pointerDragCandidateRef.current = { itemId: item.id, startX: event.clientX, startY: event.clientY };
                       draggedGroupRef.current = { anchorId: item.id, itemIds: itemIdsForDrag(item.id) };
                     }} onClick={(event) => { if (suppressClickItemIdRef.current === item.id) return; selectCalendarItem(item.id, event.metaKey || event.ctrlKey || event.shiftKey); }} onDoubleClick={() => { if (item.targetType === "todo") { onOpenTodoDetail(item.targetId); return; } onOpenActivityDetail(item.targetId); }}>
@@ -1677,6 +1993,17 @@ export const CalendarWorkspace = ({
                 </div>;
               })}
             </div>
+            {marqueeSelection ? (
+              <div
+                className="calendar-marquee-selection"
+                style={{
+                  left: `${Math.min(marqueeSelection.startX, marqueeSelection.currentX)}px`,
+                  top: `${Math.min(marqueeSelection.startY, marqueeSelection.currentY)}px`,
+                  width: `${Math.abs(marqueeSelection.currentX - marqueeSelection.startX)}px`,
+                  height: `${Math.abs(marqueeSelection.currentY - marqueeSelection.startY)}px`,
+                }}
+              />
+            ) : null}
           </div>
         </div>
         <div className="calendar-splitter" role="separator" aria-orientation="vertical" onMouseDown={() => { splitterDraggingRef.current = true; document.body.style.cursor = "col-resize"; }} />
@@ -1703,6 +2030,16 @@ export const CalendarWorkspace = ({
                   id="calendar-edit-title"
                   value={editorDraft.title}
                   onChange={(event) => updateEditorDraft({ ...editorDraft, title: event.target.value })}
+                />
+              </div>
+              <div className="field field-wide">
+                <label htmlFor="calendar-edit-participants">People</label>
+                <PeoplePicker
+                  value={editorDraft.participantText}
+                  savedPeople={savedPeople}
+                  suggestedPeople={savedPeople}
+                  placeholder="Search or add people"
+                  onChange={(value) => updateEditorDraft({ ...editorDraft, participantText: value })}
                 />
               </div>
               <div className="calendar-editor-quick-toggles">

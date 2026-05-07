@@ -4,7 +4,9 @@ import { TokenPicker } from "../../../components/TokenPicker";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
 import { DateInput } from "../../../components/DateInput";
 import { getActivitiesForSelection, getProjectsForDomain } from "../../../lib/structure/options";
-import { useState } from "react";
+import { buildHtmlMarkup, buildStructuredOutput } from "../../../lib/export/exportService";
+import { getOutputLayoutPreset } from "../../../lib/export/outputLayouts";
+import { useEffect, useMemo, useRef, useState } from "react";
 const OUTPUT_LANGUAGE_OPTIONS = [
     { value: "same", label: "Same as notes" },
     { value: "sv", label: "Swedish" },
@@ -45,7 +47,7 @@ const parseFollowUpCandidate = (value) => {
         date: nextDate,
     };
 };
-export const OutputWorkspace = ({ session, template, displayedOutput = session.output, outputVersions = [], selectedOutputVersionId = null, attachments, presentation = "full", showPresentationActions = true, showPanelHeading = true, showDetailsSection = true, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onCopyOutput, onTranslate, onRevise, onRevertOutputVersion, onOpenOutputVersion, onOpenLatestOutputVersion, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, ruleSuggestions = [], onAcceptRuleSuggestion, onDismissRuleSuggestion, onIgnoreRuleSuggestion, primaryActionLabel = "Generate", secondaryActionLabel = null, emptyStatePrimaryLabel = "Generate polished notes", emptyStateSecondaryLabel = null, linkedActivity = null, onOpenLinkedActivity, onAddFollowUpTodo, onAddFollowUpMeeting, }) => {
+export const OutputWorkspace = ({ session, template, displayedOutput = session.output, layoutPresetId, outputVersions = [], selectedOutputVersionId = null, attachments, presentation = "full", showPresentationActions = true, showPanelHeading = true, showDetailsSection = true, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onCopyOutput, onTranslate, onRevise, onRevertOutputVersion, onOpenOutputVersion, onOpenLatestOutputVersion, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, ruleSuggestions = [], onAcceptRuleSuggestion, onDismissRuleSuggestion, onIgnoreRuleSuggestion, primaryActionLabel = "Generate", secondaryActionLabel = null, emptyStatePrimaryLabel = "Generate polished notes", emptyStateSecondaryLabel = null, linkedActivity = null, onOpenLinkedActivity, onAddFollowUpTodo, onAddFollowUpMeeting, }) => {
     const [revisionInstructions, setRevisionInstructions] = useState("");
     const [followUpDraft, setFollowUpDraft] = useState("");
     const [selectedFollowUps, setSelectedFollowUps] = useState([]);
@@ -80,6 +82,132 @@ export const OutputWorkspace = ({ session, template, displayedOutput = session.o
         .slice(0, 8);
     const excerptPreview = selectedExcerpt.length > 180 ? `${selectedExcerpt.slice(0, 177).trimEnd()}...` : selectedExcerpt;
     const selectedOutputVersion = outputVersions.find((version) => version.id === selectedOutputVersionId) ?? null;
+    const outputEditorRef = useRef(null);
+    const layout = useMemo(() => getOutputLayoutPreset(layoutPresetId), [layoutPresetId]);
+    const renderedOutputHtml = useMemo(() => buildHtmlMarkup(buildStructuredOutput(displayedOutput)), [displayedOutput]);
+    const outputRichTextToPlainText = (value) => {
+        if (!value)
+            return "";
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = value;
+        const blockLines = [];
+        const pushBlock = (valueToPush) => {
+            const trimmed = valueToPush.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+            if (trimmed) {
+                blockLines.push(trimmed);
+            }
+        };
+        const readText = (element) => (typeof element.innerText === "string"
+            ? element.innerText
+            : element.textContent || "")
+            .replace(/\u00a0/g, " ")
+            .replace(/[ \t]+\n/g, "\n")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+        Array.from(wrapper.children).forEach((child) => {
+            if (!(child instanceof HTMLElement)) {
+                return;
+            }
+            const tagName = child.tagName.toUpperCase();
+            if (tagName === "UL" || tagName === "OL") {
+                const lines = Array.from(child.querySelectorAll(":scope > li"))
+                    .map((item, index) => {
+                    const text = readText(item);
+                    if (!text)
+                        return "";
+                    return tagName === "OL" ? `${index + 1}. ${text}` : `- ${text}`;
+                })
+                    .filter(Boolean)
+                    .join("\n");
+                pushBlock(lines);
+                return;
+            }
+            if (/^H[1-6]$/.test(tagName)) {
+                const level = Number(tagName.slice(1));
+                const text = readText(child);
+                pushBlock(text ? `${"#".repeat(Math.max(1, Math.min(6, level)))} ${text}` : "");
+                return;
+            }
+            if (tagName === "P" || tagName === "DIV") {
+                pushBlock(readText(child));
+                return;
+            }
+            if (tagName === "BR") {
+                return;
+            }
+            pushBlock(readText(child));
+        });
+        if (!blockLines.length) {
+            const fallback = (typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "")
+                .replace(/\u00a0/g, " ")
+                .replace(/\s+\n/g, "\n")
+                .replace(/\n{3,}/g, "\n\n")
+                .trim();
+            return fallback;
+        }
+        return blockLines.join("\n\n");
+    };
+    const normalizeOutputRichTextHtml = (value) => {
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = value || "";
+        const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6"]);
+        wrapper.querySelectorAll("*").forEach((element) => {
+            if (!allowedTags.has(element.tagName)) {
+                const fragment = document.createDocumentFragment();
+                while (element.firstChild) {
+                    fragment.appendChild(element.firstChild);
+                }
+                element.replaceWith(fragment);
+                return;
+            }
+            [...element.attributes].forEach((attribute) => element.removeAttribute(attribute.name));
+        });
+        const normalized = wrapper.innerHTML.replace(/<div>/gi, "<p>").replace(/<\/div>/gi, "</p>").trim();
+        if (!normalized)
+            return "";
+        if (!/<(p|ul|ol|li|br|h[1-6])\b/i.test(normalized)) {
+            return `<p>${normalized}</p>`;
+        }
+        return normalized;
+    };
+    const updateSelectedExcerptFromEditor = () => {
+        const selection = document.getSelection();
+        const nextExcerpt = selection?.toString().trim() ?? "";
+        setSelectedExcerpt(nextExcerpt);
+    };
+    useEffect(() => {
+        if (!outputEditorRef.current)
+            return;
+        if (document.activeElement === outputEditorRef.current) {
+            outputEditorRef.current.dataset.empty = displayedOutput.trim() ? "false" : "true";
+            return;
+        }
+        if (outputEditorRef.current.innerHTML !== renderedOutputHtml) {
+            outputEditorRef.current.innerHTML = renderedOutputHtml;
+        }
+        outputEditorRef.current.dataset.empty = displayedOutput.trim() ? "false" : "true";
+    }, [displayedOutput, renderedOutputHtml]);
+    const outputPreviewStyle = useMemo(() => ({
+        ["--output-preview-title-font"]: layout.style.titleFont,
+        ["--output-preview-heading-font"]: layout.style.headingFont,
+        ["--output-preview-body-font"]: layout.style.bodyFont,
+        ["--output-preview-meta-font"]: layout.style.metaFont,
+        ["--output-preview-heading-color"]: layout.style.headingColor,
+        ["--output-preview-meta-color"]: layout.style.metaColor,
+        ["--output-preview-body-size"]: `${layout.style.bodySize}pt`,
+        ["--output-preview-heading-size"]: `${layout.style.headingSize}pt`,
+        ["--output-preview-title-size"]: `${layout.style.titleSize}pt`,
+        ["--output-preview-line-height"]: `${layout.style.lineHeight}`,
+        ["--output-preview-paragraph-spacing"]: `${layout.style.paragraphSpacing}px`,
+        ["--output-preview-section-spacing"]: `${layout.style.sectionSpacing}px`,
+        ["--output-preview-heading-case"]: layout.style.headingCase === "uppercase" ? "uppercase" : "none",
+    }), [layout]);
+    const renderOutputSurface = (className) => (_jsx("div", { ref: outputEditorRef, className: `rich-text-surface output-rich-text-surface ${className}`, style: outputPreviewStyle, id: "session-output", contentEditable: !isViewingHistoricalVersion, suppressContentEditableWarning: true, "data-placeholder": "Generated notes will appear here.", "data-empty": "true", onInput: (event) => {
+            const normalizedHtml = normalizeOutputRichTextHtml(event.currentTarget.innerHTML);
+            const nextOutput = outputRichTextToPlainText(normalizedHtml);
+            event.currentTarget.dataset.empty = nextOutput.trim() ? "false" : "true";
+            onChange({ ...session, output: nextOutput });
+        }, onMouseUp: updateSelectedExcerptFromEditor, onKeyUp: updateSelectedExcerptFromEditor }));
     const formatOutputVersionLabel = (generatedAt) => {
         const parsed = new Date(generatedAt);
         if (Number.isNaN(parsed.getTime())) {
@@ -142,12 +270,7 @@ export const OutputWorkspace = ({ session, template, displayedOutput = session.o
                                                                                 ? "Balanced detail"
                                                                                 : session.detailLevel === 4
                                                                                     ? "Detailed"
-                                                                                    : "Comprehensive" })] }), _jsxs("label", { className: `field config-field${session.transcribeOnly ? " is-disabled" : ""}`, children: [_jsx("span", { className: "field-label", children: "Additional LLM instructions" }), _jsx("textarea", { rows: 4, value: session.additionalInstructions, disabled: session.transcribeOnly, onChange: (event) => onChange({ ...session, additionalInstructions: event.target.value }), placeholder: "Example: Focus more on risks and decisions, and exclude implementation details." })] })] })] })] }), renderRuleSuggestions()] }), _jsxs("div", { className: "output-main", children: [_jsx("div", { className: "output-card output-card-pwa", children: !hasOutput ? (_jsxs("div", { className: "output-empty output-empty-pwa", children: [_jsx("h3", { children: "Your finished notes will appear here." }), _jsxs("p", { children: ["Add notes or transcript in the Capture section to the left, include highlights if useful, then click ", _jsx("strong", { children: "Generate" }), "."] })] })) : (_jsxs(_Fragment, { children: [selectedOutputVersion ? (_jsxs("p", { className: "muted output-version-note", children: ["Viewing the version generated ", formatOutputVersionLabel(selectedOutputVersion.generatedAt), ". Open the latest version to keep editing."] })) : null, _jsx("textarea", { className: "editor-textarea editor-textarea-primary output-textarea-minimal output-textarea-pwa", id: "session-output", value: displayedOutput, onChange: (event) => onChange({ ...session, output: event.target.value }), onSelect: (event) => {
-                                                    const nextExcerpt = event.currentTarget.value
-                                                        .slice(event.currentTarget.selectionStart ?? 0, event.currentTarget.selectionEnd ?? 0)
-                                                        .trim();
-                                                    setSelectedExcerpt(nextExcerpt);
-                                                }, readOnly: isViewingHistoricalVersion, placeholder: "Generated notes will appear here." })] })) }), _jsxs("details", { className: "workspace-disclosure pwa-disclosure-card", children: [_jsx("summary", { children: "Refine output" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "revision-instructions", children: "Comments to improve the output" }), _jsx("textarea", { id: "revision-instructions", value: revisionInstructions, onChange: (event) => setRevisionInstructions(event.target.value), placeholder: "Example: Make the summary shorter, emphasize risks more, and make the action items more specific." })] }), _jsxs("div", { className: "capture-toolbar output-feedback-actions", children: [_jsx("button", { className: "secondary-button", type: "button", onClick: () => {
+                                                                                    : "Comprehensive" })] }), _jsxs("label", { className: `field config-field${session.transcribeOnly ? " is-disabled" : ""}`, children: [_jsx("span", { className: "field-label", children: "Additional LLM instructions" }), _jsx("textarea", { rows: 4, value: session.additionalInstructions, disabled: session.transcribeOnly, onChange: (event) => onChange({ ...session, additionalInstructions: event.target.value }), placeholder: "Example: Focus more on risks and decisions, and exclude implementation details." })] })] })] })] }), renderRuleSuggestions()] }), _jsxs("div", { className: "output-main", children: [_jsx("div", { className: "output-card output-card-pwa", children: !hasOutput ? (_jsxs("div", { className: "output-empty output-empty-pwa", children: [_jsx("h3", { children: "Your finished notes will appear here." }), _jsxs("p", { children: ["Add notes or transcript in the Capture section to the left, include highlights if useful, then click ", _jsx("strong", { children: "Generate" }), "."] })] })) : (_jsxs(_Fragment, { children: [selectedOutputVersion ? (_jsxs("p", { className: "muted output-version-note", children: ["Viewing the version generated ", formatOutputVersionLabel(selectedOutputVersion.generatedAt), ". Open the latest version to keep editing."] })) : null, renderOutputSurface("editor-textarea-primary output-rich-text-surface-minimal output-rich-text-surface-pwa")] })) }), _jsxs("details", { className: "workspace-disclosure pwa-disclosure-card", children: [_jsx("summary", { children: "Refine output" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "revision-instructions", children: "Comments to improve the output" }), _jsx("textarea", { id: "revision-instructions", value: revisionInstructions, onChange: (event) => setRevisionInstructions(event.target.value), placeholder: "Example: Make the summary shorter, emphasize risks more, and make the action items more specific." })] }), _jsxs("div", { className: "capture-toolbar output-feedback-actions", children: [_jsx("button", { className: "secondary-button", type: "button", onClick: () => {
                                                                 if (isViewingHistoricalVersion)
                                                                     return;
                                                                 onRevise(revisionInstructions);
@@ -216,12 +339,7 @@ export const OutputWorkspace = ({ session, template, displayedOutput = session.o
                                                     setSelectedFollowUps([]);
                                                 }, disabled: !selectedFollowUps.length || !onAddFollowUpMeeting, children: "Add selected as meeting" })] }), _jsx("div", { className: "section-list", children: followUpSuggestions.map((suggestion) => (_jsxs("div", { className: "list-item", children: [_jsxs("label", { className: "todos-workspace-main", children: [_jsx("input", { type: "checkbox", checked: selectedFollowUps.includes(suggestion), onChange: (event) => setSelectedFollowUps((current) => event.target.checked
                                                                 ? [...current, suggestion]
-                                                                : current.filter((entry) => entry !== suggestion)) }), _jsx("span", { className: "todos-workspace-copy", children: _jsx("strong", { children: suggestion }) })] }), _jsxs("div", { className: "page-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => onAddFollowUpTodo?.(suggestion, { activityId: linkedActivity.id, doOn: session.date }), children: "Add todo" }), _jsx("button", { className: "small-button", type: "button", onClick: () => applyReviewSeed(suggestion, "todo"), children: "Review" }), _jsx("button", { className: "small-button", type: "button", onClick: () => onAddFollowUpMeeting?.(suggestion, { parentActivityId: linkedActivity.id, doOn: session.date }), children: "Add meeting" })] })] }, suggestion))) })] })) : null] })] })) : null, _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "session-output", children: "Output" }), selectedOutputVersion ? (_jsxs("p", { className: "muted", children: ["Viewing the version generated ", formatOutputVersionLabel(selectedOutputVersion.generatedAt), ". Open the latest version to keep editing."] })) : null, _jsx("textarea", { className: `editor-textarea${isMinimal ? " editor-textarea-primary output-textarea-minimal" : ""}`, id: "session-output", value: displayedOutput, onChange: (event) => onChange({ ...session, output: event.target.value }), onSelect: (event) => {
-                            const nextExcerpt = event.currentTarget.value
-                                .slice(event.currentTarget.selectionStart ?? 0, event.currentTarget.selectionEnd ?? 0)
-                                .trim();
-                            setSelectedExcerpt(nextExcerpt);
-                        }, readOnly: isViewingHistoricalVersion, placeholder: "Generated notes will appear here." })] }), renderVersionHistory(), showDetailsSection ? (_jsxs("details", { className: "field field-wide workspace-disclosure", children: [_jsx("summary", { children: "Details" }), _jsxs("div", { className: "workspace-disclosure-body form-grid", children: [_jsxs("div", { className: `field field-wide${isMinimal ? " capture-title-field-minimal" : ""}`, children: [_jsx("label", { htmlFor: "output-title", children: "Title" }), _jsx("input", { className: isMinimal ? "minimal-title-input" : undefined, id: "output-title", value: session.title, onChange: (event) => onChange({ ...session, title: event.target.value }), placeholder: isMeetingNote ? "Weekly project meeting" : "Note title" })] }), _jsxs("div", { className: `field${isMinimal ? " capture-meta-field" : ""}`, children: [_jsx("label", { htmlFor: "output-date", children: "Date" }), _jsx(DateInput, { id: "output-date", value: session.date, onChange: (event) => onChange({ ...session, date: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "output-people", children: "People" }), _jsx(PeoplePicker, { value: session.participantText, savedPeople: savedPeople, suggestedPeople: suggestedPeople, onChange: (value) => onChange({ ...session, participantText: value }), placeholder: isMeetingNote ? "Search or add people" : "Search or add optional context" })] }), _jsx("div", { className: "field field-wide metadata-triplet", children: _jsxs("div", { className: "metadata-triplet-grid", children: [_jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "output-domain", children: "Domain" }), _jsx(TokenPicker, { value: session.domain, savedOptions: structureOptions.domains.length ? structureOptions.domains : savedDomains, suggestedOptions: suggestedDomains, placeholder: "Search or add domain", suggestionSummary: "Recent domains", suggestionBadgeText: "From saved Domains", mode: "single", onChange: handleDomainChange })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "output-project", children: "Project" }), _jsx(TokenPicker, { value: session.project, savedOptions: projectPickerOptions, suggestedOptions: suggestedProjectsForSelection, placeholder: "Search or add project", suggestionSummary: "Recent projects", suggestionBadgeText: "From saved Projects", mode: "single", onChange: handleProjectChange })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "output-activity", children: "Activity" }), _jsx(TokenPicker, { value: session.activity, savedOptions: activityPickerOptions, suggestedOptions: suggestedActivitiesForSelection, placeholder: "Search or add activity", suggestionSummary: "Recent activities", suggestionBadgeText: "From saved Activities", mode: "single", onChange: (value) => onChange({ ...session, activity: value }) })] })] }) }), isMeetingNote ? (_jsxs(_Fragment, { children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "output-start-time", children: "Start time" }), _jsx("input", { id: "output-start-time", type: "time", value: session.startTime, onChange: (event) => onChange({ ...session, startTime: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "output-end-time", children: "End time" }), _jsx("input", { id: "output-end-time", type: "time", value: session.endTime, onChange: (event) => onChange({ ...session, endTime: event.target.value }) })] })] })) : (_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "output-time", children: "Time" }), _jsx("input", { id: "output-time", type: "time", value: session.startTime, onChange: (event) => onChange({ ...session, startTime: event.target.value }) })] })), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "output-tags", children: "Tags" }), _jsx(TokenPicker, { value: session.tagsText, savedOptions: savedTags, suggestedOptions: suggestedTags, placeholder: "Add tags like q2-planning, budget, hiring", suggestionSummary: "Recent tags", suggestionBadgeText: "From saved Tags", onChange: (value) => onChange({ ...session, tagsText: value }) })] }), _jsxs("div", { className: `field capture-private-field${isMinimal ? " capture-meta-field" : ""}`, children: [_jsx("span", { children: "Privacy" }), _jsxs("div", { className: "compact-private-toggle", children: [_jsx("input", { id: "output-private", type: "checkbox", checked: session.isPrivate, onChange: (event) => onChange({ ...session, isPrivate: event.target.checked }) }), _jsx("label", { htmlFor: "output-private", className: "checkbox-label", children: "Private" })] })] })] })] })) : null, includedImages.length ? (_jsxs("div", { className: "field field-wide", children: [_jsx("label", { children: "Images marked for polished output" }), _jsx("div", { className: "section-list", children: includedImages.map((attachment) => (_jsxs("div", { className: "list-item image-output-item", children: [_jsx(AttachmentImagePreview, { attachment: attachment }), _jsxs("div", { className: "image-attachment-details", children: [_jsx("strong", { children: attachment.caption || attachment.filename }), _jsx("span", { className: "muted", children: "This image is staged for future structured output and richer Word/PDF export." })] })] }, attachment.id))) })] })) : null, _jsxs("details", { className: "field field-wide workspace-disclosure", children: [_jsx("summary", { children: "Refine and export" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "revision-instructions", children: "Revision instructions" }), _jsx("textarea", { id: "revision-instructions", value: revisionInstructions, onChange: (event) => setRevisionInstructions(event.target.value), placeholder: "Example: Make the summary more concise, keep action owners explicit, and translate jargon into clearer client language." })] }), _jsxs("div", { className: "page-actions", children: [_jsx("button", { className: "shell-button", type: "button", onClick: () => {
+                                                                : current.filter((entry) => entry !== suggestion)) }), _jsx("span", { className: "todos-workspace-copy", children: _jsx("strong", { children: suggestion }) })] }), _jsxs("div", { className: "page-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => onAddFollowUpTodo?.(suggestion, { activityId: linkedActivity.id, doOn: session.date }), children: "Add todo" }), _jsx("button", { className: "small-button", type: "button", onClick: () => applyReviewSeed(suggestion, "todo"), children: "Review" }), _jsx("button", { className: "small-button", type: "button", onClick: () => onAddFollowUpMeeting?.(suggestion, { parentActivityId: linkedActivity.id, doOn: session.date }), children: "Add meeting" })] })] }, suggestion))) })] })) : null] })] })) : null, _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "session-output", children: "Output" }), selectedOutputVersion ? (_jsxs("p", { className: "muted", children: ["Viewing the version generated ", formatOutputVersionLabel(selectedOutputVersion.generatedAt), ". Open the latest version to keep editing."] })) : null, renderOutputSurface(`${isMinimal ? "editor-textarea-primary output-rich-text-surface-minimal" : ""}`)] }), renderVersionHistory(), showDetailsSection ? (_jsxs("details", { className: "field field-wide workspace-disclosure", children: [_jsx("summary", { children: "Details" }), _jsxs("div", { className: "workspace-disclosure-body form-grid", children: [_jsxs("div", { className: `field field-wide${isMinimal ? " capture-title-field-minimal" : ""}`, children: [_jsx("label", { htmlFor: "output-title", children: "Title" }), _jsx("input", { className: isMinimal ? "minimal-title-input" : undefined, id: "output-title", value: session.title, onChange: (event) => onChange({ ...session, title: event.target.value }), placeholder: isMeetingNote ? "Weekly project meeting" : "Note title" })] }), _jsxs("div", { className: `field${isMinimal ? " capture-meta-field" : ""}`, children: [_jsx("label", { htmlFor: "output-date", children: "Date" }), _jsx(DateInput, { id: "output-date", value: session.date, onChange: (event) => onChange({ ...session, date: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "output-people", children: "People" }), _jsx(PeoplePicker, { value: session.participantText, savedPeople: savedPeople, suggestedPeople: suggestedPeople, onChange: (value) => onChange({ ...session, participantText: value }), placeholder: isMeetingNote ? "Search or add people" : "Search or add optional context" })] }), _jsx("div", { className: "field field-wide metadata-triplet", children: _jsxs("div", { className: "metadata-triplet-grid", children: [_jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "output-domain", children: "Domain" }), _jsx(TokenPicker, { value: session.domain, savedOptions: structureOptions.domains.length ? structureOptions.domains : savedDomains, suggestedOptions: suggestedDomains, placeholder: "Search or add domain", suggestionSummary: "Recent domains", suggestionBadgeText: "From saved Domains", mode: "single", onChange: handleDomainChange })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "output-project", children: "Project" }), _jsx(TokenPicker, { value: session.project, savedOptions: projectPickerOptions, suggestedOptions: suggestedProjectsForSelection, placeholder: "Search or add project", suggestionSummary: "Recent projects", suggestionBadgeText: "From saved Projects", mode: "single", onChange: handleProjectChange })] }), _jsxs("div", { className: "field metadata-subfield", children: [_jsx("label", { htmlFor: "output-activity", children: "Activity" }), _jsx(TokenPicker, { value: session.activity, savedOptions: activityPickerOptions, suggestedOptions: suggestedActivitiesForSelection, placeholder: "Search or add activity", suggestionSummary: "Recent activities", suggestionBadgeText: "From saved Activities", mode: "single", onChange: (value) => onChange({ ...session, activity: value }) })] })] }) }), isMeetingNote ? (_jsxs(_Fragment, { children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "output-start-time", children: "Start time" }), _jsx("input", { id: "output-start-time", type: "time", value: session.startTime, onChange: (event) => onChange({ ...session, startTime: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "output-end-time", children: "End time" }), _jsx("input", { id: "output-end-time", type: "time", value: session.endTime, onChange: (event) => onChange({ ...session, endTime: event.target.value }) })] })] })) : (_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "output-time", children: "Time" }), _jsx("input", { id: "output-time", type: "time", value: session.startTime, onChange: (event) => onChange({ ...session, startTime: event.target.value }) })] })), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "output-tags", children: "Tags" }), _jsx(TokenPicker, { value: session.tagsText, savedOptions: savedTags, suggestedOptions: suggestedTags, placeholder: "Add tags like q2-planning, budget, hiring", suggestionSummary: "Recent tags", suggestionBadgeText: "From saved Tags", onChange: (value) => onChange({ ...session, tagsText: value }) })] }), _jsxs("div", { className: `field capture-private-field${isMinimal ? " capture-meta-field" : ""}`, children: [_jsx("span", { children: "Privacy" }), _jsxs("div", { className: "compact-private-toggle", children: [_jsx("input", { id: "output-private", type: "checkbox", checked: session.isPrivate, onChange: (event) => onChange({ ...session, isPrivate: event.target.checked }) }), _jsx("label", { htmlFor: "output-private", className: "checkbox-label", children: "Private" })] })] })] })] })) : null, includedImages.length ? (_jsxs("div", { className: "field field-wide", children: [_jsx("label", { children: "Images marked for polished output" }), _jsx("div", { className: "section-list", children: includedImages.map((attachment) => (_jsxs("div", { className: "list-item image-output-item", children: [_jsx(AttachmentImagePreview, { attachment: attachment }), _jsxs("div", { className: "image-attachment-details", children: [_jsx("strong", { children: attachment.caption || attachment.filename }), _jsx("span", { className: "muted", children: "This image is staged for future structured output and richer Word/PDF export." })] })] }, attachment.id))) })] })) : null, _jsxs("details", { className: "field field-wide workspace-disclosure", children: [_jsx("summary", { children: "Refine and export" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "revision-instructions", children: "Revision instructions" }), _jsx("textarea", { id: "revision-instructions", value: revisionInstructions, onChange: (event) => setRevisionInstructions(event.target.value), placeholder: "Example: Make the summary more concise, keep action owners explicit, and translate jargon into clearer client language." })] }), _jsxs("div", { className: "page-actions", children: [_jsx("button", { className: "shell-button", type: "button", onClick: () => {
                                             if (isViewingHistoricalVersion)
                                                 return;
                                             onRevise(revisionInstructions);

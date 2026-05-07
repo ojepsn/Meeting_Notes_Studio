@@ -4,6 +4,7 @@ interface OutputWorkspaceProps {
     session: SessionRecord;
     template?: TemplateDefinition | null;
     displayedOutput?: string;
+    layoutPresetId?: string;
     outputVersions?: SessionRecord["outputVersions"];
     selectedOutputVersionId?: string | null;
     attachments: AttachmentRecord[];
@@ -60,5 +61,5 @@ interface OutputWorkspaceProps {
         comments?: string;
     }) => void;
 }
-export declare const OutputWorkspace: ({ session, template, displayedOutput, outputVersions, selectedOutputVersionId, attachments, presentation, showPresentationActions, showPanelHeading, showDetailsSection, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onCopyOutput, onTranslate, onRevise, onRevertOutputVersion, onOpenOutputVersion, onOpenLatestOutputVersion, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, ruleSuggestions, onAcceptRuleSuggestion, onDismissRuleSuggestion, onIgnoreRuleSuggestion, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, linkedActivity, onOpenLinkedActivity, onAddFollowUpTodo, onAddFollowUpMeeting, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const OutputWorkspace: ({ session, template, displayedOutput, layoutPresetId, outputVersions, selectedOutputVersionId, attachments, presentation, showPresentationActions, showPanelHeading, showDetailsSection, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onCopyOutput, onTranslate, onRevise, onRevertOutputVersion, onOpenOutputVersion, onOpenLatestOutputVersion, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, ruleSuggestions, onAcceptRuleSuggestion, onDismissRuleSuggestion, onIgnoreRuleSuggestion, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, linkedActivity, onOpenLinkedActivity, onAddFollowUpTodo, onAddFollowUpMeeting, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

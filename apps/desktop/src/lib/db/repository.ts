@@ -11,6 +11,7 @@ import {
   type ChecklistTemplateRecord,
   type CaptureMode,
   type DesktopAppSnapshot,
+  type DeletedEntityRecord,
   type EntityLinkRecord,
   type LocalAppSettings,
   type SessionRecord,
@@ -45,6 +46,7 @@ const STORAGE_KEYS = {
   calendarItems: "notesmith-desktop-calendar-items",
   entityLinks: "notesmith-desktop-entity-links",
   attachments: "notesmith-desktop-attachments",
+  deletedEntities: "notesmith-desktop-deleted-entities",
   settings: "notesmith-desktop-settings",
   aiTextCache: "notesmith-desktop-ai-text-cache",
   aiRequestHistory: "notesmith-desktop-ai-request-history",
@@ -105,10 +107,12 @@ const normalizeAttachmentRecord = (attachment: AttachmentRecord): AttachmentReco
   caption: typeof attachment.caption === "string" ? attachment.caption : "",
   includeInOutput: Boolean(attachment.includeInOutput),
   outputPosition: Number.isFinite(Number(attachment.outputPosition)) ? Number(attachment.outputPosition) : 0,
+  updatedAt: typeof attachment.updatedAt === "string" && attachment.updatedAt ? attachment.updatedAt : attachment.createdAt || now(),
 });
 
 const normalizeTodoRecord = (todo: TodoRecord): TodoRecord => ({
   ...todo,
+  participantText: typeof todo.participantText === "string" ? todo.participantText : "",
   completedAt: typeof todo.completedAt === "string" ? todo.completedAt : null,
   isPrivate: Boolean(todo.isPrivate),
   isPriority: Boolean(todo.isPriority),
@@ -125,6 +129,7 @@ const normalizeTodoRecord = (todo: TodoRecord): TodoRecord => ({
       : typeof todo.comments === "string"
         ? todo.comments
         : "",
+  updatedAt: typeof todo.updatedAt === "string" && todo.updatedAt ? todo.updatedAt : todo.createdAt || now(),
   sessionIds: Array.isArray(todo.sessionIds) ? todo.sessionIds.filter((value): value is string => typeof value === "string") : [],
 });
 
@@ -203,6 +208,7 @@ const normalizeActivityRecord = (activity: ActivityRecord): ActivityRecord => ({
   ...activity,
   type: activity.type === "meeting" ? "meeting" : "task",
   parentActivityId: typeof activity.parentActivityId === "string" ? activity.parentActivityId : "",
+  participantText: typeof activity.participantText === "string" ? activity.participantText : "",
   isPrivate: Boolean(activity.isPrivate),
   comments: typeof activity.comments === "string" ? activity.comments : "",
   domain: typeof activity.domain === "string" ? activity.domain : "",
@@ -220,6 +226,7 @@ const normalizeActivityRecord = (activity: ActivityRecord): ActivityRecord => ({
         : "",
   timeRequiredMinutes: Number.isFinite(Number(activity.timeRequiredMinutes)) ? Number(activity.timeRequiredMinutes) : 0,
   actualTimeSpentMinutes: Number.isFinite(Number(activity.actualTimeSpentMinutes)) ? Number(activity.actualTimeSpentMinutes) : 0,
+  updatedAt: typeof activity.updatedAt === "string" && activity.updatedAt ? activity.updatedAt : activity.createdAt || now(),
   sessionIds: Array.isArray(activity.sessionIds)
     ? activity.sessionIds.filter((value): value is string => typeof value === "string")
     : [],
@@ -245,6 +252,24 @@ const normalizeCalendarItemRecord = (item: CalendarItemRecord): CalendarItemReco
     : 1,
 });
 
+const normalizeDeletedEntityRecord = (record: DeletedEntityRecord): DeletedEntityRecord => ({
+  entityType:
+    record.entityType === "session" ||
+    record.entityType === "todo" ||
+    record.entityType === "activity" ||
+    record.entityType === "timelog" ||
+    record.entityType === "calendarItem" ||
+    record.entityType === "entityLink" ||
+    record.entityType === "attachment" ||
+    record.entityType === "checklist" ||
+    record.entityType === "checklistTemplate" ||
+    record.entityType === "checklistRecurrence"
+      ? record.entityType
+      : "todo",
+  entityId: typeof record.entityId === "string" ? record.entityId : "",
+  deletedAt: typeof record.deletedAt === "string" && record.deletedAt ? record.deletedAt : now(),
+});
+
 const parsePayload = <T>(payload: string): Partial<T> => {
   try {
     const parsed = JSON.parse(payload) as Partial<T>;
@@ -259,6 +284,7 @@ const normalizeEntityLinkRecord = (link: EntityLinkRecord): EntityLinkRecord => 
   fromType: link.fromType === "session" ? "session" : link.fromType === "todo" ? "todo" : "activity",
   toType: link.toType === "activity" ? "activity" : link.toType === "todo" ? "todo" : "session",
   relation: "has_session",
+  updatedAt: typeof link.updatedAt === "string" && link.updatedAt ? link.updatedAt : link.createdAt || now(),
 });
 
 const normalizeTemplateRecord = (template: TemplateDefinition): TemplateDefinition => ({
@@ -286,6 +312,7 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   calendarVisibilityFilter: "all",
   calendarShowPrivate: true,
   calendarShowBusiness: true,
+  calendarShowPriorityOnly: false,
   baselineWorkEnabled: false,
   baselineWorkActivityId: "",
   apiKey: "",
@@ -322,6 +349,7 @@ export const createDefaultSnapshot = (): DesktopAppSnapshot => ({
   calendarItems: [],
   entityLinks: [],
   attachments: [],
+  deletedEntities: [],
   settings: createDefaultSettings(),
 });
 
@@ -350,6 +378,8 @@ export interface EntityRepository {
   saveEntityLinks(records: EntityLinkRecord[]): Promise<void>;
   loadAttachments(): Promise<AttachmentRecord[]>;
   saveAttachments(records: AttachmentRecord[]): Promise<void>;
+  loadDeletedEntities(): Promise<DeletedEntityRecord[]>;
+  saveDeletedEntities(records: DeletedEntityRecord[]): Promise<void>;
   loadSettings(): Promise<LocalAppSettings>;
   saveSettings(record: LocalAppSettings): Promise<void>;
   loadAITextCache(): Promise<Array<{ key: string; value: string; createdAt: number; expiresAt: number }>>;
@@ -420,6 +450,7 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
       : settings.calendarVisibilityFilter === "private"
         ? false
         : true,
+  calendarShowPriorityOnly: Boolean(settings.calendarShowPriorityOnly),
   baselineWorkEnabled: Boolean(settings.baselineWorkEnabled),
   baselineWorkActivityId:
     typeof settings.baselineWorkActivityId === "string" ? settings.baselineWorkActivityId.trim() : "",
@@ -610,6 +641,14 @@ class BrowserEntityRepository implements AppRepository {
     writeLocalJson(STORAGE_KEYS.attachments, records);
   }
 
+  async loadDeletedEntities() {
+    return readLocalJson<DeletedEntityRecord[]>(STORAGE_KEYS.deletedEntities, []).map(normalizeDeletedEntityRecord);
+  }
+
+  async saveDeletedEntities(records: DeletedEntityRecord[]) {
+    writeLocalJson(STORAGE_KEYS.deletedEntities, records);
+  }
+
   async loadSettings() {
     return normalizeSettings(readLocalJson<Partial<LocalAppSettings>>(STORAGE_KEYS.settings, createDefaultSettings()));
   }
@@ -643,7 +682,7 @@ class BrowserEntityRepository implements AppRepository {
   }
 
   async loadSnapshot(): Promise<DesktopAppSnapshot> {
-    const [sessions, templates, todos, checklists, checklistTemplates, checklistRecurrences, archivedTasks, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
+    const [sessions, templates, todos, checklists, checklistTemplates, checklistRecurrences, archivedTasks, activities, timelogs, calendarItems, entityLinks, attachments, deletedEntities, settings] = await Promise.all([
       this.loadSessions(),
       this.loadTemplates(),
       this.loadTodos(),
@@ -656,6 +695,7 @@ class BrowserEntityRepository implements AppRepository {
       this.loadCalendarItems(),
       this.loadEntityLinks(),
       this.loadAttachments(),
+      this.loadDeletedEntities(),
       this.loadSettings(),
     ]);
 
@@ -672,6 +712,7 @@ class BrowserEntityRepository implements AppRepository {
       calendarItems,
       entityLinks,
       attachments,
+      deletedEntities,
       settings,
     };
   }
@@ -690,6 +731,7 @@ class BrowserEntityRepository implements AppRepository {
       this.saveCalendarItems(snapshot.calendarItems),
       this.saveEntityLinks(snapshot.entityLinks),
       this.saveAttachments(snapshot.attachments),
+      this.saveDeletedEntities(snapshot.deletedEntities ?? []),
       this.saveSettings(snapshot.settings),
     ]);
   }
@@ -727,21 +769,28 @@ class TauriSqliteRepository implements AppRepository {
         await db.execute("ALTER TABLE sessions ADD COLUMN additional_instructions TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE todos ADD COLUMN do_on TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE todos ADD COLUMN due_date TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE todos ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE todos ADD COLUMN participant_text TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE activities ADD COLUMN activity_type TEXT NOT NULL DEFAULT 'task'").catch(() => {});
+        await db.execute("ALTER TABLE activities ADD COLUMN participant_text TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE activities ADD COLUMN parent_activity_id TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE activities ADD COLUMN do_on TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE activities ADD COLUMN due_date TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE activities ADD COLUMN start_time TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE activities ADD COLUMN end_time TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE activities ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE attachments ADD COLUMN caption TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("ALTER TABLE attachments ADD COLUMN include_in_output INTEGER NOT NULL DEFAULT 0").catch(() => {});
         await db.execute("ALTER TABLE attachments ADD COLUMN output_position INTEGER NOT NULL DEFAULT 0").catch(() => {});
+        await db.execute("ALTER TABLE attachments ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''").catch(() => {});
+        await db.execute("ALTER TABLE entity_links ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''").catch(() => {});
         await db.execute("CREATE TABLE IF NOT EXISTS calendar_items (id TEXT PRIMARY KEY, target_type TEXT NOT NULL, target_id TEXT NOT NULL, schedule_date TEXT NOT NULL, start_slot INTEGER NOT NULL, duration_slots INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
         await db.execute("CREATE TABLE IF NOT EXISTS timelogs (id TEXT PRIMARY KEY, target_type TEXT NOT NULL, target_id TEXT NOT NULL, log_date TEXT NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL, duration_minutes INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
         await db.execute("CREATE TABLE IF NOT EXISTS archived_tasks (id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
         await db.execute("CREATE TABLE IF NOT EXISTS checklists (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
         await db.execute("CREATE TABLE IF NOT EXISTS checklist_templates (id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
         await db.execute("CREATE TABLE IF NOT EXISTS checklist_recurrences (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL, updated_at TEXT NOT NULL, payload_json TEXT NOT NULL)").catch(() => {});
+        await db.execute("CREATE TABLE IF NOT EXISTS deleted_entities (entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, deleted_at TEXT NOT NULL, PRIMARY KEY (entity_type, entity_id))").catch(() => {});
         return db;
       })();
     }
@@ -889,18 +938,21 @@ class TauriSqliteRepository implements AppRepository {
     const rows = await db.select<{
       payload_json: string;
       description: string;
+      participant_text: string;
       is_done: number;
       comments: string;
       do_on: string;
       due_date: string;
       created_at: string;
-    }>("SELECT payload_json, description, is_done, comments, do_on, due_date, created_at FROM todos ORDER BY created_at DESC");
+      updated_at: string;
+    }>("SELECT payload_json, description, participant_text, is_done, comments, do_on, due_date, created_at, updated_at FROM todos ORDER BY updated_at DESC");
     return rows.map((row) => {
       const payload = parsePayload<TodoRecord>(row.payload_json);
       return normalizeTodoRecord({
         ...payload,
         id: typeof payload.id === "string" && payload.id ? payload.id : crypto.randomUUID(),
         description: row.description || (typeof payload.description === "string" ? payload.description : ""),
+        participantText: row.participant_text || (typeof payload.participantText === "string" ? payload.participantText : ""),
         completedAt: typeof payload.completedAt === "string" ? payload.completedAt : null,
         isDone: Boolean(row.is_done ?? payload.isDone),
         isPrivate: Boolean(payload.isPrivate),
@@ -919,6 +971,7 @@ class TauriSqliteRepository implements AppRepository {
               ? payload.comments
               : "",
         createdAt: row.created_at || (typeof payload.createdAt === "string" ? payload.createdAt : now()),
+        updatedAt: row.updated_at || (typeof payload.updatedAt === "string" ? payload.updatedAt : row.created_at || now()),
         sessionIds: Array.isArray(payload.sessionIds) ? payload.sessionIds.filter((value): value is string => typeof value === "string") : [],
       });
     });
@@ -930,15 +983,17 @@ class TauriSqliteRepository implements AppRepository {
     await Promise.all(
       records.map((record) =>
         db.execute(
-          "INSERT INTO todos (id, description, is_done, comments, do_on, due_date, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO todos (id, description, participant_text, is_done, comments, do_on, due_date, created_at, updated_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             record.id,
             record.description,
+            record.participantText || "",
             record.isDone ? 1 : 0,
             record.comments,
             record.doOn,
             record.dueDate,
             record.createdAt,
+            record.updatedAt,
             JSON.stringify(record),
           ],
         ),
@@ -1008,6 +1063,7 @@ class TauriSqliteRepository implements AppRepository {
     const rows = await db.select<{
       payload_json: string;
       description: string;
+      participant_text: string;
       activity_type: string;
       parent_activity_id: string;
       is_done: number;
@@ -1017,13 +1073,15 @@ class TauriSqliteRepository implements AppRepository {
       start_time: string;
       end_time: string;
       created_at: string;
-    }>("SELECT payload_json, description, activity_type, parent_activity_id, is_done, comments, do_on, due_date, start_time, end_time, created_at FROM activities ORDER BY created_at DESC");
+      updated_at: string;
+    }>("SELECT payload_json, description, participant_text, activity_type, parent_activity_id, is_done, comments, do_on, due_date, start_time, end_time, created_at, updated_at FROM activities ORDER BY updated_at DESC");
     return rows.map((row) => {
       const payload = parsePayload<ActivityRecord>(row.payload_json);
       return normalizeActivityRecord({
         ...payload,
         id: typeof payload.id === "string" && payload.id ? payload.id : crypto.randomUUID(),
         description: row.description || (typeof payload.description === "string" ? payload.description : ""),
+        participantText: row.participant_text || (typeof payload.participantText === "string" ? payload.participantText : ""),
         type: row.activity_type === "meeting" ? "meeting" : (payload.type === "meeting" ? "meeting" : "task"),
         parentActivityId:
           row.parent_activity_id || (typeof payload.parentActivityId === "string" ? payload.parentActivityId : ""),
@@ -1046,6 +1104,7 @@ class TauriSqliteRepository implements AppRepository {
         timeRequiredMinutes: Number.isFinite(Number(payload.timeRequiredMinutes)) ? Number(payload.timeRequiredMinutes) : 0,
         actualTimeSpentMinutes: Number.isFinite(Number(payload.actualTimeSpentMinutes)) ? Number(payload.actualTimeSpentMinutes) : 0,
         createdAt: row.created_at || (typeof payload.createdAt === "string" ? payload.createdAt : now()),
+        updatedAt: row.updated_at || (typeof payload.updatedAt === "string" ? payload.updatedAt : row.created_at || now()),
         sessionIds: Array.isArray(payload.sessionIds) ? payload.sessionIds.filter((value): value is string => typeof value === "string") : [],
       });
     });
@@ -1076,10 +1135,11 @@ class TauriSqliteRepository implements AppRepository {
     await Promise.all(
       records.map((record) =>
         db.execute(
-          "INSERT INTO activities (id, description, activity_type, parent_activity_id, is_done, comments, do_on, due_date, start_time, end_time, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO activities (id, description, participant_text, activity_type, parent_activity_id, is_done, comments, do_on, due_date, start_time, end_time, created_at, updated_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             record.id,
             record.description,
+            record.participantText || "",
             record.type,
             record.parentActivityId,
             record.isDone ? 1 : 0,
@@ -1089,6 +1149,7 @@ class TauriSqliteRepository implements AppRepository {
             record.startTime,
             record.endTime,
             record.createdAt,
+            record.updatedAt,
             JSON.stringify(record),
           ],
         ),
@@ -1218,7 +1279,7 @@ class TauriSqliteRepository implements AppRepository {
 
   async loadEntityLinks() {
     const db = await this.getDb();
-    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM entity_links ORDER BY created_at DESC");
+    const rows = await db.select<{ payload_json: string }>("SELECT payload_json FROM entity_links ORDER BY updated_at DESC");
     return rows.map((row) => normalizeEntityLinkRecord(JSON.parse(row.payload_json) as EntityLinkRecord));
   }
 
@@ -1228,8 +1289,8 @@ class TauriSqliteRepository implements AppRepository {
     await Promise.all(
       records.map((record) =>
         db.execute(
-          "INSERT INTO entity_links (id, from_type, from_id, to_type, to_id, relation, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          [record.id, record.fromType, record.fromId, record.toType, record.toId, record.relation, record.createdAt, JSON.stringify(record)],
+          "INSERT INTO entity_links (id, from_type, from_id, to_type, to_id, relation, created_at, updated_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [record.id, record.fromType, record.fromId, record.toType, record.toId, record.relation, record.createdAt, record.updatedAt, JSON.stringify(record)],
         ),
       ),
     );
@@ -1238,7 +1299,7 @@ class TauriSqliteRepository implements AppRepository {
   async loadAttachments() {
     const db = await this.getDb();
     const rows = await db.select<AttachmentRecord>(
-      "SELECT id, session_id as sessionId, kind, filename, mime_type as mimeType, file_path as filePath, size_bytes as sizeBytes, caption, include_in_output as includeInOutput, output_position as outputPosition, created_at as createdAt FROM attachments ORDER BY created_at DESC",
+      "SELECT id, session_id as sessionId, kind, filename, mime_type as mimeType, file_path as filePath, size_bytes as sizeBytes, caption, include_in_output as includeInOutput, output_position as outputPosition, created_at as createdAt, updated_at as updatedAt FROM attachments ORDER BY updated_at DESC",
     );
     return rows.map(normalizeAttachmentRecord);
   }
@@ -1249,7 +1310,7 @@ class TauriSqliteRepository implements AppRepository {
     await Promise.all(
       records.map((record) =>
         db.execute(
-          "INSERT INTO attachments (id, session_id, kind, filename, mime_type, file_path, size_bytes, caption, include_in_output, output_position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO attachments (id, session_id, kind, filename, mime_type, file_path, size_bytes, caption, include_in_output, output_position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             record.id,
             record.sessionId,
@@ -1262,7 +1323,29 @@ class TauriSqliteRepository implements AppRepository {
             record.includeInOutput ? 1 : 0,
             record.outputPosition,
             record.createdAt,
+            record.updatedAt,
           ],
+        ),
+      ),
+    );
+  }
+
+  async loadDeletedEntities() {
+    const db = await this.getDb();
+    const rows = await db.select<DeletedEntityRecord>(
+      "SELECT entity_type as entityType, entity_id as entityId, deleted_at as deletedAt FROM deleted_entities ORDER BY deleted_at DESC",
+    );
+    return rows.map(normalizeDeletedEntityRecord);
+  }
+
+  async saveDeletedEntities(records: DeletedEntityRecord[]) {
+    const db = await this.getDb();
+    await db.execute("DELETE FROM deleted_entities");
+    await Promise.all(
+      records.map((record) =>
+        db.execute(
+          "INSERT INTO deleted_entities (entity_type, entity_id, deleted_at) VALUES (?, ?, ?)",
+          [record.entityType, record.entityId, record.deletedAt],
         ),
       ),
     );
@@ -1348,7 +1431,7 @@ class TauriSqliteRepository implements AppRepository {
   }
 
   async loadSnapshot(): Promise<DesktopAppSnapshot> {
-    const [sessions, templates, todos, checklists, checklistTemplates, checklistRecurrences, archivedTasks, activities, timelogs, calendarItems, entityLinks, attachments, settings] = await Promise.all([
+    const [sessions, templates, todos, checklists, checklistTemplates, checklistRecurrences, archivedTasks, activities, timelogs, calendarItems, entityLinks, attachments, deletedEntities, settings] = await Promise.all([
       this.loadSessions(),
       this.loadTemplates(),
       this.loadTodos(),
@@ -1361,6 +1444,7 @@ class TauriSqliteRepository implements AppRepository {
       this.loadCalendarItems(),
       this.loadEntityLinks(),
       this.loadAttachments(),
+      this.loadDeletedEntities(),
       this.loadSettings(),
     ]);
 
@@ -1377,6 +1461,7 @@ class TauriSqliteRepository implements AppRepository {
       calendarItems,
       entityLinks,
       attachments,
+      deletedEntities,
       settings,
     };
   }
@@ -1395,6 +1480,7 @@ class TauriSqliteRepository implements AppRepository {
       this.saveCalendarItems(snapshot.calendarItems),
       this.saveEntityLinks(snapshot.entityLinks),
       this.saveAttachments(snapshot.attachments),
+      this.saveDeletedEntities(snapshot.deletedEntities ?? []),
       this.saveSettings(snapshot.settings),
     ]);
   }
@@ -1472,7 +1558,11 @@ export const upsertTimeLog = (timeLogs: TimeLogRecord[], nextTimeLog: TimeLogRec
     ? timeLogs.map((timeLog) => (timeLog.id === nextTimeLog.id ? nextTimeLog : timeLog))
     : [nextTimeLog, ...timeLogs];
 
-export const upsertCalendarItem = (items: CalendarItemRecord[], nextItem: CalendarItemRecord) =>
-  items.some((item) => item.id === nextItem.id)
-    ? items.map((item) => (item.id === nextItem.id ? nextItem : item))
-    : [nextItem, ...items];
+export const upsertCalendarItem = (items: CalendarItemRecord[], nextItem: CalendarItemRecord) => [
+  nextItem,
+  ...items.filter(
+    (item) =>
+      item.id !== nextItem.id &&
+      !(item.targetType === nextItem.targetType && item.targetId === nextItem.targetId),
+  ),
+];

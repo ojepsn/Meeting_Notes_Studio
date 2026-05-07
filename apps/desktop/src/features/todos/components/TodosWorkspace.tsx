@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, SyntheticEvent } from "react";
 import type { ActivityRecord, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, TaskRecord, TimeLogRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
+import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog, isTimeLogRunning } from "../../../lib/time/tracking";
@@ -29,6 +30,8 @@ interface TodosWorkspaceProps {
   requestedDomain?: string | null;
   requestedProject?: string | null;
   onEditorClose?: () => void;
+  savedPeople: string[];
+  suggestedPeople: string[];
   onToggle: (todo: TaskRecord) => void;
   onAdd: (description: string, options?: { activityId?: string }) => void;
   onSave: (todo: TaskRecord) => void;
@@ -53,6 +56,7 @@ interface TodosWorkspaceProps {
 const createBlankTodoDraft = (description = ""): TaskRecord => ({
   id: "",
   description,
+  participantText: "",
   isDone: false,
   isPrivate: false,
   isPriority: false,
@@ -191,6 +195,8 @@ export const TodosWorkspace = ({
   requestedDomain,
   requestedProject,
   onEditorClose,
+  savedPeople,
+  suggestedPeople,
   onToggle,
   onAdd,
   onSave,
@@ -1159,6 +1165,17 @@ export const TodosWorkspace = ({
                     suggestionBadgeText="Available"
                     mode="single"
                     onChange={(value) => setEditingDraft({ ...editingDraft, activity: value })}
+                  />
+                </div>
+
+                <div className="field field-wide">
+                  <label htmlFor="todo-edit-participants">People</label>
+                  <PeoplePicker
+                    value={editingDraft.participantText ?? ""}
+                    savedPeople={savedPeople}
+                    suggestedPeople={suggestedPeople}
+                    placeholder="Search or add people"
+                    onChange={(value) => setEditingDraft({ ...editingDraft, participantText: value })}
                   />
                 </div>
 

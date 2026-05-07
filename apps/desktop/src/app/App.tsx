@@ -51,6 +51,7 @@ import {
   persistSelectedAttachment,
   readTranscriptFile,
   removePersistedAttachment,
+  restoreImportedAttachmentFiles,
 } from "../lib/files/attachmentStore";
 import {
   buildRecordingFilename,
@@ -71,10 +72,12 @@ import {
   getDesktopStorageInfo,
   getLatestLocalBackupInfo,
   importSnapshotBackup,
+  mergeDesktopSnapshot,
   mergeImportedPwaSnapshot,
   openDesktopPath,
   openDesktopUrl,
   revealDesktopPath,
+  withDesktopBackupAttachmentFiles,
   type LocalBackupInfo,
   type DesktopStorageInfo,
 } from "../lib/storage/desktopStorage";
@@ -387,13 +390,21 @@ export const App = () => {
 
     return {
       kind: "notesmith-desktop-backup",
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       snapshot,
       aiTextCache: snapshotAITextCache(),
       aiRequestHistory: getAIRequestHistory(),
       aiModelPricing: modelPricingSnapshot,
     };
+  };
+
+  const buildDesktopTransferBackupBundle = async (): Promise<DesktopBackupBundle | null> => {
+    const baseBundle = buildDesktopBackupBundle();
+    if (!baseBundle) {
+      return null;
+    }
+    return withDesktopBackupAttachmentFiles(baseBundle);
   };
 
   useEffect(() => {
@@ -729,10 +740,10 @@ export const App = () => {
       .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }))
       .join(", ");
 
-  const rankSavedValues = (
-    sessions: (typeof snapshot extends null ? never : NonNullable<typeof snapshot>["sessions"]),
+  const rankSavedValues = <T extends { updatedAt?: string; createdAt: string }>(
+    items: T[],
     savedValues: string[],
-    collectEntries: (session: NonNullable<typeof snapshot>["sessions"][number]) => string[],
+    collectEntries: (item: T) => string[],
   ) => {
     const savedLookup = new Map(
       savedValues
@@ -742,9 +753,9 @@ export const App = () => {
     );
     const stats = new Map<string, { name: string; count: number; lastSeen: number }>();
 
-    sessions.forEach((session) => {
-      const lastSeen = Date.parse(session.updatedAt || session.createdAt || "") || 0;
-      collectEntries(session).forEach((entry) => {
+    items.forEach((item) => {
+      const lastSeen = Date.parse(item.updatedAt || item.createdAt || "") || 0;
+      collectEntries(item).forEach((entry) => {
         const key = entry.toLocaleLowerCase();
         const existing = stats.get(key);
         const canonicalName = savedLookup.get(key) ?? entry;
@@ -795,13 +806,29 @@ export const App = () => {
     [snapshot],
   );
 
+  const participantSuggestionSources = useMemo(() => {
+    if (!snapshot) {
+      return [];
+    }
+
+    return [
+      ...activeSessions,
+      ...snapshot.todos,
+      ...snapshot.activities,
+    ];
+  }, [activeSessions, snapshot]);
+
   const suggestedPeople = useMemo(() => {
     if (!snapshot) {
       return [];
     }
 
-    return rankSavedValues(activeSessions, snapshot.settings.savedParticipants, (session) => parsePeopleFromSession(session.participantText));
-  }, [activeSessions, snapshot]);
+    return rankSavedValues(
+      participantSuggestionSources,
+      snapshot.settings.savedParticipants,
+      (item) => parsePeopleFromSession(item.participantText ?? ""),
+    );
+  }, [participantSuggestionSources, snapshot]);
 
   const suggestedProjects = useMemo(() => {
     if (!snapshot) {
@@ -1477,7 +1504,7 @@ export const App = () => {
 
   const handleExportSnapshot = async () => {
     try {
-      const backupBundle = buildDesktopBackupBundle();
+      const backupBundle = await buildDesktopTransferBackupBundle();
       if (!backupBundle) {
         setStatusNote("Nothing is loaded yet to export.");
         return;
@@ -1492,7 +1519,7 @@ export const App = () => {
 
   const handleSaveSnapshotAs = async () => {
     try {
-      const backupBundle = buildDesktopBackupBundle();
+      const backupBundle = await buildDesktopTransferBackupBundle();
       if (!backupBundle) {
         setStatusNote("Nothing is loaded yet to export.");
         return;
@@ -1509,7 +1536,7 @@ export const App = () => {
     }
   };
 
-  const handleImportBackup = async () => {
+  const handleImportBackup = async (mode: "replace" | "merge" = "replace") => {
     try {
       const imported = await importSnapshotBackup();
       if (!imported) {
@@ -1521,22 +1548,35 @@ export const App = () => {
         await restoreBackupSnapshot(mergedSnapshot);
         setStatusNote("Imported PWA sessions into the desktop database.");
       } else {
-        await restoreBackupSnapshot(imported.snapshot);
-        if (imported.aiTextCache) {
+        const importedSnapshotWithFiles = imported.attachmentFiles?.length
+          ? {
+              ...imported.snapshot,
+              attachments: await restoreImportedAttachmentFiles({
+                attachments: imported.snapshot.attachments,
+                attachmentFiles: imported.attachmentFiles,
+              }),
+            }
+          : imported.snapshot;
+        const nextSnapshot =
+          mode === "merge" && snapshot
+            ? mergeDesktopSnapshot(snapshot, importedSnapshotWithFiles)
+            : importedSnapshotWithFiles;
+        await restoreBackupSnapshot(nextSnapshot);
+        if (mode === "replace" && imported.aiTextCache) {
           hydrateAITextCache({ records: imported.aiTextCache });
           await repository.saveAITextCache(imported.aiTextCache);
         }
-        if (imported.aiRequestHistory) {
+        if (mode === "replace" && imported.aiRequestHistory) {
           hydrateAIRequestHistory(imported.aiRequestHistory);
           setAIRequestHistory(getAIRequestHistory());
           await repository.saveAIRequestHistory(imported.aiRequestHistory);
         }
-        if (imported.aiModelPricing) {
+        if (mode === "replace" && imported.aiModelPricing) {
           setModelPricingSnapshot(imported.aiModelPricing);
           setModelPricingStatus(buildModelPricingStatus(imported.aiModelPricing));
           await repository.saveAIModelPricing(imported.aiModelPricing);
         }
-        setStatusNote("Imported the selected desktop backup file.");
+        setStatusNote(mode === "merge" ? "Merged the selected desktop backup file into the current desktop data." : "Imported the selected desktop backup file.");
       }
       setOpenPanel(null);
     } catch (error) {
@@ -1604,9 +1644,10 @@ export const App = () => {
     setUpdateStatusNote(`Preparing installer for version ${availableUpdateVersion}...`);
     setStatusNote(`Preparing update ${availableUpdateVersion}...`);
     try {
-      const backupBundle = buildDesktopBackupBundle();
-      const backupPath = backupBundle ? await createLocalSnapshotBackup(backupBundle) : null;
-      const downloadsBackupPath = backupBundle ? await exportSnapshotBackupToDownloads(backupBundle) : null;
+      const localBackupBundle = buildDesktopBackupBundle();
+      const downloadBackupBundle = await buildDesktopTransferBackupBundle();
+      const backupPath = localBackupBundle ? await createLocalSnapshotBackup(localBackupBundle) : null;
+      const downloadsBackupPath = downloadBackupBundle ? await exportSnapshotBackupToDownloads(downloadBackupBundle) : null;
       if (backupPath) {
         await refreshLatestLocalBackupInfo();
         setStatusNote(`Created a local safety backup at ${backupPath} before installing ${availableUpdateVersion}.`);
@@ -1643,7 +1684,7 @@ export const App = () => {
       return;
     }
     try {
-      const backupBundle = buildDesktopBackupBundle();
+      const backupBundle = await buildDesktopTransferBackupBundle();
       if (backupBundle) {
         const backupPath = await exportSnapshotBackupToDownloads(backupBundle);
         setStatusNote(`Created a Downloads backup at ${backupPath.path} before opening the installer download.`);
@@ -3042,6 +3083,7 @@ export const App = () => {
                 session={activeSession}
                 template={activeTemplate}
                 displayedOutput={displayedOutput}
+                layoutPresetId={snapshot.settings.outputLayoutPresetId}
                 outputVersions={activeOutputVersions}
                 selectedOutputVersionId={selectedOutputVersionId}
                 attachments={activeAttachments}
@@ -3400,6 +3442,7 @@ export const App = () => {
             session={activeSession}
             template={activeTemplate}
             displayedOutput={displayedOutput}
+            layoutPresetId={snapshot.settings.outputLayoutPresetId}
             outputVersions={activeOutputVersions}
             selectedOutputVersionId={selectedOutputVersionId}
             attachments={activeAttachments}
@@ -3801,8 +3844,11 @@ export const App = () => {
               <button className="small-button" type="button" onClick={() => void handleImportLegacy()}>
                 Import current browser data
               </button>
-              <button className="small-button" type="button" onClick={() => void handleImportBackup()}>
-                Import backup file
+              <button className="small-button" type="button" onClick={() => void handleImportBackup("replace")}>
+                Replace from back-up
+              </button>
+              <button className="small-button" type="button" onClick={() => void handleImportBackup("merge")}>
+                Merge from back-up
               </button>
               <button className="small-button" type="button" onClick={() => void handleExportSnapshot()}>
                 Export backup to Downloads
@@ -4040,6 +4086,8 @@ export const App = () => {
                 activities={snapshot.activities}
                 timeLogs={snapshot.timelogs}
                 structureOptions={structureOptions}
+                savedPeople={snapshot.settings.savedParticipants}
+                suggestedPeople={suggestedPeople}
                 requestedTodoId={requestedTodoId}
                 requestedDomain={requestedTodoDomain}
                 requestedProject={requestedTodoProject}
@@ -4096,6 +4144,7 @@ export const App = () => {
                 settings={snapshot.settings}
                 openRevision={calendarOpenRevision}
                 structureOptions={structureOptions}
+                savedPeople={snapshot.settings.savedParticipants}
                 linkedSessionStateByActivity={linkedSessionStateByActivity}
                 linkedSessionStateByTodo={linkedSessionStateByTodo}
                 onSaveSettings={(settings) => void saveSettings(settings)}
@@ -4395,6 +4444,7 @@ export const App = () => {
                       session={activeSession}
                       template={activeTemplate}
                       displayedOutput={displayedOutput}
+                      layoutPresetId={snapshot.settings.outputLayoutPresetId}
                       outputVersions={activeOutputVersions}
                       selectedOutputVersionId={selectedOutputVersionId}
                       attachments={activeAttachments}

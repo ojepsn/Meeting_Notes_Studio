@@ -1,4 +1,4 @@
-import type { DesktopAppSnapshot } from "@notesmith/domain";
+import type { DeletedEntityRecord, DesktopAppSnapshot, EntityLinkRecord, LocalAppSettings } from "@notesmith/domain";
 import { invoke } from "@tauri-apps/api/core";
 import { downloadDir } from "@tauri-apps/api/path";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -39,16 +39,24 @@ export interface ImportedSnapshotResult {
   aiTextCache?: Array<{ key: string; value: string; createdAt: number; expiresAt: number }>;
   aiRequestHistory?: AIRequestHistoryEntry[];
   aiModelPricing?: AIModelPricingSnapshot | null;
+  attachmentFiles?: DesktopBackupAttachmentFile[];
+}
+
+export interface DesktopBackupAttachmentFile {
+  attachmentId: string;
+  filename: string;
+  base64: string;
 }
 
 export interface DesktopBackupBundle {
   kind: "notesmith-desktop-backup";
-  version: 2;
+  version: 3;
   exportedAt: string;
   snapshot: DesktopAppSnapshot;
   aiTextCache: Array<{ key: string; value: string; createdAt: number; expiresAt: number }>;
   aiRequestHistory: AIRequestHistoryEntry[];
   aiModelPricing: AIModelPricingSnapshot | null;
+  attachmentFiles?: DesktopBackupAttachmentFile[];
 }
 
 const joinPath = (base: string, child: string) => `${base.replace(/[\\\/]+$/, "")}/${child}`;
@@ -63,6 +71,179 @@ export const buildSnapshotBackupFilename = (date = new Date()) => {
 };
 
 export const buildSnapshotBackupJsonFilename = (date = new Date()) => buildSnapshotBackupFilename(date).replace(/\.zip$/, ".json");
+
+const encodeBytesToBase64 = (bytes: Uint8Array) => {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+};
+
+const uniqueBy = <T,>(items: T[], getKey: (item: T) => string) => {
+  const map = new Map<string, T>();
+  items.forEach((item) => map.set(getKey(item), item));
+  return Array.from(map.values());
+};
+
+const compareTimestamps = (left: string | undefined | null, right: string | undefined | null) =>
+  (left || "").localeCompare(right || "");
+
+const mergeByIdWithUpdatedAt = <T extends { id: string; updatedAt?: string; createdAt?: string }>(current: T[], imported: T[]) => {
+  const merged = new Map(current.map((item) => [item.id, item] as const));
+  imported.forEach((item) => {
+    const existing = merged.get(item.id);
+    const itemTimestamp = item.updatedAt || item.createdAt || "";
+    const existingTimestamp = existing?.updatedAt || existing?.createdAt || "";
+    if (!existing || compareTimestamps(itemTimestamp, existingTimestamp) >= 0) {
+      merged.set(item.id, item);
+    }
+  });
+  return Array.from(merged.values());
+};
+
+const mergeDeletedEntities = (current: DeletedEntityRecord[], imported: DeletedEntityRecord[]) => {
+  const merged = new Map<string, DeletedEntityRecord>(current.map((entry) => [`${entry.entityType}::${entry.entityId}`, entry] as const));
+  imported.forEach((entry) => {
+    const key = `${entry.entityType}::${entry.entityId}`;
+    const existing = merged.get(key);
+    if (!existing || compareTimestamps(entry.deletedAt, existing.deletedAt) >= 0) {
+      merged.set(key, entry);
+    }
+  });
+  return Array.from(merged.values());
+};
+
+const mergeArchivedTasks = (current: DesktopAppSnapshot["archivedTasks"], imported: DesktopAppSnapshot["archivedTasks"]) => {
+  const merged = new Map(current.map((item) => [item.id, item] as const));
+  imported.forEach((item) => {
+    const existing = merged.get(item.id);
+    if (!existing || compareTimestamps(item.deletedAt, existing.deletedAt) >= 0) {
+      merged.set(item.id, item);
+    }
+  });
+  return Array.from(merged.values());
+};
+
+const mergeEntityLinks = (current: EntityLinkRecord[], imported: EntityLinkRecord[]) => {
+  const merged = new Map<string, EntityLinkRecord>();
+  [...current, ...imported].forEach((link) => {
+    const key = `${link.fromType}::${link.fromId}::${link.toType}::${link.toId}::${link.relation}`;
+    const existing = merged.get(key);
+    if (!existing || compareTimestamps(link.updatedAt, existing.updatedAt) >= 0) {
+      merged.set(key, link);
+    }
+  });
+  return Array.from(merged.values());
+};
+
+const mergeTemplates = (current: DesktopAppSnapshot["templates"], imported: DesktopAppSnapshot["templates"]) => {
+  const merged = new Map(current.map((template) => [template.id, template] as const));
+  imported.forEach((template) => merged.set(template.id, template));
+  return Array.from(merged.values());
+};
+
+const mergeSettings = (current: LocalAppSettings, imported: LocalAppSettings): LocalAppSettings => ({
+  ...current,
+  apiKey: current.apiKey || imported.apiKey,
+  outputLanguage: current.outputLanguage || imported.outputLanguage,
+  preferredDesktopTemplateId: current.preferredDesktopTemplateId || imported.preferredDesktopTemplateId,
+  textModel: current.textModel || imported.textModel,
+  transcriptionModel: current.transcriptionModel || imported.transcriptionModel,
+  savedParticipants: Array.from(new Set([...(current.savedParticipants || []), ...(imported.savedParticipants || [])])).sort(),
+  savedProjects: Array.from(new Set([...(current.savedProjects || []), ...(imported.savedProjects || [])])).sort(),
+  savedDomains: Array.from(new Set([...(current.savedDomains || []), ...(imported.savedDomains || [])])).sort(),
+  savedActivities: Array.from(new Set([...(current.savedActivities || []), ...(imported.savedActivities || [])])).sort(),
+  savedTags: Array.from(new Set([...(current.savedTags || []), ...(imported.savedTags || [])])).sort(),
+  projectLinks: uniqueBy([...(current.projectLinks || []), ...(imported.projectLinks || [])], (entry) => `${entry.project}::${entry.domain}`),
+  timeReportPresets: uniqueBy([...(current.timeReportPresets || []), ...(imported.timeReportPresets || [])], (entry) => entry.id),
+  abbreviations: uniqueBy([...(current.abbreviations || []), ...(imported.abbreviations || [])], (entry) => entry.id || `${entry.shortForm}::${entry.fullForm}`),
+  preferredParticipantNames: uniqueBy(
+    [...(current.preferredParticipantNames || []), ...(imported.preferredParticipantNames || [])],
+    (entry) => entry.id || `${entry.shortForm}::${entry.fullName}`,
+  ),
+  ruleSuggestions: uniqueBy([...(current.ruleSuggestions || []), ...(imported.ruleSuggestions || [])], (entry) => entry.id),
+  assistantQueryMemories: uniqueBy([...(current.assistantQueryMemories || []), ...(imported.assistantQueryMemories || [])], (entry) => entry.id),
+  promptProfile: imported.promptProfile ?? current.promptProfile,
+});
+
+const applyDeletedEntities = (snapshot: DesktopAppSnapshot) => {
+  const deletedEntities = snapshot.deletedEntities ?? [];
+  const deletedMap = new Map<string, DeletedEntityRecord>(deletedEntities.map((entry) => [`${entry.entityType}::${entry.entityId}`, entry] as const));
+  const shouldKeepUpdatedRecord = (entityType: DeletedEntityRecord["entityType"], entityId: string, updatedAt?: string) => {
+    const deleted = deletedMap.get(`${entityType}::${entityId}`);
+    return !deleted || compareTimestamps(updatedAt || "", deleted.deletedAt) > 0;
+  };
+
+  const sessions = snapshot.sessions.filter((entry) => shouldKeepUpdatedRecord("session", entry.id, entry.updatedAt));
+  const todos = snapshot.todos.filter((entry) => shouldKeepUpdatedRecord("todo", entry.id, entry.updatedAt));
+  const activities = snapshot.activities.filter((entry) => shouldKeepUpdatedRecord("activity", entry.id, entry.updatedAt));
+  const timelogs = snapshot.timelogs.filter((entry) => shouldKeepUpdatedRecord("timelog", entry.id, entry.updatedAt));
+  const calendarItems = snapshot.calendarItems.filter((entry) => shouldKeepUpdatedRecord("calendarItem", entry.id, entry.updatedAt));
+  const checklists = snapshot.checklists.filter((entry) => shouldKeepUpdatedRecord("checklist", entry.id, entry.updatedAt));
+  const checklistTemplates = snapshot.checklistTemplates.filter((entry) => shouldKeepUpdatedRecord("checklistTemplate", entry.id, entry.updatedAt));
+  const checklistRecurrences = snapshot.checklistRecurrences.filter((entry) => shouldKeepUpdatedRecord("checklistRecurrence", entry.id, entry.updatedAt));
+  const entityLinks = snapshot.entityLinks.filter((entry) => shouldKeepUpdatedRecord("entityLink", entry.id, entry.updatedAt));
+  const attachments = snapshot.attachments.filter((entry) => shouldKeepUpdatedRecord("attachment", entry.id, entry.updatedAt));
+
+  const existingSessionIds = new Set(sessions.map((entry) => entry.id));
+  const existingTodoIds = new Set(todos.map((entry) => entry.id));
+  const existingActivityIds = new Set(activities.map((entry) => entry.id));
+  const existingChecklistTemplateIds = new Set(checklistTemplates.map((entry) => entry.id));
+
+  const cleanedCalendarItems = calendarItems.filter((entry) =>
+    entry.targetType === "todo" ? existingTodoIds.has(entry.targetId) : existingActivityIds.has(entry.targetId),
+  );
+  const cleanedChecklists = checklists.filter((entry) =>
+    entry.ownerType === "project" ? true : existingTodoIds.has(entry.ownerId),
+  );
+  const cleanedChecklistRecurrences = checklistRecurrences.filter((entry) =>
+    (entry.ownerType === "project" || existingTodoIds.has(entry.ownerId)) && existingChecklistTemplateIds.has(entry.templateId),
+  );
+  const cleanedEntityLinks = entityLinks.filter((entry) => {
+    const fromExists =
+      entry.fromType === "session" ? existingSessionIds.has(entry.fromId) : entry.fromType === "todo" ? existingTodoIds.has(entry.fromId) : existingActivityIds.has(entry.fromId);
+    const toExists =
+      entry.toType === "session" ? existingSessionIds.has(entry.toId) : entry.toType === "todo" ? existingTodoIds.has(entry.toId) : existingActivityIds.has(entry.toId);
+    return fromExists && toExists;
+  });
+  const cleanedAttachments = attachments.filter((entry) => existingSessionIds.has(entry.sessionId));
+
+  const survivingDeletionKeys = new Set<string>();
+  const markSurvivingDeletion = (entityType: DeletedEntityRecord["entityType"], entityId: string, updatedAt?: string) => {
+    const deleted = deletedMap.get(`${entityType}::${entityId}`);
+    if (deleted && compareTimestamps(updatedAt || "", deleted.deletedAt) > 0) {
+      survivingDeletionKeys.add(`${entityType}::${entityId}`);
+    }
+  };
+  sessions.forEach((entry) => markSurvivingDeletion("session", entry.id, entry.updatedAt));
+  todos.forEach((entry) => markSurvivingDeletion("todo", entry.id, entry.updatedAt));
+  activities.forEach((entry) => markSurvivingDeletion("activity", entry.id, entry.updatedAt));
+  timelogs.forEach((entry) => markSurvivingDeletion("timelog", entry.id, entry.updatedAt));
+  calendarItems.forEach((entry) => markSurvivingDeletion("calendarItem", entry.id, entry.updatedAt));
+  checklists.forEach((entry) => markSurvivingDeletion("checklist", entry.id, entry.updatedAt));
+  checklistTemplates.forEach((entry) => markSurvivingDeletion("checklistTemplate", entry.id, entry.updatedAt));
+  checklistRecurrences.forEach((entry) => markSurvivingDeletion("checklistRecurrence", entry.id, entry.updatedAt));
+  entityLinks.forEach((entry) => markSurvivingDeletion("entityLink", entry.id, entry.updatedAt));
+  attachments.forEach((entry) => markSurvivingDeletion("attachment", entry.id, entry.updatedAt));
+
+  return {
+    ...snapshot,
+    sessions,
+    todos,
+    activities,
+    timelogs,
+    calendarItems: cleanedCalendarItems,
+    checklists: cleanedChecklists,
+    checklistTemplates,
+    checklistRecurrences: cleanedChecklistRecurrences,
+    entityLinks: cleanedEntityLinks,
+    attachments: cleanedAttachments,
+    deletedEntities: deletedEntities.filter(
+      (entry) => !survivingDeletionKeys.has(`${entry.entityType}::${entry.entityId}`),
+    ),
+  };
+};
 
 const getZipCrcTable = () => {
   if (zipCrcTable) {
@@ -375,6 +556,84 @@ export const getDesktopBundleType = async () => {
   return app.getBundleType();
 };
 
+export const withDesktopBackupAttachmentFiles = async (bundle: DesktopBackupBundle) => {
+  if (!isTauriRuntime()) {
+    return bundle;
+  }
+
+  const attachmentFiles = await Promise.all(
+    (bundle.snapshot.attachments || []).map(async (attachment) => {
+      if (!attachment.filePath) {
+        return null;
+      }
+      try {
+        const bytes = await invoke<number[]>("read_file_bytes", { path: attachment.filePath });
+        return {
+          attachmentId: attachment.id,
+          filename: attachment.filename,
+          base64: encodeBytesToBase64(Uint8Array.from(bytes)),
+        } satisfies DesktopBackupAttachmentFile;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return {
+    ...bundle,
+    attachmentFiles: attachmentFiles.filter((entry): entry is DesktopBackupAttachmentFile => Boolean(entry)),
+  };
+};
+
+export const mergeDesktopSnapshot = (
+  current: DesktopAppSnapshot,
+  imported: DesktopAppSnapshot,
+): DesktopAppSnapshot => {
+  const mergedSnapshot: DesktopAppSnapshot = {
+    ...current,
+    sessions: mergeByIdWithUpdatedAt(current.sessions, imported.sessions).sort((left, right) =>
+      (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || ""),
+    ),
+    templates: mergeTemplates(current.templates, imported.templates),
+    todos: mergeByIdWithUpdatedAt(current.todos, imported.todos).sort((left, right) =>
+      (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || ""),
+    ),
+    checklists: mergeByIdWithUpdatedAt(current.checklists, imported.checklists).sort((left, right) =>
+      (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || ""),
+    ),
+    checklistTemplates: mergeByIdWithUpdatedAt(current.checklistTemplates, imported.checklistTemplates).sort((left, right) =>
+      (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || ""),
+    ),
+    checklistRecurrences: mergeByIdWithUpdatedAt(current.checklistRecurrences, imported.checklistRecurrences).sort((left, right) =>
+      (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || ""),
+    ),
+    archivedTasks: mergeArchivedTasks(current.archivedTasks, imported.archivedTasks).sort((left, right) =>
+      (right.deletedAt || "").localeCompare(left.deletedAt || ""),
+    ),
+    activities: mergeByIdWithUpdatedAt(current.activities, imported.activities).sort((left, right) =>
+      (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || ""),
+    ),
+    timelogs: mergeByIdWithUpdatedAt(current.timelogs, imported.timelogs).sort((left, right) =>
+      (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || ""),
+    ),
+    calendarItems: mergeByIdWithUpdatedAt(current.calendarItems, imported.calendarItems).sort((left, right) =>
+      (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || ""),
+    ),
+    entityLinks: mergeEntityLinks(current.entityLinks, imported.entityLinks).sort((left, right) =>
+      (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || ""),
+    ),
+    attachments: mergeByIdWithUpdatedAt(current.attachments, imported.attachments).sort((left, right) =>
+      (right.updatedAt || right.createdAt || "").localeCompare(left.updatedAt || left.createdAt || ""),
+    ),
+    deletedEntities: mergeDeletedEntities(current.deletedEntities || [], imported.deletedEntities || []).sort((left, right) =>
+      (right.deletedAt || "").localeCompare(left.deletedAt || ""),
+    ),
+    settings: mergeSettings(current.settings, imported.settings),
+  };
+
+  return applyDeletedEntities(mergedSnapshot);
+};
+
 export const exportSnapshotBackup = async (bundle: DesktopBackupBundle) => {
   const content = JSON.stringify(bundle, null, 2);
 
@@ -480,7 +739,7 @@ const isDesktopBackupBundle = (value: unknown): value is DesktopBackupBundle => 
   const candidate = value as Record<string, unknown>;
   return (
     candidate.kind === "notesmith-desktop-backup" &&
-    Number(candidate.version) === 2 &&
+    Number(candidate.version) >= 2 &&
     isDesktopSnapshotLike(candidate.snapshot)
   );
 };
@@ -653,6 +912,7 @@ export const importSnapshotBackup = async (): Promise<ImportedSnapshotResult | n
       aiTextCache: Array.isArray(parsed.aiTextCache) ? parsed.aiTextCache : [],
       aiRequestHistory: Array.isArray(parsed.aiRequestHistory) ? parsed.aiRequestHistory : [],
       aiModelPricing: parsed.aiModelPricing ?? null,
+      attachmentFiles: Array.isArray(parsed.attachmentFiles) ? parsed.attachmentFiles : [],
     };
   }
 

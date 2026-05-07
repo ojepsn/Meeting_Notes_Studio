@@ -3,6 +3,8 @@ import { TokenPicker } from "../../../components/TokenPicker";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
 import { DateInput } from "../../../components/DateInput";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
+import { buildHtmlMarkup, buildStructuredOutput } from "../../../lib/export/exportService";
+import { getOutputLayoutPreset } from "../../../lib/export/outputLayouts";
 import type {
   ActivityRecord,
   AttachmentRecord,
@@ -11,7 +13,7 @@ import type {
   SessionRecord,
   TemplateDefinition,
 } from "@notesmith/domain";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 type FollowUpKind = "todo" | "meeting";
 
@@ -62,6 +64,7 @@ interface OutputWorkspaceProps {
   session: SessionRecord;
   template?: TemplateDefinition | null;
   displayedOutput?: string;
+  layoutPresetId?: string;
   outputVersions?: SessionRecord["outputVersions"];
   selectedOutputVersionId?: string | null;
   attachments: AttachmentRecord[];
@@ -115,6 +118,7 @@ export const OutputWorkspace = ({
   session,
   template,
   displayedOutput = session.output,
+  layoutPresetId,
   outputVersions = [],
   selectedOutputVersionId = null,
   attachments,
@@ -198,6 +202,161 @@ export const OutputWorkspace = ({
   const excerptPreview =
     selectedExcerpt.length > 180 ? `${selectedExcerpt.slice(0, 177).trimEnd()}...` : selectedExcerpt;
   const selectedOutputVersion = outputVersions.find((version) => version.id === selectedOutputVersionId) ?? null;
+  const outputEditorRef = useRef<HTMLDivElement | null>(null);
+  const layout = useMemo(() => getOutputLayoutPreset(layoutPresetId), [layoutPresetId]);
+  const renderedOutputHtml = useMemo(
+    () => buildHtmlMarkup(buildStructuredOutput(displayedOutput)),
+    [displayedOutput],
+  );
+
+  const outputRichTextToPlainText = (value: string) => {
+    if (!value) return "";
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = value;
+    const blockLines: string[] = [];
+    const pushBlock = (valueToPush: string) => {
+      const trimmed = valueToPush.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+      if (trimmed) {
+        blockLines.push(trimmed);
+      }
+    };
+
+    const readText = (element: Element) =>
+      (typeof (element as HTMLElement).innerText === "string"
+        ? (element as HTMLElement).innerText
+        : element.textContent || ""
+      )
+        .replace(/\u00a0/g, " ")
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+    Array.from(wrapper.children).forEach((child) => {
+      if (!(child instanceof HTMLElement)) {
+        return;
+      }
+      const tagName = child.tagName.toUpperCase();
+      if (tagName === "UL" || tagName === "OL") {
+        const lines = Array.from(child.querySelectorAll(":scope > li"))
+          .map((item, index) => {
+            const text = readText(item);
+            if (!text) return "";
+            return tagName === "OL" ? `${index + 1}. ${text}` : `- ${text}`;
+          })
+          .filter(Boolean)
+          .join("\n");
+        pushBlock(lines);
+        return;
+      }
+      if (/^H[1-6]$/.test(tagName)) {
+        const level = Number(tagName.slice(1));
+        const text = readText(child);
+        pushBlock(text ? `${"#".repeat(Math.max(1, Math.min(6, level)))} ${text}` : "");
+        return;
+      }
+      if (tagName === "P" || tagName === "DIV") {
+        pushBlock(readText(child));
+        return;
+      }
+      if (tagName === "BR") {
+        return;
+      }
+      pushBlock(readText(child));
+    });
+
+    if (!blockLines.length) {
+      const fallback = (typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "")
+        .replace(/\u00a0/g, " ")
+        .replace(/\s+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      return fallback;
+    }
+
+    return blockLines.join("\n\n");
+  };
+
+  const normalizeOutputRichTextHtml = (value: string) => {
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = value || "";
+    const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6"]);
+    wrapper.querySelectorAll("*").forEach((element) => {
+      if (!allowedTags.has(element.tagName)) {
+        const fragment = document.createDocumentFragment();
+        while (element.firstChild) {
+          fragment.appendChild(element.firstChild);
+        }
+        element.replaceWith(fragment);
+        return;
+      }
+      [...element.attributes].forEach((attribute) => element.removeAttribute(attribute.name));
+    });
+    const normalized = wrapper.innerHTML.replace(/<div>/gi, "<p>").replace(/<\/div>/gi, "</p>").trim();
+    if (!normalized) return "";
+    if (!/<(p|ul|ol|li|br|h[1-6])\b/i.test(normalized)) {
+      return `<p>${normalized}</p>`;
+    }
+    return normalized;
+  };
+
+  const updateSelectedExcerptFromEditor = () => {
+    const selection = document.getSelection();
+    const nextExcerpt = selection?.toString().trim() ?? "";
+    setSelectedExcerpt(nextExcerpt);
+  };
+
+  useEffect(() => {
+    if (!outputEditorRef.current) return;
+    if (document.activeElement === outputEditorRef.current) {
+      outputEditorRef.current.dataset.empty = displayedOutput.trim() ? "false" : "true";
+      return;
+    }
+    if (outputEditorRef.current.innerHTML !== renderedOutputHtml) {
+      outputEditorRef.current.innerHTML = renderedOutputHtml;
+    }
+    outputEditorRef.current.dataset.empty = displayedOutput.trim() ? "false" : "true";
+  }, [displayedOutput, renderedOutputHtml]);
+
+  const outputPreviewStyle = useMemo(
+    () =>
+      ({
+        ["--output-preview-title-font" as string]: layout.style.titleFont,
+        ["--output-preview-heading-font" as string]: layout.style.headingFont,
+        ["--output-preview-body-font" as string]: layout.style.bodyFont,
+        ["--output-preview-meta-font" as string]: layout.style.metaFont,
+        ["--output-preview-heading-color" as string]: layout.style.headingColor,
+        ["--output-preview-meta-color" as string]: layout.style.metaColor,
+        ["--output-preview-body-size" as string]: `${layout.style.bodySize}pt`,
+        ["--output-preview-heading-size" as string]: `${layout.style.headingSize}pt`,
+        ["--output-preview-title-size" as string]: `${layout.style.titleSize}pt`,
+        ["--output-preview-line-height" as string]: `${layout.style.lineHeight}`,
+        ["--output-preview-paragraph-spacing" as string]: `${layout.style.paragraphSpacing}px`,
+        ["--output-preview-section-spacing" as string]: `${layout.style.sectionSpacing}px`,
+        ["--output-preview-heading-case" as string]: layout.style.headingCase === "uppercase" ? "uppercase" : "none",
+      }) as CSSProperties,
+    [layout],
+  );
+
+  const renderOutputSurface = (className: string) => (
+    <div
+      ref={outputEditorRef}
+      className={`rich-text-surface output-rich-text-surface ${className}`}
+      style={outputPreviewStyle}
+      id="session-output"
+      contentEditable={!isViewingHistoricalVersion}
+      suppressContentEditableWarning
+      data-placeholder="Generated notes will appear here."
+      data-empty="true"
+      onInput={(event) => {
+        const normalizedHtml = normalizeOutputRichTextHtml((event.currentTarget as HTMLDivElement).innerHTML);
+        const nextOutput = outputRichTextToPlainText(normalizedHtml);
+        (event.currentTarget as HTMLDivElement).dataset.empty = nextOutput.trim() ? "false" : "true";
+        onChange({ ...session, output: nextOutput });
+      }}
+      onMouseUp={updateSelectedExcerptFromEditor}
+      onKeyUp={updateSelectedExcerptFromEditor}
+    />
+  );
   const formatOutputVersionLabel = (generatedAt: string) => {
     const parsed = new Date(generatedAt);
     if (Number.isNaN(parsed.getTime())) {
@@ -502,20 +661,7 @@ export const OutputWorkspace = ({
                       Viewing the version generated {formatOutputVersionLabel(selectedOutputVersion.generatedAt)}. Open the latest version to keep editing.
                     </p>
                   ) : null}
-                  <textarea
-                    className="editor-textarea editor-textarea-primary output-textarea-minimal output-textarea-pwa"
-                    id="session-output"
-                    value={displayedOutput}
-                    onChange={(event) => onChange({ ...session, output: event.target.value })}
-                    onSelect={(event) => {
-                      const nextExcerpt = event.currentTarget.value
-                        .slice(event.currentTarget.selectionStart ?? 0, event.currentTarget.selectionEnd ?? 0)
-                        .trim();
-                      setSelectedExcerpt(nextExcerpt);
-                    }}
-                    readOnly={isViewingHistoricalVersion}
-                    placeholder="Generated notes will appear here."
-                  />
+                  {renderOutputSurface("editor-textarea-primary output-rich-text-surface-minimal output-rich-text-surface-pwa")}
                 </>
               )}
             </div>
@@ -1030,20 +1176,7 @@ export const OutputWorkspace = ({
         {selectedOutputVersion ? (
           <p className="muted">Viewing the version generated {formatOutputVersionLabel(selectedOutputVersion.generatedAt)}. Open the latest version to keep editing.</p>
         ) : null}
-        <textarea
-          className={`editor-textarea${isMinimal ? " editor-textarea-primary output-textarea-minimal" : ""}`}
-          id="session-output"
-          value={displayedOutput}
-          onChange={(event) => onChange({ ...session, output: event.target.value })}
-          onSelect={(event) => {
-            const nextExcerpt = event.currentTarget.value
-              .slice(event.currentTarget.selectionStart ?? 0, event.currentTarget.selectionEnd ?? 0)
-              .trim();
-            setSelectedExcerpt(nextExcerpt);
-          }}
-          readOnly={isViewingHistoricalVersion}
-          placeholder="Generated notes will appear here."
-        />
+        {renderOutputSurface(`${isMinimal ? "editor-textarea-primary output-rich-text-surface-minimal" : ""}`)}
       </div>
       {renderVersionHistory()}
       {showDetailsSection ? (
