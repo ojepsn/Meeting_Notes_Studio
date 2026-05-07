@@ -93,6 +93,7 @@ import { formatStockholmDate as getStockholmDateKey } from "../lib/time/stockhol
 type AppWorkspace = "notes" | "now" | "todos" | "calendar" | "time" | "analytics" | "structure" | "assistant" | "files";
 type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | "instructions" | null;
 type CalendarSessionOverlayTab = "capture" | "output" | "details";
+type NotesWorkspaceTab = "capture" | "output" | "details";
 type CommandAction = {
   id: string;
   label: string;
@@ -275,6 +276,7 @@ export const App = () => {
     loadError,
     load,
     setActiveSessionId,
+    activeView,
     setActiveView,
     repository,
     saveSession,
@@ -327,6 +329,7 @@ export const App = () => {
   const [selectedOutputVersionId, setSelectedOutputVersionId] = useState<string | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("ai");
   const [notesCapturePaneWidth, setNotesCapturePaneWidth] = useState(640);
+  const [notesWorkspaceTab, setNotesWorkspaceTab] = useState<NotesWorkspaceTab>("capture");
   const [requestedTodoId, setRequestedTodoId] = useState<string | null>(null);
   const [requestedTodoDomain, setRequestedTodoDomain] = useState<string | null>(null);
   const [requestedTodoProject, setRequestedTodoProject] = useState<string | null>(null);
@@ -508,6 +511,12 @@ export const App = () => {
   useEffect(() => {
     setSelectedOutputVersionId(null);
   }, [activeSessionId]);
+
+  useEffect(() => {
+    if (activeView === "capture" || activeView === "output") {
+      setNotesWorkspaceTab(activeView);
+    }
+  }, [activeView]);
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -4166,6 +4175,7 @@ export const App = () => {
                   })
                 }
                 onUpdateCalendarItem={(id, updates) => void updateCalendarItem(id, updates)}
+                onSaveTimeLog={(timeLog) => void saveTimeLog(timeLog)}
                 onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
                 onOpenTodoWorkspace={() => setActiveWorkspace("todos")}
@@ -4384,119 +4394,371 @@ export const App = () => {
                     </button>
                   </div>
                 ) : null}
-                <div
-                  ref={notesLayoutRef}
-                  className="notes-pwa-grid notes-pwa-grid-resizable"
-                  style={{ gridTemplateColumns: `${notesCapturePaneWidth}px 12px minmax(${NOTES_PANEL_MIN_WIDTH}px, 1fr)` }}
-                >
-                  <div className="notes-pwa-capture">
-                    <SessionEditor
-                      session={activeSession}
-                      templates={snapshot.templates}
-                      attachments={activeAttachments}
-                      presentation="minimal"
-                      showPresentationActions={false}
-                      savedPeople={snapshot.settings.savedParticipants}
-                      suggestedPeople={suggestedPeople}
-                      savedProjects={snapshot.settings.savedProjects}
-                      suggestedProjects={suggestedProjects}
-                      savedDomains={snapshot.settings.savedDomains}
-                      suggestedDomains={suggestedDomains}
-                      savedActivities={snapshot.settings.savedActivities}
-                      suggestedActivities={suggestedActivities}
-                      structureOptions={structureOptions}
-                      savedTags={snapshot.settings.savedTags}
-                      suggestedTags={suggestedTags}
-                      isTranscribingAudio={isTranscribingAudio}
-                      recordingMode={recordingMode}
-                      isRecordingAudio={isRecordingAudio}
-                      recordingStatusNote={recordingStatusNote}
-                      generationLog={generationLog}
-                      onClearGenerationLog={() => setGenerationLog([])}
-                      onChange={handleCaptureSessionChange}
-                      onImportImage={() => void handleImportImage()}
-                      onCreateInlineImageAttachment={(file) => handleCreateInlineImageAttachment(file)}
-                      onImportAudio={() => void handleImportAudio()}
-                      onTranscribeAudio={() => void handleTranscribeAudio()}
-                      onChangeRecordingMode={setRecordingMode}
-                      onStartRecording={(mode) => void handleStartRecording(mode)}
-                      onStopRecording={() => void handleStopRecording()}
-                      onImportTranscript={() => void handleImportTranscript()}
-                      onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
-                      onUpdateAttachment={(attachment) => void handleUpdateAttachment(attachment)}
-                      onOpenDetails={() => openOverlay("capture-details")}
-                      onCreateSessionFromTemplate={(templateId) => void handleCreateSessionFromTemplate(templateId)}
-                      onOpenInstructions={() => openOverlay("instructions")}
-                    />
-                  </div>
-                  <div
-                    className="notes-pwa-splitter"
-                    role="separator"
-                    aria-orientation="vertical"
-                    aria-label="Resize capture and output panels"
-                    onMouseDown={() => {
-                      notesSplitterDraggingRef.current = true;
-                      document.body.style.cursor = "col-resize";
-                    }}
-                  />
-                  <div className="notes-pwa-output">
-                    <OutputWorkspace
-                      session={activeSession}
-                      template={activeTemplate}
-                      displayedOutput={displayedOutput}
-                      layoutPresetId={snapshot.settings.outputLayoutPresetId}
-                      outputVersions={activeOutputVersions}
-                      selectedOutputVersionId={selectedOutputVersionId}
-                      attachments={activeAttachments}
-                      presentation="minimal"
-                      showPresentationActions={false}
-                      onChange={(session) => void handleOutputWorkspaceChange(session)}
-                      savedPeople={snapshot.settings.savedParticipants}
-                      suggestedPeople={suggestedPeople}
-                      savedProjects={snapshot.settings.savedProjects}
-                      suggestedProjects={suggestedProjects}
-                      savedDomains={snapshot.settings.savedDomains}
-                      suggestedDomains={suggestedDomains}
-                      savedActivities={snapshot.settings.savedActivities}
-                      suggestedActivities={suggestedActivities}
-                      structureOptions={structureOptions}
-                      savedTags={snapshot.settings.savedTags}
-                      suggestedTags={suggestedTags}
-                      isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
-                      isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
-                      isRevising={isRevising}
-                      onPrimaryAction={outputActionConfig.onPrimary}
-                      onSecondaryAction={outputActionConfig.onSecondary}
-                      onCopyOutput={() => void handleCopyOutput()}
-                      onTranslate={() => void handleTranslate()}
-                      onRevise={(instructions) => void handleRevise(instructions)}
-                      onRevertOutputVersion={handleRevertOutputVersion}
-                      onOpenOutputVersion={handleOpenOutputVersion}
-                      onOpenLatestOutputVersion={handleOpenLatestOutputVersion}
-                      onExportText={() => exportOutputAsText({ title: activeSession.title, output: displayedOutput })}
-                      onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: displayedOutput })}
-                      onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
-                      onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
-                      onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
-                      ruleSuggestions={visibleRuleSuggestions.filter((entry) => !dismissedRuleSuggestionIds.includes(entry.id))}
-                      onAcceptRuleSuggestion={(suggestionId) => void handleAcceptVisibleRuleSuggestion(suggestionId)}
-                      onDismissRuleSuggestion={handleDismissVisibleRuleSuggestion}
-                      onIgnoreRuleSuggestion={(suggestionId) => void handleIgnoreVisibleRuleSuggestion(suggestionId)}
-                      primaryActionLabel={outputActionConfig.primaryLabel}
-                      secondaryActionLabel={outputActionConfig.secondaryLabel}
-                      emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
-                      emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
-                      linkedActivity={activeLinkedActivity}
-                      onOpenLinkedActivity={(activityId) => openActivityFromLink(activityId, "notes")}
-                      onAddFollowUpTodo={(description, options) =>
-                        void addTodo(description, {
-                          ...getMeetingTodoDefaults(),
-                          ...options,
-                        })
-                      }
-                      onAddFollowUpMeeting={(description, options) => void addActivity(description, "meeting", options)}
-                    />
-                  </div>
+                <div className="calendar-session-overlay-tabs notes-workspace-tabs" role="tablist" aria-label="Notes workspace tabs">
+                  {(["capture", "output", "details"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      className="calendar-session-overlay-tab"
+                      data-active={notesWorkspaceTab === tab}
+                      aria-selected={notesWorkspaceTab === tab}
+                      onClick={() => {
+                        setNotesWorkspaceTab(tab);
+                        if (tab === "capture" || tab === "output") {
+                          setActiveView(tab);
+                        }
+                      }}
+                    >
+                      {tab === "capture" ? "Capture" : tab === "output" ? "Output" : "Details"}
+                    </button>
+                  ))}
+                </div>
+                <div ref={notesLayoutRef} className="notes-pwa-tab-panel">
+                  {notesWorkspaceTab === "capture" ? (
+                    <div className="notes-pwa-capture">
+                      <SessionEditor
+                        session={activeSession}
+                        templates={snapshot.templates}
+                        attachments={activeAttachments}
+                        presentation="minimal"
+                        showPresentationActions={false}
+                        savedPeople={snapshot.settings.savedParticipants}
+                        suggestedPeople={suggestedPeople}
+                        savedProjects={snapshot.settings.savedProjects}
+                        suggestedProjects={suggestedProjects}
+                        savedDomains={snapshot.settings.savedDomains}
+                        suggestedDomains={suggestedDomains}
+                        savedActivities={snapshot.settings.savedActivities}
+                        suggestedActivities={suggestedActivities}
+                        structureOptions={structureOptions}
+                        savedTags={snapshot.settings.savedTags}
+                        suggestedTags={suggestedTags}
+                        isTranscribingAudio={isTranscribingAudio}
+                        recordingMode={recordingMode}
+                        isRecordingAudio={isRecordingAudio}
+                        recordingStatusNote={recordingStatusNote}
+                        generationLog={generationLog}
+                        onClearGenerationLog={() => setGenerationLog([])}
+                        onChange={handleCaptureSessionChange}
+                        onImportImage={() => void handleImportImage()}
+                        onCreateInlineImageAttachment={(file) => handleCreateInlineImageAttachment(file)}
+                        onImportAudio={() => void handleImportAudio()}
+                        onTranscribeAudio={() => void handleTranscribeAudio()}
+                        onChangeRecordingMode={setRecordingMode}
+                        onStartRecording={(mode) => void handleStartRecording(mode)}
+                        onStopRecording={() => void handleStopRecording()}
+                        onImportTranscript={() => void handleImportTranscript()}
+                        onRemoveAttachment={(attachmentId) => void handleRemoveAttachment(attachmentId)}
+                        onUpdateAttachment={(attachment) => void handleUpdateAttachment(attachment)}
+                        onOpenDetails={() => setNotesWorkspaceTab("details")}
+                        onCreateSessionFromTemplate={(templateId) => void handleCreateSessionFromTemplate(templateId)}
+                        onOpenInstructions={() => openOverlay("instructions")}
+                      />
+                    </div>
+                  ) : null}
+                  {notesWorkspaceTab === "output" ? (
+                    <div className="notes-pwa-output">
+                      <OutputWorkspace
+                        session={activeSession}
+                        template={activeTemplate}
+                        displayedOutput={displayedOutput}
+                        layoutPresetId={snapshot.settings.outputLayoutPresetId}
+                        outputVersions={activeOutputVersions}
+                        selectedOutputVersionId={selectedOutputVersionId}
+                        attachments={activeAttachments}
+                        presentation="minimal"
+                        showPresentationActions={false}
+                        onChange={(session) => void handleOutputWorkspaceChange(session)}
+                        savedPeople={snapshot.settings.savedParticipants}
+                        suggestedPeople={suggestedPeople}
+                        savedProjects={snapshot.settings.savedProjects}
+                        suggestedProjects={suggestedProjects}
+                        savedDomains={snapshot.settings.savedDomains}
+                        suggestedDomains={suggestedDomains}
+                        savedActivities={snapshot.settings.savedActivities}
+                        suggestedActivities={suggestedActivities}
+                        structureOptions={structureOptions}
+                        savedTags={snapshot.settings.savedTags}
+                        suggestedTags={suggestedTags}
+                        isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
+                        isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
+                        isRevising={isRevising}
+                        onPrimaryAction={outputActionConfig.onPrimary}
+                        onSecondaryAction={outputActionConfig.onSecondary}
+                        onCopyOutput={() => void handleCopyOutput()}
+                        onTranslate={() => void handleTranslate()}
+                        onRevise={(instructions) => void handleRevise(instructions)}
+                        onRevertOutputVersion={handleRevertOutputVersion}
+                        onOpenOutputVersion={handleOpenOutputVersion}
+                        onOpenLatestOutputVersion={handleOpenLatestOutputVersion}
+                        onExportText={() => exportOutputAsText({ title: activeSession.title, output: displayedOutput })}
+                        onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: displayedOutput })}
+                        onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                        onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                        onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                        ruleSuggestions={visibleRuleSuggestions.filter((entry) => !dismissedRuleSuggestionIds.includes(entry.id))}
+                        onAcceptRuleSuggestion={(suggestionId) => void handleAcceptVisibleRuleSuggestion(suggestionId)}
+                        onDismissRuleSuggestion={handleDismissVisibleRuleSuggestion}
+                        onIgnoreRuleSuggestion={(suggestionId) => void handleIgnoreVisibleRuleSuggestion(suggestionId)}
+                        primaryActionLabel={outputActionConfig.primaryLabel}
+                        secondaryActionLabel={outputActionConfig.secondaryLabel}
+                        emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
+                        emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
+                        linkedActivity={activeLinkedActivity}
+                        onOpenLinkedActivity={(activityId) => openActivityFromLink(activityId, "notes")}
+                        onAddFollowUpTodo={(description, options) =>
+                          void addTodo(description, {
+                            ...getMeetingTodoDefaults(),
+                            ...options,
+                          })
+                        }
+                        onAddFollowUpMeeting={(description, options) => void addActivity(description, "meeting", options)}
+                      />
+                    </div>
+                  ) : null}
+                  {notesWorkspaceTab === "details" ? (
+                    <div className="card calendar-session-details-card notes-workspace-details-card">
+                      <div className="calendar-session-details-grid">
+                        <div className="field field-wide">
+                          <label htmlFor="notes-workspace-session-title">Title</label>
+                          <input
+                            id="notes-workspace-session-title"
+                            value={activeSession.title}
+                            onChange={(event) => handleCaptureSessionChange({ ...activeSession, title: event.target.value })}
+                            placeholder="Session title"
+                          />
+                        </div>
+                        <div className="field">
+                          <label htmlFor="notes-workspace-template">Template</label>
+                          <select
+                            id="notes-workspace-template"
+                            value={activeTemplate?.id ?? ""}
+                            onChange={(event) => handleCalendarOverlayTemplateChange(event.target.value)}
+                          >
+                            {getTemplatesForCaptureMode(snapshot.templates, activeSession.captureMode).map((template) => (
+                              <option key={template.id} value={template.id}>
+                                {template.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label htmlFor="notes-workspace-date">Date</label>
+                          <DateInput
+                            id="notes-workspace-date"
+                            value={activeSession.date}
+                            onChange={(event) => handleCaptureSessionChange({ ...activeSession, date: event.target.value })}
+                          />
+                        </div>
+                        <div className="field">
+                          <label htmlFor="notes-workspace-start">Start</label>
+                          <input
+                            id="notes-workspace-start"
+                            type="time"
+                            value={activeSession.startTime}
+                            onChange={(event) => handleCaptureSessionChange({ ...activeSession, startTime: event.target.value })}
+                          />
+                        </div>
+                        <div className="field">
+                          <label htmlFor="notes-workspace-end">End</label>
+                          <input
+                            id="notes-workspace-end"
+                            type="time"
+                            value={activeSession.endTime}
+                            onChange={(event) => handleCaptureSessionChange({ ...activeSession, endTime: event.target.value })}
+                          />
+                        </div>
+                        <div className="field field-wide">
+                          <label htmlFor="notes-workspace-people">People</label>
+                          <PeoplePicker
+                            value={activeSession.participantText}
+                            savedPeople={snapshot.settings.savedParticipants}
+                            suggestedPeople={suggestedPeople}
+                            onChange={(value) => handleCaptureSessionChange({ ...activeSession, participantText: value })}
+                            placeholder="Search or add people"
+                          />
+                        </div>
+                        <div className="field field-wide metadata-triplet">
+                          <div className="metadata-triplet-grid">
+                            <div className="field metadata-subfield">
+                              <label htmlFor="notes-workspace-domain">Domain</label>
+                              <TokenPicker
+                                value={activeSession.domain}
+                                savedOptions={structureOptions.domains.length ? structureOptions.domains : snapshot.settings.savedDomains}
+                                suggestedOptions={suggestedDomains}
+                                placeholder="Search or add domain"
+                                suggestionSummary="Recent domains"
+                                suggestionBadgeText="From saved Domains"
+                                mode="single"
+                                onChange={handleCalendarOverlayDomainChange}
+                              />
+                            </div>
+                            <div className="field metadata-subfield">
+                              <label htmlFor="notes-workspace-project">Project</label>
+                              <TokenPicker
+                                value={activeSession.project}
+                                savedOptions={(() => {
+                                  const options = getProjectsForDomain(structureOptions, activeSession.domain);
+                                  return options.length ? options : snapshot.settings.savedProjects;
+                                })()}
+                                suggestedOptions={suggestedProjects.filter((project) =>
+                                  new Set((() => {
+                                    const options = getProjectsForDomain(structureOptions, activeSession.domain);
+                                    return options.length ? options : snapshot.settings.savedProjects;
+                                  })()).has(project),
+                                )}
+                                placeholder="Search or add project"
+                                suggestionSummary="Recent projects"
+                                suggestionBadgeText="From saved Projects"
+                                mode="single"
+                                onChange={handleCalendarOverlayProjectChange}
+                              />
+                            </div>
+                            <div className="field metadata-subfield">
+                              <label htmlFor="notes-workspace-activity">Activity</label>
+                              <TokenPicker
+                                value={activeSession.activity}
+                                savedOptions={(() => {
+                                  const options = getActivitiesForSelection(structureOptions, activeSession.domain, activeSession.project);
+                                  return options.length ? options : snapshot.settings.savedActivities;
+                                })()}
+                                suggestedOptions={suggestedActivities.filter((activity) =>
+                                  new Set((() => {
+                                    const options = getActivitiesForSelection(structureOptions, activeSession.domain, activeSession.project);
+                                    return options.length ? options : snapshot.settings.savedActivities;
+                                  })()).has(activity),
+                                )}
+                                placeholder="Search or add activity"
+                                suggestionSummary="Recent activities"
+                                suggestionBadgeText="From saved Activities"
+                                mode="single"
+                                onChange={(value) => handleCaptureSessionChange({ ...activeSession, activity: value })}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="field field-wide">
+                          <label htmlFor="notes-workspace-tags">Tags</label>
+                          <TokenPicker
+                            value={activeSession.tagsText}
+                            savedOptions={snapshot.settings.savedTags}
+                            suggestedOptions={suggestedTags}
+                            placeholder="Add tags"
+                            suggestionSummary="Recent tags"
+                            suggestionBadgeText="From saved Tags"
+                            onChange={(value) => handleCaptureSessionChange({ ...activeSession, tagsText: value })}
+                          />
+                        </div>
+                        <div className="field">
+                          <label htmlFor="notes-workspace-output-language">Output language</label>
+                          <select
+                            id="notes-workspace-output-language"
+                            value={activeSession.outputLanguage}
+                            onChange={(event) =>
+                              handleCaptureSessionChange({
+                                ...activeSession,
+                                outputLanguage: event.target.value as SessionRecord["outputLanguage"],
+                              })
+                            }
+                          >
+                            <option value="same">Same as notes</option>
+                            <option value="sv">Swedish</option>
+                            <option value="en">English</option>
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label htmlFor="notes-workspace-detail-level">Detail level</label>
+                          <select
+                            id="notes-workspace-detail-level"
+                            value={String(activeSession.detailLevel)}
+                            onChange={(event) =>
+                              handleCaptureSessionChange({
+                                ...activeSession,
+                                detailLevel: Number(event.target.value),
+                              })
+                            }
+                          >
+                            {[1, 2, 3, 4, 5].map((level) => (
+                              <option key={level} value={String(level)}>
+                                {level}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="field calendar-session-details-toggle">
+                          <span>Privacy</span>
+                          <label className="compact-private-toggle">
+                            <input
+                              type="checkbox"
+                              checked={activeSession.isPrivate}
+                              onChange={(event) =>
+                                handleCaptureSessionChange({
+                                  ...activeSession,
+                                  isPrivate: event.target.checked,
+                                })
+                              }
+                            />
+                            <span>Private</span>
+                          </label>
+                        </div>
+                        <div className="field field-wide">
+                          <label htmlFor="notes-workspace-instructions">Additional LLM instructions</label>
+                          <textarea
+                            id="notes-workspace-instructions"
+                            rows={4}
+                            value={activeSession.additionalInstructions}
+                            onChange={(event) =>
+                              handleCaptureSessionChange({
+                                ...activeSession,
+                                additionalInstructions: event.target.value,
+                              })
+                            }
+                            placeholder="Example: Focus more on risks and decisions."
+                          />
+                        </div>
+                        {(activeTemplate?.fields.filter(
+                          (field) =>
+                            field.enabled &&
+                            !STANDARD_TEMPLATE_FIELD_KEYS.includes(field.key as (typeof STANDARD_TEMPLATE_FIELD_KEYS)[number]),
+                        ) ?? []).map((field) => (
+                          <div key={field.id} className={field.type === "textarea" ? "field field-wide" : "field"}>
+                            <label htmlFor={`notes-workspace-custom-${field.id}`}>{field.label}</label>
+                            {field.type === "textarea" ? (
+                              <textarea
+                                id={`notes-workspace-custom-${field.id}`}
+                                rows={4}
+                                value={activeSession.customFieldValues[field.id] ?? ""}
+                                onChange={(event) =>
+                                  handleCaptureSessionChange({
+                                    ...activeSession,
+                                    customFieldValues: {
+                                      ...activeSession.customFieldValues,
+                                      [field.id]: event.target.value,
+                                    },
+                                  })
+                                }
+                              />
+                            ) : (
+                              <input
+                                id={`notes-workspace-custom-${field.id}`}
+                                type={field.type === "number" ? "number" : field.type}
+                                value={activeSession.customFieldValues[field.id] ?? ""}
+                                onChange={(event) =>
+                                  handleCaptureSessionChange({
+                                    ...activeSession,
+                                    customFieldValues: {
+                                      ...activeSession.customFieldValues,
+                                      [field.id]: event.target.value,
+                                    },
+                                  })
+                                }
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )}

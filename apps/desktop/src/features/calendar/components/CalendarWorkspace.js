@@ -135,7 +135,7 @@ export const layoutCalendarItems = (items) => {
     });
     return result.sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.lane - right.lane);
 };
-export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, calendarItems, settings, openRevision = 0, structureOptions, linkedSessionStateByActivity, linkedSessionStateByTodo, savedPeople, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onCreateChecklist, onSaveChecklist, onDeleteChecklist, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onCreateLinkedTaskSession, onPreviewSessionOutput, onFullScreenChange, }) => {
+export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, calendarItems, settings, openRevision = 0, structureOptions, linkedSessionStateByActivity, linkedSessionStateByTodo, savedPeople, onSaveSettings, onCreateFromText, onMoveItem, onSaveTodo, onDeleteTodo, onCreateChecklist, onSaveChecklist, onDeleteChecklist, onSaveActivity, onDeleteActivity, onConvertTodoToMeeting, onUpdateCalendarItem, onSaveTimeLog, onStartTracking, onStopTracking, onOpenTodoWorkspace, onOpenTodoDetail, onOpenActivityWorkspace, onOpenActivityDetail, onOpenSession, highlightedItemId, onCreateLinkedMeetingSession, onCreateLinkedTaskSession, onPreviewSessionOutput, onFullScreenChange, }) => {
     const today = getLocalDateString();
     const initialIsFullScreen = true;
     const [anchorDate, setAnchorDate] = useState(today);
@@ -148,6 +148,7 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
     const [selectedItemId, setSelectedItemId] = useState(null);
     const [selectedItemIds, setSelectedItemIds] = useState([]);
     const [editorDraft, setEditorDraft] = useState(null);
+    const [timeLogNotesDrafts, setTimeLogNotesDrafts] = useState({});
     const [jumpDate, setJumpDate] = useState(today);
     const [draftCell, setDraftCell] = useState(null);
     const [draftText, setDraftText] = useState("");
@@ -317,6 +318,7 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
         return grouped;
     }, [filteredItems]);
     const selectedItem = useMemo(() => (selectedItemId ? items.find((item) => item.id === selectedItemId) ?? null : null), [items, selectedItemId]);
+    const selectedRunningLog = useMemo(() => editorDraft ? getRunningTimeLog(timeLogsByTarget.get(`${editorDraft.targetType}:${editorDraft.targetId}`) || []) : null, [editorDraft, timeLogsByTarget]);
     const currentTaskChecklists = useMemo(() => editorDraft?.targetType === "todo"
         ? checklists
             .filter((checklist) => checklist.ownerType === "todo" && checklist.ownerId === editorDraft.targetId)
@@ -345,6 +347,46 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
             return false;
         return true;
     });
+    useEffect(() => {
+        setTimeLogNotesDrafts((current) => {
+            const activeLogIds = new Set(timeLogs.map((log) => log.id));
+            let changed = false;
+            const next = Object.fromEntries(Object.entries(current).filter(([logId]) => {
+                const keep = activeLogIds.has(logId);
+                if (!keep)
+                    changed = true;
+                return keep;
+            }));
+            return changed ? next : current;
+        });
+    }, [timeLogs]);
+    const getTimeLogNotesDraft = (log) => timeLogNotesDrafts[log.id] ?? log.notes;
+    const updateTimeLogNotesDraft = (logId, value) => {
+        setTimeLogNotesDrafts((current) => ({
+            ...current,
+            [logId]: value,
+        }));
+    };
+    const clearTimeLogNotesDraft = (logId) => {
+        setTimeLogNotesDrafts((current) => {
+            if (!(logId in current))
+                return current;
+            const next = { ...current };
+            delete next[logId];
+            return next;
+        });
+    };
+    const commitTimeLogNotesDraft = (log) => {
+        const nextNotes = getTimeLogNotesDraft(log);
+        clearTimeLogNotesDraft(log.id);
+        if (nextNotes === log.notes)
+            return;
+        onSaveTimeLog({
+            ...log,
+            notes: nextNotes,
+            updatedAt: new Date().toISOString(),
+        });
+    };
     const scrollToCurrentTime = (date = new Date()) => {
         const scroller = scrollRef.current;
         if (!scroller)
@@ -1511,5 +1553,14 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
                                                         }
                                                         onStartTracking(editorDraft.targetType, editorDraft.targetId);
                                                     }, children: runningLog ? "Stop timelog" : "Start timelog" })] }));
-                                    })() }), _jsxs("div", { className: "calendar-editor-actions calendar-editor-actions-inline", children: [_jsxs("button", { className: "shell-button", type: "button", onClick: () => (editorDraft.targetType === "todo" ? onOpenTodoWorkspace() : onOpenActivityWorkspace(editorDraft.targetId)), children: ["Open full ", editorDraft.isMeeting ? "meeting" : "task"] }), editorDraft.targetType === "todo" ? (_jsx(_Fragment, { children: _jsx("button", { className: "shell-button", type: "button", onClick: convertEditorTodoToMeeting, children: "Convert to meeting" }) })) : null] })] })) : (_jsxs("div", { className: "stack", children: [_jsx("h3", { children: "Calendar item" }), _jsx("p", { className: "muted", children: "Select a scheduled block to edit it here." })] })) })] })] }));
+                                    })() }), selectedRunningLog ? (_jsxs("div", { className: "calendar-timelog-card stack", children: [_jsxs("div", { className: "calendar-timelog-summary", children: [_jsxs("span", { className: "status-chip", children: ["Started ", selectedRunningLog.startTime] }), _jsx("span", { className: "status-chip", children: selectedRunningLog.date }), _jsx("span", { className: "status-chip", children: formatTrackedMinutes(calculateLiveDurationMinutes(selectedRunningLog, now)) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: `calendar-timelog-notes-${selectedRunningLog.id}`, children: "Comment" }), _jsx("input", { id: `calendar-timelog-notes-${selectedRunningLog.id}`, value: getTimeLogNotesDraft(selectedRunningLog), onChange: (event) => updateTimeLogNotesDraft(selectedRunningLog.id, event.target.value), onBlur: () => commitTimeLogNotesDraft(selectedRunningLog), onKeyDown: (event) => {
+                                                        if (event.key === "Enter") {
+                                                            event.preventDefault();
+                                                            commitTimeLogNotesDraft(selectedRunningLog);
+                                                        }
+                                                        if (event.key === "Escape") {
+                                                            event.preventDefault();
+                                                            clearTimeLogNotesDraft(selectedRunningLog.id);
+                                                        }
+                                                    }, placeholder: "Add a working note" })] })] })) : null, _jsxs("div", { className: "calendar-editor-actions calendar-editor-actions-inline", children: [_jsxs("button", { className: "shell-button", type: "button", onClick: () => (editorDraft.targetType === "todo" ? onOpenTodoWorkspace() : onOpenActivityWorkspace(editorDraft.targetId)), children: ["Open full ", editorDraft.isMeeting ? "meeting" : "task"] }), editorDraft.targetType === "todo" ? (_jsx(_Fragment, { children: _jsx("button", { className: "shell-button", type: "button", onClick: convertEditorTodoToMeeting, children: "Convert to meeting" }) })) : null] })] })) : (_jsxs("div", { className: "stack", children: [_jsx("h3", { children: "Calendar item" }), _jsx("p", { className: "muted", children: "Select a scheduled block to edit it here." })] })) })] })] }));
 };

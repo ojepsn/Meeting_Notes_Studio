@@ -743,6 +743,75 @@ export const SessionEditor = ({
           </div>
         ) : null}
 
+        <div className="session-editor-pwa-capture-top">
+          <section className="config-card workflow-card session-editor-capture-tools-top" aria-label="Capture methods">
+            <div className="config-card-copy">
+              <h3>Choose how to bring notes in</h3>
+            </div>
+
+            <section className="audio-capture-card session-editor-audio-pwa" data-recording={isRecordingAudio}>
+              <div className="capture-toolbar audio-capture-actions session-editor-audio-actions-pwa">
+                {RECORDING_MODE_BUTTONS.map((option) => {
+                  const isLive = isRecordingModeLive(option.mode);
+                  return (
+                    <button
+                      key={option.mode}
+                      className="secondary-button capture-mode-button"
+                      type="button"
+                      data-active={recordingMode === option.mode}
+                      data-recording={isLive}
+                      aria-pressed={recordingMode === option.mode}
+                      onClick={() => toggleRecordingMode(option.mode)}
+                    >
+                      <span className="capture-mode-title">{isLive ? option.stopLabel : option.startLabel}</span>
+                      <span className="capture-mode-hint">{isLive ? "Recording now. Click again to stop and save." : option.hint}</span>
+                    </button>
+                  );
+                })}
+                <button className="shell-button" type="button" onClick={onImportAudio}>
+                  Upload audio
+                </button>
+                <button className="shell-button" type="button" onClick={onImportTranscript}>
+                  Upload transcript
+                </button>
+                <button className="shell-button" type="button" onClick={onTranscribeAudio}>
+                  {isTranscribingAudio ? "Transcribing audio..." : "Transcribe audio"}
+                </button>
+                <button className="shell-button" type="button" onClick={onImportImage}>
+                  Upload image
+                </button>
+              </div>
+              <p className="support-text">{recordingStatusNote || RECORDING_MODE_META[recordingMode].helper}</p>
+            </section>
+          </section>
+
+          <details className="workspace-disclosure pwa-disclosure-card session-editor-pwa-advanced-tools">
+            <summary>Advanced capture tools</summary>
+            <div className="workspace-disclosure-body form-grid">
+              <div className="field field-wide metadata-triplet">
+                <div className="metadata-triplet-grid">
+                  <div className="field metadata-subfield">
+                    <label htmlFor="session-domain">Domain</label>
+                    <TokenPicker value={session.domain} savedOptions={structureOptions.domains.length ? structureOptions.domains : savedDomains} suggestedOptions={suggestedDomains} placeholder="Search or add domain" suggestionSummary="Recent domains" suggestionBadgeText="From saved Domains" mode="single" onChange={handleDomainChange} />
+                  </div>
+                  <div className="field metadata-subfield">
+                    <label htmlFor="session-project">Project</label>
+                    <TokenPicker value={session.project} savedOptions={projectPickerOptions} suggestedOptions={suggestedProjectsForSelection} placeholder="Search or add project" suggestionSummary="Recent projects" suggestionBadgeText="From saved Projects" mode="single" onChange={handleProjectChange} />
+                  </div>
+                  <div className="field metadata-subfield">
+                    <label htmlFor="session-activity">Activity</label>
+                    <TokenPicker value={session.activity} savedOptions={activityPickerOptions} suggestedOptions={suggestedActivitiesForSelection} placeholder="Search or add activity" suggestionSummary="Recent activities" suggestionBadgeText="From saved Activities" mode="single" onChange={(value) => update("activity", value)} />
+                  </div>
+                </div>
+              </div>
+              <div className="field field-wide">
+                <label htmlFor="session-tags">Tags</label>
+                <TokenPicker value={session.tagsText} savedOptions={savedTags} suggestedOptions={suggestedTags} placeholder="Add tags like q2-planning, budget, hiring" suggestionSummary="Recent tags" suggestionBadgeText="From saved Tags" onChange={(value) => update("tagsText", value)} />
+              </div>
+            </div>
+          </details>
+        </div>
+
         <div className="editor-layout session-editor-pwa-layout">
           <div className="editor-main">
             <section className="form-section" aria-label="Session details">
@@ -914,75 +983,6 @@ export const SessionEditor = ({
             ) : null}
 
           </div>
-
-          <aside className="editor-sidebar">
-            <section className="config-card workflow-card" aria-label="Capture methods">
-              <div className="config-card-copy">
-                <h3>Choose how to bring notes in</h3>
-              </div>
-
-              <section className="audio-capture-card session-editor-audio-pwa" data-recording={isRecordingAudio}>
-                <div className="capture-toolbar audio-capture-actions session-editor-audio-actions-pwa">
-                  {RECORDING_MODE_BUTTONS.map((option) => {
-                    const isLive = isRecordingModeLive(option.mode);
-                    return (
-                      <button
-                        key={option.mode}
-                        className="secondary-button capture-mode-button"
-                        type="button"
-                        data-active={recordingMode === option.mode}
-                        data-recording={isLive}
-                        aria-pressed={recordingMode === option.mode}
-                        onClick={() => toggleRecordingMode(option.mode)}
-                      >
-                        <span className="capture-mode-title">{isLive ? option.stopLabel : option.startLabel}</span>
-                        <span className="capture-mode-hint">{isLive ? "Recording now. Click again to stop and save." : option.hint}</span>
-                      </button>
-                    );
-                  })}
-                  <button className="shell-button" type="button" onClick={onImportAudio}>
-                    Upload audio
-                  </button>
-                  <button className="shell-button" type="button" onClick={onImportTranscript}>
-                    Upload transcript
-                  </button>
-                  <button className="shell-button" type="button" onClick={onTranscribeAudio}>
-                    {isTranscribingAudio ? "Transcribing audio..." : "Transcribe audio"}
-                  </button>
-                  <button className="shell-button" type="button" onClick={onImportImage}>
-                    Upload image
-                  </button>
-                </div>
-                <p className="support-text">{recordingStatusNote || RECORDING_MODE_META[recordingMode].helper}</p>
-              </section>
-            </section>
-
-            <details className="workspace-disclosure pwa-disclosure-card">
-              <summary>Advanced capture tools</summary>
-              <div className="workspace-disclosure-body form-grid">
-                <div className="field field-wide metadata-triplet">
-                  <div className="metadata-triplet-grid">
-                    <div className="field metadata-subfield">
-                      <label htmlFor="session-domain">Domain</label>
-                      <TokenPicker value={session.domain} savedOptions={structureOptions.domains.length ? structureOptions.domains : savedDomains} suggestedOptions={suggestedDomains} placeholder="Search or add domain" suggestionSummary="Recent domains" suggestionBadgeText="From saved Domains" mode="single" onChange={handleDomainChange} />
-                    </div>
-                    <div className="field metadata-subfield">
-                      <label htmlFor="session-project">Project</label>
-                      <TokenPicker value={session.project} savedOptions={projectPickerOptions} suggestedOptions={suggestedProjectsForSelection} placeholder="Search or add project" suggestionSummary="Recent projects" suggestionBadgeText="From saved Projects" mode="single" onChange={handleProjectChange} />
-                    </div>
-                    <div className="field metadata-subfield">
-                      <label htmlFor="session-activity">Activity</label>
-                      <TokenPicker value={session.activity} savedOptions={activityPickerOptions} suggestedOptions={suggestedActivitiesForSelection} placeholder="Search or add activity" suggestionSummary="Recent activities" suggestionBadgeText="From saved Activities" mode="single" onChange={(value) => update("activity", value)} />
-                    </div>
-                  </div>
-                </div>
-                <div className="field field-wide">
-                  <label htmlFor="session-tags">Tags</label>
-                  <TokenPicker value={session.tagsText} savedOptions={savedTags} suggestedOptions={suggestedTags} placeholder="Add tags like q2-planning, budget, hiring" suggestionSummary="Recent tags" suggestionBadgeText="From saved Tags" onChange={(value) => update("tagsText", value)} />
-                </div>
-              </div>
-            </details>
-          </aside>
         </div>
 
         <section className="form-section notes-transcript-section" aria-label="Notes and transcripts">

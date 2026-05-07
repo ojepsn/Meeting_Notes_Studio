@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ActivityRecord, CalendarItemRecord, ChecklistRecord, LocalAppSettings, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, CalendarItemRecord, ChecklistRecord, LocalAppSettings, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
@@ -222,7 +222,7 @@ interface CalendarWorkspaceProps {
   todos: TodoRecord[];
   checklists: ChecklistRecord[];
   activities: ActivityRecord[];
-  timeLogs: import("@notesmith/domain").TimeLogRecord[];
+  timeLogs: TimeLogRecord[];
   calendarItems: CalendarItemRecord[];
   settings: LocalAppSettings;
   openRevision?: number;
@@ -247,6 +247,7 @@ interface CalendarWorkspaceProps {
   onDeleteActivity: (id: string) => void;
   onConvertTodoToMeeting: (todo: TodoRecord, options: { date: string; startTime: string; endTime: string }) => void;
   onUpdateCalendarItem: (id: string, updates: { date: string; startSlot: number; durationSlots: number }) => void;
+  onSaveTimeLog: (timeLog: TimeLogRecord) => void;
   onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
   onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
   onOpenTodoWorkspace: () => void;
@@ -285,6 +286,7 @@ export const CalendarWorkspace = ({
   onDeleteActivity,
   onConvertTodoToMeeting,
   onUpdateCalendarItem,
+  onSaveTimeLog,
   onStartTracking,
   onStopTracking,
   onOpenTodoWorkspace,
@@ -310,6 +312,7 @@ export const CalendarWorkspace = ({
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [editorDraft, setEditorDraft] = useState<EditorDraft | null>(null);
+  const [timeLogNotesDrafts, setTimeLogNotesDrafts] = useState<Record<string, string>>({});
   const [jumpDate, setJumpDate] = useState(today);
   const [draftCell, setDraftCell] = useState<{ date: string; slot: number } | null>(null);
   const [draftText, setDraftText] = useState("");
@@ -497,6 +500,11 @@ export const CalendarWorkspace = ({
     () => (selectedItemId ? items.find((item) => item.id === selectedItemId) ?? null : null),
     [items, selectedItemId],
   );
+  const selectedRunningLog = useMemo(
+    () =>
+      editorDraft ? getRunningTimeLog(timeLogsByTarget.get(`${editorDraft.targetType}:${editorDraft.targetId}`) || []) : null,
+    [editorDraft, timeLogsByTarget],
+  );
   const currentTaskChecklists = useMemo(
     () =>
       editorDraft?.targetType === "todo"
@@ -529,6 +537,50 @@ export const CalendarWorkspace = ({
     if (editorDraft.project && activity.project && activity.project !== editorDraft.project) return false;
     return true;
   });
+
+  useEffect(() => {
+    setTimeLogNotesDrafts((current) => {
+      const activeLogIds = new Set(timeLogs.map((log) => log.id));
+      let changed = false;
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([logId]) => {
+          const keep = activeLogIds.has(logId);
+          if (!keep) changed = true;
+          return keep;
+        }),
+      );
+      return changed ? next : current;
+    });
+  }, [timeLogs]);
+
+  const getTimeLogNotesDraft = (log: TimeLogRecord) => timeLogNotesDrafts[log.id] ?? log.notes;
+
+  const updateTimeLogNotesDraft = (logId: string, value: string) => {
+    setTimeLogNotesDrafts((current) => ({
+      ...current,
+      [logId]: value,
+    }));
+  };
+
+  const clearTimeLogNotesDraft = (logId: string) => {
+    setTimeLogNotesDrafts((current) => {
+      if (!(logId in current)) return current;
+      const next = { ...current };
+      delete next[logId];
+      return next;
+    });
+  };
+
+  const commitTimeLogNotesDraft = (log: TimeLogRecord) => {
+    const nextNotes = getTimeLogNotesDraft(log);
+    clearTimeLogNotesDraft(log.id);
+    if (nextNotes === log.notes) return;
+    onSaveTimeLog({
+      ...log,
+      notes: nextNotes,
+      updatedAt: new Date().toISOString(),
+    });
+  };
 
   const scrollToCurrentTime = (date = new Date()) => {
     const scroller = scrollRef.current;
@@ -2509,6 +2561,37 @@ export const CalendarWorkspace = ({
                   );
                 })()}
               </div>
+              {selectedRunningLog ? (
+                <div className="calendar-timelog-card stack">
+                  <div className="calendar-timelog-summary">
+                    <span className="status-chip">Started {selectedRunningLog.startTime}</span>
+                    <span className="status-chip">{selectedRunningLog.date}</span>
+                    <span className="status-chip">
+                      {formatTrackedMinutes(calculateLiveDurationMinutes(selectedRunningLog, now))}
+                    </span>
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`calendar-timelog-notes-${selectedRunningLog.id}`}>Comment</label>
+                    <input
+                      id={`calendar-timelog-notes-${selectedRunningLog.id}`}
+                      value={getTimeLogNotesDraft(selectedRunningLog)}
+                      onChange={(event) => updateTimeLogNotesDraft(selectedRunningLog.id, event.target.value)}
+                      onBlur={() => commitTimeLogNotesDraft(selectedRunningLog)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          commitTimeLogNotesDraft(selectedRunningLog);
+                        }
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          clearTimeLogNotesDraft(selectedRunningLog.id);
+                        }
+                      }}
+                      placeholder="Add a working note"
+                    />
+                  </div>
+                </div>
+              ) : null}
               <div className="calendar-editor-actions calendar-editor-actions-inline">
                 <button
                   className="shell-button"
