@@ -3,11 +3,14 @@ const STOCKHOLM_DST_OFFSET_MINUTES = 120;
 const STOCKHOLM_DST_START_HOUR_UTC = 1;
 const STOCKHOLM_DST_END_HOUR_UTC = 1;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
+const DEFAULT_TIME_ZONE = "Europe/Stockholm";
+const SYSTEM_TIME_ZONE = typeof Intl !== "undefined"
+    ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIME_ZONE
+    : DEFAULT_TIME_ZONE;
 const pad = (value) => `${value}`.padStart(2, "0");
 const stockholmPartsFormatter = typeof Intl !== "undefined"
     ? new Intl.DateTimeFormat("en-CA", {
-        timeZone: STOCKHOLM_TIME_ZONE,
+        timeZone: SYSTEM_TIME_ZONE,
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
