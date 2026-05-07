@@ -237,12 +237,42 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
                 const todo = todoMap.get(item.targetId);
                 if (!todo)
                     return null;
-                return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "todo", targetId: item.targetId, title: todo.description, label: "Task", isMeeting: false, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: Boolean(todo.isPriority), lane: 0, laneCount: 1 };
+                return {
+                    id: item.id,
+                    date: todo.doOn || item.date,
+                    startSlot: item.startSlot,
+                    durationSlots: item.durationSlots,
+                    targetType: "todo",
+                    targetId: item.targetId,
+                    title: todo.description,
+                    label: "Task",
+                    isMeeting: false,
+                    isPrivate: todo.isPrivate,
+                    isDone: todo.isDone,
+                    isPriority: Boolean(todo.isPriority),
+                    lane: 0,
+                    laneCount: 1,
+                };
             }
             const activity = activityMap.get(item.targetId);
             if (!activity)
                 return null;
-            return { id: item.id, date: item.date, startSlot: item.startSlot, durationSlots: item.durationSlots, targetType: "activity", targetId: item.targetId, title: activity.description, label: activity.type === "meeting" ? "Meeting" : "Task", isMeeting: activity.type === "meeting", isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, lane: 0, laneCount: 1 };
+            return {
+                id: item.id,
+                date: activity.doOn || item.date,
+                startSlot: item.startSlot,
+                durationSlots: item.durationSlots,
+                targetType: "activity",
+                targetId: item.targetId,
+                title: activity.description,
+                label: activity.type === "meeting" ? "Meeting" : "Task",
+                isMeeting: activity.type === "meeting",
+                isPrivate: activity.isPrivate,
+                isDone: activity.isDone,
+                isPriority: false,
+                lane: 0,
+                laneCount: 1,
+            };
         })
             .filter((item) => item !== null)
             .sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.title.localeCompare(right.title));
@@ -507,7 +537,7 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
             const todo = todos.find((entry) => entry.id === calendarItem.targetId);
             if (!todo)
                 return;
-            const nextDraft = { itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, participantText: todo.participantText ?? "", activityId: todo.activityId, parentActivityId: "", doOn: calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: Boolean(todo.isPriority), isMeeting: false };
+            const nextDraft = { itemId: calendarItem.id, targetType: "todo", targetId: todo.id, title: todo.description, participantText: todo.participantText ?? "", activityId: todo.activityId, parentActivityId: "", doOn: todo.doOn || calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: Boolean(todo.isPriority), isMeeting: false };
             if (editorDraft &&
                 editorDraft.itemId === nextDraft.itemId &&
                 editorDraft.targetType === nextDraft.targetType &&
@@ -535,7 +565,7 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
         const activity = activities.find((entry) => entry.id === calendarItem.targetId);
         if (!activity)
             return;
-        const nextDraft = { itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, participantText: activity.participantText ?? "", activityId: "", parentActivityId: activity.parentActivityId, doOn: calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, isMeeting: activity.type === "meeting" };
+        const nextDraft = { itemId: calendarItem.id, targetType: "activity", targetId: activity.id, title: activity.description, participantText: activity.participantText ?? "", activityId: "", parentActivityId: activity.parentActivityId, doOn: activity.doOn || calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, isMeeting: activity.type === "meeting" };
         if (editorDraft &&
             editorDraft.itemId === nextDraft.itemId &&
             editorDraft.targetType === nextDraft.targetType &&
