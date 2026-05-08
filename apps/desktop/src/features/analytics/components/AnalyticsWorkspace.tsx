@@ -89,13 +89,14 @@ const buildBucketKey = (value: string, granularity: TimelineGranularity) => {
 const topSlice = <T,>(entries: T[], count = 10) => entries.slice(0, count);
 
 const ANALYTICS_SERIES_COLORS = [
-  "var(--app-accent-strong)",
-  "#4f7cff",
-  "#3fb68b",
-  "#e0a33a",
-  "#d96c6c",
-  "#8a6fe8",
+  "#2f6df6",
+  "#14a66c",
+  "#ea952d",
+  "#d95a52",
+  "#7b63eb",
+  "#1d9db4",
 ];
+const BACKGROUND_FLOW_COLOR = "#8a96aa";
 
 const buildCategorizedTimelineSeries = (
   logs: EnrichedTimeLog[],
@@ -193,7 +194,12 @@ const getActivitySeriesLabel = (log: EnrichedTimeLog) =>
 const getTimeLogFlowLabel = (log: EnrichedTimeLog) =>
   log.project && log.project !== "No project" ? `${log.project} / ${log.activityLabel}` : log.activityLabel;
 
+const isBackgroundFlowLabel = (label: string) => label === "Background / Background" || label === "Background";
+
 const getSeriesColor = (label: string) => {
+  if (isBackgroundFlowLabel(label)) {
+    return BACKGROUND_FLOW_COLOR;
+  }
   let hash = 0;
   for (let index = 0; index < label.length; index += 1) {
     hash = (hash * 31 + label.charCodeAt(index)) >>> 0;
@@ -444,6 +450,7 @@ export const AnalyticsWorkspace = ({
           startTime: string;
           endTime: string;
           notes: string;
+          isBackground: boolean;
           startMinutes: number;
           endMinutes: number;
           effectiveMinutes: number;
@@ -484,6 +491,7 @@ export const AnalyticsWorkspace = ({
           startTime: log.startTime,
           endTime: log.endTime,
           notes: log.notes,
+          isBackground: log.isBaselineWork,
           startMinutes,
           endMinutes,
           effectiveMinutes: log.effectiveMinutes,
@@ -751,7 +759,7 @@ export const AnalyticsWorkspace = ({
                       <button
                         key={segment.id}
                         type="button"
-                        className="analytics-day-flow-segment"
+                        className={`analytics-day-flow-segment${segment.isBackground ? " analytics-day-flow-segment-background" : ""}`}
                         onClick={() => setDrilldown({ scope: "activity", label: segment.drilldownLabel })}
                         onMouseEnter={() =>
                           setHoveredFlowSegment({

@@ -57,13 +57,14 @@ const buildBucketKey = (value, granularity) => {
 };
 const topSlice = (entries, count = 10) => entries.slice(0, count);
 const ANALYTICS_SERIES_COLORS = [
-    "var(--app-accent-strong)",
-    "#4f7cff",
-    "#3fb68b",
-    "#e0a33a",
-    "#d96c6c",
-    "#8a6fe8",
+    "#2f6df6",
+    "#14a66c",
+    "#ea952d",
+    "#d95a52",
+    "#7b63eb",
+    "#1d9db4",
 ];
+const BACKGROUND_FLOW_COLOR = "#8a96aa";
 const buildCategorizedTimelineSeries = (logs, granularity, getLabel, limit = 5) => {
     const totalByLabel = new Map();
     logs.forEach((log) => {
@@ -121,7 +122,11 @@ const buildBinaryTimelineSeries = (logs, granularity, labels, predicate) => {
 };
 const getActivitySeriesLabel = (log) => log.project && log.project !== "No project" ? `${log.activityLabel} - ${log.project}` : log.activityLabel;
 const getTimeLogFlowLabel = (log) => log.project && log.project !== "No project" ? `${log.project} / ${log.activityLabel}` : log.activityLabel;
+const isBackgroundFlowLabel = (label) => label === "Background / Background" || label === "Background";
 const getSeriesColor = (label) => {
+    if (isBackgroundFlowLabel(label)) {
+        return BACKGROUND_FLOW_COLOR;
+    }
     let hash = 0;
     for (let index = 0; index < label.length; index += 1) {
         hash = (hash * 31 + label.charCodeAt(index)) >>> 0;
@@ -307,6 +312,7 @@ export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs,
                 startTime: log.startTime,
                 endTime: log.endTime,
                 notes: log.notes,
+                isBackground: log.isBaselineWork,
                 startMinutes,
                 endMinutes,
                 effectiveMinutes: log.effectiveMinutes,
@@ -390,7 +396,7 @@ export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs,
                                 } })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-to-date", children: "To" }), _jsx(DateInput, { id: "analytics-to-date", value: toDate, onChange: (event) => {
                                     setRangePreset("custom");
                                     setToDate(event.target.value);
-                                } })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-project-filter", children: "Project" }), _jsxs("select", { id: "analytics-project-filter", value: projectFilter, onChange: (event) => setProjectFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), projectOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-domain-filter", children: "Domain" }), _jsxs("select", { id: "analytics-domain-filter", value: domainFilter, onChange: (event) => setDomainFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), domainOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-activity-filter", children: "Activity" }), _jsxs("select", { id: "analytics-activity-filter", value: activityFilter, onChange: (event) => setActivityFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), activityOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field analytics-visibility-field", children: [_jsx("label", { children: "Visibility" }), _jsxs("div", { className: "page-actions analytics-visibility-actions", children: [_jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showPrivateItems, onChange: (event) => setShowPrivateItems(event.target.checked) }), _jsx("span", { children: "Show private" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showBusinessItems, onChange: (event) => setShowBusinessItems(event.target.checked) }), _jsx("span", { children: "Show business" })] })] })] }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "analytics-search", children: "Search" }), _jsx("input", { id: "analytics-search", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "Filter by title, project, domain, activity, or comment" })] })] }), _jsx("div", { className: "analytics-chart-grid", children: _jsxs("div", { className: "sidebar-card analytics-day-flow-card", children: [_jsx("div", { className: "card-header", children: _jsxs("div", { children: [_jsx("h3", { children: "Daily timelog flow" }), _jsx("p", { className: "muted", children: "Each bar shows individual timelogs in the order they happened during the day, so switching and focused stretches are visible." })] }) }), _jsxs("div", { className: "analytics-day-flow-axis", "aria-hidden": "true", children: [_jsx("span", { children: "00" }), _jsx("span", { children: "06" }), _jsx("span", { children: "12" }), _jsx("span", { children: "18" }), _jsx("span", { children: "24" })] }), _jsx("div", { className: "analytics-day-flow", children: dailyTimeLogFlowRows.length ? (dailyTimeLogFlowRows.map((row) => (_jsxs("div", { className: "analytics-day-flow-row", children: [_jsx("span", { className: "tiny-text analytics-bar-label", children: row.date }), _jsx("div", { className: "analytics-day-flow-track", children: row.segments.map((segment) => (_jsx("button", { type: "button", className: "analytics-day-flow-segment", onClick: () => setDrilldown({ scope: "activity", label: segment.drilldownLabel }), onMouseEnter: () => setHoveredFlowSegment({
+                                } })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-project-filter", children: "Project" }), _jsxs("select", { id: "analytics-project-filter", value: projectFilter, onChange: (event) => setProjectFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), projectOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-domain-filter", children: "Domain" }), _jsxs("select", { id: "analytics-domain-filter", value: domainFilter, onChange: (event) => setDomainFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), domainOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-activity-filter", children: "Activity" }), _jsxs("select", { id: "analytics-activity-filter", value: activityFilter, onChange: (event) => setActivityFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), activityOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field analytics-visibility-field", children: [_jsx("label", { children: "Visibility" }), _jsxs("div", { className: "page-actions analytics-visibility-actions", children: [_jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showPrivateItems, onChange: (event) => setShowPrivateItems(event.target.checked) }), _jsx("span", { children: "Show private" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showBusinessItems, onChange: (event) => setShowBusinessItems(event.target.checked) }), _jsx("span", { children: "Show business" })] })] })] }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "analytics-search", children: "Search" }), _jsx("input", { id: "analytics-search", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "Filter by title, project, domain, activity, or comment" })] })] }), _jsx("div", { className: "analytics-chart-grid", children: _jsxs("div", { className: "sidebar-card analytics-day-flow-card", children: [_jsx("div", { className: "card-header", children: _jsxs("div", { children: [_jsx("h3", { children: "Daily timelog flow" }), _jsx("p", { className: "muted", children: "Each bar shows individual timelogs in the order they happened during the day, so switching and focused stretches are visible." })] }) }), _jsxs("div", { className: "analytics-day-flow-axis", "aria-hidden": "true", children: [_jsx("span", { children: "00" }), _jsx("span", { children: "06" }), _jsx("span", { children: "12" }), _jsx("span", { children: "18" }), _jsx("span", { children: "24" })] }), _jsx("div", { className: "analytics-day-flow", children: dailyTimeLogFlowRows.length ? (dailyTimeLogFlowRows.map((row) => (_jsxs("div", { className: "analytics-day-flow-row", children: [_jsx("span", { className: "tiny-text analytics-bar-label", children: row.date }), _jsx("div", { className: "analytics-day-flow-track", children: row.segments.map((segment) => (_jsx("button", { type: "button", className: `analytics-day-flow-segment${segment.isBackground ? " analytics-day-flow-segment-background" : ""}`, onClick: () => setDrilldown({ scope: "activity", label: segment.drilldownLabel }), onMouseEnter: () => setHoveredFlowSegment({
                                                 id: segment.id,
                                                 title: segment.title,
                                                 label: segment.label,
