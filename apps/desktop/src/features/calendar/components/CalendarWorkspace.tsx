@@ -301,6 +301,8 @@ export const CalendarWorkspace = ({
   onFullScreenChange,
 }: CalendarWorkspaceProps) => {
   const today = getLocalDateString();
+  const runtimeTimeZone =
+    typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown" : "unknown";
   const initialIsFullScreen = true;
   const [anchorDate, setAnchorDate] = useState(today);
   const [daysInView, setDaysInView] = useState<typeof DAYS[number]>(settings.calendarDaysInView);
@@ -500,6 +502,10 @@ export const CalendarWorkspace = ({
     () => (selectedItemId ? items.find((item) => item.id === selectedItemId) ?? null : null),
     [items, selectedItemId],
   );
+  const selectedCalendarRecord = useMemo(
+    () => (selectedItemId ? calendarItems.find((item) => item.id === selectedItemId) ?? null : null),
+    [calendarItems, selectedItemId],
+  );
   const selectedRunningLog = useMemo(
     () =>
       editorDraft ? getRunningTimeLog(timeLogsByTarget.get(`${editorDraft.targetType}:${editorDraft.targetId}`) || []) : null,
@@ -562,6 +568,30 @@ export const CalendarWorkspace = ({
     }));
   };
 
+  const getPinnedCalendarWidth = () => {
+    const layout = layoutRef.current;
+    if (!layout) return 84;
+    const timeColumn = layout.querySelector<HTMLElement>(".calendar-time-column");
+    if (timeColumn) {
+      return Math.round(timeColumn.getBoundingClientRect().width);
+    }
+    const corner = layout.querySelector<HTMLElement>(".calendar-corner");
+    return Math.round(corner?.getBoundingClientRect().width || 84);
+  };
+
+  const scrollDateColumnIntoView = (date: string) => {
+    const scroller = scrollRef.current;
+    if (!scroller) return false;
+    const column = scroller.querySelector<HTMLElement>(`.calendar-day-column[data-date="${date}"]`);
+    if (!column) return false;
+    const nextScrollLeft = Math.max(0, Math.round(column.offsetLeft - getPinnedCalendarWidth()));
+    scroller.scrollLeft = nextScrollLeft;
+    if (scrollLeft !== nextScrollLeft) {
+      setScrollLeft(nextScrollLeft);
+    }
+    return true;
+  };
+
   const clearTimeLogNotesDraft = (logId: string) => {
     setTimeLogNotesDrafts((current) => {
       if (!(logId in current)) return current;
@@ -590,17 +620,13 @@ export const CalendarWorkspace = ({
       pendingScrollDateRef.current = currentDay;
       setAnchorDate(currentDay);
       setJumpDate(currentDay);
+    } else {
+      scrollDateColumnIntoView(currentDay);
     }
     const nextScrollTop = initialCalendarScrollTop(date, slotHeight);
-    const nextScrollLeft = HORIZONTAL_BUFFER_DAYS * dayColumnWidth;
     scroller.scrollTop = nextScrollTop;
-    scroller.scrollLeft = nextScrollLeft;
     if (scrollTop !== nextScrollTop) {
       setScrollTop(nextScrollTop);
-    }
-    if (scrollLeft !== nextScrollLeft) {
-      setScrollLeft(nextScrollLeft);
-      return;
     }
   };
 
@@ -617,11 +643,7 @@ export const CalendarWorkspace = ({
 
     const pendingDate = pendingScrollDateRef.current;
     if (pendingDate) {
-      const dateIndex = visibleDates.indexOf(pendingDate);
-      if (dateIndex >= 0) {
-        const nextScrollLeft = dateIndex * dayColumnWidth;
-        scroller.scrollLeft = nextScrollLeft;
-        setScrollLeft(nextScrollLeft);
+      if (visibleDates.includes(pendingDate) && scrollDateColumnIntoView(pendingDate)) {
         pendingScrollDateRef.current = null;
       }
     }
@@ -634,7 +656,7 @@ export const CalendarWorkspace = ({
       pendingHorizontalScrollDeltaRef.current = 0;
       isExtendingHorizontalRangeRef.current = false;
     }
-  }, [dayColumnWidth, visibleDates]);
+  }, [dayColumnWidth, scrollLeft, visibleDates]);
 
   useLayoutEffect(() => {
     if (didApplyInitialViewportRef.current) return;
@@ -1018,19 +1040,19 @@ export const CalendarWorkspace = ({
       return;
     }
     if (appliedHighlightedItemIdRef.current === highlightedItemId) return;
-    const calendarItem = calendarItems.find((item) => item.id === highlightedItemId);
-    if (!calendarItem) return;
+    const highlightedItem = items.find((item) => item.id === highlightedItemId);
+    if (!highlightedItem) return;
     appliedHighlightedItemIdRef.current = highlightedItemId;
-    pendingScrollDateRef.current = calendarItem.date;
-    setAnchorDate(calendarItem.date);
-    setJumpDate(calendarItem.date);
+    pendingScrollDateRef.current = highlightedItem.date;
+    setAnchorDate(highlightedItem.date);
+    setJumpDate(highlightedItem.date);
     setSelectedItemId(highlightedItemId);
     window.requestAnimationFrame(() => {
       const scroller = scrollRef.current;
       if (!scroller) return;
-      scroller.scrollTop = Math.max(0, (calendarItem.startSlot - 12) * slotHeight);
+      scroller.scrollTop = Math.max(0, (highlightedItem.startSlot - 12) * slotHeight);
     });
-  }, [calendarItems, highlightedItemId, slotHeight]);
+  }, [highlightedItemId, items, slotHeight]);
 
   const selectCalendarItem = (itemId: string, additive: boolean) => {
     setDraftCell(null);
@@ -1653,6 +1675,47 @@ export const CalendarWorkspace = ({
                   ))}
                 </select>
               </div>
+              <details className="workspace-disclosure">
+                <summary>Calendar diagnostics</summary>
+                <div className="workspace-disclosure-body stack">
+                  <div className="ai-settings-summary-grid">
+                    <div className="diagnostics-card">
+                      <span className="model-option-label">Timezone</span>
+                      <strong>{runtimeTimeZone}</strong>
+                      <span className="tiny-text">Browser runtime timezone</span>
+                    </div>
+                    <div className="diagnostics-card">
+                      <span className="model-option-label">Calendar today</span>
+                      <strong>{today}</strong>
+                      <span className="tiny-text">Day key used by the calendar</span>
+                    </div>
+                    <div className="diagnostics-card">
+                      <span className="model-option-label">Anchor date</span>
+                      <strong>{anchorDate}</strong>
+                      <span className="tiny-text">Day aligned after the pinned time column</span>
+                    </div>
+                  </div>
+                  {selectedItem ? (
+                    <div className="ai-settings-summary-grid">
+                      <div className="diagnostics-card">
+                        <span className="model-option-label">Rendered date</span>
+                        <strong>{selectedItem.date}</strong>
+                        <span className="tiny-text">Date used in the calendar layout</span>
+                      </div>
+                      <div className="diagnostics-card">
+                        <span className="model-option-label">Inspector date</span>
+                        <strong>{editorDraft?.doOn || "-"}</strong>
+                        <span className="tiny-text">Date shown in the selected item editor</span>
+                      </div>
+                      <div className="diagnostics-card">
+                        <span className="model-option-label">Raw calendar row date</span>
+                        <strong>{selectedCalendarRecord?.date || "-"}</strong>
+                        <span className="tiny-text">Stored date on the backing calendar row</span>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </details>
             </div>
           </div>
         </details>
