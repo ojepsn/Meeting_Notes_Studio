@@ -40,6 +40,12 @@ const shiftDays = (value: string, days: number) => {
 
 const formatMinutes = (minutes: number) => formatTrackedMinutes(minutes);
 
+const timeStringToMinutes = (value: string) => {
+  const [hours, minutes] = value.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
+  return Math.max(0, Math.min(24 * 60, hours * 60 + minutes));
+};
+
 const getWeekStart = (value: string) => {
   const date = new Date(`${value}T00:00:00`);
   const mondayOffset = (date.getDay() + 6) % 7;
@@ -184,6 +190,17 @@ const buildBinaryTimelineSeries = (
 const getActivitySeriesLabel = (log: EnrichedTimeLog) =>
   log.project && log.project !== "No project" ? `${log.activityLabel} - ${log.project}` : log.activityLabel;
 
+const getTimeLogFlowLabel = (log: EnrichedTimeLog) =>
+  log.project && log.project !== "No project" ? `${log.project} / ${log.activityLabel}` : log.activityLabel;
+
+const getSeriesColor = (label: string) => {
+  let hash = 0;
+  for (let index = 0; index < label.length; index += 1) {
+    hash = (hash * 31 + label.charCodeAt(index)) >>> 0;
+  }
+  return ANALYTICS_SERIES_COLORS[hash % ANALYTICS_SERIES_COLORS.length];
+};
+
 type DrilldownState =
   | {
       scope: "activity";
@@ -197,6 +214,17 @@ type DrilldownState =
       scope: "baseline";
       label: "Baseline work" | "Explicit timelogs";
     };
+
+type HoveredFlowSegment = {
+  id: string;
+  title: string;
+  label: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  notes: string;
+  effectiveMinutes: number;
+};
 
 export const AnalyticsWorkspace = ({
   todos,
@@ -220,6 +248,7 @@ export const AnalyticsWorkspace = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [chartDisplayMode, setChartDisplayMode] = useState<ChartDisplayMode>("hours");
   const [drilldown, setDrilldown] = useState<DrilldownState | null>(null);
+  const [hoveredFlowSegment, setHoveredFlowSegment] = useState<HoveredFlowSegment | null>(null);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -399,6 +428,96 @@ export const AnalyticsWorkspace = ({
     () => buildCategorizedTimelineSeries(filteredLogs, timelineGranularity, getActivitySeriesLabel),
     [filteredLogs, timelineGranularity],
   );
+
+  const dailyTimeLogFlowRows = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        date: string;
+        totalMinutes: number;
+        segments: Array<{
+          id: string;
+          label: string;
+          drilldownLabel: string;
+          title: string;
+          date: string;
+          startTime: string;
+          endTime: string;
+          notes: string;
+          startMinutes: number;
+          endMinutes: number;
+          effectiveMinutes: number;
+          color: string;
+        }>;
+      }
+    >();
+
+    [...filteredLogs]
+      .sort(
+        (left, right) =>
+          left.date.localeCompare(right.date) ||
+          left.startTime.localeCompare(right.startTime) ||
+          left.title.localeCompare(right.title),
+      )
+      .forEach((log) => {
+        const label = getTimeLogFlowLabel(log);
+        const drilldownLabel = getActivitySeriesLabel(log);
+        const startMinutes = timeStringToMinutes(log.startTime);
+        const measuredEndMinutes = timeStringToMinutes(log.endTime);
+        const computedEndMinutes = startMinutes + Math.max(1, log.effectiveMinutes);
+        const endMinutes = Math.max(
+          startMinutes + 1,
+          Math.min(24 * 60, measuredEndMinutes > startMinutes ? measuredEndMinutes : computedEndMinutes),
+        );
+        const row = grouped.get(log.date) || {
+          date: log.date,
+          totalMinutes: 0,
+          segments: [],
+        };
+        row.totalMinutes += log.effectiveMinutes;
+        row.segments.push({
+          id: log.id,
+          label,
+          drilldownLabel,
+          title: `${log.startTime}-${log.endTime === log.startTime ? "(running)" : log.endTime} · ${log.title} · ${label} · ${formatMinutes(log.effectiveMinutes)}`,
+          date: log.date,
+          startTime: log.startTime,
+          endTime: log.endTime,
+          notes: log.notes,
+          startMinutes,
+          endMinutes,
+          effectiveMinutes: log.effectiveMinutes,
+          color: getSeriesColor(label),
+        });
+        grouped.set(log.date, row);
+      });
+
+    return Array.from(grouped.values())
+      .map((row) => ({
+        ...row,
+        segments: row.segments.sort(
+          (left, right) =>
+            left.startMinutes - right.startMinutes ||
+            left.endMinutes - right.endMinutes ||
+            left.label.localeCompare(right.label),
+        ),
+      }))
+      .sort((left, right) => right.date.localeCompare(left.date));
+  }, [filteredLogs]);
+
+  const dailyTimeLogFlowLegend = useMemo(() => {
+    const grouped = new Map<string, { minutes: number; drilldownLabel: string }>();
+    filteredLogs.forEach((log) => {
+      const label = getTimeLogFlowLabel(log);
+      const current = grouped.get(label) || { minutes: 0, drilldownLabel: getActivitySeriesLabel(log) };
+      current.minutes += log.effectiveMinutes;
+      grouped.set(label, current);
+    });
+    return Array.from(grouped.entries())
+      .map(([label, entry]) => ({ label, minutes: entry.minutes, drilldownLabel: entry.drilldownLabel, color: getSeriesColor(label) }))
+      .sort((left, right) => right.minutes - left.minutes || left.label.localeCompare(right.label))
+      .slice(0, 10);
+  }, [filteredLogs]);
 
   const projectTimelineSeries = useMemo(
     () => buildCategorizedTimelineSeries(filteredLogs, timelineGranularity, (log) => log.project || "No project"),
@@ -605,6 +724,106 @@ export const AnalyticsWorkspace = ({
             placeholder="Filter by title, project, domain, activity, or comment"
           />
         </div>
+      </div>
+
+      <div className="analytics-chart-grid">
+        <div className="sidebar-card analytics-day-flow-card">
+          <div className="card-header">
+            <div>
+              <h3>Daily timelog flow</h3>
+              <p className="muted">Each bar shows individual timelogs in the order they happened during the day, so switching and focused stretches are visible.</p>
+            </div>
+          </div>
+          <div className="analytics-day-flow-axis" aria-hidden="true">
+            <span>00</span>
+            <span>06</span>
+            <span>12</span>
+            <span>18</span>
+            <span>24</span>
+          </div>
+          <div className="analytics-day-flow">
+            {dailyTimeLogFlowRows.length ? (
+              dailyTimeLogFlowRows.map((row) => (
+                <div key={row.date} className="analytics-day-flow-row">
+                  <span className="tiny-text analytics-bar-label">{row.date}</span>
+                  <div className="analytics-day-flow-track">
+                    {row.segments.map((segment) => (
+                      <button
+                        key={segment.id}
+                        type="button"
+                        className="analytics-day-flow-segment"
+                        onClick={() => setDrilldown({ scope: "activity", label: segment.drilldownLabel })}
+                        onMouseEnter={() =>
+                          setHoveredFlowSegment({
+                            id: segment.id,
+                            title: segment.title,
+                            label: segment.label,
+                            date: segment.date,
+                            startTime: segment.startTime,
+                            endTime: segment.endTime,
+                            notes: segment.notes,
+                            effectiveMinutes: segment.effectiveMinutes,
+                          })
+                        }
+                        onMouseLeave={() => setHoveredFlowSegment((current) => (current?.id === segment.id ? null : current))}
+                        onFocus={() =>
+                          setHoveredFlowSegment({
+                            id: segment.id,
+                            title: segment.title,
+                            label: segment.label,
+                            date: segment.date,
+                            startTime: segment.startTime,
+                            endTime: segment.endTime,
+                            notes: segment.notes,
+                            effectiveMinutes: segment.effectiveMinutes,
+                          })
+                        }
+                        onBlur={() => setHoveredFlowSegment((current) => (current?.id === segment.id ? null : current))}
+                        aria-label={segment.title}
+                        style={{
+                          left: `${(segment.startMinutes / (24 * 60)) * 100}%`,
+                          width: `${Math.max(0.35, ((segment.endMinutes - segment.startMinutes) / (24 * 60)) * 100)}%`,
+                          background: segment.color,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <strong>{formatMinutes(row.totalMinutes)}</strong>
+                </div>
+              ))
+            ) : (
+              <p className="muted">No timelog flow matches the current filters.</p>
+            )}
+          </div>
+          {hoveredFlowSegment ? (
+            <div className="analytics-flow-hover-card">
+              <strong>{hoveredFlowSegment.title}</strong>
+              <span className="tiny-text">
+                {hoveredFlowSegment.date} · {hoveredFlowSegment.startTime}-{hoveredFlowSegment.endTime === hoveredFlowSegment.startTime ? "running" : hoveredFlowSegment.endTime}
+              </span>
+              <span className="tiny-text">
+                {hoveredFlowSegment.label} · {formatMinutes(hoveredFlowSegment.effectiveMinutes)}
+              </span>
+              {hoveredFlowSegment.notes ? <p className="tiny-text">{hoveredFlowSegment.notes}</p> : <p className="tiny-text muted">No comment on this timelog.</p>}
+            </div>
+          ) : null}
+          {dailyTimeLogFlowLegend.length ? (
+            <div className="analytics-series-legend">
+              {dailyTimeLogFlowLegend.map((entry) => (
+                <button
+                  key={entry.label}
+                  type="button"
+                  className={`status-chip analytics-series-chip${drilldown?.scope === "activity" && drilldown.label === entry.drilldownLabel ? " analytics-series-chip-active" : ""}`}
+                  onClick={() => setDrilldown({ scope: "activity", label: entry.drilldownLabel })}
+                >
+                  <span className="analytics-series-chip-swatch" style={{ background: entry.color }} />
+                  {entry.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
       </div>
 
       <div className="analytics-chart-grid">
