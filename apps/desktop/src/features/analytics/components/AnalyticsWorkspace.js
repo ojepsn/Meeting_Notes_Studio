@@ -9,6 +9,7 @@ const shiftDays = (value, days) => {
     return formatDateInput(date);
 };
 const formatMinutes = (minutes) => formatTrackedMinutes(minutes);
+const formatHourTick = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}`;
 const timeStringToMinutes = (value) => {
     const [hours, minutes] = value.split(":").map(Number);
     if (!Number.isFinite(hours) || !Number.isFinite(minutes))
@@ -65,6 +66,26 @@ const ANALYTICS_SERIES_COLORS = [
     "#1d9db4",
 ];
 const BACKGROUND_FLOW_COLOR = "#8a96aa";
+const DAY_FLOW_WINDOWS = {
+    "full-day": {
+        label: "0-24h",
+        startMinutes: 0,
+        endMinutes: 24 * 60,
+        tickMinutes: [0, 6 * 60, 12 * 60, 18 * 60, 24 * 60],
+    },
+    "extended-day": {
+        label: "05:00-22:00",
+        startMinutes: 5 * 60,
+        endMinutes: 22 * 60,
+        tickMinutes: [5 * 60, 9 * 60, 13 * 60, 17 * 60, 22 * 60],
+    },
+    "work-day": {
+        label: "07:00-18:00",
+        startMinutes: 7 * 60,
+        endMinutes: 18 * 60,
+        tickMinutes: [7 * 60, 10 * 60, 13 * 60, 16 * 60, 18 * 60],
+    },
+};
 const buildCategorizedTimelineSeries = (logs, granularity, getLabel, limit = 5) => {
     const totalByLabel = new Map();
     logs.forEach((log) => {
@@ -133,7 +154,13 @@ const getSeriesColor = (label) => {
     }
     return ANALYTICS_SERIES_COLORS[hash % ANALYTICS_SERIES_COLORS.length];
 };
-export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs, settings, onOpenTodoDetail, onOpenActivityDetail, }) => {
+const calculateDurationMinutes = (date, startTime, endTime) => {
+    const start = new Date(`${date}T${startTime || "00:00"}:00`);
+    const end = new Date(`${date}T${endTime || startTime || "00:00"}:00`);
+    const diff = Math.round((end.getTime() - start.getTime()) / 60000);
+    return Number.isFinite(diff) ? Math.max(0, diff) : 0;
+};
+export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs, settings, onOpenTodoDetail, onOpenActivityDetail, onSaveTimeLog, onSaveTodo, onSaveActivity, }) => {
     const defaultRange = buildRangeFromPreset("90d");
     const [timelineGranularity, setTimelineGranularity] = useState("daily");
     const [rangePreset, setRangePreset] = useState("90d");
@@ -146,8 +173,11 @@ export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs,
     const [showBusinessItems, setShowBusinessItems] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [chartDisplayMode, setChartDisplayMode] = useState("hours");
+    const [dayFlowWindowMode, setDayFlowWindowMode] = useState("full-day");
     const [drilldown, setDrilldown] = useState(null);
     const [hoveredFlowSegment, setHoveredFlowSegment] = useState(null);
+    const [selectedTimeLogId, setSelectedTimeLogId] = useState(null);
+    const [timeLogDrafts, setTimeLogDrafts] = useState({});
     const [now, setNow] = useState(() => new Date());
     useEffect(() => {
         const hasRunningLog = timeLogs.some((entry) => isTimeLogRunning(entry));
@@ -159,6 +189,33 @@ export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs,
     const todoLookup = useMemo(() => Object.fromEntries(todos.map((todo) => [todo.id, todo])), [todos]);
     const archivedTaskLookup = useMemo(() => Object.fromEntries(archivedTasks.map((task) => [task.id, task])), [archivedTasks]);
     const activityLookup = useMemo(() => Object.fromEntries(activities.map((activity) => [activity.id, activity])), [activities]);
+    const getTimeLogDraft = (log) => timeLogDrafts[log.id] ?? {
+        title: log.title,
+        date: log.date,
+        startTime: log.startTime,
+        endTime: log.endTime,
+        notes: log.notes,
+        project: log.project === "No project" ? "" : log.project,
+        activity: log.activityLabel === "No activity" ? "" : log.activityLabel,
+    };
+    const updateTimeLogDraft = (log, updates) => {
+        setTimeLogDrafts((current) => ({
+            ...current,
+            [log.id]: {
+                ...getTimeLogDraft(log),
+                ...updates,
+            },
+        }));
+    };
+    const clearTimeLogDraft = (logId) => {
+        setTimeLogDrafts((current) => {
+            if (!(logId in current))
+                return current;
+            const next = { ...current };
+            delete next[logId];
+            return next;
+        });
+    };
     const enrichedLogs = useMemo(() => timeLogs.map((log) => {
         if (log.targetType === "todo") {
             const todo = todoLookup[log.targetId];
@@ -228,6 +285,12 @@ export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs,
         }
         return true;
     }), [activityFilter, domainFilter, enrichedLogs, fromDate, projectFilter, searchQuery, showBusinessItems, showPrivateItems, toDate]);
+    const selectedTimeLog = useMemo(() => (selectedTimeLogId ? enrichedLogs.find((log) => log.id === selectedTimeLogId) ?? null : null), [enrichedLogs, selectedTimeLogId]);
+    useEffect(() => {
+        if (selectedTimeLogId && !selectedTimeLog) {
+            setSelectedTimeLogId(null);
+        }
+    }, [selectedTimeLog, selectedTimeLogId]);
     const totalMinutes = useMemo(() => filteredLogs.reduce((sum, log) => sum + log.effectiveMinutes, 0), [filteredLogs]);
     const activeDays = useMemo(() => new Set(filteredLogs.map((log) => log.date)).size, [filteredLogs]);
     const averagePerActiveDay = activeDays ? Math.round(totalMinutes / activeDays) : 0;
@@ -342,6 +405,15 @@ export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs,
             .sort((left, right) => right.minutes - left.minutes || left.label.localeCompare(right.label))
             .slice(0, 10);
     }, [filteredLogs]);
+    const dayFlowWindow = DAY_FLOW_WINDOWS[dayFlowWindowMode];
+    const dayFlowWindowSpanMinutes = Math.max(1, dayFlowWindow.endMinutes - dayFlowWindow.startMinutes);
+    const dayFlowTickPositions = useMemo(() => dayFlowWindow.tickMinutes.map((tickMinutes) => ({
+        tickMinutes,
+        label: formatHourTick(tickMinutes),
+        leftPercent: ((tickMinutes - dayFlowWindow.startMinutes) / dayFlowWindowSpanMinutes) * 100,
+    })), [dayFlowWindow, dayFlowWindowSpanMinutes]);
+    const selectedTimeLogDraft = selectedTimeLog ? getTimeLogDraft(selectedTimeLog) : null;
+    const selectedTimeLogCanEditSourceFields = Boolean(selectedTimeLog && !selectedTimeLog.isArchivedTarget && !selectedTimeLog.isBaselineWork);
     const projectTimelineSeries = useMemo(() => buildCategorizedTimelineSeries(filteredLogs, timelineGranularity, (log) => log.project || "No project"), [filteredLogs, timelineGranularity]);
     const privacyTimelineSeries = useMemo(() => buildBinaryTimelineSeries(filteredLogs, timelineGranularity, ["Private", "Business"], (log) => log.isPrivate), [filteredLogs, timelineGranularity]);
     const baselineTimelineSeries = useMemo(() => buildBinaryTimelineSeries(filteredLogs, timelineGranularity, ["Baseline work", "Explicit timelogs"], (log) => log.isBaselineWork), [filteredLogs, timelineGranularity]);
@@ -377,6 +449,85 @@ export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs,
             setDrilldown(null);
         }
     }, [activityTimelineSeries.labels, baselineTimelineSeries.labels, drilldown, privacyTimelineSeries.labels]);
+    const commitTimeLogDraft = (log) => {
+        const draft = timeLogDrafts[log.id];
+        if (!draft)
+            return;
+        const nextTitle = draft.title.trim() || log.title;
+        const nextDate = draft.date || log.date;
+        const nextStartTime = draft.startTime || log.startTime;
+        const draftEndTime = draft.endTime || log.endTime;
+        const running = log.startTime === log.endTime;
+        const keepRunning = running &&
+            draftEndTime === log.endTime &&
+            (nextDate !== log.date || nextStartTime !== log.startTime);
+        const nextEndTime = keepRunning ? nextStartTime : draftEndTime;
+        const nextNotes = draft.notes;
+        const nextProject = draft.project.trim();
+        const nextActivity = draft.activity.trim();
+        const canEditSourceFields = !log.isArchivedTarget && !log.isBaselineWork;
+        const changed = nextTitle !== log.title ||
+            nextDate !== log.date ||
+            nextStartTime !== log.startTime ||
+            nextEndTime !== log.endTime ||
+            nextNotes !== log.notes ||
+            nextProject !== (log.project === "No project" ? "" : log.project) ||
+            nextActivity !== (log.activityLabel === "No activity" ? "" : log.activityLabel);
+        clearTimeLogDraft(log.id);
+        if (!changed)
+            return;
+        if (canEditSourceFields) {
+            if (log.targetType === "todo") {
+                const todo = todoLookup[log.targetId];
+                if (todo) {
+                    const linkedActivity = todo.activityId ? activityLookup[todo.activityId] : null;
+                    const keepLinkedActivity = linkedActivity &&
+                        nextActivity === linkedActivity.description &&
+                        nextProject === linkedActivity.project;
+                    onSaveTodo({
+                        ...todo,
+                        description: nextTitle,
+                        project: nextProject,
+                        activity: nextActivity,
+                        activityId: keepLinkedActivity ? todo.activityId : "",
+                    });
+                }
+            }
+            else {
+                const activity = activityLookup[log.targetId];
+                if (activity) {
+                    onSaveActivity({
+                        ...activity,
+                        description: nextTitle,
+                        project: nextProject,
+                        activity: nextActivity,
+                    });
+                }
+            }
+        }
+        onSaveTimeLog({
+            ...log,
+            date: nextDate,
+            startTime: nextStartTime,
+            endTime: nextEndTime,
+            durationMinutes: calculateDurationMinutes(nextDate, nextStartTime, nextEndTime),
+            notes: log.isBaselineWork ? log.notes : nextNotes,
+            updatedAt: new Date().toISOString(),
+        });
+    };
+    const handleTimeLogDraftKeyDown = (event, log) => {
+        if (event.key === "Enter" && !(event.currentTarget instanceof HTMLTextAreaElement && event.shiftKey)) {
+            event.preventDefault();
+            commitTimeLogDraft(log);
+            event.currentTarget.blur();
+            return;
+        }
+        if (event.key === "Escape") {
+            event.preventDefault();
+            clearTimeLogDraft(log.id);
+            event.currentTarget.blur();
+        }
+    };
     const busiestBucket = timelineBuckets.length
         ? timelineBuckets.reduce((best, entry) => (entry.minutes > best.minutes ? entry : best), timelineBuckets[0])
         : null;
@@ -396,29 +547,41 @@ export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs,
                                 } })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-to-date", children: "To" }), _jsx(DateInput, { id: "analytics-to-date", value: toDate, onChange: (event) => {
                                     setRangePreset("custom");
                                     setToDate(event.target.value);
-                                } })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-project-filter", children: "Project" }), _jsxs("select", { id: "analytics-project-filter", value: projectFilter, onChange: (event) => setProjectFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), projectOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-domain-filter", children: "Domain" }), _jsxs("select", { id: "analytics-domain-filter", value: domainFilter, onChange: (event) => setDomainFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), domainOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-activity-filter", children: "Activity" }), _jsxs("select", { id: "analytics-activity-filter", value: activityFilter, onChange: (event) => setActivityFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), activityOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field analytics-visibility-field", children: [_jsx("label", { children: "Visibility" }), _jsxs("div", { className: "page-actions analytics-visibility-actions", children: [_jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showPrivateItems, onChange: (event) => setShowPrivateItems(event.target.checked) }), _jsx("span", { children: "Show private" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showBusinessItems, onChange: (event) => setShowBusinessItems(event.target.checked) }), _jsx("span", { children: "Show business" })] })] })] }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "analytics-search", children: "Search" }), _jsx("input", { id: "analytics-search", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "Filter by title, project, domain, activity, or comment" })] })] }), _jsx("div", { className: "analytics-chart-grid", children: _jsxs("div", { className: "sidebar-card analytics-day-flow-card", children: [_jsx("div", { className: "card-header", children: _jsxs("div", { children: [_jsx("h3", { children: "Daily timelog flow" }), _jsx("p", { className: "muted", children: "Each bar shows individual timelogs in the order they happened during the day, so switching and focused stretches are visible." })] }) }), _jsxs("div", { className: "analytics-day-flow-axis", "aria-hidden": "true", children: [_jsx("span", { children: "00" }), _jsx("span", { children: "06" }), _jsx("span", { children: "12" }), _jsx("span", { children: "18" }), _jsx("span", { children: "24" })] }), _jsx("div", { className: "analytics-day-flow", children: dailyTimeLogFlowRows.length ? (dailyTimeLogFlowRows.map((row) => (_jsxs("div", { className: "analytics-day-flow-row", children: [_jsx("span", { className: "tiny-text analytics-bar-label", children: row.date }), _jsx("div", { className: "analytics-day-flow-track", children: row.segments.map((segment) => (_jsx("button", { type: "button", className: `analytics-day-flow-segment${segment.isBackground ? " analytics-day-flow-segment-background" : ""}`, onClick: () => setDrilldown({ scope: "activity", label: segment.drilldownLabel }), onMouseEnter: () => setHoveredFlowSegment({
-                                                id: segment.id,
-                                                title: segment.title,
-                                                label: segment.label,
-                                                date: segment.date,
-                                                startTime: segment.startTime,
-                                                endTime: segment.endTime,
-                                                notes: segment.notes,
-                                                effectiveMinutes: segment.effectiveMinutes,
-                                            }), onMouseLeave: () => setHoveredFlowSegment((current) => (current?.id === segment.id ? null : current)), onFocus: () => setHoveredFlowSegment({
-                                                id: segment.id,
-                                                title: segment.title,
-                                                label: segment.label,
-                                                date: segment.date,
-                                                startTime: segment.startTime,
-                                                endTime: segment.endTime,
-                                                notes: segment.notes,
-                                                effectiveMinutes: segment.effectiveMinutes,
-                                            }), onBlur: () => setHoveredFlowSegment((current) => (current?.id === segment.id ? null : current)), "aria-label": segment.title, style: {
-                                                left: `${(segment.startMinutes / (24 * 60)) * 100}%`,
-                                                width: `${Math.max(0.35, ((segment.endMinutes - segment.startMinutes) / (24 * 60)) * 100)}%`,
-                                                background: segment.color,
-                                            } }, segment.id))) }), _jsx("strong", { children: formatMinutes(row.totalMinutes) })] }, row.date)))) : (_jsx("p", { className: "muted", children: "No timelog flow matches the current filters." })) }), hoveredFlowSegment ? (_jsxs("div", { className: "analytics-flow-hover-card", children: [_jsx("strong", { children: hoveredFlowSegment.title }), _jsxs("span", { className: "tiny-text", children: [hoveredFlowSegment.date, " \u00B7 ", hoveredFlowSegment.startTime, "-", hoveredFlowSegment.endTime === hoveredFlowSegment.startTime ? "running" : hoveredFlowSegment.endTime] }), _jsxs("span", { className: "tiny-text", children: [hoveredFlowSegment.label, " \u00B7 ", formatMinutes(hoveredFlowSegment.effectiveMinutes)] }), hoveredFlowSegment.notes ? _jsx("p", { className: "tiny-text", children: hoveredFlowSegment.notes }) : _jsx("p", { className: "tiny-text muted", children: "No comment on this timelog." })] })) : null, dailyTimeLogFlowLegend.length ? (_jsx("div", { className: "analytics-series-legend", children: dailyTimeLogFlowLegend.map((entry) => (_jsxs("button", { type: "button", className: `status-chip analytics-series-chip${drilldown?.scope === "activity" && drilldown.label === entry.drilldownLabel ? " analytics-series-chip-active" : ""}`, onClick: () => setDrilldown({ scope: "activity", label: entry.drilldownLabel }), children: [_jsx("span", { className: "analytics-series-chip-swatch", style: { background: entry.color } }), entry.label] }, entry.label))) })) : null] }) }), _jsxs("div", { className: "analytics-chart-grid", children: [_jsxs("div", { className: "sidebar-card", children: [_jsx("div", { className: "card-header", children: _jsxs("div", { children: [_jsx("h3", { children: "Activity time over time" }), _jsxs("p", { className: "muted", children: ["Tracked hours summarized by ", timelineGranularity.slice(0, -2), " and split by the top activities in view."] })] }) }), _jsx("div", { className: "analytics-stacked-timeline", children: activityTimelineSeries.buckets.length ? (activityTimelineSeries.buckets.map((bucket) => (_jsxs("div", { className: "analytics-stacked-timeline-row", children: [_jsx("span", { className: "tiny-text analytics-bar-label", children: bucket.label }), _jsx("div", { className: "analytics-stacked-timeline-track", style: chartDisplayMode === "hours"
+                                } })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-project-filter", children: "Project" }), _jsxs("select", { id: "analytics-project-filter", value: projectFilter, onChange: (event) => setProjectFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), projectOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-domain-filter", children: "Domain" }), _jsxs("select", { id: "analytics-domain-filter", value: domainFilter, onChange: (event) => setDomainFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), domainOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-activity-filter", children: "Activity" }), _jsxs("select", { id: "analytics-activity-filter", value: activityFilter, onChange: (event) => setActivityFilter(event.target.value), children: [_jsx("option", { value: "all", children: "All" }), activityOptions.map((option) => (_jsx("option", { value: option, children: option }, option)))] })] }), _jsxs("div", { className: "field analytics-visibility-field", children: [_jsx("label", { children: "Visibility" }), _jsxs("div", { className: "page-actions analytics-visibility-actions", children: [_jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showPrivateItems, onChange: (event) => setShowPrivateItems(event.target.checked) }), _jsx("span", { children: "Show private" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showBusinessItems, onChange: (event) => setShowBusinessItems(event.target.checked) }), _jsx("span", { children: "Show business" })] })] })] }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "analytics-search", children: "Search" }), _jsx("input", { id: "analytics-search", value: searchQuery, onChange: (event) => setSearchQuery(event.target.value), placeholder: "Filter by title, project, domain, activity, or comment" })] })] }), _jsx("div", { className: "analytics-chart-grid", children: _jsxs("div", { className: "sidebar-card analytics-day-flow-card", children: [_jsxs("div", { className: "card-header", children: [_jsxs("div", { children: [_jsx("h3", { children: "Daily timelog flow" }), _jsx("p", { className: "muted", children: "Each bar shows individual timelogs in the order they happened during the day, so switching and focused stretches are visible." })] }), _jsx("div", { className: "capture-density-toggle analytics-day-flow-window-toggle", children: Object.entries(DAY_FLOW_WINDOWS).map(([mode, config]) => (_jsx("button", { className: "segment-button", "data-active": dayFlowWindowMode === mode, type: "button", onClick: () => setDayFlowWindowMode(mode), children: config.label }, mode))) })] }), _jsxs("div", { className: "analytics-day-flow-axis", "aria-hidden": "true", children: [_jsx("span", {}), _jsx("div", { className: "analytics-day-flow-axis-track", children: dayFlowTickPositions.map((tick, index) => (_jsx("span", { className: "analytics-day-flow-axis-tick", "data-edge": index === 0 ? "start" : index === dayFlowTickPositions.length - 1 ? "end" : "middle", style: { left: `${tick.leftPercent}%` }, children: tick.label }, tick.tickMinutes))) }), _jsx("span", {})] }), _jsx("div", { className: "analytics-day-flow", children: dailyTimeLogFlowRows.length ? (dailyTimeLogFlowRows.map((row) => (_jsxs("div", { className: "analytics-day-flow-row", children: [_jsx("span", { className: "tiny-text analytics-bar-label", children: row.date }), _jsxs("div", { className: "analytics-day-flow-track", children: [_jsx("div", { className: "analytics-day-flow-track-grid", "aria-hidden": "true", children: dayFlowTickPositions.map((tick, index) => (_jsx("span", { className: "analytics-day-flow-track-grid-line", "data-edge": index === 0 ? "start" : index === dayFlowTickPositions.length - 1 ? "end" : "middle", style: { left: `${tick.leftPercent}%` } }, tick.tickMinutes))) }), row.segments
+                                                .filter((segment) => segment.endMinutes > dayFlowWindow.startMinutes && segment.startMinutes < dayFlowWindow.endMinutes)
+                                                .map((segment) => {
+                                                const clippedStart = Math.max(dayFlowWindow.startMinutes, segment.startMinutes);
+                                                const clippedEnd = Math.min(dayFlowWindow.endMinutes, segment.endMinutes);
+                                                return (_jsx("button", { type: "button", className: `analytics-day-flow-segment${segment.isBackground ? " analytics-day-flow-segment-background" : ""}${selectedTimeLogId === segment.id ? " analytics-day-flow-segment-active" : ""}`, onClick: () => {
+                                                        setDrilldown({ scope: "activity", label: segment.drilldownLabel });
+                                                        setSelectedTimeLogId(segment.id);
+                                                    }, onMouseEnter: () => setHoveredFlowSegment({
+                                                        id: segment.id,
+                                                        title: segment.title,
+                                                        label: segment.label,
+                                                        date: segment.date,
+                                                        startTime: segment.startTime,
+                                                        endTime: segment.endTime,
+                                                        notes: segment.notes,
+                                                        effectiveMinutes: segment.effectiveMinutes,
+                                                    }), onMouseLeave: () => setHoveredFlowSegment((current) => (current?.id === segment.id ? null : current)), onFocus: () => setHoveredFlowSegment({
+                                                        id: segment.id,
+                                                        title: segment.title,
+                                                        label: segment.label,
+                                                        date: segment.date,
+                                                        startTime: segment.startTime,
+                                                        endTime: segment.endTime,
+                                                        notes: segment.notes,
+                                                        effectiveMinutes: segment.effectiveMinutes,
+                                                    }), onBlur: () => setHoveredFlowSegment((current) => (current?.id === segment.id ? null : current)), "aria-label": segment.title, style: {
+                                                        left: `${((clippedStart - dayFlowWindow.startMinutes) / dayFlowWindowSpanMinutes) * 100}%`,
+                                                        width: `${Math.max(0.35, ((clippedEnd - clippedStart) / dayFlowWindowSpanMinutes) * 100)}%`,
+                                                        background: segment.color,
+                                                    } }, segment.id));
+                                            })] }), _jsx("strong", { children: formatMinutes(row.totalMinutes) })] }, row.date)))) : (_jsx("p", { className: "muted", children: "No timelog flow matches the current filters." })) }), hoveredFlowSegment ? (_jsxs("div", { className: "analytics-flow-hover-card", children: [_jsx("strong", { children: hoveredFlowSegment.title }), _jsxs("span", { className: "tiny-text", children: [hoveredFlowSegment.date, " \u00B7 ", hoveredFlowSegment.startTime, "-", hoveredFlowSegment.endTime === hoveredFlowSegment.startTime ? "running" : hoveredFlowSegment.endTime] }), _jsxs("span", { className: "tiny-text", children: [hoveredFlowSegment.label, " \u00B7 ", formatMinutes(hoveredFlowSegment.effectiveMinutes)] }), hoveredFlowSegment.notes ? _jsx("p", { className: "tiny-text", children: hoveredFlowSegment.notes }) : _jsx("p", { className: "tiny-text muted", children: "No comment on this timelog." })] })) : null, dailyTimeLogFlowLegend.length ? (_jsx("div", { className: "analytics-series-legend", children: dailyTimeLogFlowLegend.map((entry) => (_jsxs("button", { type: "button", className: `status-chip analytics-series-chip${drilldown?.scope === "activity" && drilldown.label === entry.drilldownLabel ? " analytics-series-chip-active" : ""}`, onClick: () => setDrilldown({ scope: "activity", label: entry.drilldownLabel }), children: [_jsx("span", { className: "analytics-series-chip-swatch", style: { background: entry.color } }), entry.label] }, entry.label))) })) : null] }) }), selectedTimeLog && selectedTimeLogDraft ? (_jsxs("div", { className: "sidebar-card analytics-timelog-editor-card", children: [_jsxs("div", { className: "card-header", children: [_jsxs("div", { children: [_jsx("h3", { children: "Selected timelog" }), _jsxs("p", { className: "muted", children: [selectedTimeLog.date, " \u00B7 ", selectedTimeLog.startTime, "-", selectedTimeLog.endTime === selectedTimeLog.startTime ? "running" : selectedTimeLog.endTime, " \u00B7 ", selectedTimeLog.workKind] })] }), _jsxs("div", { className: "page-actions", children: [_jsx("span", { className: "status-chip", children: formatMinutes(selectedTimeLog.effectiveMinutes) }), _jsx("button", { className: "small-button", type: "button", onClick: () => {
+                                            clearTimeLogDraft(selectedTimeLog.id);
+                                            setSelectedTimeLogId(null);
+                                        }, children: "Close" })] })] }), _jsxs("div", { className: "time-filter-grid-compact analytics-timelog-editor-grid", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-selected-timelog-title", children: "Title" }), _jsx("input", { id: "analytics-selected-timelog-title", value: selectedTimeLogDraft.title, disabled: !selectedTimeLogCanEditSourceFields, onChange: (event) => updateTimeLogDraft(selectedTimeLog, { title: event.target.value }), onKeyDown: (event) => handleTimeLogDraftKeyDown(event, selectedTimeLog) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-selected-timelog-project", children: "Project" }), _jsx("input", { id: "analytics-selected-timelog-project", list: "analytics-project-suggestions", value: selectedTimeLogDraft.project, disabled: !selectedTimeLogCanEditSourceFields, onChange: (event) => updateTimeLogDraft(selectedTimeLog, { project: event.target.value }), onKeyDown: (event) => handleTimeLogDraftKeyDown(event, selectedTimeLog) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-selected-timelog-activity", children: "Activity" }), _jsx("input", { id: "analytics-selected-timelog-activity", list: "analytics-activity-suggestions", value: selectedTimeLogDraft.activity, disabled: !selectedTimeLogCanEditSourceFields, onChange: (event) => updateTimeLogDraft(selectedTimeLog, { activity: event.target.value }), onKeyDown: (event) => handleTimeLogDraftKeyDown(event, selectedTimeLog) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-selected-timelog-date", children: "Date" }), _jsx(DateInput, { id: "analytics-selected-timelog-date", value: selectedTimeLogDraft.date, disabled: selectedTimeLog.isBaselineWork, onChange: (event) => updateTimeLogDraft(selectedTimeLog, { date: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-selected-timelog-start", children: "Start" }), _jsx("input", { id: "analytics-selected-timelog-start", type: "time", value: selectedTimeLogDraft.startTime, onChange: (event) => updateTimeLogDraft(selectedTimeLog, { startTime: event.target.value }), onKeyDown: (event) => handleTimeLogDraftKeyDown(event, selectedTimeLog) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "analytics-selected-timelog-end", children: "End" }), _jsx("input", { id: "analytics-selected-timelog-end", type: "time", value: selectedTimeLogDraft.endTime, onChange: (event) => updateTimeLogDraft(selectedTimeLog, { endTime: event.target.value }), onKeyDown: (event) => handleTimeLogDraftKeyDown(event, selectedTimeLog) })] }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "analytics-selected-timelog-notes", children: "Comment" }), _jsx("textarea", { id: "analytics-selected-timelog-notes", rows: 3, value: selectedTimeLogDraft.notes, disabled: selectedTimeLog.isBaselineWork, onChange: (event) => updateTimeLogDraft(selectedTimeLog, { notes: event.target.value }), onKeyDown: (event) => handleTimeLogDraftKeyDown(event, selectedTimeLog), placeholder: selectedTimeLog.isBaselineWork ? "Background logs keep their comment locked." : "Optional context" })] })] }), _jsxs("div", { className: "page-actions analytics-timelog-editor-actions", children: [_jsx("span", { className: "tiny-text muted", children: selectedTimeLogCanEditSourceFields ? "Title, project, and activity sync back to the source item." : selectedTimeLog.isBaselineWork ? "Background logs keep source fields locked; timing stays editable." : "Source fields are locked for archived items, but the timelog timing and comment can still be updated." }), _jsx("button", { className: "small-button", type: "button", onClick: () => clearTimeLogDraft(selectedTimeLog.id), children: "Reset" }), _jsx("button", { className: "primary-button", type: "button", onClick: () => commitTimeLogDraft(selectedTimeLog), children: "Save timelog" })] }), _jsx("datalist", { id: "analytics-project-suggestions", children: projectOptions.filter((option) => option !== "No project").map((option) => (_jsx("option", { value: option }, option))) }), _jsx("datalist", { id: "analytics-activity-suggestions", children: activityOptions.filter((option) => option !== "No activity").map((option) => (_jsx("option", { value: option }, option))) })] })) : null, _jsxs("div", { className: "analytics-chart-grid", children: [_jsxs("div", { className: "sidebar-card", children: [_jsx("div", { className: "card-header", children: _jsxs("div", { children: [_jsx("h3", { children: "Activity time over time" }), _jsxs("p", { className: "muted", children: ["Tracked hours summarized by ", timelineGranularity.slice(0, -2), " and split by the top activities in view."] })] }) }), _jsx("div", { className: "analytics-stacked-timeline", children: activityTimelineSeries.buckets.length ? (activityTimelineSeries.buckets.map((bucket) => (_jsxs("div", { className: "analytics-stacked-timeline-row", children: [_jsx("span", { className: "tiny-text analytics-bar-label", children: bucket.label }), _jsx("div", { className: "analytics-stacked-timeline-track", style: chartDisplayMode === "hours"
                                                 ? { width: `${(bucket.totalMinutes / activityMaxBucketMinutes) * 100}%` }
                                                 : undefined, children: activityTimelineSeries.labels.map((label, index) => {
                                                 const minutes = bucket.series[label] || 0;

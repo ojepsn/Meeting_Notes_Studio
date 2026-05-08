@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ActivityRecord, ArchivedTaskRecord, LocalAppSettings, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, isTimeLogRunning } from "../../../lib/time/tracking";
@@ -11,11 +12,15 @@ type AnalyticsWorkspaceProps = {
   settings: LocalAppSettings;
   onOpenTodoDetail: (todoId: string) => void;
   onOpenActivityDetail: (activityId: string) => void;
+  onSaveTimeLog: (timeLog: TimeLogRecord) => void;
+  onSaveTodo: (todo: TodoRecord) => void;
+  onSaveActivity: (activity: ActivityRecord) => void;
 };
 
 type TimelineGranularity = "daily" | "weekly" | "monthly";
 type AnalyticsRangePreset = "30d" | "90d" | "365d" | "custom";
 type ChartDisplayMode = "share" | "hours";
+type DayFlowWindowMode = "full-day" | "extended-day" | "work-day";
 type EnrichedTimeLog = TimeLogRecord & {
   title: string;
   contextLabel: string;
@@ -39,6 +44,7 @@ const shiftDays = (value: string, days: number) => {
 };
 
 const formatMinutes = (minutes: number) => formatTrackedMinutes(minutes);
+const formatHourTick = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}`;
 
 const timeStringToMinutes = (value: string) => {
   const [hours, minutes] = value.split(":").map(Number);
@@ -97,6 +103,29 @@ const ANALYTICS_SERIES_COLORS = [
   "#1d9db4",
 ];
 const BACKGROUND_FLOW_COLOR = "#8a96aa";
+const DAY_FLOW_WINDOWS: Record<
+  DayFlowWindowMode,
+  { label: string; startMinutes: number; endMinutes: number; tickMinutes: number[] }
+> = {
+  "full-day": {
+    label: "0-24h",
+    startMinutes: 0,
+    endMinutes: 24 * 60,
+    tickMinutes: [0, 6 * 60, 12 * 60, 18 * 60, 24 * 60],
+  },
+  "extended-day": {
+    label: "05:00-22:00",
+    startMinutes: 5 * 60,
+    endMinutes: 22 * 60,
+    tickMinutes: [5 * 60, 9 * 60, 13 * 60, 17 * 60, 22 * 60],
+  },
+  "work-day": {
+    label: "07:00-18:00",
+    startMinutes: 7 * 60,
+    endMinutes: 18 * 60,
+    tickMinutes: [7 * 60, 10 * 60, 13 * 60, 16 * 60, 18 * 60],
+  },
+};
 
 const buildCategorizedTimelineSeries = (
   logs: EnrichedTimeLog[],
@@ -232,6 +261,23 @@ type HoveredFlowSegment = {
   effectiveMinutes: number;
 };
 
+type TimeLogEditDraft = {
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  notes: string;
+  project: string;
+  activity: string;
+};
+
+const calculateDurationMinutes = (date: string, startTime: string, endTime: string) => {
+  const start = new Date(`${date}T${startTime || "00:00"}:00`);
+  const end = new Date(`${date}T${endTime || startTime || "00:00"}:00`);
+  const diff = Math.round((end.getTime() - start.getTime()) / 60000);
+  return Number.isFinite(diff) ? Math.max(0, diff) : 0;
+};
+
 export const AnalyticsWorkspace = ({
   todos,
   archivedTasks,
@@ -240,6 +286,9 @@ export const AnalyticsWorkspace = ({
   settings,
   onOpenTodoDetail,
   onOpenActivityDetail,
+  onSaveTimeLog,
+  onSaveTodo,
+  onSaveActivity,
 }: AnalyticsWorkspaceProps) => {
   const defaultRange = buildRangeFromPreset("90d");
   const [timelineGranularity, setTimelineGranularity] = useState<TimelineGranularity>("daily");
@@ -253,8 +302,11 @@ export const AnalyticsWorkspace = ({
   const [showBusinessItems, setShowBusinessItems] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [chartDisplayMode, setChartDisplayMode] = useState<ChartDisplayMode>("hours");
+  const [dayFlowWindowMode, setDayFlowWindowMode] = useState<DayFlowWindowMode>("full-day");
   const [drilldown, setDrilldown] = useState<DrilldownState | null>(null);
   const [hoveredFlowSegment, setHoveredFlowSegment] = useState<HoveredFlowSegment | null>(null);
+  const [selectedTimeLogId, setSelectedTimeLogId] = useState<string | null>(null);
+  const [timeLogDrafts, setTimeLogDrafts] = useState<Record<string, TimeLogEditDraft>>({});
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -273,6 +325,36 @@ export const AnalyticsWorkspace = ({
     () => Object.fromEntries(activities.map((activity) => [activity.id, activity])) as Record<string, ActivityRecord>,
     [activities],
   );
+
+  const getTimeLogDraft = (log: EnrichedTimeLog): TimeLogEditDraft =>
+    timeLogDrafts[log.id] ?? {
+      title: log.title,
+      date: log.date,
+      startTime: log.startTime,
+      endTime: log.endTime,
+      notes: log.notes,
+      project: log.project === "No project" ? "" : log.project,
+      activity: log.activityLabel === "No activity" ? "" : log.activityLabel,
+    };
+
+  const updateTimeLogDraft = (log: EnrichedTimeLog, updates: Partial<TimeLogEditDraft>) => {
+    setTimeLogDrafts((current) => ({
+      ...current,
+      [log.id]: {
+        ...getTimeLogDraft(log),
+        ...updates,
+      },
+    }));
+  };
+
+  const clearTimeLogDraft = (logId: string) => {
+    setTimeLogDrafts((current) => {
+      if (!(logId in current)) return current;
+      const next = { ...current };
+      delete next[logId];
+      return next;
+    });
+  };
 
   const enrichedLogs = useMemo<EnrichedTimeLog[]>(
     () =>
@@ -357,6 +439,17 @@ export const AnalyticsWorkspace = ({
       }),
     [activityFilter, domainFilter, enrichedLogs, fromDate, projectFilter, searchQuery, showBusinessItems, showPrivateItems, toDate],
   );
+
+  const selectedTimeLog = useMemo(
+    () => (selectedTimeLogId ? enrichedLogs.find((log) => log.id === selectedTimeLogId) ?? null : null),
+    [enrichedLogs, selectedTimeLogId],
+  );
+
+  useEffect(() => {
+    if (selectedTimeLogId && !selectedTimeLog) {
+      setSelectedTimeLogId(null);
+    }
+  }, [selectedTimeLog, selectedTimeLogId]);
 
   const totalMinutes = useMemo(() => filteredLogs.reduce((sum, log) => sum + log.effectiveMinutes, 0), [filteredLogs]);
   const activeDays = useMemo(() => new Set(filteredLogs.map((log) => log.date)).size, [filteredLogs]);
@@ -527,6 +620,20 @@ export const AnalyticsWorkspace = ({
       .slice(0, 10);
   }, [filteredLogs]);
 
+  const dayFlowWindow = DAY_FLOW_WINDOWS[dayFlowWindowMode];
+  const dayFlowWindowSpanMinutes = Math.max(1, dayFlowWindow.endMinutes - dayFlowWindow.startMinutes);
+  const dayFlowTickPositions = useMemo(
+    () =>
+      dayFlowWindow.tickMinutes.map((tickMinutes) => ({
+        tickMinutes,
+        label: formatHourTick(tickMinutes),
+        leftPercent: ((tickMinutes - dayFlowWindow.startMinutes) / dayFlowWindowSpanMinutes) * 100,
+      })),
+    [dayFlowWindow, dayFlowWindowSpanMinutes],
+  );
+  const selectedTimeLogDraft = selectedTimeLog ? getTimeLogDraft(selectedTimeLog) : null;
+  const selectedTimeLogCanEditSourceFields = Boolean(selectedTimeLog && !selectedTimeLog.isArchivedTarget && !selectedTimeLog.isBaselineWork);
+
   const projectTimelineSeries = useMemo(
     () => buildCategorizedTimelineSeries(filteredLogs, timelineGranularity, (log) => log.project || "No project"),
     [filteredLogs, timelineGranularity],
@@ -584,6 +691,90 @@ export const AnalyticsWorkspace = ({
       setDrilldown(null);
     }
   }, [activityTimelineSeries.labels, baselineTimelineSeries.labels, drilldown, privacyTimelineSeries.labels]);
+
+  const commitTimeLogDraft = (log: EnrichedTimeLog) => {
+    const draft = timeLogDrafts[log.id];
+    if (!draft) return;
+    const nextTitle = draft.title.trim() || log.title;
+    const nextDate = draft.date || log.date;
+    const nextStartTime = draft.startTime || log.startTime;
+    const draftEndTime = draft.endTime || log.endTime;
+    const running = log.startTime === log.endTime;
+    const keepRunning =
+      running &&
+      draftEndTime === log.endTime &&
+      (nextDate !== log.date || nextStartTime !== log.startTime);
+    const nextEndTime = keepRunning ? nextStartTime : draftEndTime;
+    const nextNotes = draft.notes;
+    const nextProject = draft.project.trim();
+    const nextActivity = draft.activity.trim();
+    const canEditSourceFields = !log.isArchivedTarget && !log.isBaselineWork;
+    const changed =
+      nextTitle !== log.title ||
+      nextDate !== log.date ||
+      nextStartTime !== log.startTime ||
+      nextEndTime !== log.endTime ||
+      nextNotes !== log.notes ||
+      nextProject !== (log.project === "No project" ? "" : log.project) ||
+      nextActivity !== (log.activityLabel === "No activity" ? "" : log.activityLabel);
+    clearTimeLogDraft(log.id);
+    if (!changed) return;
+    if (canEditSourceFields) {
+      if (log.targetType === "todo") {
+        const todo = todoLookup[log.targetId];
+        if (todo) {
+          const linkedActivity = todo.activityId ? activityLookup[todo.activityId] : null;
+          const keepLinkedActivity =
+            linkedActivity &&
+            nextActivity === linkedActivity.description &&
+            nextProject === linkedActivity.project;
+          onSaveTodo({
+            ...todo,
+            description: nextTitle,
+            project: nextProject,
+            activity: nextActivity,
+            activityId: keepLinkedActivity ? todo.activityId : "",
+          });
+        }
+      } else {
+        const activity = activityLookup[log.targetId];
+        if (activity) {
+          onSaveActivity({
+            ...activity,
+            description: nextTitle,
+            project: nextProject,
+            activity: nextActivity,
+          });
+        }
+      }
+    }
+    onSaveTimeLog({
+      ...log,
+      date: nextDate,
+      startTime: nextStartTime,
+      endTime: nextEndTime,
+      durationMinutes: calculateDurationMinutes(nextDate, nextStartTime, nextEndTime),
+      notes: log.isBaselineWork ? log.notes : nextNotes,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const handleTimeLogDraftKeyDown = (
+    event: ReactKeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+    log: EnrichedTimeLog,
+  ) => {
+    if (event.key === "Enter" && !(event.currentTarget instanceof HTMLTextAreaElement && event.shiftKey)) {
+      event.preventDefault();
+      commitTimeLogDraft(log);
+      event.currentTarget.blur();
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      clearTimeLogDraft(log.id);
+      event.currentTarget.blur();
+    }
+  };
 
   const busiestBucket = timelineBuckets.length
     ? timelineBuckets.reduce((best, entry) => (entry.minutes > best.minutes ? entry : best), timelineBuckets[0])
@@ -741,13 +932,35 @@ export const AnalyticsWorkspace = ({
               <h3>Daily timelog flow</h3>
               <p className="muted">Each bar shows individual timelogs in the order they happened during the day, so switching and focused stretches are visible.</p>
             </div>
+            <div className="capture-density-toggle analytics-day-flow-window-toggle">
+              {Object.entries(DAY_FLOW_WINDOWS).map(([mode, config]) => (
+                <button
+                  key={mode}
+                  className="segment-button"
+                  data-active={dayFlowWindowMode === mode}
+                  type="button"
+                  onClick={() => setDayFlowWindowMode(mode as DayFlowWindowMode)}
+                >
+                  {config.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="analytics-day-flow-axis" aria-hidden="true">
-            <span>00</span>
-            <span>06</span>
-            <span>12</span>
-            <span>18</span>
-            <span>24</span>
+            <span />
+            <div className="analytics-day-flow-axis-track">
+              {dayFlowTickPositions.map((tick, index) => (
+                <span
+                  key={tick.tickMinutes}
+                  className="analytics-day-flow-axis-tick"
+                  data-edge={index === 0 ? "start" : index === dayFlowTickPositions.length - 1 ? "end" : "middle"}
+                  style={{ left: `${tick.leftPercent}%` }}
+                >
+                  {tick.label}
+                </span>
+              ))}
+            </div>
+            <span />
           </div>
           <div className="analytics-day-flow">
             {dailyTimeLogFlowRows.length ? (
@@ -755,46 +968,65 @@ export const AnalyticsWorkspace = ({
                 <div key={row.date} className="analytics-day-flow-row">
                   <span className="tiny-text analytics-bar-label">{row.date}</span>
                   <div className="analytics-day-flow-track">
-                    {row.segments.map((segment) => (
-                      <button
-                        key={segment.id}
-                        type="button"
-                        className={`analytics-day-flow-segment${segment.isBackground ? " analytics-day-flow-segment-background" : ""}`}
-                        onClick={() => setDrilldown({ scope: "activity", label: segment.drilldownLabel })}
-                        onMouseEnter={() =>
-                          setHoveredFlowSegment({
-                            id: segment.id,
-                            title: segment.title,
-                            label: segment.label,
-                            date: segment.date,
-                            startTime: segment.startTime,
-                            endTime: segment.endTime,
-                            notes: segment.notes,
-                            effectiveMinutes: segment.effectiveMinutes,
-                          })
-                        }
-                        onMouseLeave={() => setHoveredFlowSegment((current) => (current?.id === segment.id ? null : current))}
-                        onFocus={() =>
-                          setHoveredFlowSegment({
-                            id: segment.id,
-                            title: segment.title,
-                            label: segment.label,
-                            date: segment.date,
-                            startTime: segment.startTime,
-                            endTime: segment.endTime,
-                            notes: segment.notes,
-                            effectiveMinutes: segment.effectiveMinutes,
-                          })
-                        }
-                        onBlur={() => setHoveredFlowSegment((current) => (current?.id === segment.id ? null : current))}
-                        aria-label={segment.title}
-                        style={{
-                          left: `${(segment.startMinutes / (24 * 60)) * 100}%`,
-                          width: `${Math.max(0.35, ((segment.endMinutes - segment.startMinutes) / (24 * 60)) * 100)}%`,
-                          background: segment.color,
-                        }}
-                      />
-                    ))}
+                    <div className="analytics-day-flow-track-grid" aria-hidden="true">
+                      {dayFlowTickPositions.map((tick, index) => (
+                        <span
+                          key={tick.tickMinutes}
+                          className="analytics-day-flow-track-grid-line"
+                          data-edge={index === 0 ? "start" : index === dayFlowTickPositions.length - 1 ? "end" : "middle"}
+                          style={{ left: `${tick.leftPercent}%` }}
+                        />
+                      ))}
+                    </div>
+                    {row.segments
+                      .filter((segment) => segment.endMinutes > dayFlowWindow.startMinutes && segment.startMinutes < dayFlowWindow.endMinutes)
+                      .map((segment) => {
+                        const clippedStart = Math.max(dayFlowWindow.startMinutes, segment.startMinutes);
+                        const clippedEnd = Math.min(dayFlowWindow.endMinutes, segment.endMinutes);
+                        return (
+                          <button
+                            key={segment.id}
+                            type="button"
+                            className={`analytics-day-flow-segment${segment.isBackground ? " analytics-day-flow-segment-background" : ""}${selectedTimeLogId === segment.id ? " analytics-day-flow-segment-active" : ""}`}
+                            onClick={() => {
+                              setDrilldown({ scope: "activity", label: segment.drilldownLabel });
+                              setSelectedTimeLogId(segment.id);
+                            }}
+                            onMouseEnter={() =>
+                              setHoveredFlowSegment({
+                                id: segment.id,
+                                title: segment.title,
+                                label: segment.label,
+                                date: segment.date,
+                                startTime: segment.startTime,
+                                endTime: segment.endTime,
+                                notes: segment.notes,
+                                effectiveMinutes: segment.effectiveMinutes,
+                              })
+                            }
+                            onMouseLeave={() => setHoveredFlowSegment((current) => (current?.id === segment.id ? null : current))}
+                            onFocus={() =>
+                              setHoveredFlowSegment({
+                                id: segment.id,
+                                title: segment.title,
+                                label: segment.label,
+                                date: segment.date,
+                                startTime: segment.startTime,
+                                endTime: segment.endTime,
+                                notes: segment.notes,
+                                effectiveMinutes: segment.effectiveMinutes,
+                              })
+                            }
+                            onBlur={() => setHoveredFlowSegment((current) => (current?.id === segment.id ? null : current))}
+                            aria-label={segment.title}
+                            style={{
+                              left: `${((clippedStart - dayFlowWindow.startMinutes) / dayFlowWindowSpanMinutes) * 100}%`,
+                              width: `${Math.max(0.35, ((clippedEnd - clippedStart) / dayFlowWindowSpanMinutes) * 100)}%`,
+                              background: segment.color,
+                            }}
+                          />
+                        );
+                      })}
                   </div>
                   <strong>{formatMinutes(row.totalMinutes)}</strong>
                 </div>
@@ -833,6 +1065,136 @@ export const AnalyticsWorkspace = ({
         </div>
 
       </div>
+
+      {selectedTimeLog && selectedTimeLogDraft ? (
+        <div className="sidebar-card analytics-timelog-editor-card">
+          <div className="card-header">
+            <div>
+              <h3>Selected timelog</h3>
+              <p className="muted">
+                {selectedTimeLog.date} · {selectedTimeLog.startTime}-{selectedTimeLog.endTime === selectedTimeLog.startTime ? "running" : selectedTimeLog.endTime} · {selectedTimeLog.workKind}
+              </p>
+            </div>
+            <div className="page-actions">
+              <span className="status-chip">{formatMinutes(selectedTimeLog.effectiveMinutes)}</span>
+              <button
+                className="small-button"
+                type="button"
+                onClick={() => {
+                  clearTimeLogDraft(selectedTimeLog.id);
+                  setSelectedTimeLogId(null);
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          <div className="time-filter-grid-compact analytics-timelog-editor-grid">
+            <div className="field">
+              <label htmlFor="analytics-selected-timelog-title">Title</label>
+              <input
+                id="analytics-selected-timelog-title"
+                value={selectedTimeLogDraft.title}
+                disabled={!selectedTimeLogCanEditSourceFields}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { title: event.target.value })}
+                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="analytics-selected-timelog-project">Project</label>
+              <input
+                id="analytics-selected-timelog-project"
+                list="analytics-project-suggestions"
+                value={selectedTimeLogDraft.project}
+                disabled={!selectedTimeLogCanEditSourceFields}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { project: event.target.value })}
+                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="analytics-selected-timelog-activity">Activity</label>
+              <input
+                id="analytics-selected-timelog-activity"
+                list="analytics-activity-suggestions"
+                value={selectedTimeLogDraft.activity}
+                disabled={!selectedTimeLogCanEditSourceFields}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { activity: event.target.value })}
+                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="analytics-selected-timelog-date">Date</label>
+              <DateInput
+                id="analytics-selected-timelog-date"
+                value={selectedTimeLogDraft.date}
+                disabled={selectedTimeLog.isBaselineWork}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { date: event.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="analytics-selected-timelog-start">Start</label>
+              <input
+                id="analytics-selected-timelog-start"
+                type="time"
+                value={selectedTimeLogDraft.startTime}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { startTime: event.target.value })}
+                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="analytics-selected-timelog-end">End</label>
+              <input
+                id="analytics-selected-timelog-end"
+                type="time"
+                value={selectedTimeLogDraft.endTime}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { endTime: event.target.value })}
+                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
+              />
+            </div>
+            <div className="field field-wide">
+              <label htmlFor="analytics-selected-timelog-notes">Comment</label>
+              <textarea
+                id="analytics-selected-timelog-notes"
+                rows={3}
+                value={selectedTimeLogDraft.notes}
+                disabled={selectedTimeLog.isBaselineWork}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { notes: event.target.value })}
+                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
+                placeholder={selectedTimeLog.isBaselineWork ? "Background logs keep their comment locked." : "Optional context"}
+              />
+            </div>
+          </div>
+          <div className="page-actions analytics-timelog-editor-actions">
+            <span className="tiny-text muted">
+              {selectedTimeLogCanEditSourceFields ? "Title, project, and activity sync back to the source item." : selectedTimeLog.isBaselineWork ? "Background logs keep source fields locked; timing stays editable." : "Source fields are locked for archived items, but the timelog timing and comment can still be updated."}
+            </span>
+            <button
+              className="small-button"
+              type="button"
+              onClick={() => clearTimeLogDraft(selectedTimeLog.id)}
+            >
+              Reset
+            </button>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => commitTimeLogDraft(selectedTimeLog)}
+            >
+              Save timelog
+            </button>
+          </div>
+          <datalist id="analytics-project-suggestions">
+            {projectOptions.filter((option) => option !== "No project").map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+          <datalist id="analytics-activity-suggestions">
+            {activityOptions.filter((option) => option !== "No activity").map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+        </div>
+      ) : null}
 
       <div className="analytics-chart-grid">
         <div className="sidebar-card">

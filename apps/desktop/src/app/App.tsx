@@ -4265,6 +4265,9 @@ export const App = () => {
                 settings={snapshot.settings}
                 onOpenTodoDetail={(todoId) => openTodoDetailFromLink(todoId, "analytics")}
                 onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "analytics")}
+                onSaveTimeLog={(timeLog) => void saveTimeLog(timeLog)}
+                onSaveTodo={(todo) => void saveTodo(todo)}
+                onSaveActivity={(activity) => void saveActivity(activity)}
               />
             ) : activeWorkspace === "structure" ? (
               <StructureWorkspace
