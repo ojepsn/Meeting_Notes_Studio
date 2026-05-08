@@ -116,7 +116,7 @@ const buildBinaryTimelineSeries = (logs, granularity, labels, predicate) => {
 const getActivitySeriesLabel = (log) => log.project && log.project !== "No project" ? `${log.activityLabel} - ${log.project}` : log.activityLabel;
 export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs, settings, onOpenTodoDetail, onOpenActivityDetail, }) => {
     const defaultRange = buildRangeFromPreset("90d");
-    const [timelineGranularity, setTimelineGranularity] = useState("weekly");
+    const [timelineGranularity, setTimelineGranularity] = useState("daily");
     const [rangePreset, setRangePreset] = useState("90d");
     const [fromDate, setFromDate] = useState(defaultRange.fromDate);
     const [toDate, setToDate] = useState(defaultRange.toDate);
@@ -126,7 +126,7 @@ export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs,
     const [showPrivateItems, setShowPrivateItems] = useState(true);
     const [showBusinessItems, setShowBusinessItems] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
-    const [chartDisplayMode, setChartDisplayMode] = useState("share");
+    const [chartDisplayMode, setChartDisplayMode] = useState("hours");
     const [drilldown, setDrilldown] = useState(null);
     const [now, setNow] = useState(() => new Date());
     useEffect(() => {
@@ -164,17 +164,22 @@ export const AnalyticsWorkspace = ({ todos, archivedTasks, activities, timeLogs,
             };
         }
         const activity = activityLookup[log.targetId];
+        const isBackgroundLog = Boolean(settings.baselineWorkActivityId &&
+            log.targetType === "activity" &&
+            log.targetId === settings.baselineWorkActivityId);
         return {
             ...log,
-            title: activity?.description || "Deleted activity",
-            contextLabel: activity?.project || activity?.domain || "Activity",
-            domain: activity?.domain || "No domain",
-            project: activity?.project || "No project",
-            activityLabel: activity?.description || "No activity",
+            title: isBackgroundLog ? "Background log" : activity?.description || "Deleted activity",
+            contextLabel: isBackgroundLog
+                ? "System-managed background work"
+                : activity?.project || activity?.domain || (activity?.type === "meeting" ? "Meeting" : "Activity"),
+            domain: isBackgroundLog ? "Background" : activity?.domain || "No domain",
+            project: isBackgroundLog ? "Background" : activity?.project || "No project",
+            activityLabel: isBackgroundLog ? "Background" : activity?.activity || activity?.description || "No activity",
             workKind: activity?.type === "meeting" ? "Meeting" : "Activity",
             effectiveMinutes: isTimeLogRunning(log) ? calculateLiveDurationMinutes(log, now) : log.durationMinutes,
             isPrivate: Boolean(activity?.isPrivate),
-            isBaselineWork: Boolean(settings.baselineWorkActivityId) && log.targetType === "activity" && log.targetId === settings.baselineWorkActivityId,
+            isBaselineWork: isBackgroundLog,
         };
     }), [activityLookup, archivedTaskLookup, now, settings.baselineWorkActivityId, timeLogs, todoLookup]);
     const projectOptions = useMemo(() => Array.from(new Set(enrichedLogs.map((log) => log.project || "No project"))).sort(), [enrichedLogs]);
