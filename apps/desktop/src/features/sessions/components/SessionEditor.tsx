@@ -330,7 +330,8 @@ export const SessionEditor = ({
     ) ?? [];
   const enabledSections = activeTemplate?.sections.map((section) => ({ ...section, checked: !session.excludedSectionIds.includes(section.id) })) ?? [];
   const imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
-  const otherAttachments = attachments.filter((attachment) => attachment.kind !== "image");
+  const audioAttachments = attachments.filter((attachment) => attachment.kind === "audio");
+  const otherAttachments = attachments.filter((attachment) => attachment.kind !== "image" && attachment.kind !== "audio");
   const filteredProjects = getProjectsForDomain(structureOptions, session.domain);
   const filteredActivities = getActivitiesForSelection(structureOptions, session.domain, session.project);
   const projectPickerOptions = filteredProjects.length ? filteredProjects : savedProjects;
@@ -1169,6 +1170,27 @@ export const SessionEditor = ({
                   </button>
                 );
               })}
+            </div>
+          </div>
+        ) : null}
+
+        {audioAttachments.length ? (
+          <div className={`field field-wide${isMinimal ? " audio-attachment-inline-card" : ""}`}>
+            <label>Session audio</label>
+            <div className="section-list">
+              {audioAttachments.map((attachment) => (
+                <div key={attachment.id} className="list-item audio-attachment-item">
+                  <div className="audio-attachment-details">
+                    <strong>{attachment.filename}</strong>
+                    <span className="muted">Stored locally · {Math.max(1, Math.round(attachment.sizeBytes / 1024))} KB</span>
+                  </div>
+                  <div className="list-item-actions">
+                    <button className="small-button danger-button" type="button" onClick={() => onRemoveAttachment(attachment.id)}>
+                      Delete audio
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ) : null}

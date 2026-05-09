@@ -6,26 +6,26 @@ import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog }
 const TIMelog_RECENT_DAYS = 7;
 const TIMELOG_OLDER_BATCH_SIZE = 30;
 const defaultTimeLogColumnWidths = {
-    project: 160,
-    activity: 180,
-    source: 300,
-    date: 150,
-    start: 110,
-    stop: 110,
-    duration: 104,
-    comment: 210,
-    actions: 138,
-};
-const minTimeLogColumnWidths = {
     project: 128,
     activity: 144,
-    source: 180,
-    date: 150,
-    start: 104,
-    stop: 104,
-    duration: 88,
-    comment: 140,
-    actions: 132,
+    source: 220,
+    date: 126,
+    start: 88,
+    stop: 88,
+    duration: 92,
+    comment: 156,
+    actions: 116,
+};
+const minTimeLogColumnWidths = {
+    project: 96,
+    activity: 108,
+    source: 160,
+    date: 112,
+    start: 74,
+    stop: 74,
+    duration: 72,
+    comment: 112,
+    actions: 96,
 };
 export const formatMinutes = (minutes) => {
     if (!minutes)
