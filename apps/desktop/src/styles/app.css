@@ -6876,7 +6876,7 @@ select {
 }
 
 .analytics-timelog-editor-card {
-  margin-top: 1rem;
+  margin-bottom: 1rem;
 }
 
 .analytics-timelog-editor-grid textarea {

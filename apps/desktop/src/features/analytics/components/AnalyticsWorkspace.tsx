@@ -925,6 +925,136 @@ export const AnalyticsWorkspace = ({
         </div>
       </div>
 
+      {selectedTimeLog && selectedTimeLogDraft ? (
+        <div className="sidebar-card analytics-timelog-editor-card">
+          <div className="card-header">
+            <div>
+              <h3>Selected timelog</h3>
+              <p className="muted">
+                {selectedTimeLog.date} · {selectedTimeLog.startTime}-{selectedTimeLog.endTime === selectedTimeLog.startTime ? "running" : selectedTimeLog.endTime} · {selectedTimeLog.workKind}
+              </p>
+            </div>
+            <div className="page-actions">
+              <span className="status-chip">{formatMinutes(selectedTimeLog.effectiveMinutes)}</span>
+              <button
+                className="small-button"
+                type="button"
+                onClick={() => {
+                  clearTimeLogDraft(selectedTimeLog.id);
+                  setSelectedTimeLogId(null);
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          <div className="time-filter-grid-compact analytics-timelog-editor-grid">
+            <div className="field">
+              <label htmlFor="analytics-selected-timelog-title">Title</label>
+              <input
+                id="analytics-selected-timelog-title"
+                value={selectedTimeLogDraft.title}
+                disabled={!selectedTimeLogCanEditSourceFields}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { title: event.target.value })}
+                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="analytics-selected-timelog-project">Project</label>
+              <input
+                id="analytics-selected-timelog-project"
+                list="analytics-project-suggestions"
+                value={selectedTimeLogDraft.project}
+                disabled={!selectedTimeLogCanEditSourceFields}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { project: event.target.value })}
+                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="analytics-selected-timelog-activity">Activity</label>
+              <input
+                id="analytics-selected-timelog-activity"
+                list="analytics-activity-suggestions"
+                value={selectedTimeLogDraft.activity}
+                disabled={!selectedTimeLogCanEditSourceFields}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { activity: event.target.value })}
+                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="analytics-selected-timelog-date">Date</label>
+              <DateInput
+                id="analytics-selected-timelog-date"
+                value={selectedTimeLogDraft.date}
+                disabled={selectedTimeLog.isBaselineWork}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { date: event.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="analytics-selected-timelog-start">Start</label>
+              <input
+                id="analytics-selected-timelog-start"
+                type="time"
+                value={selectedTimeLogDraft.startTime}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { startTime: event.target.value })}
+                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="analytics-selected-timelog-end">End</label>
+              <input
+                id="analytics-selected-timelog-end"
+                type="time"
+                value={selectedTimeLogDraft.endTime}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { endTime: event.target.value })}
+                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
+              />
+            </div>
+            <div className="field field-wide">
+              <label htmlFor="analytics-selected-timelog-notes">Comment</label>
+              <textarea
+                id="analytics-selected-timelog-notes"
+                rows={3}
+                value={selectedTimeLogDraft.notes}
+                disabled={selectedTimeLog.isBaselineWork}
+                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { notes: event.target.value })}
+                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
+                placeholder={selectedTimeLog.isBaselineWork ? "Background logs keep their comment locked." : "Optional context"}
+              />
+            </div>
+          </div>
+          <div className="page-actions analytics-timelog-editor-actions">
+            <span className="tiny-text muted">
+              {selectedTimeLogCanEditSourceFields ? "Title, project, and activity sync back to the source item." : selectedTimeLog.isBaselineWork ? "Background logs keep source fields locked; timing stays editable." : "Source fields are locked for archived items, but the timelog timing and comment can still be updated."}
+            </span>
+            <button
+              className="small-button"
+              type="button"
+              onClick={() => clearTimeLogDraft(selectedTimeLog.id)}
+            >
+              Reset
+            </button>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => commitTimeLogDraft(selectedTimeLog)}
+            >
+              Save timelog
+            </button>
+          </div>
+          <datalist id="analytics-project-suggestions">
+            {projectOptions.filter((option) => option !== "No project").map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+          <datalist id="analytics-activity-suggestions">
+            {activityOptions.filter((option) => option !== "No activity").map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+        </div>
+      ) : null}
+
       <div className="analytics-chart-grid">
         <div className="sidebar-card analytics-day-flow-card">
           <div className="card-header">
@@ -1065,136 +1195,6 @@ export const AnalyticsWorkspace = ({
         </div>
 
       </div>
-
-      {selectedTimeLog && selectedTimeLogDraft ? (
-        <div className="sidebar-card analytics-timelog-editor-card">
-          <div className="card-header">
-            <div>
-              <h3>Selected timelog</h3>
-              <p className="muted">
-                {selectedTimeLog.date} · {selectedTimeLog.startTime}-{selectedTimeLog.endTime === selectedTimeLog.startTime ? "running" : selectedTimeLog.endTime} · {selectedTimeLog.workKind}
-              </p>
-            </div>
-            <div className="page-actions">
-              <span className="status-chip">{formatMinutes(selectedTimeLog.effectiveMinutes)}</span>
-              <button
-                className="small-button"
-                type="button"
-                onClick={() => {
-                  clearTimeLogDraft(selectedTimeLog.id);
-                  setSelectedTimeLogId(null);
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-          <div className="time-filter-grid-compact analytics-timelog-editor-grid">
-            <div className="field">
-              <label htmlFor="analytics-selected-timelog-title">Title</label>
-              <input
-                id="analytics-selected-timelog-title"
-                value={selectedTimeLogDraft.title}
-                disabled={!selectedTimeLogCanEditSourceFields}
-                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { title: event.target.value })}
-                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="analytics-selected-timelog-project">Project</label>
-              <input
-                id="analytics-selected-timelog-project"
-                list="analytics-project-suggestions"
-                value={selectedTimeLogDraft.project}
-                disabled={!selectedTimeLogCanEditSourceFields}
-                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { project: event.target.value })}
-                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="analytics-selected-timelog-activity">Activity</label>
-              <input
-                id="analytics-selected-timelog-activity"
-                list="analytics-activity-suggestions"
-                value={selectedTimeLogDraft.activity}
-                disabled={!selectedTimeLogCanEditSourceFields}
-                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { activity: event.target.value })}
-                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="analytics-selected-timelog-date">Date</label>
-              <DateInput
-                id="analytics-selected-timelog-date"
-                value={selectedTimeLogDraft.date}
-                disabled={selectedTimeLog.isBaselineWork}
-                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { date: event.target.value })}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="analytics-selected-timelog-start">Start</label>
-              <input
-                id="analytics-selected-timelog-start"
-                type="time"
-                value={selectedTimeLogDraft.startTime}
-                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { startTime: event.target.value })}
-                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="analytics-selected-timelog-end">End</label>
-              <input
-                id="analytics-selected-timelog-end"
-                type="time"
-                value={selectedTimeLogDraft.endTime}
-                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { endTime: event.target.value })}
-                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
-              />
-            </div>
-            <div className="field field-wide">
-              <label htmlFor="analytics-selected-timelog-notes">Comment</label>
-              <textarea
-                id="analytics-selected-timelog-notes"
-                rows={3}
-                value={selectedTimeLogDraft.notes}
-                disabled={selectedTimeLog.isBaselineWork}
-                onChange={(event) => updateTimeLogDraft(selectedTimeLog, { notes: event.target.value })}
-                onKeyDown={(event) => handleTimeLogDraftKeyDown(event, selectedTimeLog)}
-                placeholder={selectedTimeLog.isBaselineWork ? "Background logs keep their comment locked." : "Optional context"}
-              />
-            </div>
-          </div>
-          <div className="page-actions analytics-timelog-editor-actions">
-            <span className="tiny-text muted">
-              {selectedTimeLogCanEditSourceFields ? "Title, project, and activity sync back to the source item." : selectedTimeLog.isBaselineWork ? "Background logs keep source fields locked; timing stays editable." : "Source fields are locked for archived items, but the timelog timing and comment can still be updated."}
-            </span>
-            <button
-              className="small-button"
-              type="button"
-              onClick={() => clearTimeLogDraft(selectedTimeLog.id)}
-            >
-              Reset
-            </button>
-            <button
-              className="primary-button"
-              type="button"
-              onClick={() => commitTimeLogDraft(selectedTimeLog)}
-            >
-              Save timelog
-            </button>
-          </div>
-          <datalist id="analytics-project-suggestions">
-            {projectOptions.filter((option) => option !== "No project").map((option) => (
-              <option key={option} value={option} />
-            ))}
-          </datalist>
-          <datalist id="analytics-activity-suggestions">
-            {activityOptions.filter((option) => option !== "No activity").map((option) => (
-              <option key={option} value={option} />
-            ))}
-          </datalist>
-        </div>
-      ) : null}
 
       <div className="analytics-chart-grid">
         <div className="sidebar-card">
