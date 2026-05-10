@@ -121,13 +121,16 @@ const formatNextChecklistDueLabel = (cadence, value = new Date()) => {
     return `Next due ${nextValue.getFullYear()}-${`${nextValue.getMonth() + 1}`.padStart(2, "0")}`;
 };
 const formatLastCreatedChecklistLabel = (checklist) => checklist?.title ? `Last created ${checklist.title}` : "Not created yet";
-export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklistRecurrences, activities, timeLogs, structureOptions, requestedTodoId, requestedDomain, requestedProject, onEditorClose, savedPeople, suggestedPeople, onToggle, onAdd, onSave, onDelete, onCreateChecklist, onCreateChecklistFromTemplate, onCreateChecklistRecurrence, onSaveChecklist, onDeleteChecklist, onCreateChecklistTemplate, onSaveChecklistTemplate, onDeleteChecklistTemplate, onDeleteChecklistRecurrence, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }) => {
+export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklistRecurrences, activities, timeLogs, settings, structureOptions, requestedTodoId, requestedDomain, requestedProject, onEditorClose, savedPeople, suggestedPeople, onToggle, onAdd, onSave, onDelete, onCreateChecklist, onCreateChecklistFromTemplate, onCreateChecklistRecurrence, onSaveChecklist, onDeleteChecklist, onCreateChecklistTemplate, onSaveChecklistTemplate, onDeleteChecklistTemplate, onDeleteChecklistRecurrence, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onSaveSettings, onOpenActivityDetail, }) => {
     const [draft, setDraft] = useState("");
     const [sortKey, setSortKey] = useState("createdAt");
     const [sortDirection, setSortDirection] = useState("desc");
     const [columnFilters, setColumnFilters] = useState(emptyColumnFilters);
     const [columnWidths, setColumnWidths] = useState(defaultColumnWidths);
     const [visibilityFilter, setVisibilityFilter] = useState("open");
+    const [showPrivateTodos, setShowPrivateTodos] = useState(settings.todosShowPrivate ?? true);
+    const [showBusinessTodos, setShowBusinessTodos] = useState(settings.todosShowBusiness ?? true);
+    const [showPriorityOnly, setShowPriorityOnly] = useState(Boolean(settings.todosShowPriorityOnly));
     const [selectedTodoId, setSelectedTodoId] = useState(null);
     const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [editingDraft, setEditingDraft] = useState(createBlankTodoDraft());
@@ -160,6 +163,24 @@ export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklis
         const intervalId = window.setInterval(() => setNow(new Date()), 30000);
         return () => window.clearInterval(intervalId);
     }, [runningTodos.length]);
+    useEffect(() => {
+        setShowPrivateTodos(settings.todosShowPrivate ?? true);
+        setShowBusinessTodos(settings.todosShowBusiness ?? true);
+        setShowPriorityOnly(Boolean(settings.todosShowPriorityOnly));
+    }, [settings.todosShowBusiness, settings.todosShowPriorityOnly, settings.todosShowPrivate]);
+    useEffect(() => {
+        if (settings.todosShowPrivate === showPrivateTodos &&
+            settings.todosShowBusiness === showBusinessTodos &&
+            settings.todosShowPriorityOnly === showPriorityOnly) {
+            return;
+        }
+        onSaveSettings({
+            ...settings,
+            todosShowPrivate: showPrivateTodos,
+            todosShowBusiness: showBusinessTodos,
+            todosShowPriorityOnly: showPriorityOnly,
+        });
+    }, [onSaveSettings, settings, showBusinessTodos, showPriorityOnly, showPrivateTodos]);
     const getTodoColumnValue = (todo, key) => {
         switch (key) {
             case "createdAt":
@@ -189,12 +210,20 @@ export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklis
                 return todo.isDone;
             return true;
         });
-        const filtered = statusFiltered.filter((todo) => Object.entries(columnFilters).every(([key, filterValue]) => {
-            const normalizedFilter = normalizeValue(filterValue);
-            if (!normalizedFilter)
-                return true;
-            return normalizeValue(getTodoColumnValue(todo, key)).includes(normalizedFilter);
-        }));
+        const filtered = statusFiltered.filter((todo) => {
+            if (!showPrivateTodos && todo.isPrivate)
+                return false;
+            if (!showBusinessTodos && !todo.isPrivate)
+                return false;
+            if (showPriorityOnly && !todo.isPriority)
+                return false;
+            return Object.entries(columnFilters).every(([key, filterValue]) => {
+                const normalizedFilter = normalizeValue(filterValue);
+                if (!normalizedFilter)
+                    return true;
+                return normalizeValue(getTodoColumnValue(todo, key)).includes(normalizedFilter);
+            });
+        });
         const valueForSort = (todo) => {
             switch (sortKey) {
                 case "createdAt":
@@ -220,7 +249,7 @@ export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklis
             const comparison = valueForSort(left).localeCompare(valueForSort(right));
             return sortDirection === "asc" ? comparison : comparison * -1;
         });
-    }, [activityLookup, columnFilters, sortDirection, sortKey, todos, visibilityFilter]);
+    }, [activityLookup, columnFilters, showBusinessTodos, showPriorityOnly, showPrivateTodos, sortDirection, sortKey, todos, visibilityFilter]);
     useEffect(() => {
         if (requestedDomain !== undefined && requestedDomain !== null) {
             setColumnFilters((current) => ({ ...current, domain: requestedDomain || "" }));
@@ -546,12 +575,12 @@ export const TodosWorkspace = ({ todos, checklists, checklistTemplates, checklis
                                         event.preventDefault();
                                         submitDraft();
                                     }
-                                }, placeholder: "Add a focused next action" })] }), _jsx("button", { className: "primary-button", type: "submit", children: "Add" })] }), _jsxs("div", { className: "todos-hub-shell", children: [_jsxs("section", { className: "todos-hub-list-panel todos-table-panel", children: [_jsxs("div", { className: "todos-table-summary", children: [_jsxs("span", { className: "status-chip", children: [filteredTodos.length, " shown"] }), _jsxs("span", { className: "status-chip", children: [openTodos.length, " open"] }), _jsxs("span", { className: "status-chip", children: [todos.length - openTodos.length, " completed"] }), _jsxs("label", { className: "todos-visibility-control", children: [_jsx("span", { children: "Show" }), _jsxs("select", { value: visibilityFilter, onChange: (event) => setVisibilityFilter(event.target.value), children: [_jsx("option", { value: "open", children: "Open only" }), _jsx("option", { value: "all", children: "All tasks" }), _jsx("option", { value: "done", children: "Done only" })] })] }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: deleteSelectedTodo, disabled: !selectedTodoId, children: "Delete selected" }), _jsx("span", { className: "muted", children: "Click a row to select. Double-click to open the full task card. Press X to toggle done. Press Delete to remove." })] }), runningTodos.length ? (_jsxs("div", { className: "todos-running-strip", children: [_jsx("strong", { children: "Running now" }), _jsx("div", { className: "todos-running-list", children: runningTodos.map((todo) => {
+                                }, placeholder: "Add a focused next action" })] }), _jsx("button", { className: "primary-button", type: "submit", children: "Add" })] }), _jsxs("div", { className: "todos-hub-shell", children: [_jsxs("section", { className: "todos-hub-list-panel todos-table-panel", children: [_jsxs("div", { className: "todos-table-summary", children: [_jsxs("span", { className: "status-chip", children: [filteredTodos.length, " shown"] }), _jsxs("span", { className: "status-chip", children: [openTodos.length, " open"] }), _jsxs("span", { className: "status-chip", children: [todos.length - openTodos.length, " completed"] }), _jsxs("label", { className: "todos-visibility-control", children: [_jsx("span", { children: "Show" }), _jsxs("select", { value: visibilityFilter, onChange: (event) => setVisibilityFilter(event.target.value), children: [_jsx("option", { value: "open", children: "Open only" }), _jsx("option", { value: "all", children: "All tasks" }), _jsx("option", { value: "done", children: "Done only" })] })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle todos-inline-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showPrivateTodos, onChange: (event) => setShowPrivateTodos(event.target.checked) }), _jsx("span", { children: "Private" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle todos-inline-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showBusinessTodos, onChange: (event) => setShowBusinessTodos(event.target.checked) }), _jsx("span", { children: "Business" })] }), _jsxs("label", { className: "compact-private-toggle calendar-top-filter-toggle todos-inline-filter-toggle", children: [_jsx("input", { type: "checkbox", checked: showPriorityOnly, onChange: (event) => setShowPriorityOnly(event.target.checked) }), _jsx("span", { children: "Prio" })] }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: deleteSelectedTodo, disabled: !selectedTodoId, children: "Delete selected" }), _jsx("span", { className: "muted", children: "Click a row to select. Double-click to open the full task card. Press X to toggle done. Press Delete to remove." })] }), runningTodos.length ? (_jsxs("div", { className: "todos-running-strip", children: [_jsx("strong", { children: "Running now" }), _jsx("div", { className: "todos-running-list", children: runningTodos.map((todo) => {
                                             const runningLog = getRunningTimeLog(timeLogsByTodoId.get(todo.id) || []);
                                             const elapsedLabel = runningLog
                                                 ? formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now))
                                                 : "Running";
-                                            return (_jsxs("div", { className: "todos-running-chip", children: [_jsxs("button", { type: "button", className: "status-chip", onClick: () => setSelectedTodoId(todo.id), children: [todo.description, " \u2022 ", elapsedLabel] }), _jsx("button", { className: "small-button", type: "button", onClick: () => onStopTracking("todo", todo.id), children: "Stop" })] }, todo.id));
+                                            return (_jsxs("div", { className: "todos-running-chip", children: [_jsxs("button", { type: "button", className: "status-chip", onClick: () => openTodoDetail(todo.id), children: [todo.description, " \u2022 ", elapsedLabel] }), _jsx("button", { className: "small-button", type: "button", onClick: () => onStopTracking("todo", todo.id), children: "Stop" })] }, todo.id));
                                         }) })] })) : null, _jsx("div", { className: "todos-dense-table-shell", children: _jsxs("table", { className: "todos-dense-table", style: tableStyle, children: [_jsxs("thead", { children: [_jsx("tr", { children: todoColumns.map((column) => (_jsx("th", { scope: "col", children: _jsxs("div", { className: "todos-header-cell", children: [_jsxs("button", { className: "todos-sort-button", type: "button", onClick: () => toggleSort(column.key), children: [_jsx("span", { children: column.label }), _jsx("span", { "aria-hidden": "true", children: sortKey === column.key ? (sortDirection === "asc" ? "↑" : "↓") : "↕" })] }), _jsx("button", { className: "todos-column-resize-handle", type: "button", "aria-label": `Resize ${column.label} column`, onMouseDown: (event) => startColumnResize(column.key, event) })] }) }, column.key))) }), _jsxs("tr", { className: "todos-filter-row", children: [todoColumns.map((column) => (_jsx("th", { scope: "col", children: _jsx("input", { "aria-label": `Filter ${column.label}`, value: columnFilters[column.key], onChange: (event) => updateColumnFilter(column.key, event.target.value), placeholder: column.placeholder }) }, column.key))), _jsx("th", { scope: "col", children: _jsx("div", { className: "todos-header-cell", children: _jsx("span", { className: "todos-sort-button", children: "Actions" }) }) })] })] }), _jsx("tbody", { children: filteredTodos.length ? (filteredTodos.map((todo) => {
                                                 const logs = timeLogsByTodoId.get(todo.id) || [];
                                                 const totalMinutes = logs.reduce((sum, entry) => sum + entry.durationMinutes, 0);

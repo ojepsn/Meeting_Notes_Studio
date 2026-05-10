@@ -4094,6 +4094,7 @@ export const App = () => {
                 checklistRecurrences={snapshot.checklistRecurrences}
                 activities={snapshot.activities}
                 timeLogs={snapshot.timelogs}
+                settings={snapshot.settings}
                 structureOptions={structureOptions}
                 savedPeople={snapshot.settings.savedParticipants}
                 suggestedPeople={suggestedPeople}
@@ -4119,6 +4120,7 @@ export const App = () => {
                 onDeleteTimeLog={(id) => void deleteTimeLog(id)}
                 onStartTracking={(targetType, targetId) => void startTimeTracking(targetType, targetId)}
                 onStopTracking={(targetType, targetId) => void stopTimeTracking(targetType, targetId)}
+                onSaveSettings={(settings) => void saveSettings(settings)}
                 onOpenActivityDetail={(activityId) => openActivityFromLink(activityId, "todos")}
               />
             ) : activeWorkspace === "now" ? (

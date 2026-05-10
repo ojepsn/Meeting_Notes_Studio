@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, SyntheticEvent } from "react";
-import type { ActivityRecord, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, TaskRecord, TimeLogRecord } from "@notesmith/domain";
+import type { ActivityRecord, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, LocalAppSettings, TaskRecord, TimeLogRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
@@ -25,6 +25,7 @@ interface TodosWorkspaceProps {
   checklistRecurrences: ChecklistRecurrenceRecord[];
   activities: ActivityRecord[];
   timeLogs: TimeLogRecord[];
+  settings: LocalAppSettings;
   structureOptions: StructureOptions;
   requestedTodoId?: string | null;
   requestedDomain?: string | null;
@@ -50,6 +51,7 @@ interface TodosWorkspaceProps {
   onDeleteTimeLog: (id: string) => void;
   onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
   onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
+  onSaveSettings: (settings: LocalAppSettings) => void;
   onOpenActivityDetail?: (activityId: string) => void;
 }
 
@@ -190,6 +192,7 @@ export const TodosWorkspace = ({
   checklistRecurrences,
   activities,
   timeLogs,
+  settings,
   structureOptions,
   requestedTodoId,
   requestedDomain,
@@ -215,6 +218,7 @@ export const TodosWorkspace = ({
   onDeleteTimeLog,
   onStartTracking,
   onStopTracking,
+  onSaveSettings,
   onOpenActivityDetail,
 }: TodosWorkspaceProps) => {
   const [draft, setDraft] = useState("");
@@ -223,6 +227,9 @@ export const TodosWorkspace = ({
   const [columnFilters, setColumnFilters] = useState<TodoColumnFilters>(emptyColumnFilters);
   const [columnWidths, setColumnWidths] = useState<TodoColumnWidths>(defaultColumnWidths);
   const [visibilityFilter, setVisibilityFilter] = useState<TodoVisibilityFilter>("open");
+  const [showPrivateTodos, setShowPrivateTodos] = useState(settings.todosShowPrivate ?? true);
+  const [showBusinessTodos, setShowBusinessTodos] = useState(settings.todosShowBusiness ?? true);
+  const [showPriorityOnly, setShowPriorityOnly] = useState(Boolean(settings.todosShowPriorityOnly));
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [editingDraft, setEditingDraft] = useState<TaskRecord>(createBlankTodoDraft());
@@ -269,6 +276,28 @@ export const TodosWorkspace = ({
     return () => window.clearInterval(intervalId);
   }, [runningTodos.length]);
 
+  useEffect(() => {
+    setShowPrivateTodos(settings.todosShowPrivate ?? true);
+    setShowBusinessTodos(settings.todosShowBusiness ?? true);
+    setShowPriorityOnly(Boolean(settings.todosShowPriorityOnly));
+  }, [settings.todosShowBusiness, settings.todosShowPriorityOnly, settings.todosShowPrivate]);
+
+  useEffect(() => {
+    if (
+      settings.todosShowPrivate === showPrivateTodos &&
+      settings.todosShowBusiness === showBusinessTodos &&
+      settings.todosShowPriorityOnly === showPriorityOnly
+    ) {
+      return;
+    }
+    onSaveSettings({
+      ...settings,
+      todosShowPrivate: showPrivateTodos,
+      todosShowBusiness: showBusinessTodos,
+      todosShowPriorityOnly: showPriorityOnly,
+    });
+  }, [onSaveSettings, settings, showBusinessTodos, showPriorityOnly, showPrivateTodos]);
+
   const getTodoColumnValue = (todo: TaskRecord, key: TodoSortKey) => {
     switch (key) {
       case "createdAt":
@@ -297,13 +326,16 @@ export const TodosWorkspace = ({
       if (visibilityFilter === "done") return todo.isDone;
       return true;
     });
-    const filtered = statusFiltered.filter((todo) =>
-      (Object.entries(columnFilters) as [TodoSortKey, string][]).every(([key, filterValue]) => {
+    const filtered = statusFiltered.filter((todo) => {
+      if (!showPrivateTodos && todo.isPrivate) return false;
+      if (!showBusinessTodos && !todo.isPrivate) return false;
+      if (showPriorityOnly && !todo.isPriority) return false;
+      return (Object.entries(columnFilters) as [TodoSortKey, string][]).every(([key, filterValue]) => {
         const normalizedFilter = normalizeValue(filterValue);
         if (!normalizedFilter) return true;
         return normalizeValue(getTodoColumnValue(todo, key)).includes(normalizedFilter);
-      }),
-    );
+      });
+    });
 
     const valueForSort = (todo: TaskRecord) => {
       switch (sortKey) {
@@ -331,7 +363,7 @@ export const TodosWorkspace = ({
       const comparison = valueForSort(left).localeCompare(valueForSort(right));
       return sortDirection === "asc" ? comparison : comparison * -1;
     });
-  }, [activityLookup, columnFilters, sortDirection, sortKey, todos, visibilityFilter]);
+  }, [activityLookup, columnFilters, showBusinessTodos, showPriorityOnly, showPrivateTodos, sortDirection, sortKey, todos, visibilityFilter]);
 
   useEffect(() => {
     if (requestedDomain !== undefined && requestedDomain !== null) {
@@ -763,6 +795,18 @@ export const TodosWorkspace = ({
                 <option value="done">Done only</option>
               </select>
             </label>
+            <label className="compact-private-toggle calendar-top-filter-toggle todos-inline-filter-toggle">
+              <input type="checkbox" checked={showPrivateTodos} onChange={(event) => setShowPrivateTodos(event.target.checked)} />
+              <span>Private</span>
+            </label>
+            <label className="compact-private-toggle calendar-top-filter-toggle todos-inline-filter-toggle">
+              <input type="checkbox" checked={showBusinessTodos} onChange={(event) => setShowBusinessTodos(event.target.checked)} />
+              <span>Business</span>
+            </label>
+            <label className="compact-private-toggle calendar-top-filter-toggle todos-inline-filter-toggle">
+              <input type="checkbox" checked={showPriorityOnly} onChange={(event) => setShowPriorityOnly(event.target.checked)} />
+              <span>Prio</span>
+            </label>
             <button className="small-button danger-button" type="button" onClick={deleteSelectedTodo} disabled={!selectedTodoId}>
               Delete selected
             </button>
@@ -780,7 +824,7 @@ export const TodosWorkspace = ({
                     : "Running";
                   return (
                     <div key={todo.id} className="todos-running-chip">
-                      <button type="button" className="status-chip" onClick={() => setSelectedTodoId(todo.id)}>
+                      <button type="button" className="status-chip" onClick={() => openTodoDetail(todo.id)}>
                         {todo.description} • {elapsedLabel}
                       </button>
                       <button

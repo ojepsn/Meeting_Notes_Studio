@@ -2508,6 +2508,10 @@ select {
   font-size: 0.82rem;
 }
 
+.todos-inline-filter-toggle {
+  flex-shrink: 0;
+}
+
 .todos-dense-table-shell {
   overflow: auto;
   border: 1px solid var(--app-border);

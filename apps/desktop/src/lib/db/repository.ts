@@ -313,6 +313,9 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   calendarShowPrivate: true,
   calendarShowBusiness: true,
   calendarShowPriorityOnly: false,
+  todosShowPrivate: true,
+  todosShowBusiness: true,
+  todosShowPriorityOnly: false,
   baselineWorkEnabled: false,
   baselineWorkActivityId: "",
   apiKey: "",
@@ -451,6 +454,9 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
         ? false
         : true,
   calendarShowPriorityOnly: Boolean(settings.calendarShowPriorityOnly),
+  todosShowPrivate: typeof settings.todosShowPrivate === "boolean" ? settings.todosShowPrivate : true,
+  todosShowBusiness: typeof settings.todosShowBusiness === "boolean" ? settings.todosShowBusiness : true,
+  todosShowPriorityOnly: Boolean(settings.todosShowPriorityOnly),
   baselineWorkEnabled: Boolean(settings.baselineWorkEnabled),
   baselineWorkActivityId:
     typeof settings.baselineWorkActivityId === "string" ? settings.baselineWorkActivityId.trim() : "",

@@ -1,4 +1,4 @@
-import type { ActivityRecord, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, TaskRecord, TimeLogRecord } from "@notesmith/domain";
+import type { ActivityRecord, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, LocalAppSettings, TaskRecord, TimeLogRecord } from "@notesmith/domain";
 import { type StructureOptions } from "../../../lib/structure/options";
 interface TodosWorkspaceProps {
     todos: TaskRecord[];
@@ -7,6 +7,7 @@ interface TodosWorkspaceProps {
     checklistRecurrences: ChecklistRecurrenceRecord[];
     activities: ActivityRecord[];
     timeLogs: TimeLogRecord[];
+    settings: LocalAppSettings;
     structureOptions: StructureOptions;
     requestedTodoId?: string | null;
     requestedDomain?: string | null;
@@ -34,7 +35,8 @@ interface TodosWorkspaceProps {
     onDeleteTimeLog: (id: string) => void;
     onStartTracking: (targetType: "todo" | "activity", targetId: string) => void;
     onStopTracking: (targetType: "todo" | "activity", targetId: string) => void;
+    onSaveSettings: (settings: LocalAppSettings) => void;
     onOpenActivityDetail?: (activityId: string) => void;
 }
-export declare const TodosWorkspace: ({ todos, checklists, checklistTemplates, checklistRecurrences, activities, timeLogs, structureOptions, requestedTodoId, requestedDomain, requestedProject, onEditorClose, savedPeople, suggestedPeople, onToggle, onAdd, onSave, onDelete, onCreateChecklist, onCreateChecklistFromTemplate, onCreateChecklistRecurrence, onSaveChecklist, onDeleteChecklist, onCreateChecklistTemplate, onSaveChecklistTemplate, onDeleteChecklistTemplate, onDeleteChecklistRecurrence, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onOpenActivityDetail, }: TodosWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const TodosWorkspace: ({ todos, checklists, checklistTemplates, checklistRecurrences, activities, timeLogs, settings, structureOptions, requestedTodoId, requestedDomain, requestedProject, onEditorClose, savedPeople, suggestedPeople, onToggle, onAdd, onSave, onDelete, onCreateChecklist, onCreateChecklistFromTemplate, onCreateChecklistRecurrence, onSaveChecklist, onDeleteChecklist, onCreateChecklistTemplate, onSaveChecklistTemplate, onDeleteChecklistTemplate, onDeleteChecklistRecurrence, onConvertToActivity, onSaveTimeLog, onDeleteTimeLog, onStartTracking, onStopTracking, onSaveSettings, onOpenActivityDetail, }: TodosWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

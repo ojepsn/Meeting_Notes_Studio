@@ -322,6 +322,9 @@ export interface LocalAppSettings {
   calendarShowPrivate?: boolean;
   calendarShowBusiness?: boolean;
   calendarShowPriorityOnly?: boolean;
+  todosShowPrivate?: boolean;
+  todosShowBusiness?: boolean;
+  todosShowPriorityOnly?: boolean;
   baselineWorkEnabled: boolean;
   baselineWorkActivityId: string;
   apiKey: string;

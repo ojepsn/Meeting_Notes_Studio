@@ -7,6 +7,7 @@ import { normalizeTaskRecord, taskToTodoRecord, todoToTaskRecord } from "../lib/
 import { removePersistedAttachment } from "../lib/files/attachmentStore";
 import { findSessionIdForActivity, findSessionIdForTodo, upsertEntityLink } from "../lib/links/entityLinks";
 import { loadRecentLocalSnapshotBackups } from "../lib/storage/desktopStorage";
+import { inferStructureFromTitle } from "../lib/structure/inferStructure";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 import { formatStockholmDate as formatLocalDate, formatStockholmIsoWeek as formatLocalIsoWeek, formatStockholmMonth as formatLocalMonth, formatStockholmTime as formatLocalTime, } from "../lib/time/stockholm";
 const PERSIST_DEBOUNCE_MS = 300;
@@ -1332,19 +1333,25 @@ export const useDesktopStore = create((set, get) => ({
         if (!snapshot || !description.trim())
             return;
         const createdAt = new Date().toISOString();
+        const trimmedDescription = description.trim();
         const scheduledDate = options?.doOn || formatLocalDate();
         const todoId = crypto.randomUUID();
         const calendarItemId = crypto.randomUUID();
         const startSlot = findNearestAvailableTodoSlot(snapshot.calendarItems, scheduledDate);
-        const inherited = applyActivityInheritance(snapshot, {
-            activityId: options?.activityId || "",
+        const inferredStructure = inferStructureFromTitle(snapshot, trimmedDescription, "todo", {
             domain: options?.domain || "",
             project: options?.project || "",
             activity: options?.activityLabel || "",
         });
+        const inherited = applyActivityInheritance(snapshot, {
+            activityId: options?.activityId || "",
+            domain: inferredStructure.domain,
+            project: inferredStructure.project,
+            activity: inferredStructure.activity,
+        });
         const nextTask = normalizeTaskRecord({
             id: todoId,
-            description: description.trim(),
+            description: trimmedDescription,
             participantText: "",
             isDone: false,
             completedAt: null,
@@ -1431,19 +1438,25 @@ export const useDesktopStore = create((set, get) => ({
         const snapshot = get().snapshot;
         if (!snapshot || !description.trim())
             return;
+        const trimmedDescription = description.trim();
         const parentActivity = options?.parentActivityId ? getActivityById(snapshot, options.parentActivityId) : null;
+        const inferredStructure = inferStructureFromTitle(snapshot, trimmedDescription, type === "meeting" ? "meeting" : "activity", {
+            domain: options?.domain || parentActivity?.domain || "",
+            project: options?.project || parentActivity?.project || "",
+            activity: options?.activityLabel || parentActivity?.description || "",
+        });
         const nextActivity = normalizeActivityStructure({
             id: crypto.randomUUID(),
             type,
             parentActivityId: options?.parentActivityId || "",
-            description: description.trim(),
+            description: trimmedDescription,
             participantText: "",
             isDone: false,
             isPrivate: false,
             comments: options?.comments || "",
-            domain: options?.domain || parentActivity?.domain || "",
-            project: options?.project || parentActivity?.project || "",
-            activity: options?.activityLabel || parentActivity?.description || "",
+            domain: inferredStructure.domain,
+            project: inferredStructure.project,
+            activity: inferredStructure.activity,
             doOn: options?.doOn || "",
             dueDate: "",
             startTime: options?.startTime || "",
