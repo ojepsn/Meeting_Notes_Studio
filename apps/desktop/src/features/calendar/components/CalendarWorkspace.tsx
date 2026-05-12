@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ActivityRecord, CalendarItemRecord, ChecklistRecord, LocalAppSettings, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
+import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
@@ -723,7 +724,7 @@ export const CalendarWorkspace = ({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Delete" || (!selectedItem && !selectedItemIds.length)) {
+      if (event.key !== "Delete" || event.repeat) {
         return;
       }
       const activeElement = document.activeElement as HTMLElement | null;
@@ -736,13 +737,19 @@ export const CalendarWorkspace = ({
       if (isTextInput) {
         return;
       }
-      event.preventDefault();
       const idsToDelete = selectedItemIds.length ? selectedItemIds : selectedItem ? [selectedItem.id] : [];
+      if (!idsToDelete.length) {
+        return;
+      }
       const targets = new Map<string, Item>();
       idsToDelete.forEach((itemId) => {
         const item = items.find((entry) => entry.id === itemId);
         if (item) targets.set(`${item.targetType}:${item.targetId}`, item);
       });
+      if (!targets.size) {
+        return;
+      }
+      event.preventDefault();
       targets.forEach((item) => {
         if (item.targetType === "todo") {
           onDeleteTodo(item.targetId);
@@ -865,22 +872,54 @@ export const CalendarWorkspace = ({
   }, [inlineTodoEdit, selectedItemId]);
 
   useEffect(() => {
-    if (!selectedItem || selectedItem.targetType !== "todo" || inlineTodoEdit) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
-      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
-      const todo = todos.find((entry) => entry.id === selectedItem.targetId);
-      if (!todo) return;
-      if (!event.repeat && event.key.toLowerCase() === "x") {
-        event.preventDefault();
-        const nextTodo = { ...todo, isDone: !todo.isDone };
-        onSaveTodo(nextTodo);
-        setEditorDraft((current) =>
-          current?.itemId === selectedItem.id ? { ...current, isDone: nextTodo.isDone } : current,
-        );
+      const activeElement = document.activeElement as HTMLElement | null;
+      const tagName = activeElement?.tagName?.toLowerCase();
+      const isTextInput =
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select" ||
+        Boolean(activeElement?.isContentEditable);
+      if (isTextInput) {
         return;
       }
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+
+      const candidateIds = selectedItemIds.length ? selectedItemIds : selectedItem ? [selectedItem.id] : [];
+      const selectedTodoItems = candidateIds
+        .map((itemId) => items.find((entry) => entry.id === itemId))
+        .filter((item): item is Item => item !== undefined && item.targetType === "todo");
+
+      if (!selectedTodoItems.length) {
+        return;
+      }
+
+      if (!event.repeat && event.key.toLowerCase() === "x") {
+        event.preventDefault();
+        const updatedTodoStates = new Map<string, boolean>();
+        selectedTodoItems.forEach((item) => {
+          const todo = todos.find((entry) => entry.id === item.targetId);
+          if (!todo) return;
+          const nextTodo = { ...todo, isDone: !todo.isDone };
+          updatedTodoStates.set(item.id, nextTodo.isDone);
+          onSaveTodo(nextTodo);
+        });
+        if (updatedTodoStates.size) {
+          setEditorDraft((current) =>
+            current && updatedTodoStates.has(current.itemId)
+              ? { ...current, isDone: updatedTodoStates.get(current.itemId) ?? current.isDone }
+              : current,
+          );
+        }
+        return;
+      }
+
+      if (inlineTodoEdit || selectedTodoItems.length !== 1 || !selectedItem || selectedItem.targetType !== "todo") {
+        return;
+      }
+
+      const todo = todos.find((entry) => entry.id === selectedItem.targetId);
+      if (!todo) return;
       if (event.key.length === 1) {
         event.preventDefault();
         setInlineTodoEdit({ itemId: selectedItem.id, todoId: todo.id, value: event.key });
@@ -894,7 +933,7 @@ export const CalendarWorkspace = ({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [inlineTodoEdit, onSaveTodo, selectedItem, todos]);
+  }, [inlineTodoEdit, items, onSaveTodo, selectedItem, selectedItemIds, todos]);
 
   useEffect(() => {
     setSelectedItemIds((current) => current.filter((id) => items.some((item) => item.id === id)));
@@ -2248,22 +2287,20 @@ export const CalendarWorkspace = ({
                   <div className="inline-row">
                     <div className="field">
                       <label htmlFor="calendar-edit-start">Start</label>
-                      <input
+                      <DeferredTimeInput
                         id="calendar-edit-start"
-                        type="time"
                         step={300}
                         value={editorDraft.startTime}
-                        onChange={(event) => updateEditorDraft({ ...editorDraft, startTime: event.target.value })}
+                        onCommit={(value) => updateEditorDraft({ ...editorDraft, startTime: value })}
                       />
                     </div>
                     <div className="field">
                       <label htmlFor="calendar-edit-end">End</label>
-                      <input
+                      <DeferredTimeInput
                         id="calendar-edit-end"
-                        type="time"
                         step={300}
                         value={editorDraft.endTime}
-                        onChange={(event) => updateEditorDraft({ ...editorDraft, endTime: event.target.value })}
+                        onCommit={(value) => updateEditorDraft({ ...editorDraft, endTime: value })}
                       />
                     </div>
                   </div>

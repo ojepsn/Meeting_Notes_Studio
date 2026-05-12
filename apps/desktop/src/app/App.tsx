@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type CaptureMode, type RuleSuggestionRecord, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 import { DateInput } from "../components/DateInput";
+import { DeferredTimeInput } from "../components/DeferredTimeInput";
 import { PeoplePicker } from "../components/PeoplePicker";
 import { TokenPicker } from "../components/TokenPicker";
 import { useDesktopStore } from "../state/useDesktopStore";
@@ -1364,6 +1365,13 @@ export const App = () => {
       .trim();
   };
 
+  const buildDirectManualNotesOutput = (session = activeSession) => {
+    if (!session) {
+      return "";
+    }
+    return richTextToPlainText(session.manualNotes).trim();
+  };
+
   const hasTranscriptText = Boolean(activeSession?.liveTranscript.trim() || activeSession?.uploadedTranscript.trim());
   const hasWrittenCapture = Boolean((activeSession ? richTextToPlainText(activeSession.manualNotes) : "") || activeSession?.quickHighlights.trim());
   const hasAnyTextCapture = hasTranscriptText || hasWrittenCapture;
@@ -1461,13 +1469,13 @@ export const App = () => {
     const isManualPolishMode = activeSession?.transcribeOnly === true;
     return {
       primaryLabel: isManualPolishMode ? "Polish Manual notes" : "Generate with AI",
-      secondaryLabel: null as string | null,
+      secondaryLabel: "Copy Manual notes directly",
       onPrimary: () => void handleGenerate(),
-      onSecondary: undefined as (() => void) | undefined,
+      onSecondary: () => void handleCopyManualNotesDirect(),
       isPrimaryRunning: isGenerating || (activeSession?.transcribeOnly ? false : isTranscribingAudio && hasAudioOnlyVoiceCapture),
       isSecondaryRunning: false,
       emptyStatePrimaryLabel: isManualPolishMode ? "Polish Manual notes" : "Generate with AI",
-      emptyStateSecondaryLabel: null as string | null,
+      emptyStateSecondaryLabel: "Copy Manual notes directly",
     };
   })();
 
@@ -1920,6 +1928,76 @@ export const App = () => {
         visibleSession.transcribeOnly
           ? `Manual-notes transfer failed: ${error instanceof Error ? error.message : "Unknown error."}`
           : formatAIErrorMessage(error, "Generation failed."),
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleCopyManualNotesDirect = async () => {
+    if (isGenerating) {
+      return;
+    }
+
+    const latestState = useDesktopStore.getState();
+    const latestSnapshot = latestState.snapshot ?? snapshot;
+    const currentSessionId = activeSession?.id ?? latestState.activeSessionId;
+    const currentSession =
+      (activeSessionDraftRef.current?.id === currentSessionId ? activeSessionDraftRef.current : null) ??
+      latestSnapshot?.sessions.find((session) => session.id === currentSessionId && !session.deletedAt) ??
+      activeSession;
+    const template =
+      currentSession && latestSnapshot
+        ? getTemplatesForCaptureMode(latestSnapshot.templates, currentSession.captureMode).find(
+            (entry) => entry.id === currentSession.templateId,
+          ) ??
+          getTemplatesForCaptureMode(latestSnapshot.templates, currentSession.captureMode)[0] ??
+          activeTemplate
+        : activeTemplate;
+
+    if (!currentSession) {
+      setStatusNote("Open or create a session before copying notes to Output.");
+      return;
+    }
+
+    if (!template) {
+      setStatusNote("The selected template could not be found.");
+      return;
+    }
+
+    const visibleSession = readVisibleCaptureDraft(currentSession, template);
+    const directOutput = buildDirectManualNotesOutput(visibleSession);
+    if (!directOutput) {
+      setStatusNote("Add text to Manual notes first. This option copies Manual notes directly into Output.");
+      return;
+    }
+
+    setIsGenerating(true);
+    setGenerationLog([]);
+    appendGenerationLog(
+      "Direct Manual-notes copy started.",
+      "info",
+      `session: ${visibleSession.title || "Untitled session"}\nsource: Manual notes only`,
+    );
+
+    try {
+      setSelectedOutputVersionId(null);
+      await saveSession({ ...visibleSession, ...buildOutputVersionPatch(visibleSession, directOutput) });
+      appendGenerationLog(
+        "Manual notes copied directly to Output.",
+        "success",
+        `output characters: ${directOutput.length}`,
+      );
+      setStatusNote("Manual notes copied directly to Output without AI or non-AI polishing.");
+      openNotesTarget({ sessionId: visibleSession.id, view: "output" });
+    } catch (error) {
+      appendGenerationLog(
+        "Direct Manual-notes copy failed.",
+        "error",
+        error instanceof Error ? error.message : String(error),
+      );
+      setStatusNote(
+        error instanceof Error ? error.message : "Manual notes could not be copied directly to Output.",
       );
     } finally {
       setIsGenerating(false);
@@ -3201,24 +3279,18 @@ export const App = () => {
                   </div>
                   <div className="field">
                     <label htmlFor="calendar-overlay-start">Start</label>
-                    <input
+                    <DeferredTimeInput
                       id="calendar-overlay-start"
-                      type="time"
                       value={activeSession.startTime}
-                      onChange={(event) =>
-                        handleCaptureSessionChange({ ...activeSession, startTime: event.target.value })
-                      }
+                      onCommit={(value) => handleCaptureSessionChange({ ...activeSession, startTime: value })}
                     />
                   </div>
                   <div className="field">
                     <label htmlFor="calendar-overlay-end">End</label>
-                    <input
+                    <DeferredTimeInput
                       id="calendar-overlay-end"
-                      type="time"
                       value={activeSession.endTime}
-                      onChange={(event) =>
-                        handleCaptureSessionChange({ ...activeSession, endTime: event.target.value })
-                      }
+                      onCommit={(value) => handleCaptureSessionChange({ ...activeSession, endTime: value })}
                     />
                   </div>
                   <div className="field field-wide">
@@ -4557,20 +4629,18 @@ export const App = () => {
                         </div>
                         <div className="field">
                           <label htmlFor="notes-workspace-start">Start</label>
-                          <input
+                          <DeferredTimeInput
                             id="notes-workspace-start"
-                            type="time"
                             value={activeSession.startTime}
-                            onChange={(event) => handleCaptureSessionChange({ ...activeSession, startTime: event.target.value })}
+                            onCommit={(value) => handleCaptureSessionChange({ ...activeSession, startTime: value })}
                           />
                         </div>
                         <div className="field">
                           <label htmlFor="notes-workspace-end">End</label>
-                          <input
+                          <DeferredTimeInput
                             id="notes-workspace-end"
-                            type="time"
                             value={activeSession.endTime}
-                            onChange={(event) => handleCaptureSessionChange({ ...activeSession, endTime: event.target.value })}
+                            onCommit={(value) => handleCaptureSessionChange({ ...activeSession, endTime: value })}
                           />
                         </div>
                         <div className="field field-wide">

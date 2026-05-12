@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from "react";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
+import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
 import { DateInput } from "../../../components/DateInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
@@ -852,13 +853,13 @@ export const SessionEditor = ({
                   {hasStartTimeField ? (
                     <div className="field">
                       <label htmlFor="session-start">Start time</label>
-                      <input id="session-start" type="time" value={session.startTime} onChange={(event) => update("startTime", event.target.value)} />
+                      <DeferredTimeInput id="session-start" value={session.startTime} onCommit={(value) => update("startTime", value)} />
                     </div>
                   ) : null}
                   {hasEndTimeField ? (
                     <div className="field">
                       <label htmlFor="session-end">End time</label>
-                      <input id="session-end" type="time" value={session.endTime} onChange={(event) => update("endTime", event.target.value)} />
+                      <DeferredTimeInput id="session-end" value={session.endTime} onCommit={(value) => update("endTime", value)} />
                     </div>
                   ) : null}
                   {agendaField ? (
@@ -1087,8 +1088,8 @@ export const SessionEditor = ({
               </select>
             </div>
             {hasDateField ? <div className={`field${isMinimal ? " capture-meta-field" : ""}`}><label htmlFor="session-date">Date</label><DateInput id="session-date" value={session.date} onChange={(event) => update("date", event.target.value)} /></div> : null}
-            {hasStartTimeField ? <div className={`field${isMinimal ? " capture-meta-field" : ""}`}><label htmlFor="session-start">Start time</label><input id="session-start" type="time" value={session.startTime} onChange={(event) => update("startTime", event.target.value)} /></div> : null}
-            {hasEndTimeField ? <div className={`field${isMinimal ? " capture-meta-field" : ""}`}><label htmlFor="session-end">End time</label><input id="session-end" type="time" value={session.endTime} onChange={(event) => update("endTime", event.target.value)} /></div> : null}
+            {hasStartTimeField ? <div className={`field${isMinimal ? " capture-meta-field" : ""}`}><label htmlFor="session-start">Start time</label><DeferredTimeInput id="session-start" value={session.startTime} onCommit={(value) => update("startTime", value)} /></div> : null}
+            {hasEndTimeField ? <div className={`field${isMinimal ? " capture-meta-field" : ""}`}><label htmlFor="session-end">End time</label><DeferredTimeInput id="session-end" value={session.endTime} onCommit={(value) => update("endTime", value)} /></div> : null}
             {agendaField ? (
               <details className="field field-wide workspace-disclosure">
                 <summary>{agendaField.label}</summary>

@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DateInput } from "../../../components/DateInput";
+import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain } from "../../../lib/structure/options";
@@ -523,7 +524,7 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
     }, [dayColumnWidth]);
     useEffect(() => {
         const handleKeyDown = (event) => {
-            if (event.key !== "Delete" || (!selectedItem && !selectedItemIds.length)) {
+            if (event.key !== "Delete" || event.repeat) {
                 return;
             }
             const activeElement = document.activeElement;
@@ -535,14 +536,20 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
             if (isTextInput) {
                 return;
             }
-            event.preventDefault();
             const idsToDelete = selectedItemIds.length ? selectedItemIds : selectedItem ? [selectedItem.id] : [];
+            if (!idsToDelete.length) {
+                return;
+            }
             const targets = new Map();
             idsToDelete.forEach((itemId) => {
                 const item = items.find((entry) => entry.id === itemId);
                 if (item)
                     targets.set(`${item.targetType}:${item.targetId}`, item);
             });
+            if (!targets.size) {
+                return;
+            }
+            event.preventDefault();
             targets.forEach((item) => {
                 if (item.targetType === "todo") {
                     onDeleteTodo(item.targetId);
@@ -657,24 +664,49 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
         setInlineTodoEdit(null);
     }, [inlineTodoEdit, selectedItemId]);
     useEffect(() => {
-        if (!selectedItem || selectedItem.targetType !== "todo" || inlineTodoEdit)
-            return;
         const handleKeyDown = (event) => {
-            const target = event.target;
-            if (target?.closest("input, textarea, select, [contenteditable='true']"))
+            const activeElement = document.activeElement;
+            const tagName = activeElement?.tagName?.toLowerCase();
+            const isTextInput = tagName === "input" ||
+                tagName === "textarea" ||
+                tagName === "select" ||
+                Boolean(activeElement?.isContentEditable);
+            if (isTextInput) {
                 return;
+            }
             if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)
                 return;
+            const candidateIds = selectedItemIds.length ? selectedItemIds : selectedItem ? [selectedItem.id] : [];
+            const selectedTodoItems = candidateIds
+                .map((itemId) => items.find((entry) => entry.id === itemId))
+                .filter((item) => item !== undefined && item.targetType === "todo");
+            if (!selectedTodoItems.length) {
+                return;
+            }
+            if (!event.repeat && event.key.toLowerCase() === "x") {
+                event.preventDefault();
+                const updatedTodoStates = new Map();
+                selectedTodoItems.forEach((item) => {
+                    const todo = todos.find((entry) => entry.id === item.targetId);
+                    if (!todo)
+                        return;
+                    const nextTodo = { ...todo, isDone: !todo.isDone };
+                    updatedTodoStates.set(item.id, nextTodo.isDone);
+                    onSaveTodo(nextTodo);
+                });
+                if (updatedTodoStates.size) {
+                    setEditorDraft((current) => current && updatedTodoStates.has(current.itemId)
+                        ? { ...current, isDone: updatedTodoStates.get(current.itemId) ?? current.isDone }
+                        : current);
+                }
+                return;
+            }
+            if (inlineTodoEdit || selectedTodoItems.length !== 1 || !selectedItem || selectedItem.targetType !== "todo") {
+                return;
+            }
             const todo = todos.find((entry) => entry.id === selectedItem.targetId);
             if (!todo)
                 return;
-            if (!event.repeat && event.key.toLowerCase() === "x") {
-                event.preventDefault();
-                const nextTodo = { ...todo, isDone: !todo.isDone };
-                onSaveTodo(nextTodo);
-                setEditorDraft((current) => current?.itemId === selectedItem.id ? { ...current, isDone: nextTodo.isDone } : current);
-                return;
-            }
             if (event.key.length === 1) {
                 event.preventDefault();
                 setInlineTodoEdit({ itemId: selectedItem.id, todoId: todo.id, value: event.key });
@@ -690,7 +722,7 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [inlineTodoEdit, onSaveTodo, selectedItem, todos]);
+    }, [inlineTodoEdit, items, onSaveTodo, selectedItem, selectedItemIds, todos]);
     useEffect(() => {
         setSelectedItemIds((current) => current.filter((id) => items.some((item) => item.id === id)));
     }, [items]);
@@ -1516,7 +1548,7 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
                                         top: `${Math.min(marqueeSelection.startY, marqueeSelection.currentY)}px`,
                                         width: `${Math.abs(marqueeSelection.currentX - marqueeSelection.startX)}px`,
                                         height: `${Math.abs(marqueeSelection.currentY - marqueeSelection.startY)}px`,
-                                    } })) : null] }) }), _jsx("div", { className: "calendar-splitter", role: "separator", "aria-orientation": "vertical", onMouseDown: () => { splitterDraggingRef.current = true; document.body.style.cursor = "col-resize"; } }), _jsx("aside", { className: `calendar-editor-card${detailsPaneWidth <= 340 ? " calendar-editor-card-compact" : ""}`, children: editorDraft ? (_jsxs("div", { className: `stack calendar-editor-stack${detailsPaneWidth <= 340 ? " calendar-editor-stack-compact" : ""}`, children: [_jsxs("div", { className: "card-header", children: [_jsxs("div", { children: [_jsx("h3", { children: editorDraft.isMeeting ? "Meeting" : "Task" }), _jsxs("div", { className: "calendar-editor-meta", children: [_jsx("span", { className: "status-chip", children: editorDraft.isMeeting ? "Meeting" : "Task" }), editorDraft.project ? _jsx("span", { className: "status-chip", children: editorDraft.project }) : null, editorDraft.domain ? _jsx("span", { className: "status-chip", children: editorDraft.domain }) : null] })] }), _jsx("button", { className: "small-button", type: "button", onClick: () => setSelectedItemId(null), children: "Close" })] }), _jsx("div", { className: "calendar-inspector-section-label", children: "Schedule" }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-title", children: "Title" }), _jsx("input", { id: "calendar-edit-title", value: editorDraft.title, onChange: (event) => updateEditorDraft({ ...editorDraft, title: event.target.value }) })] }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "calendar-edit-participants", children: "People" }), _jsx(PeoplePicker, { value: editorDraft.participantText, savedPeople: savedPeople, suggestedPeople: savedPeople, placeholder: "Search or add people", onChange: (value) => updateEditorDraft({ ...editorDraft, participantText: value }) })] }), _jsxs("div", { className: "calendar-editor-quick-toggles", children: [editorDraft.targetType === "todo" ? (_jsxs("label", { className: "compact-private-toggle calendar-done-toggle", children: [_jsx("input", { type: "checkbox", checked: editorDraft.isDone, onChange: (event) => updateEditorDraft({ ...editorDraft, isDone: event.target.checked }) }), _jsx("span", { children: editorDraft.isDone ? "Done" : "Mark as done" })] })) : null, editorDraft.targetType === "todo" ? (_jsxs("label", { className: "compact-private-toggle calendar-done-toggle", children: [_jsx("input", { type: "checkbox", checked: editorDraft.isPriority, onChange: (event) => updateEditorDraft({ ...editorDraft, isPriority: event.target.checked }) }), _jsx("span", { children: "Prio" })] })) : null, _jsxs("label", { className: "compact-private-toggle calendar-done-toggle", children: [_jsx("input", { type: "checkbox", checked: editorDraft.isPrivate, onChange: (event) => updateEditorDraft({ ...editorDraft, isPrivate: event.target.checked }) }), _jsx("span", { children: "Private" })] })] }), editorDraft.isMeeting ? (_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-date", children: editorDraft.isMeeting ? "Date" : "Do on" }), _jsx(DateInput, { id: "calendar-edit-date", value: editorDraft.doOn, onChange: (event) => updateEditorDraft({ ...editorDraft, doOn: event.target.value }) })] })) : (_jsxs("details", { className: "workspace-disclosure calendar-inspector-disclosure", children: [_jsx("summary", { children: "Schedule details" }), _jsx("div", { className: "workspace-disclosure-body", children: _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-date", children: editorDraft.isMeeting ? "Date" : "Do on" }), _jsx(DateInput, { id: "calendar-edit-date", value: editorDraft.doOn, onChange: (event) => updateEditorDraft({ ...editorDraft, doOn: event.target.value }) })] }) })] })), editorDraft.targetType === "activity" ? (_jsxs(_Fragment, { children: [_jsx("div", { className: "calendar-inspector-section-label", children: editorDraft.isMeeting ? "Linked session" : "Schedule time" }), _jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-start", children: "Start" }), _jsx("input", { id: "calendar-edit-start", type: "time", step: 300, value: editorDraft.startTime, onChange: (event) => updateEditorDraft({ ...editorDraft, startTime: event.target.value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-end", children: "End" }), _jsx("input", { id: "calendar-edit-end", type: "time", step: 300, value: editorDraft.endTime, onChange: (event) => updateEditorDraft({ ...editorDraft, endTime: event.target.value }) })] })] }), editorDraft.isMeeting ? (_jsxs("div", { className: "field", children: [_jsx("label", { children: "Meeting session" }), _jsxs("div", { className: "calendar-linked-session-card", children: [_jsx("div", { className: "calendar-linked-session-status", children: linkedSessionStateByActivity[editorDraft.targetId]?.sessionId ? (_jsxs(_Fragment, { children: [_jsx("strong", { children: linkedSessionStateByActivity[editorDraft.targetId]?.sessionTitle || "Linked meeting session" }), _jsx("span", { children: linkedSessionStateByActivity[editorDraft.targetId]?.hasOutput ? "Output available" : "No output yet" })] })) : (_jsxs(_Fragment, { children: [_jsx("strong", { children: "No linked meeting session" }), _jsx("span", { children: "Create one when this calendar meeting should become a working notes session." })] })) }), _jsx("div", { className: "calendar-editor-actions", children: linkedSessionStateByActivity[editorDraft.targetId]?.sessionId ? (_jsxs(_Fragment, { children: [_jsx("button", { className: "shell-button", type: "button", onClick: () => {
+                                    } })) : null] }) }), _jsx("div", { className: "calendar-splitter", role: "separator", "aria-orientation": "vertical", onMouseDown: () => { splitterDraggingRef.current = true; document.body.style.cursor = "col-resize"; } }), _jsx("aside", { className: `calendar-editor-card${detailsPaneWidth <= 340 ? " calendar-editor-card-compact" : ""}`, children: editorDraft ? (_jsxs("div", { className: `stack calendar-editor-stack${detailsPaneWidth <= 340 ? " calendar-editor-stack-compact" : ""}`, children: [_jsxs("div", { className: "card-header", children: [_jsxs("div", { children: [_jsx("h3", { children: editorDraft.isMeeting ? "Meeting" : "Task" }), _jsxs("div", { className: "calendar-editor-meta", children: [_jsx("span", { className: "status-chip", children: editorDraft.isMeeting ? "Meeting" : "Task" }), editorDraft.project ? _jsx("span", { className: "status-chip", children: editorDraft.project }) : null, editorDraft.domain ? _jsx("span", { className: "status-chip", children: editorDraft.domain }) : null] })] }), _jsx("button", { className: "small-button", type: "button", onClick: () => setSelectedItemId(null), children: "Close" })] }), _jsx("div", { className: "calendar-inspector-section-label", children: "Schedule" }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-title", children: "Title" }), _jsx("input", { id: "calendar-edit-title", value: editorDraft.title, onChange: (event) => updateEditorDraft({ ...editorDraft, title: event.target.value }) })] }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "calendar-edit-participants", children: "People" }), _jsx(PeoplePicker, { value: editorDraft.participantText, savedPeople: savedPeople, suggestedPeople: savedPeople, placeholder: "Search or add people", onChange: (value) => updateEditorDraft({ ...editorDraft, participantText: value }) })] }), _jsxs("div", { className: "calendar-editor-quick-toggles", children: [editorDraft.targetType === "todo" ? (_jsxs("label", { className: "compact-private-toggle calendar-done-toggle", children: [_jsx("input", { type: "checkbox", checked: editorDraft.isDone, onChange: (event) => updateEditorDraft({ ...editorDraft, isDone: event.target.checked }) }), _jsx("span", { children: editorDraft.isDone ? "Done" : "Mark as done" })] })) : null, editorDraft.targetType === "todo" ? (_jsxs("label", { className: "compact-private-toggle calendar-done-toggle", children: [_jsx("input", { type: "checkbox", checked: editorDraft.isPriority, onChange: (event) => updateEditorDraft({ ...editorDraft, isPriority: event.target.checked }) }), _jsx("span", { children: "Prio" })] })) : null, _jsxs("label", { className: "compact-private-toggle calendar-done-toggle", children: [_jsx("input", { type: "checkbox", checked: editorDraft.isPrivate, onChange: (event) => updateEditorDraft({ ...editorDraft, isPrivate: event.target.checked }) }), _jsx("span", { children: "Private" })] })] }), editorDraft.isMeeting ? (_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-date", children: editorDraft.isMeeting ? "Date" : "Do on" }), _jsx(DateInput, { id: "calendar-edit-date", value: editorDraft.doOn, onChange: (event) => updateEditorDraft({ ...editorDraft, doOn: event.target.value }) })] })) : (_jsxs("details", { className: "workspace-disclosure calendar-inspector-disclosure", children: [_jsx("summary", { children: "Schedule details" }), _jsx("div", { className: "workspace-disclosure-body", children: _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-date", children: editorDraft.isMeeting ? "Date" : "Do on" }), _jsx(DateInput, { id: "calendar-edit-date", value: editorDraft.doOn, onChange: (event) => updateEditorDraft({ ...editorDraft, doOn: event.target.value }) })] }) })] })), editorDraft.targetType === "activity" ? (_jsxs(_Fragment, { children: [_jsx("div", { className: "calendar-inspector-section-label", children: editorDraft.isMeeting ? "Linked session" : "Schedule time" }), _jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-start", children: "Start" }), _jsx(DeferredTimeInput, { id: "calendar-edit-start", step: 300, value: editorDraft.startTime, onCommit: (value) => updateEditorDraft({ ...editorDraft, startTime: value }) })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "calendar-edit-end", children: "End" }), _jsx(DeferredTimeInput, { id: "calendar-edit-end", step: 300, value: editorDraft.endTime, onCommit: (value) => updateEditorDraft({ ...editorDraft, endTime: value }) })] })] }), editorDraft.isMeeting ? (_jsxs("div", { className: "field", children: [_jsx("label", { children: "Meeting session" }), _jsxs("div", { className: "calendar-linked-session-card", children: [_jsx("div", { className: "calendar-linked-session-status", children: linkedSessionStateByActivity[editorDraft.targetId]?.sessionId ? (_jsxs(_Fragment, { children: [_jsx("strong", { children: linkedSessionStateByActivity[editorDraft.targetId]?.sessionTitle || "Linked meeting session" }), _jsx("span", { children: linkedSessionStateByActivity[editorDraft.targetId]?.hasOutput ? "Output available" : "No output yet" })] })) : (_jsxs(_Fragment, { children: [_jsx("strong", { children: "No linked meeting session" }), _jsx("span", { children: "Create one when this calendar meeting should become a working notes session." })] })) }), _jsx("div", { className: "calendar-editor-actions", children: linkedSessionStateByActivity[editorDraft.targetId]?.sessionId ? (_jsxs(_Fragment, { children: [_jsx("button", { className: "shell-button", type: "button", onClick: () => {
                                                                             const sessionId = linkedSessionStateByActivity[editorDraft.targetId]?.sessionId;
                                                                             if (sessionId)
                                                                                 onOpenSession(sessionId);

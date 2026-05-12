@@ -1,6 +1,7 @@
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
+import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
 import { DateInput } from "../../../components/DateInput";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { buildHtmlMarkup, buildStructuredOutput } from "../../../lib/export/exportService";
@@ -533,6 +534,11 @@ export const OutputWorkspace = ({
                 >
                   {primaryActionButtonLabel}
                 </button>
+                {secondaryActionLabel && onSecondaryAction ? (
+                  <button className="secondary-button" type="button" onClick={onSecondaryAction}>
+                    {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
+                  </button>
+                ) : null}
                 <button className="secondary-button" type="button" onClick={onCopyOutput}>
                   Copy Output
                 </button>
@@ -1254,31 +1260,28 @@ export const OutputWorkspace = ({
             <>
               <div className="field">
                 <label htmlFor="output-start-time">Start time</label>
-                <input
+                <DeferredTimeInput
                   id="output-start-time"
-                  type="time"
                   value={session.startTime}
-                  onChange={(event) => onChange({ ...session, startTime: event.target.value })}
+                  onCommit={(value) => onChange({ ...session, startTime: value })}
                 />
               </div>
               <div className="field">
                 <label htmlFor="output-end-time">End time</label>
-                <input
+                <DeferredTimeInput
                   id="output-end-time"
-                  type="time"
                   value={session.endTime}
-                  onChange={(event) => onChange({ ...session, endTime: event.target.value })}
+                  onCommit={(value) => onChange({ ...session, endTime: value })}
                 />
               </div>
             </>
           ) : (
             <div className="field">
               <label htmlFor="output-time">Time</label>
-              <input
+              <DeferredTimeInput
                 id="output-time"
-                type="time"
                 value={session.startTime}
-                onChange={(event) => onChange({ ...session, startTime: event.target.value })}
+                onCommit={(value) => onChange({ ...session, startTime: value })}
               />
             </div>
           )}
