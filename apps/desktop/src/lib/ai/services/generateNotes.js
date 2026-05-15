@@ -128,6 +128,19 @@ const getDiscussionFormatInstruction = (session) => {
         "When uncertain, choose prose.",
     ].join(" ");
 };
+const getMeetingHeaderInstruction = (session) => {
+    if (session.captureMode !== "meeting-note") {
+        return "";
+    }
+    return [
+        "Always begin the final output with these labeled lines exactly once, before all sections:",
+        `Meeting title: ${session.title.trim() || "Not provided"}`,
+        `Date: ${session.date.trim() || "Not provided"}`,
+        `Start time: ${session.startTime.trim() || "Not provided"}`,
+        `End time: ${session.endTime.trim() || "Not provided"}`,
+        `Participants: ${sortParticipantsAlphabetically(session.participantText) || "Not provided"}`,
+    ].join("\n");
+};
 export const generateNotes = async ({ session, settings, template, attachments = [], onEvent, onDiagnostic, }) => {
     const promptProfile = resolvePromptProfile(settings.promptProfile);
     const sortedParticipants = sortParticipantsAlphabetically(session.participantText);
@@ -179,6 +192,7 @@ export const generateNotes = async ({ session, settings, template, attachments =
         ...generationPromptTexts,
         getCaptureModeInstruction(session),
         getDiscussionFormatInstruction(session),
+        getMeetingHeaderInstruction(session),
         "Do not reproduce the transcript or source notes verbatim. Transform the source into a synthesized, business-ready output with clear wording, merged duplicates, and meaningful summarization.",
         outputLanguageInstruction,
         getDetailLevelInstruction(session.detailLevel),

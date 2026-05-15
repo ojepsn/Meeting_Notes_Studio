@@ -6759,6 +6759,10 @@ select {
   grid-column: 1 / -1;
 }
 
+.analytics-weekly-project-card {
+  grid-column: 1 / -1;
+}
+
 .analytics-day-flow-window-toggle {
   flex-shrink: 0;
 }

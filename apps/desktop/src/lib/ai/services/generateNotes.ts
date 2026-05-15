@@ -179,6 +179,21 @@ const getDiscussionFormatInstruction = (session: SessionRecord) => {
   ].join(" ");
 };
 
+const getMeetingHeaderInstruction = (session: SessionRecord) => {
+  if (session.captureMode !== "meeting-note") {
+    return "";
+  }
+
+  return [
+    "Always begin the final output with these labeled lines exactly once, before all sections:",
+    `Meeting title: ${session.title.trim() || "Not provided"}`,
+    `Date: ${session.date.trim() || "Not provided"}`,
+    `Start time: ${session.startTime.trim() || "Not provided"}`,
+    `End time: ${session.endTime.trim() || "Not provided"}`,
+    `Participants: ${sortParticipantsAlphabetically(session.participantText) || "Not provided"}`,
+  ].join("\n");
+};
+
 export const generateNotes = async ({
   session,
   settings,
@@ -257,6 +272,7 @@ export const generateNotes = async ({
     ...generationPromptTexts,
     getCaptureModeInstruction(session),
     getDiscussionFormatInstruction(session),
+    getMeetingHeaderInstruction(session),
     "Do not reproduce the transcript or source notes verbatim. Transform the source into a synthesized, business-ready output with clear wording, merged duplicates, and meaningful summarization.",
     outputLanguageInstruction,
     getDetailLevelInstruction(session.detailLevel),

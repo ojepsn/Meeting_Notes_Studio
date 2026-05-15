@@ -37,6 +37,7 @@ import { buildRecordingFilename, getSupportedRecordingMimeType, getSystemAudioDi
 import { createLocalSnapshotBackup, downloadInstallerToDownloads, downloadInstallerToDownloadsAndOpen, exportSnapshotBackup, exportSnapshotBackupToDownloads, getDesktopBundleType, getDesktopAppVersion, getDesktopStorageInfo, getLatestLocalBackupInfo, importSnapshotBackup, mergeDesktopSnapshot, mergeImportedPwaSnapshot, openDesktopPath, openDesktopUrl, revealDesktopPath, withDesktopBackupAttachmentFiles, } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW } from "../lib/metadata/review";
 import { findActivityIdForSession, findSessionIdForActivity, findSessionIdForTodo, findTodoIdForSession } from "../lib/links/entityLinks";
+import { ensureMeetingOutputHeader } from "../lib/output/meetingOutput";
 import { polishNonAiNotesText } from "../lib/output/manualPolish";
 import { acceptRuleSuggestion, collectRuleSuggestionObservations, ignoreRuleSuggestion, mergeRuleSuggestionObservations } from "../lib/output/ruleSuggestions";
 import { buildStructureOptions, createEmptyStructureOptions, getActivitiesForSelection, getProjectsForDomain } from "../lib/structure/options";
@@ -93,6 +94,8 @@ const isStructuredHeading = (line) => {
     if (/^[-*•]/.test(line))
         return false;
     if (/^\d+[.)]\s/.test(line))
+        return false;
+    if (line.includes(":") && !/:\s*$/.test(line))
         return false;
     if (/[.!?]$/.test(line))
         return false;
@@ -155,13 +158,15 @@ const normalizeOutputVersionHistory = (outputVersions, currentOutput, updatedAt)
 };
 const buildOutputVersionPatch = (session, nextOutput) => {
     const generatedAt = new Date().toISOString();
-    const previousHistory = normalizeOutputVersionHistory(session.outputVersions, session.output, session.updatedAt);
+    const normalizedCurrentOutput = ensureMeetingOutputHeader(session, session.output).trim();
+    const normalizedNextOutput = ensureMeetingOutputHeader(session, nextOutput).trim();
+    const previousHistory = normalizeOutputVersionHistory(session.outputVersions, normalizedCurrentOutput, session.updatedAt);
     return {
-        output: nextOutput,
+        output: normalizedNextOutput,
         outputVersions: [
             {
                 id: crypto.randomUUID(),
-                output: nextOutput,
+                output: normalizedNextOutput,
                 generatedAt,
             },
             ...previousHistory,
@@ -766,7 +771,8 @@ export const App = () => {
     const activeAudioAttachment = useMemo(() => activeAttachments.find((attachment) => attachment.kind === "audio") ?? null, [activeAttachments]);
     const activeOutputVersions = useMemo(() => normalizeOutputVersionHistory(activeSession?.outputVersions, activeSession?.output ?? "", activeSession?.updatedAt ?? new Date().toISOString()), [activeSession]);
     const selectedOutputVersion = useMemo(() => activeOutputVersions.find((version) => version.id === selectedOutputVersionId) ?? null, [activeOutputVersions, selectedOutputVersionId]);
-    const displayedOutput = selectedOutputVersion?.output ?? activeSession?.output ?? "";
+    const rawDisplayedOutput = selectedOutputVersion?.output ?? activeSession?.output ?? "";
+    const displayedOutput = activeSession ? ensureMeetingOutputHeader(activeSession, rawDisplayedOutput) : rawDisplayedOutput;
     const selectedTextModelOption = modelPricingSnapshot.textModels
         .map(buildTextModelOption)
         .find((option) => option.id === snapshot?.settings.textModel);
@@ -1004,15 +1010,22 @@ export const App = () => {
             savedParticipants: snapshot?.settings.savedParticipants ?? [],
             preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
         };
-        const title = session.title.trim();
-        const metaBlock = buildOutputMetaBlock(session);
         const agenda = getAgendaText(session, template);
         const manualNotes = polishNonAiNotesText(richTextToPlainText(session.manualNotes), manualPolishOptions);
         const transcript = polishNonAiNotesText([session.liveTranscript.trim(), session.uploadedTranscript.trim()].filter(Boolean).join("\n\n"), manualPolishOptions);
         const notesBody = [manualNotes, transcript].filter(Boolean).join("\n\n").trim();
+        if (session.captureMode === "meeting-note") {
+            return [
+                agenda ? `Agenda\n${agenda}` : "",
+                notesBody ? `Notes\n${notesBody}` : "",
+            ]
+                .filter(Boolean)
+                .join("\n\n")
+                .trim();
+        }
         return [
-            title,
-            metaBlock,
+            session.title.trim(),
+            buildOutputMetaBlock(session),
             agenda ? `Agenda\n${agenda}` : "",
             notesBody ? `Notes\n${notesBody}` : "",
         ]
@@ -1535,7 +1548,7 @@ export const App = () => {
                         ? "English"
                         : "Swedish";
             const translated = await translateOutput({
-                currentOutput: activeSession.output,
+                currentOutput: ensureMeetingOutputHeader(activeSession, activeSession.output),
                 settings: snapshot.settings,
                 targetLanguage,
                 onEvent: createAIRuntimeHandler({
@@ -1559,7 +1572,7 @@ export const App = () => {
         let usedCache = false;
         try {
             const revised = await reviseOutput({
-                currentOutput: activeSession.output,
+                currentOutput: ensureMeetingOutputHeader(activeSession, activeSession.output),
                 instructions,
                 detailLevel: activeSession.detailLevel,
                 outputLanguage: resolveSessionOutputLanguage(activeSession),
@@ -1664,32 +1677,37 @@ export const App = () => {
         if (!nextSession) {
             return;
         }
+        const normalizedNextSession = {
+            ...nextSession,
+            output: ensureMeetingOutputHeader(nextSession, nextSession.output),
+        };
         if (!activeSession) {
-            await saveSession(nextSession);
+            await saveSession(normalizedNextSession);
             return;
         }
-        if (nextSession.output !== activeSession.output) {
-            const nextVersions = normalizeOutputVersionHistory(nextSession.outputVersions, activeSession.output, activeSession.updatedAt);
+        const normalizedActiveOutput = ensureMeetingOutputHeader(activeSession, activeSession.output);
+        if (normalizedNextSession.output !== normalizedActiveOutput) {
+            const nextVersions = normalizeOutputVersionHistory(normalizedNextSession.outputVersions, normalizedActiveOutput, activeSession.updatedAt);
             if (nextVersions[0]) {
                 nextVersions[0] = {
                     ...nextVersions[0],
-                    output: nextSession.output,
+                    output: normalizedNextSession.output,
                 };
             }
-            else if (nextSession.output.trim()) {
+            else if (normalizedNextSession.output.trim()) {
                 nextVersions.unshift({
                     id: crypto.randomUUID(),
-                    output: nextSession.output,
+                    output: normalizedNextSession.output,
                     generatedAt: new Date().toISOString(),
                 });
             }
             await saveSession({
-                ...nextSession,
+                ...normalizedNextSession,
                 outputVersions: nextVersions,
             });
             return;
         }
-        await saveSession(nextSession);
+        await saveSession(normalizedNextSession);
     };
     const handleImportAudio = async () => {
         const selection = await pickAudioFile();
@@ -2469,10 +2487,13 @@ export const App = () => {
                         ...options,
                     }), onAddFollowUpMeeting: (description, options) => void addActivity(description, "meeting", options) }));
             case "calendar-output-preview": {
-                const previewLines = calendarPreviewSession ? splitStructuredOutput(calendarPreviewSession.output) : [];
+                const previewOutput = calendarPreviewSession
+                    ? ensureMeetingOutputHeader(calendarPreviewSession, calendarPreviewSession.output)
+                    : "";
+                const previewLines = previewOutput ? splitStructuredOutput(previewOutput) : [];
                 return (_jsxs("div", { className: "sidebar-card overlay-card calendar-output-preview-card", children: [_jsx("div", { className: "overlay-header calendar-output-preview-header", children: _jsxs("div", { children: [_jsx("h3", { children: calendarPreviewSession?.title || "Session output" }), _jsx("p", { className: "tiny-text", children: calendarPreviewSession
                                             ? `${calendarPreviewSession.date} • ${calendarPreviewSession.startTime} to ${calendarPreviewSession.endTime}`
-                                            : "Linked session preview" })] }) }), calendarPreviewSession && calendarPreviewSession.output.trim() ? (_jsx("div", { className: "calendar-output-preview-body", children: previewLines.map((line, index) => isStructuredHeading(line) ? (_jsx("h4", { children: line.replace(/:$/, "") }, `${line}-${index}`)) : (_jsx("p", { children: line }, `${line}-${index}`))) })) : (_jsxs("div", { className: "card", children: [_jsx("h4", { children: "No output yet" }), _jsx("p", { className: "muted", children: "Generate output in the linked session first, then return here to preview it." })] }))] }));
+                                            : "Linked session preview" })] }) }), calendarPreviewSession && previewOutput.trim() ? (_jsx("div", { className: "calendar-output-preview-body", children: previewLines.map((line, index) => isStructuredHeading(line) ? (_jsx("h4", { children: line.replace(/:$/, "") }, `${line}-${index}`)) : (_jsx("p", { children: line }, `${line}-${index}`))) })) : (_jsxs("div", { className: "card", children: [_jsx("h4", { children: "No output yet" }), _jsx("p", { className: "muted", children: "Generate output in the linked session first, then return here to preview it." })] }))] }));
             }
             case "sessions":
                 return (_jsx(SessionsSidebar, { sessions: snapshot.sessions, activeSessionId: activeSession.id, onSelect: (id) => {

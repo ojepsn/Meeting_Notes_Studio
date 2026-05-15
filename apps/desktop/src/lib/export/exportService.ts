@@ -65,6 +65,7 @@ export const isHeadingLine = (line: string) => {
   if (trimmed.length > 80) return false;
   if (/^[-*•]/.test(trimmed)) return false;
   if (/^\d+[.)]\s/.test(trimmed)) return false;
+  if (trimmed.includes(":") && !/:\s*$/.test(trimmed)) return false;
   if (/[.!?]$/.test(trimmed)) return false;
   return /^[\p{L}\p{N}&/(),:'" -]+:?$/u.test(trimmed);
 };

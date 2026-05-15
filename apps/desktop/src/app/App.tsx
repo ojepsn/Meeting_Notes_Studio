@@ -84,6 +84,7 @@ import {
 } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW, type MetadataReviewState } from "../lib/metadata/review";
 import { findActivityIdForSession, findSessionIdForActivity, findSessionIdForTodo, findTodoIdForSession } from "../lib/links/entityLinks";
+import { ensureMeetingOutputHeader } from "../lib/output/meetingOutput";
 import { polishNonAiNotesText } from "../lib/output/manualPolish";
 import { acceptRuleSuggestion, collectRuleSuggestionObservations, ignoreRuleSuggestion, mergeRuleSuggestionObservations } from "../lib/output/ruleSuggestions";
 import { buildStructureOptions, createEmptyStructureOptions, getActivitiesForSelection, getProjectsForDomain } from "../lib/structure/options";
@@ -172,6 +173,7 @@ const isStructuredHeading = (line: string) => {
   if (!line || line.length > 80) return false;
   if (/^[-*•]/.test(line)) return false;
   if (/^\d+[.)]\s/.test(line)) return false;
+  if (line.includes(":") && !/:\s*$/.test(line)) return false;
   if (/[.!?]$/.test(line)) return false;
   return /^[\p{L}\p{N}&/(),:'" -]+:?$/u.test(line);
 };
@@ -249,17 +251,26 @@ const normalizeOutputVersionHistory = (
 };
 
 const buildOutputVersionPatch = (
-  session: { output: string; outputVersions?: OutputVersionRecord[]; updatedAt: string },
+  session: Pick<
+    SessionRecord,
+    "captureMode" | "title" | "date" | "startTime" | "endTime" | "participantText" | "output" | "updatedAt"
+  > & { outputVersions?: OutputVersionRecord[] },
   nextOutput: string,
 ): Pick<{ output: string; outputVersions: OutputVersionRecord[] }, "output" | "outputVersions"> => {
   const generatedAt = new Date().toISOString();
-  const previousHistory = normalizeOutputVersionHistory(session.outputVersions, session.output, session.updatedAt);
+  const normalizedCurrentOutput = ensureMeetingOutputHeader(session, session.output).trim();
+  const normalizedNextOutput = ensureMeetingOutputHeader(session, nextOutput).trim();
+  const previousHistory = normalizeOutputVersionHistory(
+    session.outputVersions,
+    normalizedCurrentOutput,
+    session.updatedAt,
+  );
   return {
-    output: nextOutput,
+    output: normalizedNextOutput,
     outputVersions: [
       {
         id: crypto.randomUUID(),
-        output: nextOutput,
+        output: normalizedNextOutput,
         generatedAt,
       },
       ...previousHistory,
@@ -1043,7 +1054,8 @@ export const App = () => {
     () => activeOutputVersions.find((version) => version.id === selectedOutputVersionId) ?? null,
     [activeOutputVersions, selectedOutputVersionId],
   );
-  const displayedOutput = selectedOutputVersion?.output ?? activeSession?.output ?? "";
+  const rawDisplayedOutput = selectedOutputVersion?.output ?? activeSession?.output ?? "";
+  const displayedOutput = activeSession ? ensureMeetingOutputHeader(activeSession, rawDisplayedOutput) : rawDisplayedOutput;
 
   const selectedTextModelOption = modelPricingSnapshot.textModels
     .map(buildTextModelOption)
@@ -1344,8 +1356,6 @@ export const App = () => {
       savedParticipants: snapshot?.settings.savedParticipants ?? [],
       preferredParticipantNames: snapshot?.settings.preferredParticipantNames ?? [],
     };
-    const title = session.title.trim();
-    const metaBlock = buildOutputMetaBlock(session);
     const agenda = getAgendaText(session, template);
     const manualNotes = polishNonAiNotesText(richTextToPlainText(session.manualNotes), manualPolishOptions);
     const transcript = polishNonAiNotesText(
@@ -1354,9 +1364,19 @@ export const App = () => {
     );
     const notesBody = [manualNotes, transcript].filter(Boolean).join("\n\n").trim();
 
+    if (session.captureMode === "meeting-note") {
+      return [
+        agenda ? `Agenda\n${agenda}` : "",
+        notesBody ? `Notes\n${notesBody}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n")
+        .trim();
+    }
+
     return [
-      title,
-      metaBlock,
+      session.title.trim(),
+      buildOutputMetaBlock(session),
       agenda ? `Agenda\n${agenda}` : "",
       notesBody ? `Notes\n${notesBody}` : "",
     ]
@@ -2016,7 +2036,7 @@ export const App = () => {
               ? "English"
               : "Swedish";
       const translated = await translateOutput({
-        currentOutput: activeSession.output,
+        currentOutput: ensureMeetingOutputHeader(activeSession, activeSession.output),
         settings: snapshot.settings,
         targetLanguage,
         onEvent: createAIRuntimeHandler({
@@ -2042,7 +2062,7 @@ export const App = () => {
     let usedCache = false;
     try {
       const revised = await reviseOutput({
-        currentOutput: activeSession.output,
+        currentOutput: ensureMeetingOutputHeader(activeSession, activeSession.output),
         instructions,
         detailLevel: activeSession.detailLevel,
         outputLanguage: resolveSessionOutputLanguage(activeSession),
@@ -2157,38 +2177,44 @@ export const App = () => {
       return;
     }
 
+    const normalizedNextSession = {
+      ...nextSession,
+      output: ensureMeetingOutputHeader(nextSession, nextSession.output),
+    };
+
     if (!activeSession) {
-      await saveSession(nextSession);
+      await saveSession(normalizedNextSession);
       return;
     }
 
-    if (nextSession.output !== activeSession.output) {
+    const normalizedActiveOutput = ensureMeetingOutputHeader(activeSession, activeSession.output);
+    if (normalizedNextSession.output !== normalizedActiveOutput) {
       const nextVersions = normalizeOutputVersionHistory(
-        nextSession.outputVersions,
-        activeSession.output,
+        normalizedNextSession.outputVersions,
+        normalizedActiveOutput,
         activeSession.updatedAt,
       );
       if (nextVersions[0]) {
         nextVersions[0] = {
           ...nextVersions[0],
-          output: nextSession.output,
+          output: normalizedNextSession.output,
         };
-      } else if (nextSession.output.trim()) {
+      } else if (normalizedNextSession.output.trim()) {
         nextVersions.unshift({
           id: crypto.randomUUID(),
-          output: nextSession.output,
+          output: normalizedNextSession.output,
           generatedAt: new Date().toISOString(),
         });
       }
 
       await saveSession({
-        ...nextSession,
+        ...normalizedNextSession,
         outputVersions: nextVersions,
       });
       return;
     }
 
-    await saveSession(nextSession);
+    await saveSession(normalizedNextSession);
   };
 
   const handleImportAudio = async () => {
@@ -3577,7 +3603,10 @@ export const App = () => {
           />
         );
       case "calendar-output-preview": {
-        const previewLines = calendarPreviewSession ? splitStructuredOutput(calendarPreviewSession.output) : [];
+        const previewOutput = calendarPreviewSession
+          ? ensureMeetingOutputHeader(calendarPreviewSession, calendarPreviewSession.output)
+          : "";
+        const previewLines = previewOutput ? splitStructuredOutput(previewOutput) : [];
         return (
           <div className="sidebar-card overlay-card calendar-output-preview-card">
             <div className="overlay-header calendar-output-preview-header">
@@ -3590,7 +3619,7 @@ export const App = () => {
                 </p>
               </div>
             </div>
-            {calendarPreviewSession && calendarPreviewSession.output.trim() ? (
+            {calendarPreviewSession && previewOutput.trim() ? (
               <div className="calendar-output-preview-body">
                 {previewLines.map((line, index) =>
                   isStructuredHeading(line) ? (

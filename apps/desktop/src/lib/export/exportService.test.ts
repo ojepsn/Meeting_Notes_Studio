@@ -16,6 +16,7 @@ describe("exportService helpers", () => {
   it("detects headings and excludes bullets and sentences", () => {
     expect(isHeadingLine("Decisions and next steps")).toBe(true);
     expect(isHeadingLine("Decisions and next steps:")).toBe(true);
+    expect(isHeadingLine("Meeting title: Weekly project sync")).toBe(false);
     expect(isHeadingLine("- action item")).toBe(false);
     expect(isHeadingLine("This is a full sentence.")).toBe(false);
   });

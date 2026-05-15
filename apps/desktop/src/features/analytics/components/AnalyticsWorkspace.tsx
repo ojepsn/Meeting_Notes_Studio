@@ -176,7 +176,7 @@ const buildCategorizedTimelineSeries = (
 
   return {
     labels: orderedLabels,
-    buckets: Array.from(bucketMap.values()).sort((left, right) => left.bucketKey.localeCompare(right.bucketKey)),
+    buckets: Array.from(bucketMap.values()).sort((left, right) => right.bucketKey.localeCompare(left.bucketKey)),
   };
 };
 
@@ -213,7 +213,7 @@ const buildBinaryTimelineSeries = (
 
   return {
     labels: [positiveLabel, negativeLabel],
-    buckets: Array.from(bucketMap.values()).sort((left, right) => left.bucketKey.localeCompare(right.bucketKey)),
+    buckets: Array.from(bucketMap.values()).sort((left, right) => right.bucketKey.localeCompare(left.bucketKey)),
   };
 };
 
@@ -468,7 +468,7 @@ export const AnalyticsWorkspace = ({
         label: formatBucketLabel(bucketKey, timelineGranularity),
         minutes,
       }))
-      .sort((left, right) => left.bucketKey.localeCompare(right.bucketKey));
+      .sort((left, right) => right.bucketKey.localeCompare(left.bucketKey));
   }, [filteredLogs, timelineGranularity]);
 
   const topItems = useMemo(() => {
@@ -638,6 +638,10 @@ export const AnalyticsWorkspace = ({
     () => buildCategorizedTimelineSeries(filteredLogs, timelineGranularity, (log) => log.project || "No project"),
     [filteredLogs, timelineGranularity],
   );
+  const weeklyProjectTimelineSeries = useMemo(
+    () => buildCategorizedTimelineSeries(filteredLogs, "weekly", (log) => log.project || "No project"),
+    [filteredLogs],
+  );
 
   const privacyTimelineSeries = useMemo(
     () => buildBinaryTimelineSeries(filteredLogs, timelineGranularity, ["Private", "Business"], (log) => log.isPrivate),
@@ -657,6 +661,10 @@ export const AnalyticsWorkspace = ({
 
   const activityMaxBucketMinutes = Math.max(1, ...activityTimelineSeries.buckets.map((entry) => entry.totalMinutes));
   const projectMaxBucketMinutes = Math.max(1, ...projectTimelineSeries.buckets.map((entry) => entry.totalMinutes));
+  const weeklyProjectMaxBucketMinutes = Math.max(
+    1,
+    ...weeklyProjectTimelineSeries.buckets.map((entry) => entry.totalMinutes),
+  );
   const privacyMaxBucketMinutes = Math.max(1, ...privacyTimelineSeries.buckets.map((entry) => entry.totalMinutes));
   const baselineMaxBucketMinutes = Math.max(1, ...baselineTimelineSeries.buckets.map((entry) => entry.totalMinutes));
 
@@ -1194,6 +1202,64 @@ export const AnalyticsWorkspace = ({
           ) : null}
         </div>
 
+        <div className="sidebar-card analytics-weekly-project-card">
+          <div className="card-header">
+            <div>
+              <h3>Weekly project distribution</h3>
+              <p className="muted">Time worked per week, distributed over projects. Weeks start on Monday.</p>
+            </div>
+          </div>
+          <div className="analytics-stacked-timeline">
+            {weeklyProjectTimelineSeries.buckets.length ? (
+              weeklyProjectTimelineSeries.buckets.map((bucket) => (
+                <div key={bucket.bucketKey} className="analytics-stacked-timeline-row">
+                  <span className="tiny-text analytics-bar-label">{bucket.label}</span>
+                  <div
+                    className="analytics-stacked-timeline-track"
+                    style={
+                      chartDisplayMode === "hours"
+                        ? { width: `${(bucket.totalMinutes / weeklyProjectMaxBucketMinutes) * 100}%` }
+                        : undefined
+                    }
+                  >
+                    {weeklyProjectTimelineSeries.labels.map((label, index) => {
+                      const minutes = bucket.series[label] || 0;
+                      const denominator = chartDisplayMode === "share" ? bucket.totalMinutes : weeklyProjectMaxBucketMinutes;
+                      if (!minutes || !denominator) return null;
+                      return (
+                        <span
+                          key={`${bucket.bucketKey}-${label}`}
+                          className="analytics-segment-button"
+                          title={`${label}: ${formatMinutes(minutes)}`}
+                          style={{
+                            width: `${(minutes / denominator) * 100}%`,
+                            background: ANALYTICS_SERIES_COLORS[index % ANALYTICS_SERIES_COLORS.length],
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <strong>{formatMinutes(bucket.totalMinutes)}</strong>
+                </div>
+              ))
+            ) : (
+              <p className="muted">No weekly project data matches the current filters.</p>
+            )}
+          </div>
+          {weeklyProjectTimelineSeries.labels.length ? (
+            <div className="analytics-series-legend">
+              {weeklyProjectTimelineSeries.labels.map((label, index) => (
+                <span key={label} className="status-chip analytics-series-chip">
+                  <span
+                    className="analytics-series-chip-swatch"
+                    style={{ background: ANALYTICS_SERIES_COLORS[index % ANALYTICS_SERIES_COLORS.length] }}
+                  />
+                  {label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="analytics-chart-grid">
