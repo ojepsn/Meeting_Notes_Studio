@@ -143,9 +143,23 @@ const slotToTime = (slot) => {
     return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 };
 const normalizeStructureValue = (value) => (typeof value === "string" ? value.trim() : "");
-const hasAssignedStructure = (payload) => Boolean(normalizeStructureValue(payload.domain) ||
-    normalizeStructureValue(payload.project) ||
-    normalizeStructureValue(payload.activity));
+const GENERIC_STRUCTURE_VALUES = new Set([
+    "",
+    "other",
+    "background",
+    "no domain",
+    "no project",
+    "no activity",
+    "unassigned",
+]);
+const isMeaningfulAssignedStructureValue = (value) => {
+    const normalized = normalizeStructureValue(value).toLocaleLowerCase();
+    return Boolean(normalized) && !GENERIC_STRUCTURE_VALUES.has(normalized);
+};
+const sanitizeStructureSeedValue = (value) => isMeaningfulAssignedStructureValue(value) ? normalizeStructureValue(value) : "";
+const hasAssignedStructure = (payload) => Boolean(isMeaningfulAssignedStructureValue(payload.domain) ||
+    isMeaningfulAssignedStructureValue(payload.project) ||
+    isMeaningfulAssignedStructureValue(payload.activity));
 const didStructureAssignmentChange = (previous, next) => normalizeStructureValue(previous?.domain) !== normalizeStructureValue(next.domain) ||
     normalizeStructureValue(previous?.project) !== normalizeStructureValue(next.project) ||
     normalizeStructureValue(previous?.activity) !== normalizeStructureValue(next.activity);
@@ -707,9 +721,9 @@ const applyActivityInheritance = (snapshot, payload) => {
 };
 export const inferTodoStructureAssignment = (snapshot, title, payload) => {
     const inferred = inferStructureFromTitle(snapshot, title, "todo", {
-        domain: payload.domain || "",
-        project: payload.project || "",
-        activity: payload.activity || "",
+        domain: sanitizeStructureSeedValue(payload.domain),
+        project: sanitizeStructureSeedValue(payload.project),
+        activity: sanitizeStructureSeedValue(payload.activity),
     });
     return applyActivityInheritance(snapshot, {
         activityId: payload.activityId || "",
@@ -721,9 +735,9 @@ export const inferTodoStructureAssignment = (snapshot, title, payload) => {
 export const inferActivityStructureAssignment = (snapshot, title, type, payload) => {
     const parentActivity = payload.parentActivityId ? getActivityById(snapshot, payload.parentActivityId) : null;
     const inferred = inferStructureFromTitle(snapshot, title, type === "meeting" ? "meeting" : "activity", {
-        domain: payload.domain || parentActivity?.domain || "",
-        project: payload.project || parentActivity?.project || "",
-        activity: payload.activity || parentActivity?.description || "",
+        domain: sanitizeStructureSeedValue(payload.domain) || sanitizeStructureSeedValue(parentActivity?.domain),
+        project: sanitizeStructureSeedValue(payload.project) || sanitizeStructureSeedValue(parentActivity?.project),
+        activity: sanitizeStructureSeedValue(payload.activity) || sanitizeStructureSeedValue(parentActivity?.description),
     });
     return {
         domain: inferred.domain,
@@ -1473,7 +1487,7 @@ export const useDesktopStore = create((set, get) => {
             };
             set({ snapshot: nextSnapshot });
             await flushSnapshotPersist(get().repository, nextSnapshot, set);
-            if (options?.activityId || options?.domain || options?.project || options?.activityLabel) {
+            if (hasAssignedStructure(nextTask)) {
                 scheduleStructureRuleLearning("todo", todoId, "todo");
             }
         },
@@ -1583,7 +1597,7 @@ export const useDesktopStore = create((set, get) => {
             };
             set({ snapshot: nextSnapshot });
             await flushSnapshotPersist(get().repository, nextSnapshot, set);
-            if (options?.parentActivityId || options?.domain || options?.project || options?.activityLabel) {
+            if (hasAssignedStructure(nextActivity)) {
                 scheduleStructureRuleLearning("activity", nextActivity.id, type === "meeting" ? "meeting" : "activity");
             }
         },
@@ -2023,6 +2037,9 @@ export const useDesktopStore = create((set, get) => {
                         updatedAt: createdAt,
                     }),
                 };
+                if (hasAssignedStructure(normalizedTodo)) {
+                    scheduleStructureRuleLearning("todo", normalizedTodo.id, "todo");
+                }
             }
             else {
                 const durationSlots = Math.max(1, (typeof options?.endSlot === "number" ? clampSlotIndex(options.endSlot) : normalizedSlot + DEFAULT_MEETING_DURATION_SLOTS) - normalizedSlot);
@@ -2067,6 +2084,9 @@ export const useDesktopStore = create((set, get) => {
                         updatedAt: createdAt,
                     }),
                 };
+                if (hasAssignedStructure(activity)) {
+                    scheduleStructureRuleLearning("activity", activity.id, "meeting");
+                }
             }
             set({ snapshot: nextSnapshot });
             await flushSnapshotPersist(get().repository, nextSnapshot, set);

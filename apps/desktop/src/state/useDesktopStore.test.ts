@@ -258,4 +258,46 @@ describe("inferTodoStructureAssignment", () => {
       activity: "Regnora",
     });
   });
+
+  it("treats Other/Other/Other placeholders as blank so real historical matches can replace them", () => {
+    const snapshot = createDefaultSnapshot();
+    snapshot.activities = [
+      {
+        id: "activity-regnora",
+        type: "meeting",
+        parentActivityId: "",
+        description: "Regnora",
+        participantText: "",
+        isDone: false,
+        isPrivate: false,
+        comments: "",
+        domain: "AI",
+        project: "Regnora",
+        activity: "Meetings",
+        doOn: "2026-05-13",
+        dueDate: "",
+        startTime: "15:00",
+        endTime: "15:15",
+        detailsHtml: "",
+        timeRequiredMinutes: 0,
+        actualTimeSpentMinutes: 20,
+        createdAt: "2026-05-11T09:29:32.215Z",
+        updatedAt: "2026-05-13T13:25:58.417Z",
+        sessionIds: [],
+      },
+    ];
+
+    const inferred = inferTodoStructureAssignment(snapshot, "Regnora", {
+      activityId: "",
+      domain: "Other",
+      project: "Other",
+      activity: "Other",
+    });
+
+    expect(inferred).toMatchObject({
+      domain: "AI",
+      project: "Regnora",
+      activity: "Meetings",
+    });
+  });
 });

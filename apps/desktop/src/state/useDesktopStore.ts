@@ -224,11 +224,29 @@ const slotToTime = (slot: number) => {
 
 const normalizeStructureValue = (value: string | undefined | null) => (typeof value === "string" ? value.trim() : "");
 
+const GENERIC_STRUCTURE_VALUES = new Set([
+  "",
+  "other",
+  "background",
+  "no domain",
+  "no project",
+  "no activity",
+  "unassigned",
+]);
+
+const isMeaningfulAssignedStructureValue = (value: string | undefined | null) => {
+  const normalized = normalizeStructureValue(value).toLocaleLowerCase();
+  return Boolean(normalized) && !GENERIC_STRUCTURE_VALUES.has(normalized);
+};
+
+const sanitizeStructureSeedValue = (value: string | undefined | null) =>
+  isMeaningfulAssignedStructureValue(value) ? normalizeStructureValue(value) : "";
+
 const hasAssignedStructure = (payload: { domain?: string; project?: string; activity?: string }) =>
   Boolean(
-    normalizeStructureValue(payload.domain) ||
-      normalizeStructureValue(payload.project) ||
-      normalizeStructureValue(payload.activity),
+    isMeaningfulAssignedStructureValue(payload.domain) ||
+      isMeaningfulAssignedStructureValue(payload.project) ||
+      isMeaningfulAssignedStructureValue(payload.activity),
   );
 
 const didStructureAssignmentChange = (
@@ -926,9 +944,9 @@ export const inferTodoStructureAssignment = (
   payload: Pick<Todo, "domain" | "project" | "activity" | "activityId">,
 ) => {
   const inferred = inferStructureFromTitle(snapshot, title, "todo", {
-    domain: payload.domain || "",
-    project: payload.project || "",
-    activity: payload.activity || "",
+    domain: sanitizeStructureSeedValue(payload.domain),
+    project: sanitizeStructureSeedValue(payload.project),
+    activity: sanitizeStructureSeedValue(payload.activity),
   });
 
   return applyActivityInheritance(snapshot, {
@@ -952,9 +970,9 @@ export const inferActivityStructureAssignment = (
 ) => {
   const parentActivity = payload.parentActivityId ? getActivityById(snapshot, payload.parentActivityId) : null;
   const inferred = inferStructureFromTitle(snapshot, title, type === "meeting" ? "meeting" : "activity", {
-    domain: payload.domain || parentActivity?.domain || "",
-    project: payload.project || parentActivity?.project || "",
-    activity: payload.activity || parentActivity?.description || "",
+    domain: sanitizeStructureSeedValue(payload.domain) || sanitizeStructureSeedValue(parentActivity?.domain),
+    project: sanitizeStructureSeedValue(payload.project) || sanitizeStructureSeedValue(parentActivity?.project),
+    activity: sanitizeStructureSeedValue(payload.activity) || sanitizeStructureSeedValue(parentActivity?.description),
   });
 
   return {
@@ -1955,7 +1973,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       };
       set({ snapshot: nextSnapshot });
       await flushSnapshotPersist(get().repository, nextSnapshot, set);
-      if (options?.activityId || options?.domain || options?.project || options?.activityLabel) {
+      if (hasAssignedStructure(nextTask)) {
         scheduleStructureRuleLearning("todo", todoId, "todo");
       }
     },
@@ -2077,7 +2095,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         };
       set({ snapshot: nextSnapshot });
       await flushSnapshotPersist(get().repository, nextSnapshot, set);
-      if (options?.parentActivityId || options?.domain || options?.project || options?.activityLabel) {
+      if (hasAssignedStructure(nextActivity)) {
         scheduleStructureRuleLearning(
           "activity",
           nextActivity.id,
@@ -2543,6 +2561,9 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
           updatedAt: createdAt,
         }),
       };
+      if (hasAssignedStructure(normalizedTodo)) {
+        scheduleStructureRuleLearning("todo", normalizedTodo.id, "todo");
+      }
     } else {
       const durationSlots = Math.max(
         1,
@@ -2589,6 +2610,9 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
           updatedAt: createdAt,
         }),
       };
+      if (hasAssignedStructure(activity)) {
+        scheduleStructureRuleLearning("activity", activity.id, "meeting");
+      }
     }
 
     set({ snapshot: nextSnapshot });
