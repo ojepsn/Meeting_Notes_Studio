@@ -224,6 +224,13 @@ const slotToTime = (slot: number) => {
 
 const normalizeStructureValue = (value: string | undefined | null) => (typeof value === "string" ? value.trim() : "");
 
+const hasAssignedStructure = (payload: { domain?: string; project?: string; activity?: string }) =>
+  Boolean(
+    normalizeStructureValue(payload.domain) ||
+      normalizeStructureValue(payload.project) ||
+      normalizeStructureValue(payload.activity),
+  );
+
 const didStructureAssignmentChange = (
   previous: { domain?: string; project?: string; activity?: string } | undefined,
   next: { domain?: string; project?: string; activity?: string },
@@ -911,6 +918,50 @@ const applyActivityInheritance = (
     project: payload.project || linkedActivity.project,
     activity: payload.activity || linkedActivity.description,
   });
+};
+
+export const inferTodoStructureAssignment = (
+  snapshot: Snapshot,
+  title: string,
+  payload: Pick<Todo, "domain" | "project" | "activity" | "activityId">,
+) => {
+  const inferred = inferStructureFromTitle(snapshot, title, "todo", {
+    domain: payload.domain || "",
+    project: payload.project || "",
+    activity: payload.activity || "",
+  });
+
+  return applyActivityInheritance(snapshot, {
+    activityId: payload.activityId || "",
+    domain: inferred.domain,
+    project: inferred.project,
+    activity: inferred.activity,
+  });
+};
+
+export const inferActivityStructureAssignment = (
+  snapshot: Snapshot,
+  title: string,
+  type: Activity["type"],
+  payload: {
+    domain?: string;
+    project?: string;
+    activity?: string;
+    parentActivityId?: string;
+  },
+) => {
+  const parentActivity = payload.parentActivityId ? getActivityById(snapshot, payload.parentActivityId) : null;
+  const inferred = inferStructureFromTitle(snapshot, title, type === "meeting" ? "meeting" : "activity", {
+    domain: payload.domain || parentActivity?.domain || "",
+    project: payload.project || parentActivity?.project || "",
+    activity: payload.activity || parentActivity?.description || "",
+  });
+
+  return {
+    domain: inferred.domain,
+    project: inferred.project,
+    activity: inferred.activity,
+  };
 };
 
 const toSessionIds = (activeSessionId: string | null) =>
@@ -1817,14 +1868,23 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       if (!snapshot) return;
       const existingTodo = snapshot.todos.find((entry) => entry.id === todo.id);
       const updatedAt = new Date().toISOString();
+      const nextStructure =
+        todo.description.trim() && (!existingTodo || !hasAssignedStructure(existingTodo))
+          ? inferTodoStructureAssignment(snapshot, todo.description, {
+              domain: todo.domain,
+              project: todo.project,
+              activity: todo.activity,
+              activityId: todo.activityId,
+            })
+          : applyActivityInheritance(snapshot, {
+              domain: todo.domain,
+              project: todo.project,
+              activity: todo.activity,
+              activityId: todo.activityId,
+            });
       const normalizedTask = normalizeTaskRecord({
         ...todoToTaskRecord(todo),
-        ...applyActivityInheritance(snapshot, {
-          domain: todo.domain,
-          project: todo.project,
-          activity: todo.activity,
-          activityId: todo.activityId,
-        }),
+        ...nextStructure,
       } as Task);
       const nextTodo = normalizeCompletionState(existingTodo, taskToTodoRecord({
         ...normalizedTask,
@@ -1852,16 +1912,11 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
     const todoId = crypto.randomUUID();
     const calendarItemId = crypto.randomUUID();
     const startSlot = findNearestAvailableTodoSlot(snapshot.calendarItems, scheduledDate);
-    const inferredStructure = inferStructureFromTitle(snapshot, trimmedDescription, "todo", {
+    const inferredStructure = inferTodoStructureAssignment(snapshot, trimmedDescription, {
+      activityId: options?.activityId || "",
       domain: options?.domain || "",
       project: options?.project || "",
       activity: options?.activityLabel || "",
-    });
-    const inherited = applyActivityInheritance(snapshot, {
-      activityId: options?.activityId || "",
-      domain: inferredStructure.domain,
-      project: inferredStructure.project,
-      activity: inferredStructure.activity,
     });
       const nextTask = normalizeTaskRecord({
       id: todoId,
@@ -1872,10 +1927,10 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       isPrivate: false,
       isPriority: false,
       comments: options?.comments || "",
-      activityId: inherited.activityId,
-      domain: inherited.domain,
-      project: inherited.project,
-      activity: inherited.activity,
+      activityId: inferredStructure.activityId,
+      domain: inferredStructure.domain,
+      project: inferredStructure.project,
+      activity: inferredStructure.activity,
       doOn: scheduledDate,
       dueDate: "",
       detailsHtml: "",
@@ -1941,11 +1996,25 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       const existingActivity = snapshot.activities.find((entry) => entry.id === activity.id);
       const updatedAt = new Date().toISOString();
       const actualTimeSpentMinutes = computeTrackedMinutes(snapshot.timelogs, "activity", activity.id);
+      const nextStructure =
+        activity.description.trim() && (!existingActivity || !hasAssignedStructure(existingActivity))
+          ? inferActivityStructureAssignment(snapshot, activity.description, activity.type, {
+              domain: activity.domain,
+              project: activity.project,
+              activity: activity.activity,
+              parentActivityId: activity.parentActivityId,
+            })
+          : {
+              domain: activity.domain,
+              project: activity.project,
+              activity: activity.activity,
+            };
       const nextActivity =
         snapshot.settings.baselineWorkActivityId === activity.id
           ? normalizeBaselineWorkActivity(activity, actualTimeSpentMinutes)
           : normalizeActivityStructure({
               ...activity,
+              ...nextStructure,
               actualTimeSpentMinutes,
               updatedAt,
             });
@@ -1972,17 +2041,12 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
     const snapshot = get().snapshot;
     if (!snapshot || !description.trim()) return;
     const trimmedDescription = description.trim();
-    const parentActivity = options?.parentActivityId ? getActivityById(snapshot, options.parentActivityId) : null;
-    const inferredStructure = inferStructureFromTitle(
-      snapshot,
-      trimmedDescription,
-      type === "meeting" ? "meeting" : "activity",
-      {
-        domain: options?.domain || parentActivity?.domain || "",
-        project: options?.project || parentActivity?.project || "",
-        activity: options?.activityLabel || parentActivity?.description || "",
-      },
-    );
+    const inferredStructure = inferActivityStructureAssignment(snapshot, trimmedDescription, type, {
+      parentActivityId: options?.parentActivityId,
+      domain: options?.domain || "",
+      project: options?.project || "",
+      activity: options?.activityLabel || "",
+    });
       const nextActivity: DesktopAppSnapshot["activities"][number] = normalizeActivityStructure({
       id: crypto.randomUUID(),
       type,
@@ -2434,6 +2498,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         project: "",
         activity: "",
       });
+      const inferred = inferTodoStructureAssignment(snapshot, parsed.description, inherited);
       const todo = {
         id: crypto.randomUUID(),
         description: parsed.description,
@@ -2443,10 +2508,10 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         isPrivate: false,
         isPriority: false,
         comments: "",
-        activityId: options?.activityId || "",
-        domain: inherited.domain,
-        project: inherited.project,
-        activity: inherited.activity,
+        activityId: inferred.activityId,
+        domain: inferred.domain,
+        project: inferred.project,
+        activity: inferred.activity,
         doOn: date,
         dueDate: "",
         detailsHtml: "",
@@ -2456,7 +2521,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       };
       const normalizedTodo = taskToTodoRecord(normalizeTaskRecord({
         ...todoToTaskRecord(todo),
-        ...applyActivityInheritance(snapshot, {
+        ...inferTodoStructureAssignment(snapshot, todo.description, {
           activityId: todo.activityId,
           domain: todo.domain,
           project: todo.project,
@@ -2483,6 +2548,9 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         1,
         (typeof options?.endSlot === "number" ? clampSlotIndex(options.endSlot) : normalizedSlot + DEFAULT_MEETING_DURATION_SLOTS) - normalizedSlot,
       );
+      const inferredStructure = inferActivityStructureAssignment(snapshot, parsed.description, "meeting", {
+        parentActivityId: options?.parentActivityId || options?.activityId || "",
+      });
       const activity: DesktopAppSnapshot["activities"][number] = normalizeActivityStructure({
         id: crypto.randomUUID(),
         type: "meeting",
@@ -2492,9 +2560,9 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         isDone: false,
         isPrivate: false,
         comments: "",
-        domain: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.domain || "",
-        project: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.project || "",
-        activity: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.description || "",
+        domain: inferredStructure.domain,
+        project: inferredStructure.project,
+        activity: inferredStructure.activity,
         doOn: date,
         dueDate: "",
         startTime: slotToTime(normalizedSlot),

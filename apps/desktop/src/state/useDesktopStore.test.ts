@@ -1,5 +1,10 @@
 import { createDefaultSnapshot } from "../lib/db/repository";
-import { findNearestAvailableTodoSlot, reconcileCalendarBackedScheduleFields, rollForwardOverdueCalendarTodos } from "./useDesktopStore";
+import {
+  findNearestAvailableTodoSlot,
+  inferTodoStructureAssignment,
+  reconcileCalendarBackedScheduleFields,
+  rollForwardOverdueCalendarTodos,
+} from "./useDesktopStore";
 
 const buildTodo = (id: string, description: string, doOn: string, isDone = false) => ({
   id,
@@ -180,6 +185,36 @@ describe("reconcileCalendarBackedScheduleFields", () => {
       doOn: "2026-04-22",
       startTime: "11:00",
       endTime: "12:30",
+    });
+  });
+});
+
+describe("inferTodoStructureAssignment", () => {
+  it("backfills domain, project, and activity for a short recurring title like Regnora", () => {
+    const snapshot = createDefaultSnapshot();
+    snapshot.todos = [
+      buildTodo("todo-regnora-1", "Regnora follow-up", "2026-05-07"),
+      buildTodo("todo-regnora-2", "Regnora review", "2026-05-08"),
+    ].map((todo) => ({
+      ...todo,
+      domain: "Clinical Success",
+      project: "Regnora",
+      activity: "Regnora",
+      updatedAt: "2026-05-08T08:00:00.000Z",
+      participantText: "",
+    }));
+
+    const inferred = inferTodoStructureAssignment(snapshot, "Regnora", {
+      activityId: "",
+      domain: "",
+      project: "",
+      activity: "",
+    });
+
+    expect(inferred).toMatchObject({
+      domain: "Clinical Success",
+      project: "Regnora",
+      activity: "Regnora",
     });
   });
 });

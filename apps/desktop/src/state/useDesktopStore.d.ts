@@ -1,8 +1,10 @@
-import type { CaptureMode, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistTemplateRecord, DesktopAppSnapshot, TimeLogRecord } from "@notesmith/domain";
+import type { ActivityRecord, CaptureMode, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistTemplateRecord, DesktopAppSnapshot, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 import { createAppRepository } from "../lib/db/repository";
 type DesktopView = "capture" | "output";
 type SaveState = "saved" | "saving" | "error";
 type Snapshot = DesktopAppSnapshot;
+type Todo = TodoRecord;
+type Activity = ActivityRecord;
 type TimeLog = TimeLogRecord;
 export declare const findNearestAvailableTodoSlot: (calendarItems: Snapshot["calendarItems"], date: string, preferredSlot?: number) => number;
 export declare const reconcileCalendarBackedScheduleFields: (snapshot: Snapshot) => {
@@ -12,6 +14,22 @@ export declare const reconcileCalendarBackedScheduleFields: (snapshot: Snapshot)
 export declare const rollForwardOverdueCalendarTodos: (snapshot: Snapshot, today?: string) => {
     snapshot: DesktopAppSnapshot;
     changed: boolean;
+};
+export declare const inferTodoStructureAssignment: (snapshot: Snapshot, title: string, payload: Pick<Todo, "domain" | "project" | "activity" | "activityId">) => {
+    domain: string;
+    project: string;
+    activity: string;
+    activityId: string;
+};
+export declare const inferActivityStructureAssignment: (snapshot: Snapshot, title: string, type: Activity["type"], payload: {
+    domain?: string;
+    project?: string;
+    activity?: string;
+    parentActivityId?: string;
+}) => {
+    domain: string;
+    project: string;
+    activity: string;
 };
 interface DesktopState {
     snapshot: DesktopAppSnapshot | null;
