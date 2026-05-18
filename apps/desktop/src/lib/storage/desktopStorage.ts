@@ -5,6 +5,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import type { AIRequestHistoryEntry } from "../ai/history";
 import type { AIModelPricingSnapshot } from "../ai/modelPricing";
 import { resolvePromptProfile } from "../ai/prompts";
+import { normalizeStructureInferenceRules } from "../structure/inferStructure";
 import { isTauriRuntime } from "./environment";
 import { parseLegacyImportSnapshot } from "./migrateLegacy";
 
@@ -163,6 +164,10 @@ const mergeSettings = (current: LocalAppSettings, imported: LocalAppSettings): L
     (entry) => entry.id || `${entry.shortForm}::${entry.fullName}`,
   ),
   ruleSuggestions: uniqueBy([...(current.ruleSuggestions || []), ...(imported.ruleSuggestions || [])], (entry) => entry.id),
+  structureInferenceRules: normalizeStructureInferenceRules([
+    ...(current.structureInferenceRules || []),
+    ...(imported.structureInferenceRules || []),
+  ]),
   assistantQueryMemories: uniqueBy([...(current.assistantQueryMemories || []), ...(imported.assistantQueryMemories || [])], (entry) => entry.id),
   promptProfile: imported.promptProfile ?? current.promptProfile,
 });

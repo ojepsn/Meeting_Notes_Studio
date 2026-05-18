@@ -7,7 +7,7 @@ import { normalizeTaskRecord, taskToTodoRecord, todoToTaskRecord } from "../lib/
 import { removePersistedAttachment } from "../lib/files/attachmentStore";
 import { findSessionIdForActivity, findSessionIdForTodo, upsertEntityLink } from "../lib/links/entityLinks";
 import { loadRecentLocalSnapshotBackups } from "../lib/storage/desktopStorage";
-import { inferStructureFromTitle } from "../lib/structure/inferStructure";
+import { inferStructureFromTitle, normalizeStructureInferenceRules, upsertStructureInferenceRule } from "../lib/structure/inferStructure";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 import { formatStockholmDate as formatLocalDate, formatStockholmIsoWeek as formatLocalIsoWeek, formatStockholmMonth as formatLocalMonth, formatStockholmTime as formatLocalTime, } from "../lib/time/stockholm";
 const PERSIST_DEBOUNCE_MS = 300;
@@ -28,6 +28,7 @@ const COMPLETED_TASK_PURGE_DAYS = 90;
 const COMPLETED_TASK_PURGE_MS = COMPLETED_TASK_PURGE_DAYS * 24 * 60 * 60 * 1000;
 const DEFAULT_CHECKLIST_TEMPLATE_CATEGORY = "General";
 const DEFAULT_CHECKLIST_RECURRENCE_CADENCE = "monthly";
+const STRUCTURE_RULE_LEARN_DEBOUNCE_MS = 1200;
 const recordDeletedEntity = (deletedEntities, entityType, entityId, deletedAt = new Date().toISOString()) => {
     const currentDeletedEntities = deletedEntities ?? [];
     const nextRecord = { entityType, entityId, deletedAt };
@@ -140,6 +141,25 @@ const slotToTime = (slot) => {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+};
+const normalizeStructureValue = (value) => (typeof value === "string" ? value.trim() : "");
+const didStructureAssignmentChange = (previous, next) => normalizeStructureValue(previous?.domain) !== normalizeStructureValue(next.domain) ||
+    normalizeStructureValue(previous?.project) !== normalizeStructureValue(next.project) ||
+    normalizeStructureValue(previous?.activity) !== normalizeStructureValue(next.activity);
+const learnStructureRuleForItem = (settings, title, kind, structure, updatedAt) => ({
+    ...settings,
+    structureInferenceRules: upsertStructureInferenceRule(settings.structureInferenceRules, title, kind, structure, updatedAt),
+});
+const renameStructureInferenceRuleField = (rules, field, previousValue, nextValue) => {
+    const normalizedPrevious = normalizeStructureValue(previousValue);
+    const normalizedNext = normalizeStructureValue(nextValue);
+    return normalizeStructureInferenceRules((rules ?? []).map((rule) => normalizeStructureValue(rule[field]) === normalizedPrevious
+        ? {
+            ...rule,
+            [field]: normalizedNext,
+            updatedAt: new Date().toISOString(),
+        }
+        : rule));
 };
 const durationFromTimes = (startTime, endTime) => {
     const startSlot = timeToSlot(startTime);
@@ -1039,6 +1059,7 @@ const applyRecurringChecklistInstantiation = (snapshot, value = new Date()) => {
 };
 let persistTimer = null;
 let pendingSnapshot = null;
+const structureRuleLearningTimers = new Map();
 const logPersistError = (error) => {
     console.error("NoteSmith desktop persistence failed", error);
 };
@@ -1096,1234 +1117,1282 @@ const flushSnapshotPersist = async (repository, snapshot, setState) => {
         throw error;
     }
 };
-export const useDesktopStore = create((set, get) => ({
-    snapshot: null,
-    activeSessionId: null,
-    activeView: "capture",
-    saveState: "saved",
-    lastSavedAt: null,
-    isLoaded: false,
-    loadError: null,
-    repository: createAppRepository(),
-    load: async () => {
-        try {
-            let [loadedSnapshot, aiTextCache, aiRequestHistory] = await Promise.all([
-                get().repository.loadSnapshot(),
-                get().repository.loadAITextCache(),
-                get().repository.loadAIRequestHistory(),
-            ]);
-            if (!hasMeaningfulSnapshotData(loadedSnapshot) || isSuspiciouslyReducedSnapshot(loadedSnapshot)) {
-                const recoverySnapshot = await selectRecoverySnapshot(loadedSnapshot);
-                if (recoverySnapshot) {
-                    loadedSnapshot = recoverySnapshot;
-                    await get().repository.saveSnapshot(recoverySnapshot);
+export const useDesktopStore = create((set, get) => {
+    const scheduleStructureRuleLearning = (entityType, entityId, kind) => {
+        const timerKey = `${entityType}:${entityId}:${kind}`;
+        const existingTimer = structureRuleLearningTimers.get(timerKey);
+        if (existingTimer) {
+            clearTimeout(existingTimer);
+        }
+        structureRuleLearningTimers.set(timerKey, setTimeout(() => {
+            structureRuleLearningTimers.delete(timerKey);
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const item = entityType === "todo"
+                ? snapshot.todos.find((entry) => entry.id === entityId)
+                : snapshot.activities.find((entry) => entry.id === entityId);
+            if (!item || !item.description.trim())
+                return;
+            const nextSettings = learnStructureRuleForItem(snapshot.settings, item.description, kind, item, new Date().toISOString());
+            const currentRules = JSON.stringify(snapshot.settings.structureInferenceRules ?? []);
+            const nextRules = JSON.stringify(nextSettings.structureInferenceRules ?? []);
+            if (currentRules === nextRules)
+                return;
+            const nextSnapshot = {
+                ...snapshot,
+                settings: nextSettings,
+            };
+            set({ snapshot: nextSnapshot });
+            scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+        }, STRUCTURE_RULE_LEARN_DEBOUNCE_MS));
+    };
+    return {
+        snapshot: null,
+        activeSessionId: null,
+        activeView: "capture",
+        saveState: "saved",
+        lastSavedAt: null,
+        isLoaded: false,
+        loadError: null,
+        repository: createAppRepository(),
+        load: async () => {
+            try {
+                let [loadedSnapshot, aiTextCache, aiRequestHistory] = await Promise.all([
+                    get().repository.loadSnapshot(),
+                    get().repository.loadAITextCache(),
+                    get().repository.loadAIRequestHistory(),
+                ]);
+                if (!hasMeaningfulSnapshotData(loadedSnapshot) || isSuspiciouslyReducedSnapshot(loadedSnapshot)) {
+                    const recoverySnapshot = await selectRecoverySnapshot(loadedSnapshot);
+                    if (recoverySnapshot) {
+                        loadedSnapshot = recoverySnapshot;
+                        await get().repository.saveSnapshot(recoverySnapshot);
+                    }
+                }
+                const nowMs = Date.now();
+                const expiredSessionIds = new Set(loadedSnapshot.sessions.filter((session) => isSessionExpired(session, nowMs)).map((session) => session.id));
+                const remainingSessions = loadedSnapshot.sessions.filter((session) => !expiredSessionIds.has(session.id));
+                const removedAttachments = loadedSnapshot.attachments.filter((attachment) => expiredSessionIds.has(attachment.sessionId));
+                if (removedAttachments.length) {
+                    await Promise.all(removedAttachments.map((attachment) => removePersistedAttachment(attachment.filePath)));
+                }
+                const nextAttachments = loadedSnapshot.attachments.filter((attachment) => !expiredSessionIds.has(attachment.sessionId));
+                let snapshot = {
+                    ...loadedSnapshot,
+                    sessions: remainingSessions,
+                    attachments: nextAttachments,
+                    deletedEntities: Array.isArray(loadedSnapshot.deletedEntities) ? loadedSnapshot.deletedEntities : [],
+                    activities: recalculateActivitiesWithTimeLogs(loadedSnapshot.activities, loadedSnapshot.timelogs),
+                };
+                const scheduleReconciliation = reconcileCalendarBackedScheduleFields(snapshot);
+                snapshot = scheduleReconciliation.snapshot;
+                snapshot = applyRecurringChecklistInstantiation(snapshot);
+                snapshot = applyCompletedTaskCleanup(snapshot);
+                const rolloverResult = rollForwardOverdueCalendarTodos(snapshot);
+                snapshot = rolloverResult.snapshot;
+                const activeCandidate = getFirstActiveSessionId(snapshot.sessions);
+                if (!snapshot.sessions.length || !activeCandidate) {
+                    const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting", "meeting-note");
+                    snapshot = {
+                        ...snapshot,
+                        sessions: [replacement, ...snapshot.sessions],
+                    };
+                }
+                if (expiredSessionIds.size || scheduleReconciliation.changed || rolloverResult.changed) {
+                    await get().repository.saveSnapshot(snapshot);
+                }
+                configureAITextCachePersistence({
+                    save: (records) => get().repository.saveAITextCache(records),
+                });
+                configureAIRequestHistoryPersistence({
+                    save: (records) => get().repository.saveAIRequestHistory(records),
+                });
+                hydrateAITextCache({ records: aiTextCache });
+                hydrateAIRequestHistory(aiRequestHistory);
+                set({
+                    snapshot,
+                    activeSessionId: getFirstActiveSessionId(snapshot.sessions),
+                    isLoaded: true,
+                    loadError: null,
+                    saveState: "saved",
+                    lastSavedAt: new Date().toISOString(),
+                });
+            }
+            catch (error) {
+                set({
+                    snapshot: null,
+                    activeSessionId: null,
+                    isLoaded: true,
+                    loadError: error instanceof Error ? error.message : "Desktop startup failed.",
+                });
+            }
+        },
+        setActiveView: (activeView) => set({ activeView }),
+        setActiveSessionId: (activeSessionId) => set({ activeSessionId }),
+        saveSession: async (payload) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const nextSnapshot = {
+                ...snapshot,
+                sessions: upsertSession(snapshot.sessions, {
+                    ...payload,
+                    updatedAt: new Date().toISOString(),
+                }),
+            };
+            set({ snapshot: nextSnapshot, activeSessionId: payload.id });
+            scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        createNewSession: async (options) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const captureMode = options?.captureMode ?? "meeting-note";
+            const matchingTemplates = getTemplatesForCaptureMode(snapshot.templates, captureMode);
+            const preferredMeetingTemplateId = captureMode === "meeting-note" &&
+                matchingTemplates.some((template) => template.id === snapshot.settings.preferredDesktopTemplateId)
+                ? snapshot.settings.preferredDesktopTemplateId
+                : null;
+            const fallbackTemplateId = preferredMeetingTemplateId ??
+                matchingTemplates.find((template) => template.id === DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode])?.id ??
+                matchingTemplates[0]?.id ??
+                DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode];
+            const nextSession = createSessionRecord(options?.templateId ?? fallbackTemplateId, captureMode);
+            const nextSnapshot = {
+                ...snapshot,
+                sessions: [nextSession, ...snapshot.sessions],
+            };
+            set({ snapshot: nextSnapshot, activeSessionId: nextSession.id, activeView: "capture" });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        deleteSession: async (id) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const deletionTimestamp = new Date().toISOString();
+            let nextSessions = snapshot.sessions.map((session) => session.id === id
+                ? {
+                    ...session,
+                    deletedAt: deletionTimestamp,
+                    updatedAt: deletionTimestamp,
+                }
+                : session);
+            let nextActiveId = get().activeSessionId;
+            if (!nextActiveId || nextActiveId === id) {
+                const firstActive = getFirstActiveSessionId(nextSessions);
+                if (firstActive) {
+                    nextActiveId = firstActive;
+                }
+                else {
+                    const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting", "meeting-note");
+                    nextSessions = [replacement, ...nextSessions];
+                    nextActiveId = replacement.id;
                 }
             }
-            const nowMs = Date.now();
-            const expiredSessionIds = new Set(loadedSnapshot.sessions.filter((session) => isSessionExpired(session, nowMs)).map((session) => session.id));
-            const remainingSessions = loadedSnapshot.sessions.filter((session) => !expiredSessionIds.has(session.id));
-            const removedAttachments = loadedSnapshot.attachments.filter((attachment) => expiredSessionIds.has(attachment.sessionId));
+            const nextSnapshot = { ...snapshot, sessions: nextSessions };
+            set({
+                snapshot: nextSnapshot,
+                activeSessionId: nextActiveId,
+                activeView: get().activeView,
+            });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        restoreSession: async (id) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const restoreTimestamp = new Date().toISOString();
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "session", id),
+                sessions: snapshot.sessions.map((session) => session.id === id
+                    ? {
+                        ...session,
+                        deletedAt: null,
+                        updatedAt: restoreTimestamp,
+                    }
+                    : session),
+            };
+            set({ snapshot: nextSnapshot, activeSessionId: id });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        permanentlyDeleteSession: async (id) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const deletionTimestamp = new Date().toISOString();
+            const removedAttachments = snapshot.attachments.filter((attachment) => attachment.sessionId === id);
             if (removedAttachments.length) {
                 await Promise.all(removedAttachments.map((attachment) => removePersistedAttachment(attachment.filePath)));
             }
-            const nextAttachments = loadedSnapshot.attachments.filter((attachment) => !expiredSessionIds.has(attachment.sessionId));
-            let snapshot = {
-                ...loadedSnapshot,
-                sessions: remainingSessions,
-                attachments: nextAttachments,
-                deletedEntities: Array.isArray(loadedSnapshot.deletedEntities) ? loadedSnapshot.deletedEntities : [],
-                activities: recalculateActivitiesWithTimeLogs(loadedSnapshot.activities, loadedSnapshot.timelogs),
-            };
-            const scheduleReconciliation = reconcileCalendarBackedScheduleFields(snapshot);
-            snapshot = scheduleReconciliation.snapshot;
-            snapshot = applyRecurringChecklistInstantiation(snapshot);
-            snapshot = applyCompletedTaskCleanup(snapshot);
-            const rolloverResult = rollForwardOverdueCalendarTodos(snapshot);
-            snapshot = rolloverResult.snapshot;
-            const activeCandidate = getFirstActiveSessionId(snapshot.sessions);
-            if (!snapshot.sessions.length || !activeCandidate) {
+            let remainingSessions = snapshot.sessions.filter((session) => session.id !== id);
+            let nextActiveId = get().activeSessionId;
+            if (!remainingSessions.length || !getFirstActiveSessionId(remainingSessions)) {
                 const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting", "meeting-note");
-                snapshot = {
-                    ...snapshot,
-                    sessions: [replacement, ...snapshot.sessions],
-                };
-            }
-            if (expiredSessionIds.size || scheduleReconciliation.changed || rolloverResult.changed) {
-                await get().repository.saveSnapshot(snapshot);
-            }
-            configureAITextCachePersistence({
-                save: (records) => get().repository.saveAITextCache(records),
-            });
-            configureAIRequestHistoryPersistence({
-                save: (records) => get().repository.saveAIRequestHistory(records),
-            });
-            hydrateAITextCache({ records: aiTextCache });
-            hydrateAIRequestHistory(aiRequestHistory);
-            set({
-                snapshot,
-                activeSessionId: getFirstActiveSessionId(snapshot.sessions),
-                isLoaded: true,
-                loadError: null,
-                saveState: "saved",
-                lastSavedAt: new Date().toISOString(),
-            });
-        }
-        catch (error) {
-            set({
-                snapshot: null,
-                activeSessionId: null,
-                isLoaded: true,
-                loadError: error instanceof Error ? error.message : "Desktop startup failed.",
-            });
-        }
-    },
-    setActiveView: (activeView) => set({ activeView }),
-    setActiveSessionId: (activeSessionId) => set({ activeSessionId }),
-    saveSession: async (payload) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const nextSnapshot = {
-            ...snapshot,
-            sessions: upsertSession(snapshot.sessions, {
-                ...payload,
-                updatedAt: new Date().toISOString(),
-            }),
-        };
-        set({ snapshot: nextSnapshot, activeSessionId: payload.id });
-        scheduleSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    createNewSession: async (options) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const captureMode = options?.captureMode ?? "meeting-note";
-        const matchingTemplates = getTemplatesForCaptureMode(snapshot.templates, captureMode);
-        const preferredMeetingTemplateId = captureMode === "meeting-note" &&
-            matchingTemplates.some((template) => template.id === snapshot.settings.preferredDesktopTemplateId)
-            ? snapshot.settings.preferredDesktopTemplateId
-            : null;
-        const fallbackTemplateId = preferredMeetingTemplateId ??
-            matchingTemplates.find((template) => template.id === DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode])?.id ??
-            matchingTemplates[0]?.id ??
-            DEFAULT_TEMPLATE_BY_CAPTURE_MODE[captureMode];
-        const nextSession = createSessionRecord(options?.templateId ?? fallbackTemplateId, captureMode);
-        const nextSnapshot = {
-            ...snapshot,
-            sessions: [nextSession, ...snapshot.sessions],
-        };
-        set({ snapshot: nextSnapshot, activeSessionId: nextSession.id, activeView: "capture" });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    deleteSession: async (id) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const deletionTimestamp = new Date().toISOString();
-        let nextSessions = snapshot.sessions.map((session) => session.id === id
-            ? {
-                ...session,
-                deletedAt: deletionTimestamp,
-                updatedAt: deletionTimestamp,
-            }
-            : session);
-        let nextActiveId = get().activeSessionId;
-        if (!nextActiveId || nextActiveId === id) {
-            const firstActive = getFirstActiveSessionId(nextSessions);
-            if (firstActive) {
-                nextActiveId = firstActive;
-            }
-            else {
-                const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting", "meeting-note");
-                nextSessions = [replacement, ...nextSessions];
+                remainingSessions = [replacement, ...remainingSessions];
                 nextActiveId = replacement.id;
             }
-        }
-        const nextSnapshot = { ...snapshot, sessions: nextSessions };
-        set({
-            snapshot: nextSnapshot,
-            activeSessionId: nextActiveId,
-            activeView: get().activeView,
-        });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    restoreSession: async (id) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const restoreTimestamp = new Date().toISOString();
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "session", id),
-            sessions: snapshot.sessions.map((session) => session.id === id
-                ? {
-                    ...session,
-                    deletedAt: null,
-                    updatedAt: restoreTimestamp,
-                }
-                : session),
-        };
-        set({ snapshot: nextSnapshot, activeSessionId: id });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    permanentlyDeleteSession: async (id) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const deletionTimestamp = new Date().toISOString();
-        const removedAttachments = snapshot.attachments.filter((attachment) => attachment.sessionId === id);
-        if (removedAttachments.length) {
-            await Promise.all(removedAttachments.map((attachment) => removePersistedAttachment(attachment.filePath)));
-        }
-        let remainingSessions = snapshot.sessions.filter((session) => session.id !== id);
-        let nextActiveId = get().activeSessionId;
-        if (!remainingSessions.length || !getFirstActiveSessionId(remainingSessions)) {
-            const replacement = createSessionRecord(snapshot.settings.preferredDesktopTemplateId || "meeting", "meeting-note");
-            remainingSessions = [replacement, ...remainingSessions];
-            nextActiveId = replacement.id;
-        }
-        else if (nextActiveId === id) {
-            nextActiveId = getFirstActiveSessionId(remainingSessions);
-        }
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: removedAttachments.reduce((current, attachment) => recordDeletedEntity(current, "attachment", attachment.id, deletionTimestamp), recordDeletedEntity(snapshot.deletedEntities, "session", id, deletionTimestamp)),
-            sessions: remainingSessions,
-            attachments: snapshot.attachments.filter((attachment) => attachment.sessionId !== id),
-            entityLinks: snapshot.entityLinks.filter((entry) => !((entry.fromType === "session" && entry.fromId === id) ||
-                (entry.toType === "session" && entry.toId === id))),
-        };
-        set({
-            snapshot: nextSnapshot,
-            activeSessionId: nextActiveId,
-            activeView: get().activeView,
-        });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    saveTodo: async (todo) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const existingTodo = snapshot.todos.find((entry) => entry.id === todo.id);
-        const normalizedTask = normalizeTaskRecord({
-            ...todoToTaskRecord(todo),
-            ...applyActivityInheritance(snapshot, {
-                domain: todo.domain,
-                project: todo.project,
-                activity: todo.activity,
-                activityId: todo.activityId,
-            }),
-        });
-        const nextTodo = normalizeCompletionState(existingTodo, taskToTodoRecord({
-            ...normalizedTask,
-            updatedAt: new Date().toISOString(),
-        }));
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "todo", nextTodo.id),
-            todos: upsertTodo(snapshot.todos, nextTodo),
-        };
-        const calendarSyncedSnapshot = syncCalendarItemForTodo(nextSnapshot, nextTodo);
-        const syncedSnapshot = syncLinkedSessionForTodo(calendarSyncedSnapshot, nextTodo);
-        set({ snapshot: syncedSnapshot });
-        scheduleSnapshotPersist(get().repository, syncedSnapshot, set);
-    },
-    addTodo: async (description, options) => {
-        const snapshot = get().snapshot;
-        if (!snapshot || !description.trim())
-            return;
-        const createdAt = new Date().toISOString();
-        const trimmedDescription = description.trim();
-        const scheduledDate = options?.doOn || formatLocalDate();
-        const todoId = crypto.randomUUID();
-        const calendarItemId = crypto.randomUUID();
-        const startSlot = findNearestAvailableTodoSlot(snapshot.calendarItems, scheduledDate);
-        const inferredStructure = inferStructureFromTitle(snapshot, trimmedDescription, "todo", {
-            domain: options?.domain || "",
-            project: options?.project || "",
-            activity: options?.activityLabel || "",
-        });
-        const inherited = applyActivityInheritance(snapshot, {
-            activityId: options?.activityId || "",
-            domain: inferredStructure.domain,
-            project: inferredStructure.project,
-            activity: inferredStructure.activity,
-        });
-        const nextTask = normalizeTaskRecord({
-            id: todoId,
-            description: trimmedDescription,
-            participantText: "",
-            isDone: false,
-            completedAt: null,
-            isPrivate: false,
-            isPriority: false,
-            comments: options?.comments || "",
-            activityId: inherited.activityId,
-            domain: inherited.domain,
-            project: inherited.project,
-            activity: inherited.activity,
-            doOn: scheduledDate,
-            dueDate: "",
-            detailsHtml: "",
-            createdAt,
-            updatedAt: createdAt,
-            sessionIds: toSessionIds(get().activeSessionId),
-        });
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "todo", todoId),
-            todos: [taskToTodoRecord(nextTask), ...snapshot.todos],
-            calendarItems: upsertCalendarItem(snapshot.calendarItems, {
-                id: calendarItemId,
-                targetType: "todo",
-                targetId: todoId,
-                date: scheduledDate,
-                startSlot,
-                durationSlots: 1,
-                createdAt,
-                updatedAt: createdAt,
-            }),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    deleteTodo: async (id) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const deletionTimestamp = new Date().toISOString();
-        const todoToArchive = snapshot.todos.find((todo) => todo.id === id);
-        const nextArchivedTasks = todoToArchive
-            ? archiveTodoRecord(snapshot.archivedTasks, todoToArchive)
-            : snapshot.archivedTasks;
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "todo", id, deletionTimestamp),
-            archivedTasks: nextArchivedTasks,
-            todos: snapshot.todos.filter((todo) => todo.id !== id),
-            checklists: snapshot.checklists.filter((checklist) => !(checklist.ownerType === "todo" && checklist.ownerId === id)),
-            checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => !(rule.ownerType === "todo" && rule.ownerId === id)),
-            calendarItems: snapshot.calendarItems.filter((item) => !(item.targetType === "todo" && item.targetId === id)),
-            entityLinks: snapshot.entityLinks.filter((entry) => !((entry.fromType === "todo" && entry.fromId === id) ||
-                (entry.toType === "todo" && entry.toId === id))),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    saveActivity: async (activity) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const actualTimeSpentMinutes = computeTrackedMinutes(snapshot.timelogs, "activity", activity.id);
-        const nextActivity = snapshot.settings.baselineWorkActivityId === activity.id
-            ? normalizeBaselineWorkActivity(activity, actualTimeSpentMinutes)
-            : normalizeActivityStructure({
-                ...activity,
-                actualTimeSpentMinutes,
-                updatedAt: new Date().toISOString(),
-            });
-        let nextSnapshot = {
-            ...snapshot,
-            deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "activity", nextActivity.id),
-            activities: upsertActivity(snapshot.activities, nextActivity),
-        };
-        if (nextActivity.type === "meeting") {
-            nextSnapshot = syncCalendarItemForMeeting(nextSnapshot, nextActivity);
-            nextSnapshot = syncLinkedSessionForMeeting(nextSnapshot, nextActivity);
-        }
-        set({ snapshot: nextSnapshot });
-        scheduleSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    addActivity: async (description, type = "task", options) => {
-        const snapshot = get().snapshot;
-        if (!snapshot || !description.trim())
-            return;
-        const trimmedDescription = description.trim();
-        const parentActivity = options?.parentActivityId ? getActivityById(snapshot, options.parentActivityId) : null;
-        const inferredStructure = inferStructureFromTitle(snapshot, trimmedDescription, type === "meeting" ? "meeting" : "activity", {
-            domain: options?.domain || parentActivity?.domain || "",
-            project: options?.project || parentActivity?.project || "",
-            activity: options?.activityLabel || parentActivity?.description || "",
-        });
-        const nextActivity = normalizeActivityStructure({
-            id: crypto.randomUUID(),
-            type,
-            parentActivityId: options?.parentActivityId || "",
-            description: trimmedDescription,
-            participantText: "",
-            isDone: false,
-            isPrivate: false,
-            comments: options?.comments || "",
-            domain: inferredStructure.domain,
-            project: inferredStructure.project,
-            activity: inferredStructure.activity,
-            doOn: options?.doOn || "",
-            dueDate: "",
-            startTime: options?.startTime || "",
-            endTime: options?.endTime || "",
-            detailsHtml: "",
-            timeRequiredMinutes: 0,
-            actualTimeSpentMinutes: 0,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            sessionIds: toSessionIds(get().activeSessionId),
-        });
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "activity", nextActivity.id),
-            activities: [nextActivity, ...snapshot.activities],
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    deleteActivity: async (id) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        if (snapshot.settings.baselineWorkActivityId === id)
-            return;
-        const deletionTimestamp = new Date().toISOString();
-        const removedActivityIds = collectActivityDescendants(snapshot.activities, id);
-        const todosToArchive = snapshot.todos.filter((todo) => removedActivityIds.has(todo.activityId));
-        const removedTodoIds = new Set(todosToArchive.map((todo) => todo.id));
-        const removedSessionIds = new Set(snapshot.entityLinks
-            .filter((entry) => entry.fromType === "activity" && removedActivityIds.has(entry.fromId))
-            .map((entry) => entry.toId));
-        const nextArchivedTasks = todosToArchive.reduce((current, todo) => archiveTodoRecord(current, todo), snapshot.archivedTasks);
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: Array.from(removedActivityIds).reduce((current, activityId) => recordDeletedEntity(current, "activity", activityId, deletionTimestamp), removedTodoIds.size
-                ? Array.from(removedTodoIds).reduce((current, todoId) => recordDeletedEntity(current, "todo", todoId, deletionTimestamp), snapshot.deletedEntities)
-                : snapshot.deletedEntities),
-            archivedTasks: nextArchivedTasks,
-            activities: snapshot.activities.filter((activity) => !removedActivityIds.has(activity.id)),
-            todos: snapshot.todos.filter((todo) => !removedActivityIds.has(todo.activityId)),
-            checklists: snapshot.checklists.filter((checklist) => !(checklist.ownerType === "todo" && removedTodoIds.has(checklist.ownerId))),
-            checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => !(rule.ownerType === "todo" && removedTodoIds.has(rule.ownerId))),
-            calendarItems: snapshot.calendarItems.filter((item) => !((item.targetType === "activity" && removedActivityIds.has(item.targetId)) ||
-                (item.targetType === "todo" &&
-                    snapshot.todos.some((todo) => todo.id === item.targetId && removedActivityIds.has(todo.activityId))))),
-            entityLinks: snapshot.entityLinks.filter((entry) => !((entry.fromType === "activity" && removedActivityIds.has(entry.fromId)) ||
-                (entry.toType === "activity" && removedActivityIds.has(entry.toId)) ||
-                (entry.fromType === "todo" && removedTodoIds.has(entry.fromId)) ||
-                (entry.toType === "todo" && removedTodoIds.has(entry.toId)) ||
-                (entry.toType === "session" && removedSessionIds.has(entry.toId)))),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    saveChecklist: async (checklist) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const nextChecklist = normalizeChecklist({
-            ...checklist,
-            updatedAt: new Date().toISOString(),
-        });
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklist", nextChecklist.id),
-            checklists: upsertChecklist(snapshot.checklists, nextChecklist),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    createChecklist: async (ownerType, ownerId, title) => {
-        const snapshot = get().snapshot;
-        const nextTitle = title.trim();
-        const nextOwnerId = ownerId.trim();
-        if (!snapshot || !nextTitle || !nextOwnerId)
-            return;
-        const nextChecklist = buildChecklistRecord(ownerType, nextOwnerId, nextTitle);
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklist", nextChecklist.id),
-            checklists: [nextChecklist, ...snapshot.checklists],
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    deleteChecklist: async (id) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "checklist", id),
-            checklists: snapshot.checklists.filter((checklist) => checklist.id !== id),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    saveChecklistTemplate: async (template) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const nextTemplate = normalizeChecklistTemplate({
-            ...template,
-            updatedAt: new Date().toISOString(),
-        });
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklistTemplate", nextTemplate.id),
-            checklistTemplates: upsertChecklistTemplate(snapshot.checklistTemplates, nextTemplate),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    createChecklistTemplate: async (title, category = DEFAULT_CHECKLIST_TEMPLATE_CATEGORY, items = []) => {
-        const snapshot = get().snapshot;
-        const nextTitle = stripChecklistDateSuffix(title);
-        if (!snapshot || !nextTitle)
-            return;
-        const normalizedItems = items.map((item, index) => ({
-            ...item,
-            id: item.id || crypto.randomUUID(),
-            isChecked: false,
-            checkedAt: null,
-            position: index + 1,
-        }));
-        const nextTemplate = buildChecklistTemplateRecord(nextTitle, category, normalizedItems);
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklistTemplate", nextTemplate.id),
-            checklistTemplates: [nextTemplate, ...snapshot.checklistTemplates],
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    deleteChecklistTemplate: async (id) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "checklistTemplate", id),
-            checklistTemplates: snapshot.checklistTemplates.filter((template) => template.id !== id),
-            checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => rule.templateId !== id),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    createChecklistFromTemplate: async (ownerType, ownerId, templateId) => {
-        const snapshot = get().snapshot;
-        const nextOwnerId = ownerId.trim();
-        if (!snapshot || !nextOwnerId)
-            return;
-        const template = snapshot.checklistTemplates.find((entry) => entry.id === templateId);
-        if (!template)
-            return;
-        const nextChecklist = normalizeChecklist(instantiateChecklistFromTemplate(ownerType, nextOwnerId, template, {
-            cadence: "monthly",
-        }));
-        const nextSnapshot = {
-            ...snapshot,
-            checklists: [nextChecklist, ...snapshot.checklists],
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    createChecklistRecurrence: async (ownerType, ownerId, templateId, cadence) => {
-        const snapshot = get().snapshot;
-        const nextOwnerId = ownerId.trim();
-        if (!snapshot || !nextOwnerId)
-            return;
-        const template = snapshot.checklistTemplates.find((entry) => entry.id === templateId);
-        if (!template)
-            return;
-        const existingRule = snapshot.checklistRecurrences.find((rule) => rule.ownerType === ownerType &&
-            rule.ownerId === nextOwnerId &&
-            rule.templateId === templateId &&
-            rule.cadence === cadence);
-        const nextRule = existingRule
-            ? normalizeChecklistRecurrence({
-                ...existingRule,
-                updatedAt: new Date().toISOString(),
-            })
-            : buildChecklistRecurrenceRecord(ownerType, nextOwnerId, templateId, cadence);
-        const nextSnapshot = applyRecurringChecklistInstantiation({
-            ...snapshot,
-            deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklistRecurrence", nextRule.id),
-            checklistRecurrences: upsertChecklistRecurrence(snapshot.checklistRecurrences, nextRule),
-        }, new Date());
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    deleteChecklistRecurrence: async (id) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "checklistRecurrence", id),
-            checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => rule.id !== id),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    saveTimeLog: async (timeLog) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const nextTimeLog = buildTimeLog(timeLog.targetType, timeLog.targetId, {
-            ...timeLog,
-            updatedAt: new Date().toISOString(),
-        });
-        const nextTimeLogs = upsertTimeLog(snapshot.timelogs, nextTimeLog);
-        const nextSnapshot = {
-            ...snapshot,
-            timelogs: nextTimeLogs,
-            activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    deleteTimeLog: async (id) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const nextTimeLogs = snapshot.timelogs.filter((entry) => entry.id !== id);
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "timelog", id),
-            timelogs: nextTimeLogs,
-            activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    startTimeTracking: async (targetType, targetId) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const activeOpenLog = snapshot.timelogs.find((entry) => entry.targetType === targetType && entry.targetId === targetId && entry.startTime === entry.endTime);
-        if (activeOpenLog) {
-            return;
-        }
-        const now = new Date();
-        const { nextTimeLogs: closedTimeLogs } = closeOpenTimeLogs(snapshot.timelogs, now);
-        const nextTimeLog = buildTimeLog(targetType, targetId);
-        const nextTimeLogs = [nextTimeLog, ...closedTimeLogs];
-        const nextSnapshot = {
-            ...snapshot,
-            timelogs: nextTimeLogs,
-            activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    stopTimeTracking: async (targetType, targetId) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const activeOpenLog = snapshot.timelogs.find((entry) => entry.targetType === targetType && entry.targetId === targetId && entry.startTime === entry.endTime);
-        if (!activeOpenLog) {
-            return;
-        }
-        const now = new Date();
-        const nextDate = activeOpenLog.date || formatLocalDate(now);
-        const nextEndTime = getClosingTime(nextDate, activeOpenLog.startTime, now);
-        const nextTimeLog = {
-            ...activeOpenLog,
-            endTime: nextEndTime,
-            durationMinutes: calculateDurationMinutes(nextDate, activeOpenLog.startTime, nextEndTime),
-            updatedAt: now.toISOString(),
-        };
-        const nextTimeLogs = upsertTimeLog(snapshot.timelogs, nextTimeLog);
-        let nextSnapshot = {
-            ...snapshot,
-            timelogs: nextTimeLogs,
-            activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
-        };
-        const baselineActivityId = snapshot.settings.baselineWorkActivityId;
-        const stoppedBaseline = targetType === "activity" &&
-            Boolean(baselineActivityId) &&
-            targetId === baselineActivityId;
-        if (stoppedBaseline) {
-            nextSnapshot = {
-                ...nextSnapshot,
-                settings: {
-                    ...nextSnapshot.settings,
-                    baselineWorkEnabled: false,
-                },
+            else if (nextActiveId === id) {
+                nextActiveId = getFirstActiveSessionId(remainingSessions);
+            }
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: removedAttachments.reduce((current, attachment) => recordDeletedEntity(current, "attachment", attachment.id, deletionTimestamp), recordDeletedEntity(snapshot.deletedEntities, "session", id, deletionTimestamp)),
+                sessions: remainingSessions,
+                attachments: snapshot.attachments.filter((attachment) => attachment.sessionId !== id),
+                entityLinks: snapshot.entityLinks.filter((entry) => !((entry.fromType === "session" && entry.fromId === id) ||
+                    (entry.toType === "session" && entry.toId === id))),
             };
-        }
-        else {
-            nextSnapshot = ensureBaselineWorkRunningIfNeeded(nextSnapshot, now);
-        }
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    startAdhocTimeLog: async (options) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return null;
-        const now = new Date();
-        const createdAt = now.toISOString();
-        const nextTask = normalizeTaskRecord({
-            id: crypto.randomUUID(),
-            description: "",
-            isDone: false,
-            completedAt: null,
-            isPrivate: false,
-            isPriority: false,
-            comments: "",
-            participantText: "",
-            activityId: "",
-            domain: options?.domain || "",
-            project: options?.project || "",
-            activity: options?.activity || "",
-            doOn: formatLocalDate(now),
-            dueDate: "",
-            detailsHtml: "",
-            createdAt,
-            updatedAt: createdAt,
-            sessionIds: toSessionIds(get().activeSessionId),
-        });
-        const { nextTimeLogs: closedTimeLogs } = closeOpenTimeLogs(snapshot.timelogs, now);
-        const nextTimeLog = buildTimeLog("todo", nextTask.id, {
-            date: formatLocalDate(now),
-            startTime: formatLocalTime(now),
-            endTime: formatLocalTime(now),
-            createdAt,
-            updatedAt: createdAt,
-        });
-        const nextSnapshot = {
-            ...snapshot,
-            todos: [taskToTodoRecord(nextTask), ...snapshot.todos],
-            timelogs: [nextTimeLog, ...closedTimeLogs],
-            activities: recalculateActivitiesWithTimeLogs(snapshot.activities, [nextTimeLog, ...closedTimeLogs]),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-        return nextTask.id;
-    },
-    startWorkBaseline: async () => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const now = new Date();
-        const enabledSnapshot = {
-            ...snapshot,
-            settings: {
-                ...snapshot.settings,
-                baselineWorkEnabled: true,
-            },
-        };
-        const nextSnapshot = ensureBaselineWorkRunningIfNeeded(enabledSnapshot, now);
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    stopWorkBaseline: async () => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const now = new Date();
-        const baselineActivityId = snapshot.settings.baselineWorkActivityId;
-        const nextSettings = {
-            ...snapshot.settings,
-            baselineWorkEnabled: false,
-        };
-        const openBaselineLog = baselineActivityId
-            ? snapshot.timelogs.find((entry) => entry.targetType === "activity" &&
-                entry.targetId === baselineActivityId &&
-                isOpenTimeLog(entry))
-            : null;
-        let nextTimeLogs = snapshot.timelogs;
-        if (openBaselineLog) {
-            const nextDate = openBaselineLog.date || formatLocalDate(now);
-            const nextEndTime = getClosingTime(nextDate, openBaselineLog.startTime, now);
-            nextTimeLogs = upsertTimeLog(snapshot.timelogs, {
-                ...openBaselineLog,
-                endTime: nextEndTime,
-                durationMinutes: calculateDurationMinutes(nextDate, openBaselineLog.startTime, nextEndTime),
-                updatedAt: now.toISOString(),
+            set({
+                snapshot: nextSnapshot,
+                activeSessionId: nextActiveId,
+                activeView: get().activeView,
             });
-        }
-        const nextSnapshot = {
-            ...snapshot,
-            settings: nextSettings,
-            timelogs: nextTimeLogs,
-            activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    createCalendarEntryFromText: async (date, startSlot, value, options) => {
-        const snapshot = get().snapshot;
-        const parsed = options?.kind
-            ? { kind: options.kind, description: value.trim() || (options.kind === "meeting" ? "New meeting" : "New task") }
-            : parseScheduledText(value);
-        if (!snapshot || !parsed)
-            return null;
-        const createdAt = new Date().toISOString();
-        const normalizedSlot = clampSlotIndex(startSlot);
-        let nextSnapshot = snapshot;
-        let createdCalendarItemId = null;
-        if (parsed.kind !== "meeting") {
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        saveTodo: async (todo) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const existingTodo = snapshot.todos.find((entry) => entry.id === todo.id);
+            const updatedAt = new Date().toISOString();
+            const normalizedTask = normalizeTaskRecord({
+                ...todoToTaskRecord(todo),
+                ...applyActivityInheritance(snapshot, {
+                    domain: todo.domain,
+                    project: todo.project,
+                    activity: todo.activity,
+                    activityId: todo.activityId,
+                }),
+            });
+            const nextTodo = normalizeCompletionState(existingTodo, taskToTodoRecord({
+                ...normalizedTask,
+                updatedAt,
+            }));
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "todo", nextTodo.id),
+                todos: upsertTodo(snapshot.todos, nextTodo),
+            };
+            const calendarSyncedSnapshot = syncCalendarItemForTodo(nextSnapshot, nextTodo);
+            const syncedSnapshot = syncLinkedSessionForTodo(calendarSyncedSnapshot, nextTodo);
+            set({ snapshot: syncedSnapshot });
+            scheduleSnapshotPersist(get().repository, syncedSnapshot, set);
+            if (existingTodo && didStructureAssignmentChange(existingTodo, nextTodo)) {
+                scheduleStructureRuleLearning("todo", nextTodo.id, "todo");
+            }
+        },
+        addTodo: async (description, options) => {
+            const snapshot = get().snapshot;
+            if (!snapshot || !description.trim())
+                return;
+            const createdAt = new Date().toISOString();
+            const trimmedDescription = description.trim();
+            const scheduledDate = options?.doOn || formatLocalDate();
+            const todoId = crypto.randomUUID();
+            const calendarItemId = crypto.randomUUID();
+            const startSlot = findNearestAvailableTodoSlot(snapshot.calendarItems, scheduledDate);
+            const inferredStructure = inferStructureFromTitle(snapshot, trimmedDescription, "todo", {
+                domain: options?.domain || "",
+                project: options?.project || "",
+                activity: options?.activityLabel || "",
+            });
             const inherited = applyActivityInheritance(snapshot, {
                 activityId: options?.activityId || "",
-                domain: "",
-                project: "",
-                activity: "",
+                domain: inferredStructure.domain,
+                project: inferredStructure.project,
+                activity: inferredStructure.activity,
             });
-            const todo = {
-                id: crypto.randomUUID(),
-                description: parsed.description,
+            const nextTask = normalizeTaskRecord({
+                id: todoId,
+                description: trimmedDescription,
                 participantText: "",
                 isDone: false,
                 completedAt: null,
                 isPrivate: false,
                 isPriority: false,
-                comments: "",
-                activityId: options?.activityId || "",
+                comments: options?.comments || "",
+                activityId: inherited.activityId,
                 domain: inherited.domain,
                 project: inherited.project,
                 activity: inherited.activity,
-                doOn: date,
+                doOn: scheduledDate,
                 dueDate: "",
                 detailsHtml: "",
                 createdAt,
                 updatedAt: createdAt,
                 sessionIds: toSessionIds(get().activeSessionId),
-            };
-            const normalizedTodo = taskToTodoRecord(normalizeTaskRecord({
-                ...todoToTaskRecord(todo),
-                ...applyActivityInheritance(snapshot, {
-                    activityId: todo.activityId,
-                    domain: todo.domain,
-                    project: todo.project,
-                    activity: todo.activity,
-                }),
-            }));
-            createdCalendarItemId = crypto.randomUUID();
-            nextSnapshot = {
+            });
+            const nextSnapshot = {
                 ...snapshot,
-                todos: [normalizedTodo, ...snapshot.todos],
+                deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "todo", todoId),
+                todos: [taskToTodoRecord(nextTask), ...snapshot.todos],
                 calendarItems: upsertCalendarItem(snapshot.calendarItems, {
-                    id: createdCalendarItemId,
+                    id: calendarItemId,
                     targetType: "todo",
-                    targetId: normalizedTodo.id,
-                    date,
-                    startSlot: normalizedSlot,
+                    targetId: todoId,
+                    date: scheduledDate,
+                    startSlot,
                     durationSlots: 1,
                     createdAt,
                     updatedAt: createdAt,
                 }),
             };
-        }
-        else {
-            const durationSlots = Math.max(1, (typeof options?.endSlot === "number" ? clampSlotIndex(options.endSlot) : normalizedSlot + DEFAULT_MEETING_DURATION_SLOTS) - normalizedSlot);
-            const activity = normalizeActivityStructure({
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+            if (options?.activityId || options?.domain || options?.project || options?.activityLabel) {
+                scheduleStructureRuleLearning("todo", todoId, "todo");
+            }
+        },
+        deleteTodo: async (id) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const deletionTimestamp = new Date().toISOString();
+            const todoToArchive = snapshot.todos.find((todo) => todo.id === id);
+            const nextArchivedTasks = todoToArchive
+                ? archiveTodoRecord(snapshot.archivedTasks, todoToArchive)
+                : snapshot.archivedTasks;
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "todo", id, deletionTimestamp),
+                archivedTasks: nextArchivedTasks,
+                todos: snapshot.todos.filter((todo) => todo.id !== id),
+                checklists: snapshot.checklists.filter((checklist) => !(checklist.ownerType === "todo" && checklist.ownerId === id)),
+                checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => !(rule.ownerType === "todo" && rule.ownerId === id)),
+                calendarItems: snapshot.calendarItems.filter((item) => !(item.targetType === "todo" && item.targetId === id)),
+                entityLinks: snapshot.entityLinks.filter((entry) => !((entry.fromType === "todo" && entry.fromId === id) ||
+                    (entry.toType === "todo" && entry.toId === id))),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        saveActivity: async (activity) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const existingActivity = snapshot.activities.find((entry) => entry.id === activity.id);
+            const updatedAt = new Date().toISOString();
+            const actualTimeSpentMinutes = computeTrackedMinutes(snapshot.timelogs, "activity", activity.id);
+            const nextActivity = snapshot.settings.baselineWorkActivityId === activity.id
+                ? normalizeBaselineWorkActivity(activity, actualTimeSpentMinutes)
+                : normalizeActivityStructure({
+                    ...activity,
+                    actualTimeSpentMinutes,
+                    updatedAt,
+                });
+            let nextSnapshot = {
+                ...snapshot,
+                deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "activity", nextActivity.id),
+                activities: upsertActivity(snapshot.activities, nextActivity),
+            };
+            if (nextActivity.type === "meeting") {
+                nextSnapshot = syncCalendarItemForMeeting(nextSnapshot, nextActivity);
+                nextSnapshot = syncLinkedSessionForMeeting(nextSnapshot, nextActivity);
+            }
+            set({ snapshot: nextSnapshot });
+            scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+            if (existingActivity && nextActivity.description.trim() && didStructureAssignmentChange(existingActivity, nextActivity)) {
+                scheduleStructureRuleLearning("activity", nextActivity.id, nextActivity.type === "meeting" ? "meeting" : "activity");
+            }
+        },
+        addActivity: async (description, type = "task", options) => {
+            const snapshot = get().snapshot;
+            if (!snapshot || !description.trim())
+                return;
+            const trimmedDescription = description.trim();
+            const parentActivity = options?.parentActivityId ? getActivityById(snapshot, options.parentActivityId) : null;
+            const inferredStructure = inferStructureFromTitle(snapshot, trimmedDescription, type === "meeting" ? "meeting" : "activity", {
+                domain: options?.domain || parentActivity?.domain || "",
+                project: options?.project || parentActivity?.project || "",
+                activity: options?.activityLabel || parentActivity?.description || "",
+            });
+            const nextActivity = normalizeActivityStructure({
                 id: crypto.randomUUID(),
-                type: "meeting",
-                parentActivityId: options?.parentActivityId || options?.activityId || "",
-                description: parsed.description,
+                type,
+                parentActivityId: options?.parentActivityId || "",
+                description: trimmedDescription,
                 participantText: "",
                 isDone: false,
                 isPrivate: false,
-                comments: "",
-                domain: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.domain || "",
-                project: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.project || "",
-                activity: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.description || "",
-                doOn: date,
+                comments: options?.comments || "",
+                domain: inferredStructure.domain,
+                project: inferredStructure.project,
+                activity: inferredStructure.activity,
+                doOn: options?.doOn || "",
                 dueDate: "",
-                startTime: slotToTime(normalizedSlot),
-                endTime: slotToTime(normalizedSlot + durationSlots),
+                startTime: options?.startTime || "",
+                endTime: options?.endTime || "",
                 detailsHtml: "",
                 timeRequiredMinutes: 0,
                 actualTimeSpentMinutes: 0,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                sessionIds: toSessionIds(get().activeSessionId),
+            });
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "activity", nextActivity.id),
+                activities: [nextActivity, ...snapshot.activities],
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+            if (options?.parentActivityId || options?.domain || options?.project || options?.activityLabel) {
+                scheduleStructureRuleLearning("activity", nextActivity.id, type === "meeting" ? "meeting" : "activity");
+            }
+        },
+        deleteActivity: async (id) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            if (snapshot.settings.baselineWorkActivityId === id)
+                return;
+            const deletionTimestamp = new Date().toISOString();
+            const removedActivityIds = collectActivityDescendants(snapshot.activities, id);
+            const todosToArchive = snapshot.todos.filter((todo) => removedActivityIds.has(todo.activityId));
+            const removedTodoIds = new Set(todosToArchive.map((todo) => todo.id));
+            const removedSessionIds = new Set(snapshot.entityLinks
+                .filter((entry) => entry.fromType === "activity" && removedActivityIds.has(entry.fromId))
+                .map((entry) => entry.toId));
+            const nextArchivedTasks = todosToArchive.reduce((current, todo) => archiveTodoRecord(current, todo), snapshot.archivedTasks);
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: Array.from(removedActivityIds).reduce((current, activityId) => recordDeletedEntity(current, "activity", activityId, deletionTimestamp), removedTodoIds.size
+                    ? Array.from(removedTodoIds).reduce((current, todoId) => recordDeletedEntity(current, "todo", todoId, deletionTimestamp), snapshot.deletedEntities)
+                    : snapshot.deletedEntities),
+                archivedTasks: nextArchivedTasks,
+                activities: snapshot.activities.filter((activity) => !removedActivityIds.has(activity.id)),
+                todos: snapshot.todos.filter((todo) => !removedActivityIds.has(todo.activityId)),
+                checklists: snapshot.checklists.filter((checklist) => !(checklist.ownerType === "todo" && removedTodoIds.has(checklist.ownerId))),
+                checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => !(rule.ownerType === "todo" && removedTodoIds.has(rule.ownerId))),
+                calendarItems: snapshot.calendarItems.filter((item) => !((item.targetType === "activity" && removedActivityIds.has(item.targetId)) ||
+                    (item.targetType === "todo" &&
+                        snapshot.todos.some((todo) => todo.id === item.targetId && removedActivityIds.has(todo.activityId))))),
+                entityLinks: snapshot.entityLinks.filter((entry) => !((entry.fromType === "activity" && removedActivityIds.has(entry.fromId)) ||
+                    (entry.toType === "activity" && removedActivityIds.has(entry.toId)) ||
+                    (entry.fromType === "todo" && removedTodoIds.has(entry.fromId)) ||
+                    (entry.toType === "todo" && removedTodoIds.has(entry.toId)) ||
+                    (entry.toType === "session" && removedSessionIds.has(entry.toId)))),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        saveChecklist: async (checklist) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const nextChecklist = normalizeChecklist({
+                ...checklist,
+                updatedAt: new Date().toISOString(),
+            });
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklist", nextChecklist.id),
+                checklists: upsertChecklist(snapshot.checklists, nextChecklist),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        createChecklist: async (ownerType, ownerId, title) => {
+            const snapshot = get().snapshot;
+            const nextTitle = title.trim();
+            const nextOwnerId = ownerId.trim();
+            if (!snapshot || !nextTitle || !nextOwnerId)
+                return;
+            const nextChecklist = buildChecklistRecord(ownerType, nextOwnerId, nextTitle);
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklist", nextChecklist.id),
+                checklists: [nextChecklist, ...snapshot.checklists],
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        deleteChecklist: async (id) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "checklist", id),
+                checklists: snapshot.checklists.filter((checklist) => checklist.id !== id),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        saveChecklistTemplate: async (template) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const nextTemplate = normalizeChecklistTemplate({
+                ...template,
+                updatedAt: new Date().toISOString(),
+            });
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklistTemplate", nextTemplate.id),
+                checklistTemplates: upsertChecklistTemplate(snapshot.checklistTemplates, nextTemplate),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        createChecklistTemplate: async (title, category = DEFAULT_CHECKLIST_TEMPLATE_CATEGORY, items = []) => {
+            const snapshot = get().snapshot;
+            const nextTitle = stripChecklistDateSuffix(title);
+            if (!snapshot || !nextTitle)
+                return;
+            const normalizedItems = items.map((item, index) => ({
+                ...item,
+                id: item.id || crypto.randomUUID(),
+                isChecked: false,
+                checkedAt: null,
+                position: index + 1,
+            }));
+            const nextTemplate = buildChecklistTemplateRecord(nextTitle, category, normalizedItems);
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklistTemplate", nextTemplate.id),
+                checklistTemplates: [nextTemplate, ...snapshot.checklistTemplates],
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        deleteChecklistTemplate: async (id) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "checklistTemplate", id),
+                checklistTemplates: snapshot.checklistTemplates.filter((template) => template.id !== id),
+                checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => rule.templateId !== id),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        createChecklistFromTemplate: async (ownerType, ownerId, templateId) => {
+            const snapshot = get().snapshot;
+            const nextOwnerId = ownerId.trim();
+            if (!snapshot || !nextOwnerId)
+                return;
+            const template = snapshot.checklistTemplates.find((entry) => entry.id === templateId);
+            if (!template)
+                return;
+            const nextChecklist = normalizeChecklist(instantiateChecklistFromTemplate(ownerType, nextOwnerId, template, {
+                cadence: "monthly",
+            }));
+            const nextSnapshot = {
+                ...snapshot,
+                checklists: [nextChecklist, ...snapshot.checklists],
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        createChecklistRecurrence: async (ownerType, ownerId, templateId, cadence) => {
+            const snapshot = get().snapshot;
+            const nextOwnerId = ownerId.trim();
+            if (!snapshot || !nextOwnerId)
+                return;
+            const template = snapshot.checklistTemplates.find((entry) => entry.id === templateId);
+            if (!template)
+                return;
+            const existingRule = snapshot.checklistRecurrences.find((rule) => rule.ownerType === ownerType &&
+                rule.ownerId === nextOwnerId &&
+                rule.templateId === templateId &&
+                rule.cadence === cadence);
+            const nextRule = existingRule
+                ? normalizeChecklistRecurrence({
+                    ...existingRule,
+                    updatedAt: new Date().toISOString(),
+                })
+                : buildChecklistRecurrenceRecord(ownerType, nextOwnerId, templateId, cadence);
+            const nextSnapshot = applyRecurringChecklistInstantiation({
+                ...snapshot,
+                deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "checklistRecurrence", nextRule.id),
+                checklistRecurrences: upsertChecklistRecurrence(snapshot.checklistRecurrences, nextRule),
+            }, new Date());
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        deleteChecklistRecurrence: async (id) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "checklistRecurrence", id),
+                checklistRecurrences: snapshot.checklistRecurrences.filter((rule) => rule.id !== id),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        saveTimeLog: async (timeLog) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const nextTimeLog = buildTimeLog(timeLog.targetType, timeLog.targetId, {
+                ...timeLog,
+                updatedAt: new Date().toISOString(),
+            });
+            const nextTimeLogs = upsertTimeLog(snapshot.timelogs, nextTimeLog);
+            const nextSnapshot = {
+                ...snapshot,
+                timelogs: nextTimeLogs,
+                activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        deleteTimeLog: async (id) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const nextTimeLogs = snapshot.timelogs.filter((entry) => entry.id !== id);
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: recordDeletedEntity(snapshot.deletedEntities, "timelog", id),
+                timelogs: nextTimeLogs,
+                activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        startTimeTracking: async (targetType, targetId) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const activeOpenLog = snapshot.timelogs.find((entry) => entry.targetType === targetType && entry.targetId === targetId && entry.startTime === entry.endTime);
+            if (activeOpenLog) {
+                return;
+            }
+            const now = new Date();
+            const { nextTimeLogs: closedTimeLogs } = closeOpenTimeLogs(snapshot.timelogs, now);
+            const nextTimeLog = buildTimeLog(targetType, targetId);
+            const nextTimeLogs = [nextTimeLog, ...closedTimeLogs];
+            const nextSnapshot = {
+                ...snapshot,
+                timelogs: nextTimeLogs,
+                activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        stopTimeTracking: async (targetType, targetId) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const activeOpenLog = snapshot.timelogs.find((entry) => entry.targetType === targetType && entry.targetId === targetId && entry.startTime === entry.endTime);
+            if (!activeOpenLog) {
+                return;
+            }
+            const now = new Date();
+            const nextDate = activeOpenLog.date || formatLocalDate(now);
+            const nextEndTime = getClosingTime(nextDate, activeOpenLog.startTime, now);
+            const nextTimeLog = {
+                ...activeOpenLog,
+                endTime: nextEndTime,
+                durationMinutes: calculateDurationMinutes(nextDate, activeOpenLog.startTime, nextEndTime),
+                updatedAt: now.toISOString(),
+            };
+            const nextTimeLogs = upsertTimeLog(snapshot.timelogs, nextTimeLog);
+            let nextSnapshot = {
+                ...snapshot,
+                timelogs: nextTimeLogs,
+                activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
+            };
+            const baselineActivityId = snapshot.settings.baselineWorkActivityId;
+            const stoppedBaseline = targetType === "activity" &&
+                Boolean(baselineActivityId) &&
+                targetId === baselineActivityId;
+            if (stoppedBaseline) {
+                nextSnapshot = {
+                    ...nextSnapshot,
+                    settings: {
+                        ...nextSnapshot.settings,
+                        baselineWorkEnabled: false,
+                    },
+                };
+            }
+            else {
+                nextSnapshot = ensureBaselineWorkRunningIfNeeded(nextSnapshot, now);
+            }
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        startAdhocTimeLog: async (options) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return null;
+            const now = new Date();
+            const createdAt = now.toISOString();
+            const nextTask = normalizeTaskRecord({
+                id: crypto.randomUUID(),
+                description: "",
+                isDone: false,
+                completedAt: null,
+                isPrivate: false,
+                isPriority: false,
+                comments: "",
+                participantText: "",
+                activityId: "",
+                domain: options?.domain || "",
+                project: options?.project || "",
+                activity: options?.activity || "",
+                doOn: formatLocalDate(now),
+                dueDate: "",
+                detailsHtml: "",
                 createdAt,
                 updatedAt: createdAt,
                 sessionIds: toSessionIds(get().activeSessionId),
             });
-            createdCalendarItemId = crypto.randomUUID();
-            nextSnapshot = {
+            const { nextTimeLogs: closedTimeLogs } = closeOpenTimeLogs(snapshot.timelogs, now);
+            const nextTimeLog = buildTimeLog("todo", nextTask.id, {
+                date: formatLocalDate(now),
+                startTime: formatLocalTime(now),
+                endTime: formatLocalTime(now),
+                createdAt,
+                updatedAt: createdAt,
+            });
+            const nextSnapshot = {
                 ...snapshot,
-                activities: [activity, ...snapshot.activities],
-                calendarItems: upsertCalendarItem(snapshot.calendarItems, {
-                    id: createdCalendarItemId,
-                    targetType: "activity",
-                    targetId: activity.id,
-                    date,
-                    startSlot: normalizedSlot,
-                    durationSlots,
+                todos: [taskToTodoRecord(nextTask), ...snapshot.todos],
+                timelogs: [nextTimeLog, ...closedTimeLogs],
+                activities: recalculateActivitiesWithTimeLogs(snapshot.activities, [nextTimeLog, ...closedTimeLogs]),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+            return nextTask.id;
+        },
+        startWorkBaseline: async () => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const now = new Date();
+            const enabledSnapshot = {
+                ...snapshot,
+                settings: {
+                    ...snapshot.settings,
+                    baselineWorkEnabled: true,
+                },
+            };
+            const nextSnapshot = ensureBaselineWorkRunningIfNeeded(enabledSnapshot, now);
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        stopWorkBaseline: async () => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const now = new Date();
+            const baselineActivityId = snapshot.settings.baselineWorkActivityId;
+            const nextSettings = {
+                ...snapshot.settings,
+                baselineWorkEnabled: false,
+            };
+            const openBaselineLog = baselineActivityId
+                ? snapshot.timelogs.find((entry) => entry.targetType === "activity" &&
+                    entry.targetId === baselineActivityId &&
+                    isOpenTimeLog(entry))
+                : null;
+            let nextTimeLogs = snapshot.timelogs;
+            if (openBaselineLog) {
+                const nextDate = openBaselineLog.date || formatLocalDate(now);
+                const nextEndTime = getClosingTime(nextDate, openBaselineLog.startTime, now);
+                nextTimeLogs = upsertTimeLog(snapshot.timelogs, {
+                    ...openBaselineLog,
+                    endTime: nextEndTime,
+                    durationMinutes: calculateDurationMinutes(nextDate, openBaselineLog.startTime, nextEndTime),
+                    updatedAt: now.toISOString(),
+                });
+            }
+            const nextSnapshot = {
+                ...snapshot,
+                settings: nextSettings,
+                timelogs: nextTimeLogs,
+                activities: recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        createCalendarEntryFromText: async (date, startSlot, value, options) => {
+            const snapshot = get().snapshot;
+            const parsed = options?.kind
+                ? { kind: options.kind, description: value.trim() || (options.kind === "meeting" ? "New meeting" : "New task") }
+                : parseScheduledText(value);
+            if (!snapshot || !parsed)
+                return null;
+            const createdAt = new Date().toISOString();
+            const normalizedSlot = clampSlotIndex(startSlot);
+            let nextSnapshot = snapshot;
+            let createdCalendarItemId = null;
+            if (parsed.kind !== "meeting") {
+                const inherited = applyActivityInheritance(snapshot, {
+                    activityId: options?.activityId || "",
+                    domain: "",
+                    project: "",
+                    activity: "",
+                });
+                const todo = {
+                    id: crypto.randomUUID(),
+                    description: parsed.description,
+                    participantText: "",
+                    isDone: false,
+                    completedAt: null,
+                    isPrivate: false,
+                    isPriority: false,
+                    comments: "",
+                    activityId: options?.activityId || "",
+                    domain: inherited.domain,
+                    project: inherited.project,
+                    activity: inherited.activity,
+                    doOn: date,
+                    dueDate: "",
+                    detailsHtml: "",
                     createdAt,
                     updatedAt: createdAt,
-                }),
-            };
-        }
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-        return createdCalendarItemId;
-    },
-    rollForwardOverdueTodos: async () => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const rolloverResult = rollForwardOverdueCalendarTodos(snapshot);
-        if (!rolloverResult.changed)
-            return;
-        set({ snapshot: rolloverResult.snapshot });
-        await flushSnapshotPersist(get().repository, rolloverResult.snapshot, set);
-    },
-    moveCalendarItem: async (id, date, startSlot) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const existing = snapshot.calendarItems.find((item) => item.id === id);
-        if (!existing)
-            return;
-        const normalizedSlot = clampSlotIndex(startSlot);
-        let nextSnapshot = {
-            ...snapshot,
-            calendarItems: upsertCalendarItem(snapshot.calendarItems, {
-                ...existing,
-                date,
-                startSlot: normalizedSlot,
-                updatedAt: new Date().toISOString(),
-            }),
-        };
-        if (existing.targetType === "todo") {
-            const todo = snapshot.todos.find((entry) => entry.id === existing.targetId);
-            if (todo) {
+                    sessionIds: toSessionIds(get().activeSessionId),
+                };
+                const normalizedTodo = taskToTodoRecord(normalizeTaskRecord({
+                    ...todoToTaskRecord(todo),
+                    ...applyActivityInheritance(snapshot, {
+                        activityId: todo.activityId,
+                        domain: todo.domain,
+                        project: todo.project,
+                        activity: todo.activity,
+                    }),
+                }));
+                createdCalendarItemId = crypto.randomUUID();
                 nextSnapshot = {
-                    ...nextSnapshot,
-                    todos: upsertTodo(nextSnapshot.todos, { ...todo, doOn: date }),
+                    ...snapshot,
+                    todos: [normalizedTodo, ...snapshot.todos],
+                    calendarItems: upsertCalendarItem(snapshot.calendarItems, {
+                        id: createdCalendarItemId,
+                        targetType: "todo",
+                        targetId: normalizedTodo.id,
+                        date,
+                        startSlot: normalizedSlot,
+                        durationSlots: 1,
+                        createdAt,
+                        updatedAt: createdAt,
+                    }),
                 };
             }
-        }
-        else {
-            const activity = snapshot.activities.find((entry) => entry.id === existing.targetId);
-            if (activity) {
-                const durationSlots = Math.max(1, existing.durationSlots);
-                const nextActivity = {
-                    ...activity,
+            else {
+                const durationSlots = Math.max(1, (typeof options?.endSlot === "number" ? clampSlotIndex(options.endSlot) : normalizedSlot + DEFAULT_MEETING_DURATION_SLOTS) - normalizedSlot);
+                const activity = normalizeActivityStructure({
+                    id: crypto.randomUUID(),
+                    type: "meeting",
+                    parentActivityId: options?.parentActivityId || options?.activityId || "",
+                    description: parsed.description,
+                    participantText: "",
+                    isDone: false,
+                    isPrivate: false,
+                    comments: "",
+                    domain: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.domain || "",
+                    project: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.project || "",
+                    activity: getActivityById(snapshot, options?.activityId || options?.parentActivityId || "")?.description || "",
                     doOn: date,
+                    dueDate: "",
                     startTime: slotToTime(normalizedSlot),
                     endTime: slotToTime(normalizedSlot + durationSlots),
-                };
+                    detailsHtml: "",
+                    timeRequiredMinutes: 0,
+                    actualTimeSpentMinutes: 0,
+                    createdAt,
+                    updatedAt: createdAt,
+                    sessionIds: toSessionIds(get().activeSessionId),
+                });
+                createdCalendarItemId = crypto.randomUUID();
                 nextSnapshot = {
-                    ...nextSnapshot,
-                    activities: upsertActivity(nextSnapshot.activities, nextActivity),
-                };
-                if (nextActivity.type === "meeting") {
-                    nextSnapshot = syncLinkedSessionForMeeting(nextSnapshot, nextActivity);
-                }
-            }
-        }
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    updateCalendarItem: async (id, updates) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const existing = snapshot.calendarItems.find((item) => item.id === id);
-        if (!existing)
-            return;
-        const normalizedSlot = clampSlotIndex(updates.startSlot);
-        const normalizedDuration = Math.max(1, Math.round(updates.durationSlots));
-        let nextSnapshot = {
-            ...snapshot,
-            calendarItems: upsertCalendarItem(snapshot.calendarItems, {
-                ...existing,
-                date: updates.date,
-                startSlot: normalizedSlot,
-                durationSlots: normalizedDuration,
-                updatedAt: new Date().toISOString(),
-            }),
-        };
-        if (existing.targetType === "todo") {
-            const todo = snapshot.todos.find((entry) => entry.id === existing.targetId);
-            if (todo) {
-                nextSnapshot = {
-                    ...nextSnapshot,
-                    todos: upsertTodo(nextSnapshot.todos, { ...todo, doOn: updates.date }),
+                    ...snapshot,
+                    activities: [activity, ...snapshot.activities],
+                    calendarItems: upsertCalendarItem(snapshot.calendarItems, {
+                        id: createdCalendarItemId,
+                        targetType: "activity",
+                        targetId: activity.id,
+                        date,
+                        startSlot: normalizedSlot,
+                        durationSlots,
+                        createdAt,
+                        updatedAt: createdAt,
+                    }),
                 };
             }
-        }
-        else {
-            const activity = snapshot.activities.find((entry) => entry.id === existing.targetId);
-            if (activity) {
-                const nextActivity = {
-                    ...activity,
-                    doOn: updates.date,
-                    startTime: slotToTime(normalizedSlot),
-                    endTime: slotToTime(normalizedSlot + normalizedDuration),
-                };
-                nextSnapshot = {
-                    ...nextSnapshot,
-                    activities: upsertActivity(nextSnapshot.activities, nextActivity),
-                };
-                if (nextActivity.type === "meeting") {
-                    nextSnapshot = syncLinkedSessionForMeeting(nextSnapshot, nextActivity);
-                }
-            }
-        }
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    convertTodoToActivity: async (todo, options) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return null;
-        const nextType = options?.type ?? "task";
-        const nextDate = options?.date ?? todo.doOn;
-        const hasScheduledTime = Boolean(options?.startTime || options?.endTime);
-        const nextStartTime = nextType === "meeting" || hasScheduledTime ? options?.startTime || "09:00" : "";
-        const nextEndTime = nextType === "meeting" || hasScheduledTime
-            ? options?.endTime || slotToTime(timeToSlot(nextStartTime) + DEFAULT_MEETING_DURATION_SLOTS)
-            : "";
-        const nextStartSlot = nextStartTime ? clampSlotIndex(timeToSlot(nextStartTime)) : null;
-        const nextDurationSlots = nextStartTime && nextEndTime ? Math.max(1, timeToSlot(nextEndTime) - timeToSlot(nextStartTime)) : null;
-        const nextActivity = {
-            id: crypto.randomUUID(),
-            type: nextType,
-            parentActivityId: "",
-            description: todo.description,
-            isDone: false,
-            isPrivate: todo.isPrivate,
-            comments: todo.comments,
-            domain: todo.domain,
-            project: todo.project,
-            activity: todo.activity,
-            doOn: nextDate,
-            dueDate: todo.dueDate,
-            startTime: nextStartTime,
-            endTime: nextEndTime,
-            detailsHtml: todo.detailsHtml,
-            timeRequiredMinutes: 0,
-            actualTimeSpentMinutes: computeTrackedMinutes(snapshot.timelogs, "todo", todo.id),
-            createdAt: new Date().toISOString(),
-            sessionIds: todo.sessionIds,
-        };
-        let nextSnapshot = {
-            ...snapshot,
-            todos: snapshot.todos.filter((entry) => entry.id !== todo.id),
-            activities: [nextActivity, ...snapshot.activities],
-            timelogs: snapshot.timelogs.map((entry) => entry.targetType === "todo" && entry.targetId === todo.id
-                ? {
-                    ...entry,
-                    targetType: "activity",
-                    targetId: nextActivity.id,
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+            return createdCalendarItemId;
+        },
+        rollForwardOverdueTodos: async () => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const rolloverResult = rollForwardOverdueCalendarTodos(snapshot);
+            if (!rolloverResult.changed)
+                return;
+            set({ snapshot: rolloverResult.snapshot });
+            await flushSnapshotPersist(get().repository, rolloverResult.snapshot, set);
+        },
+        moveCalendarItem: async (id, date, startSlot) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const existing = snapshot.calendarItems.find((item) => item.id === id);
+            if (!existing)
+                return;
+            const normalizedSlot = clampSlotIndex(startSlot);
+            let nextSnapshot = {
+                ...snapshot,
+                calendarItems: upsertCalendarItem(snapshot.calendarItems, {
+                    ...existing,
+                    date,
+                    startSlot: normalizedSlot,
                     updatedAt: new Date().toISOString(),
+                }),
+            };
+            if (existing.targetType === "todo") {
+                const todo = snapshot.todos.find((entry) => entry.id === existing.targetId);
+                if (todo) {
+                    nextSnapshot = {
+                        ...nextSnapshot,
+                        todos: upsertTodo(nextSnapshot.todos, { ...todo, doOn: date }),
+                    };
                 }
-                : entry),
-            calendarItems: snapshot.calendarItems.map((item) => item.targetType === "todo" && item.targetId === todo.id
-                ? {
-                    ...item,
-                    targetType: "activity",
-                    targetId: nextActivity.id,
-                    date: nextDate || item.date,
-                    startSlot: nextStartSlot ?? item.startSlot,
-                    durationSlots: nextDurationSlots ?? item.durationSlots,
+            }
+            else {
+                const activity = snapshot.activities.find((entry) => entry.id === existing.targetId);
+                if (activity) {
+                    const durationSlots = Math.max(1, existing.durationSlots);
+                    const nextActivity = {
+                        ...activity,
+                        doOn: date,
+                        startTime: slotToTime(normalizedSlot),
+                        endTime: slotToTime(normalizedSlot + durationSlots),
+                    };
+                    nextSnapshot = {
+                        ...nextSnapshot,
+                        activities: upsertActivity(nextSnapshot.activities, nextActivity),
+                    };
+                    if (nextActivity.type === "meeting") {
+                        nextSnapshot = syncLinkedSessionForMeeting(nextSnapshot, nextActivity);
+                    }
+                }
+            }
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        updateCalendarItem: async (id, updates) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const existing = snapshot.calendarItems.find((item) => item.id === id);
+            if (!existing)
+                return;
+            const normalizedSlot = clampSlotIndex(updates.startSlot);
+            const normalizedDuration = Math.max(1, Math.round(updates.durationSlots));
+            let nextSnapshot = {
+                ...snapshot,
+                calendarItems: upsertCalendarItem(snapshot.calendarItems, {
+                    ...existing,
+                    date: updates.date,
+                    startSlot: normalizedSlot,
+                    durationSlots: normalizedDuration,
                     updatedAt: new Date().toISOString(),
+                }),
+            };
+            if (existing.targetType === "todo") {
+                const todo = snapshot.todos.find((entry) => entry.id === existing.targetId);
+                if (todo) {
+                    nextSnapshot = {
+                        ...nextSnapshot,
+                        todos: upsertTodo(nextSnapshot.todos, { ...todo, doOn: updates.date }),
+                    };
                 }
-                : item),
-        };
-        if (nextType === "meeting") {
-            nextSnapshot = syncCalendarItemForMeeting(nextSnapshot, nextActivity);
-        }
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-        return nextActivity.id;
-    },
-    ensureSessionForActivity: async (activityId) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return null;
-        const activity = snapshot.activities.find((entry) => entry.id === activityId);
-        if (!activity)
-            return null;
-        const existingSessionId = findSessionIdForActivity(snapshot.entityLinks, activityId);
-        if (existingSessionId) {
-            return existingSessionId;
-        }
-        const linkedSession = buildLinkedMeetingSession(snapshot, activity, snapshot.settings.preferredDesktopTemplateId);
-        const nextSnapshot = {
-            ...snapshot,
-            sessions: [linkedSession, ...snapshot.sessions],
-            entityLinks: upsertEntityLink(snapshot.entityLinks, {
+            }
+            else {
+                const activity = snapshot.activities.find((entry) => entry.id === existing.targetId);
+                if (activity) {
+                    const nextActivity = {
+                        ...activity,
+                        doOn: updates.date,
+                        startTime: slotToTime(normalizedSlot),
+                        endTime: slotToTime(normalizedSlot + normalizedDuration),
+                    };
+                    nextSnapshot = {
+                        ...nextSnapshot,
+                        activities: upsertActivity(nextSnapshot.activities, nextActivity),
+                    };
+                    if (nextActivity.type === "meeting") {
+                        nextSnapshot = syncLinkedSessionForMeeting(nextSnapshot, nextActivity);
+                    }
+                }
+            }
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        convertTodoToActivity: async (todo, options) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return null;
+            const nextType = options?.type ?? "task";
+            const nextDate = options?.date ?? todo.doOn;
+            const hasScheduledTime = Boolean(options?.startTime || options?.endTime);
+            const nextStartTime = nextType === "meeting" || hasScheduledTime ? options?.startTime || "09:00" : "";
+            const nextEndTime = nextType === "meeting" || hasScheduledTime
+                ? options?.endTime || slotToTime(timeToSlot(nextStartTime) + DEFAULT_MEETING_DURATION_SLOTS)
+                : "";
+            const nextStartSlot = nextStartTime ? clampSlotIndex(timeToSlot(nextStartTime)) : null;
+            const nextDurationSlots = nextStartTime && nextEndTime ? Math.max(1, timeToSlot(nextEndTime) - timeToSlot(nextStartTime)) : null;
+            const nextActivity = {
                 id: crypto.randomUUID(),
-                fromType: "activity",
-                fromId: activity.id,
-                toType: "session",
-                toId: linkedSession.id,
-                relation: "has_session",
+                type: nextType,
+                parentActivityId: "",
+                description: todo.description,
+                isDone: false,
+                isPrivate: todo.isPrivate,
+                comments: todo.comments,
+                domain: todo.domain,
+                project: todo.project,
+                activity: todo.activity,
+                doOn: nextDate,
+                dueDate: todo.dueDate,
+                startTime: nextStartTime,
+                endTime: nextEndTime,
+                detailsHtml: todo.detailsHtml,
+                timeRequiredMinutes: 0,
+                actualTimeSpentMinutes: computeTrackedMinutes(snapshot.timelogs, "todo", todo.id),
                 createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            }),
-        };
-        set({ snapshot: nextSnapshot, activeSessionId: linkedSession.id });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-        return linkedSession.id;
-    },
-    ensureSessionForTodo: async (todoId) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return null;
-        const todo = snapshot.todos.find((entry) => entry.id === todoId);
-        if (!todo)
-            return null;
-        const existingSessionId = findSessionIdForTodo(snapshot.entityLinks, todoId);
-        if (existingSessionId) {
-            return existingSessionId;
-        }
-        const linkedSession = buildLinkedTaskSession(snapshot, todo);
-        const nextSnapshot = {
-            ...snapshot,
-            sessions: [linkedSession, ...snapshot.sessions],
-            entityLinks: upsertEntityLink(snapshot.entityLinks, {
-                id: crypto.randomUUID(),
-                fromType: "todo",
-                fromId: todo.id,
-                toType: "session",
-                toId: linkedSession.id,
-                relation: "has_session",
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            }),
-        };
-        set({ snapshot: nextSnapshot, activeSessionId: linkedSession.id });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-        return linkedSession.id;
-    },
-    saveSettings: async (settings) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const nextSnapshot = { ...snapshot, settings };
-        set({ snapshot: nextSnapshot });
-        scheduleSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    renameDomainValue: async (previousValue, nextValue) => {
-        const snapshot = get().snapshot;
-        const previous = previousValue.trim();
-        const next = nextValue.trim();
-        if (!snapshot || !previous || !next || previous === next)
-            return;
-        const nextSnapshot = {
-            ...snapshot,
-            sessions: snapshot.sessions.map((session) => session.domain === previous ? { ...session, domain: next, updatedAt: new Date().toISOString() } : session),
-            todos: snapshot.todos.map((todo) => todo.domain === previous ? { ...todo, domain: next, updatedAt: new Date().toISOString() } : todo),
-            activities: snapshot.activities.map((activity) => activity.domain === previous ? { ...activity, domain: next, updatedAt: new Date().toISOString() } : activity),
-            settings: {
-                ...snapshot.settings,
-                savedDomains: Array.from(new Set(snapshot.settings.savedDomains.map((entry) => (entry === previous ? next : entry)).concat(next))).sort((left, right) => left.localeCompare(right)),
-                projectLinks: snapshot.settings.projectLinks.map((entry) => entry.domain === previous ? { ...entry, domain: next } : entry),
-                timeReportPresets: snapshot.settings.timeReportPresets.map((entry) => entry.domain === previous ? { ...entry, domain: next } : entry),
-            },
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    renameProjectValue: async (previousValue, nextValue) => {
-        const snapshot = get().snapshot;
-        const previous = previousValue.trim();
-        const next = nextValue.trim();
-        if (!snapshot || !previous || !next || previous === next)
-            return;
-        const nextSnapshot = {
-            ...snapshot,
-            sessions: snapshot.sessions.map((session) => session.project === previous ? { ...session, project: next, updatedAt: new Date().toISOString() } : session),
-            todos: snapshot.todos.map((todo) => todo.project === previous ? { ...todo, project: next, updatedAt: new Date().toISOString() } : todo),
-            checklists: snapshot.checklists.map((checklist) => checklist.ownerType === "project" && checklist.ownerId === previous
-                ? { ...checklist, ownerId: next, updatedAt: new Date().toISOString() }
-                : checklist),
-            checklistRecurrences: snapshot.checklistRecurrences.map((rule) => rule.ownerType === "project" && rule.ownerId === previous
-                ? { ...rule, ownerId: next, updatedAt: new Date().toISOString() }
-                : rule),
-            activities: snapshot.activities.map((activity) => activity.project === previous ? { ...activity, project: next, updatedAt: new Date().toISOString() } : activity),
-            settings: {
-                ...snapshot.settings,
-                savedProjects: Array.from(new Set(snapshot.settings.savedProjects.map((entry) => (entry === previous ? next : entry)).concat(next))).sort((left, right) => left.localeCompare(right)),
-                projectLinks: snapshot.settings.projectLinks.map((entry) => entry.project === previous ? { ...entry, project: next } : entry),
-                timeReportPresets: snapshot.settings.timeReportPresets.map((entry) => entry.project === previous ? { ...entry, project: next } : entry),
-            },
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    saveTemplate: async (template) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const nextSnapshot = {
-            ...snapshot,
-            templates: upsertTemplate(snapshot.templates, template),
-        };
-        set({ snapshot: nextSnapshot });
-        scheduleSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    resetTemplates: async () => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const nextSnapshot = {
-            ...snapshot,
-            templates: BUILTIN_TEMPLATES,
-            settings: {
-                ...snapshot.settings,
-                preferredDesktopTemplateId: "meeting",
-            },
-        };
-        set({ snapshot: nextSnapshot });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    saveAttachments: async (attachments) => {
-        const snapshot = get().snapshot;
-        if (!snapshot)
-            return;
-        const nowIso = new Date().toISOString();
-        const nextAttachments = attachments.map((attachment) => ({
-            ...attachment,
-            updatedAt: attachment.updatedAt || nowIso,
-        }));
-        const nextSnapshot = {
-            ...snapshot,
-            deletedEntities: nextAttachments.reduce((current, attachment) => clearDeletedEntity(current, "attachment", attachment.id), snapshot.deletedEntities),
-            attachments: nextAttachments,
-        };
-        set({ snapshot: nextSnapshot });
-        scheduleSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-    importLegacyBrowserData: async () => {
-        const migrated = loadLegacyBrowserSnapshot();
-        if (!migrated) {
-            return "missing";
-        }
-        set({
-            snapshot: migrated,
-            activeSessionId: migrated.sessions[0]?.id ?? null,
-            activeView: "capture",
-        });
-        await flushSnapshotPersist(get().repository, migrated, set);
-        return "imported";
-    },
-    importBackupSnapshot: async (snapshot) => {
-        const nextSnapshot = applyCompletedTaskCleanup({
-            ...snapshot,
-            sessions: Array.isArray(snapshot.sessions) && snapshot.sessions.length
-                ? snapshot.sessions
-                : [createSessionRecord(snapshot.settings?.preferredDesktopTemplateId || "meeting", "meeting-note")],
-            todos: Array.isArray(snapshot.todos) ? snapshot.todos.map((todo) => normalizeTaskRecord(todoToTaskRecord(todo))) : [],
-            checklists: Array.isArray(snapshot.checklists) ? snapshot.checklists.map((checklist) => normalizeChecklist(checklist)) : [],
-            checklistTemplates: Array.isArray(snapshot.checklistTemplates)
-                ? snapshot.checklistTemplates.map((template) => normalizeChecklistTemplate(template))
-                : [],
-            checklistRecurrences: Array.isArray(snapshot.checklistRecurrences)
-                ? snapshot.checklistRecurrences.map((rule) => normalizeChecklistRecurrence(rule))
-                : [],
-            archivedTasks: Array.isArray(snapshot.archivedTasks) ? snapshot.archivedTasks : [],
-            activities: recalculateActivitiesWithTimeLogs(snapshot.activities ?? [], snapshot.timelogs ?? []),
-            deletedEntities: Array.isArray(snapshot.deletedEntities) ? snapshot.deletedEntities : [],
-        });
-        set({
-            snapshot: nextSnapshot,
-            activeSessionId: getFirstActiveSessionId(nextSnapshot.sessions),
-            activeView: "capture",
-        });
-        await flushSnapshotPersist(get().repository, nextSnapshot, set);
-    },
-}));
+                sessionIds: todo.sessionIds,
+            };
+            let nextSnapshot = {
+                ...snapshot,
+                todos: snapshot.todos.filter((entry) => entry.id !== todo.id),
+                activities: [nextActivity, ...snapshot.activities],
+                timelogs: snapshot.timelogs.map((entry) => entry.targetType === "todo" && entry.targetId === todo.id
+                    ? {
+                        ...entry,
+                        targetType: "activity",
+                        targetId: nextActivity.id,
+                        updatedAt: new Date().toISOString(),
+                    }
+                    : entry),
+                calendarItems: snapshot.calendarItems.map((item) => item.targetType === "todo" && item.targetId === todo.id
+                    ? {
+                        ...item,
+                        targetType: "activity",
+                        targetId: nextActivity.id,
+                        date: nextDate || item.date,
+                        startSlot: nextStartSlot ?? item.startSlot,
+                        durationSlots: nextDurationSlots ?? item.durationSlots,
+                        updatedAt: new Date().toISOString(),
+                    }
+                    : item),
+            };
+            if (nextType === "meeting") {
+                nextSnapshot = syncCalendarItemForMeeting(nextSnapshot, nextActivity);
+            }
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+            return nextActivity.id;
+        },
+        ensureSessionForActivity: async (activityId) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return null;
+            const activity = snapshot.activities.find((entry) => entry.id === activityId);
+            if (!activity)
+                return null;
+            const existingSessionId = findSessionIdForActivity(snapshot.entityLinks, activityId);
+            if (existingSessionId) {
+                return existingSessionId;
+            }
+            const linkedSession = buildLinkedMeetingSession(snapshot, activity, snapshot.settings.preferredDesktopTemplateId);
+            const nextSnapshot = {
+                ...snapshot,
+                sessions: [linkedSession, ...snapshot.sessions],
+                entityLinks: upsertEntityLink(snapshot.entityLinks, {
+                    id: crypto.randomUUID(),
+                    fromType: "activity",
+                    fromId: activity.id,
+                    toType: "session",
+                    toId: linkedSession.id,
+                    relation: "has_session",
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                }),
+            };
+            set({ snapshot: nextSnapshot, activeSessionId: linkedSession.id });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+            return linkedSession.id;
+        },
+        ensureSessionForTodo: async (todoId) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return null;
+            const todo = snapshot.todos.find((entry) => entry.id === todoId);
+            if (!todo)
+                return null;
+            const existingSessionId = findSessionIdForTodo(snapshot.entityLinks, todoId);
+            if (existingSessionId) {
+                return existingSessionId;
+            }
+            const linkedSession = buildLinkedTaskSession(snapshot, todo);
+            const nextSnapshot = {
+                ...snapshot,
+                sessions: [linkedSession, ...snapshot.sessions],
+                entityLinks: upsertEntityLink(snapshot.entityLinks, {
+                    id: crypto.randomUUID(),
+                    fromType: "todo",
+                    fromId: todo.id,
+                    toType: "session",
+                    toId: linkedSession.id,
+                    relation: "has_session",
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                }),
+            };
+            set({ snapshot: nextSnapshot, activeSessionId: linkedSession.id });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+            return linkedSession.id;
+        },
+        saveSettings: async (settings) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const nextSnapshot = { ...snapshot, settings };
+            set({ snapshot: nextSnapshot });
+            scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        renameDomainValue: async (previousValue, nextValue) => {
+            const snapshot = get().snapshot;
+            const previous = previousValue.trim();
+            const next = nextValue.trim();
+            if (!snapshot || !previous || !next || previous === next)
+                return;
+            const nextSnapshot = {
+                ...snapshot,
+                sessions: snapshot.sessions.map((session) => session.domain === previous ? { ...session, domain: next, updatedAt: new Date().toISOString() } : session),
+                todos: snapshot.todos.map((todo) => todo.domain === previous ? { ...todo, domain: next, updatedAt: new Date().toISOString() } : todo),
+                activities: snapshot.activities.map((activity) => activity.domain === previous ? { ...activity, domain: next, updatedAt: new Date().toISOString() } : activity),
+                settings: {
+                    ...snapshot.settings,
+                    savedDomains: Array.from(new Set(snapshot.settings.savedDomains.map((entry) => (entry === previous ? next : entry)).concat(next))).sort((left, right) => left.localeCompare(right)),
+                    structureInferenceRules: renameStructureInferenceRuleField(snapshot.settings.structureInferenceRules, "domain", previous, next),
+                    projectLinks: snapshot.settings.projectLinks.map((entry) => entry.domain === previous ? { ...entry, domain: next } : entry),
+                    timeReportPresets: snapshot.settings.timeReportPresets.map((entry) => entry.domain === previous ? { ...entry, domain: next } : entry),
+                },
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        renameProjectValue: async (previousValue, nextValue) => {
+            const snapshot = get().snapshot;
+            const previous = previousValue.trim();
+            const next = nextValue.trim();
+            if (!snapshot || !previous || !next || previous === next)
+                return;
+            const nextSnapshot = {
+                ...snapshot,
+                sessions: snapshot.sessions.map((session) => session.project === previous ? { ...session, project: next, updatedAt: new Date().toISOString() } : session),
+                todos: snapshot.todos.map((todo) => todo.project === previous ? { ...todo, project: next, updatedAt: new Date().toISOString() } : todo),
+                checklists: snapshot.checklists.map((checklist) => checklist.ownerType === "project" && checklist.ownerId === previous
+                    ? { ...checklist, ownerId: next, updatedAt: new Date().toISOString() }
+                    : checklist),
+                checklistRecurrences: snapshot.checklistRecurrences.map((rule) => rule.ownerType === "project" && rule.ownerId === previous
+                    ? { ...rule, ownerId: next, updatedAt: new Date().toISOString() }
+                    : rule),
+                activities: snapshot.activities.map((activity) => activity.project === previous ? { ...activity, project: next, updatedAt: new Date().toISOString() } : activity),
+                settings: {
+                    ...snapshot.settings,
+                    savedProjects: Array.from(new Set(snapshot.settings.savedProjects.map((entry) => (entry === previous ? next : entry)).concat(next))).sort((left, right) => left.localeCompare(right)),
+                    structureInferenceRules: renameStructureInferenceRuleField(snapshot.settings.structureInferenceRules, "project", previous, next),
+                    projectLinks: snapshot.settings.projectLinks.map((entry) => entry.project === previous ? { ...entry, project: next } : entry),
+                    timeReportPresets: snapshot.settings.timeReportPresets.map((entry) => entry.project === previous ? { ...entry, project: next } : entry),
+                },
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        saveTemplate: async (template) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const nextSnapshot = {
+                ...snapshot,
+                templates: upsertTemplate(snapshot.templates, template),
+            };
+            set({ snapshot: nextSnapshot });
+            scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        resetTemplates: async () => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const nextSnapshot = {
+                ...snapshot,
+                templates: BUILTIN_TEMPLATES,
+                settings: {
+                    ...snapshot.settings,
+                    preferredDesktopTemplateId: "meeting",
+                },
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        saveAttachments: async (attachments) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return;
+            const nowIso = new Date().toISOString();
+            const nextAttachments = attachments.map((attachment) => ({
+                ...attachment,
+                updatedAt: attachment.updatedAt || nowIso,
+            }));
+            const nextSnapshot = {
+                ...snapshot,
+                deletedEntities: nextAttachments.reduce((current, attachment) => clearDeletedEntity(current, "attachment", attachment.id), snapshot.deletedEntities),
+                attachments: nextAttachments,
+            };
+            set({ snapshot: nextSnapshot });
+            scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        importLegacyBrowserData: async () => {
+            const migrated = loadLegacyBrowserSnapshot();
+            if (!migrated) {
+                return "missing";
+            }
+            set({
+                snapshot: migrated,
+                activeSessionId: migrated.sessions[0]?.id ?? null,
+                activeView: "capture",
+            });
+            await flushSnapshotPersist(get().repository, migrated, set);
+            return "imported";
+        },
+        importBackupSnapshot: async (snapshot) => {
+            const nextSnapshot = applyCompletedTaskCleanup({
+                ...snapshot,
+                sessions: Array.isArray(snapshot.sessions) && snapshot.sessions.length
+                    ? snapshot.sessions
+                    : [createSessionRecord(snapshot.settings?.preferredDesktopTemplateId || "meeting", "meeting-note")],
+                todos: Array.isArray(snapshot.todos) ? snapshot.todos.map((todo) => normalizeTaskRecord(todoToTaskRecord(todo))) : [],
+                checklists: Array.isArray(snapshot.checklists) ? snapshot.checklists.map((checklist) => normalizeChecklist(checklist)) : [],
+                checklistTemplates: Array.isArray(snapshot.checklistTemplates)
+                    ? snapshot.checklistTemplates.map((template) => normalizeChecklistTemplate(template))
+                    : [],
+                checklistRecurrences: Array.isArray(snapshot.checklistRecurrences)
+                    ? snapshot.checklistRecurrences.map((rule) => normalizeChecklistRecurrence(rule))
+                    : [],
+                archivedTasks: Array.isArray(snapshot.archivedTasks) ? snapshot.archivedTasks : [],
+                activities: recalculateActivitiesWithTimeLogs(snapshot.activities ?? [], snapshot.timelogs ?? []),
+                deletedEntities: Array.isArray(snapshot.deletedEntities) ? snapshot.deletedEntities : [],
+            });
+            set({
+                snapshot: nextSnapshot,
+                activeSessionId: getFirstActiveSessionId(nextSnapshot.sessions),
+                activeView: "capture",
+            });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+    };
+});

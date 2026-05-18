@@ -30,6 +30,7 @@ import {
 import { DEFAULT_OUTPUT_LAYOUT_PRESET_ID, normalizeOutputLayoutPresetId } from "../export/outputLayouts";
 import { isTauriRuntime } from "../storage/environment";
 import { getDesktopStorageInfo } from "../storage/desktopStorage";
+import { normalizeStructureInferenceRules } from "../structure/inferStructure";
 import { formatStockholmDate, formatStockholmTime } from "../time/stockholm";
 import { sqliteBootstrapStatements } from "./schema";
 
@@ -331,6 +332,7 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   abbreviations: [],
   preferredParticipantNames: [],
   ruleSuggestions: [],
+  structureInferenceRules: [],
   assistantQueryMemories: [],
   promptProfile: resolvePromptProfile(undefined).profile,
 });
@@ -526,6 +528,7 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
         }))
         .filter((entry) => Boolean(entry.sourceValue && entry.suggestedValue))
     : [],
+  structureInferenceRules: normalizeStructureInferenceRules(settings.structureInferenceRules),
   assistantQueryMemories: Array.isArray(settings.assistantQueryMemories)
     ? settings.assistantQueryMemories
         .map((entry) => ({

@@ -1,4 +1,11 @@
-import type { ActivityRecord, SessionRecord, TodoRecord } from "@notesmith/domain";
+import type {
+  ActivityRecord,
+  LocalAppSettings,
+  SessionRecord,
+  StructureInferenceRuleKind,
+  StructureInferenceRuleRecord,
+  TodoRecord,
+} from "@notesmith/domain";
 
 type StructureInferenceKind = "todo" | "meeting" | "activity" | "session";
 
@@ -12,9 +19,10 @@ type StructureInferenceSnapshot = {
   todos: TodoRecord[];
   activities: ActivityRecord[];
   sessions: SessionRecord[];
+  settings?: Pick<LocalAppSettings, "structureInferenceRules">;
 };
 
-type StructureInferenceResult = {
+export type StructureInferenceResult = {
   domain: string;
   project: string;
   activity: string;
@@ -43,6 +51,12 @@ type StructureHistory = {
   projectHintMap: Map<string, StructureHint>;
   activityHintMap: Map<string, StructureHint>;
   candidates: StructureCandidate[];
+};
+
+const RULE_KIND_PRIORITY: Record<Exclude<StructureInferenceKind, "session">, StructureInferenceRuleKind[]> = {
+  todo: ["todo", "activity", "meeting"],
+  activity: ["activity", "meeting", "todo"],
+  meeting: ["meeting", "activity", "todo"],
 };
 
 const GENERIC_STRUCTURE_VALUES = new Set([
@@ -90,6 +104,12 @@ const TITLE_STOP_WORDS = new Set([
 ]);
 
 const normalizeMatchText = (value: string | undefined | null) => (typeof value === "string" ? value.trim().toLocaleLowerCase() : "");
+
+export const normalizeStructureInferenceRuleTitle = (value: string) =>
+  normalizeMatchText(value)
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const isMeaningfulStructureValue = (value: string | undefined | null) => {
   const normalized = normalizeMatchText(value);
@@ -147,6 +167,115 @@ const buildRecencyBonus = (value: string) => {
   if (!Number.isFinite(timestamp)) return 0;
   const ageDays = Math.max(0, (Date.now() - timestamp) / 86400000);
   return Math.max(0, 40 - Math.floor(ageDays / 14));
+};
+
+const normalizeStructureInferenceRule = (
+  rule: Partial<StructureInferenceRuleRecord>,
+): StructureInferenceRuleRecord | null => {
+  const normalizedTitle = normalizeStructureInferenceRuleTitle(typeof rule.normalizedTitle === "string" && rule.normalizedTitle ? rule.normalizedTitle : typeof rule.title === "string" ? rule.title : "");
+  const kind: StructureInferenceRuleKind =
+    rule.kind === "meeting" || rule.kind === "activity" || rule.kind === "todo" ? rule.kind : "todo";
+  const domain = typeof rule.domain === "string" ? rule.domain.trim() : "";
+  const project = typeof rule.project === "string" ? rule.project.trim() : "";
+  const activity = typeof rule.activity === "string" ? rule.activity.trim() : "";
+  if (!normalizedTitle) return null;
+  if (!isMeaningfulStructureValue(domain) && !isMeaningfulStructureValue(project) && !isMeaningfulStructureValue(activity)) {
+    return null;
+  }
+  const title = typeof rule.title === "string" && rule.title.trim() ? rule.title.trim() : normalizedTitle;
+  const timestamp = typeof rule.updatedAt === "string" && rule.updatedAt ? rule.updatedAt : new Date().toISOString();
+  return {
+    id: typeof rule.id === "string" && rule.id.trim() ? rule.id : crypto.randomUUID(),
+    kind,
+    title,
+    normalizedTitle,
+    domain,
+    project,
+    activity,
+    evidenceCount: Number.isFinite(Number(rule.evidenceCount)) ? Math.max(1, Math.round(Number(rule.evidenceCount))) : 1,
+    createdAt: typeof rule.createdAt === "string" && rule.createdAt ? rule.createdAt : timestamp,
+    updatedAt: timestamp,
+  };
+};
+
+const compareRulePriority = (left: StructureInferenceRuleRecord, right: StructureInferenceRuleRecord) =>
+  compareTimestamps(right.updatedAt, left.updatedAt) ||
+  right.evidenceCount - left.evidenceCount ||
+  left.title.localeCompare(right.title);
+
+const compareTimestamps = (left: string | undefined | null, right: string | undefined | null) =>
+  (left || "").localeCompare(right || "");
+
+export const normalizeStructureInferenceRules = (
+  rules: Array<Partial<StructureInferenceRuleRecord>> | undefined | null,
+) => {
+  const deduped = new Map<string, StructureInferenceRuleRecord>();
+  (rules ?? []).forEach((rule) => {
+    const normalized = normalizeStructureInferenceRule(rule);
+    if (!normalized) return;
+    const key = `${normalized.kind}::${normalized.normalizedTitle}`;
+    const existing = deduped.get(key);
+    if (!existing || compareRulePriority(normalized, existing) < 0) {
+      deduped.set(key, normalized);
+    }
+  });
+  return Array.from(deduped.values()).sort(compareRulePriority);
+};
+
+export const upsertStructureInferenceRule = (
+  rules: Array<Partial<StructureInferenceRuleRecord>> | undefined,
+  title: string,
+  kind: StructureInferenceRuleKind,
+  structure: Partial<StructureInferenceResult>,
+  updatedAt = new Date().toISOString(),
+) => {
+  const normalizedTitle = normalizeStructureInferenceRuleTitle(title);
+  const domain = typeof structure.domain === "string" ? structure.domain.trim() : "";
+  const project = typeof structure.project === "string" ? structure.project.trim() : "";
+  const activity = typeof structure.activity === "string" ? structure.activity.trim() : "";
+  if (!normalizedTitle) {
+    return normalizeStructureInferenceRules(rules ?? []);
+  }
+  if (!isMeaningfulStructureValue(domain) && !isMeaningfulStructureValue(project) && !isMeaningfulStructureValue(activity)) {
+    return normalizeStructureInferenceRules(rules ?? []);
+  }
+
+  const normalizedRules = normalizeStructureInferenceRules(rules ?? []);
+  const existing = normalizedRules.find((rule) => rule.kind === kind && rule.normalizedTitle === normalizedTitle);
+  const nextRule: StructureInferenceRuleRecord = {
+    id: existing?.id || crypto.randomUUID(),
+    kind,
+    title: title.trim() || existing?.title || normalizedTitle,
+    normalizedTitle,
+    domain,
+    project,
+    activity,
+    evidenceCount: (existing?.evidenceCount ?? 0) + 1,
+    createdAt: existing?.createdAt || updatedAt,
+    updatedAt,
+  };
+
+  return normalizeStructureInferenceRules([
+    ...normalizedRules.filter((rule) => !(rule.kind === kind && rule.normalizedTitle === normalizedTitle)),
+    nextRule,
+  ]);
+};
+
+const findBestLearnedRule = (
+  rules: Array<Partial<StructureInferenceRuleRecord>> | undefined,
+  title: string,
+  kind: Exclude<StructureInferenceKind, "session">,
+) => {
+  const normalizedTitle = normalizeStructureInferenceRuleTitle(title);
+  if (!normalizedTitle) return null;
+  const kindOrder = RULE_KIND_PRIORITY[kind];
+  return normalizeStructureInferenceRules(rules)
+    .filter((rule) => rule.normalizedTitle === normalizedTitle)
+    .sort((left, right) => {
+      const kindDelta = kindOrder.indexOf(left.kind) - kindOrder.indexOf(right.kind);
+      if (kindDelta !== 0) return kindDelta;
+      return compareRulePriority(left, right);
+    })[0] ?? null;
 };
 
 const scoreCandidateAgainstTitle = (
@@ -366,6 +495,11 @@ export const inferStructureFromTitle = (
   const titleTokens = tokenizeTitle(trimmedTitle);
   const history = collectStructureHistory(snapshot);
   let inferred = { ...initial };
+
+  const learnedRule = findBestLearnedRule(snapshot.settings?.structureInferenceRules, trimmedTitle, kind);
+  if (learnedRule) {
+    inferred = mergeMissingStructure(inferred, learnedRule);
+  }
 
   if (!inferred.activity) {
     const activityHint = findBestHint(normalizedTitle, titleTokens, history.activityHints);

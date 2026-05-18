@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { downloadDir } from "@tauri-apps/api/path";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { resolvePromptProfile } from "../ai/prompts";
+import { normalizeStructureInferenceRules } from "../structure/inferStructure";
 import { isTauriRuntime } from "./environment";
 import { parseLegacyImportSnapshot } from "./migrateLegacy";
 const joinPath = (base, child) => `${base.replace(/[\\\/]+$/, "")}/${child}`;
@@ -93,6 +94,10 @@ const mergeSettings = (current, imported) => ({
     abbreviations: uniqueBy([...(current.abbreviations || []), ...(imported.abbreviations || [])], (entry) => entry.id || `${entry.shortForm}::${entry.fullForm}`),
     preferredParticipantNames: uniqueBy([...(current.preferredParticipantNames || []), ...(imported.preferredParticipantNames || [])], (entry) => entry.id || `${entry.shortForm}::${entry.fullName}`),
     ruleSuggestions: uniqueBy([...(current.ruleSuggestions || []), ...(imported.ruleSuggestions || [])], (entry) => entry.id),
+    structureInferenceRules: normalizeStructureInferenceRules([
+        ...(current.structureInferenceRules || []),
+        ...(imported.structureInferenceRules || []),
+    ]),
     assistantQueryMemories: uniqueBy([...(current.assistantQueryMemories || []), ...(imported.assistantQueryMemories || [])], (entry) => entry.id),
     promptProfile: imported.promptProfile ?? current.promptProfile,
 });

@@ -293,6 +293,21 @@ export interface RuleSuggestionRecord {
   updatedAt: string;
 }
 
+export type StructureInferenceRuleKind = "todo" | "meeting" | "activity";
+
+export interface StructureInferenceRuleRecord {
+  id: string;
+  kind: StructureInferenceRuleKind;
+  title: string;
+  normalizedTitle: string;
+  domain: string;
+  project: string;
+  activity: string;
+  evidenceCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AssistantQueryMemoryRecord {
   id: string;
   fingerprint: string;
@@ -340,6 +355,7 @@ export interface LocalAppSettings {
   abbreviations: Array<{ id: string; shortForm: string; fullForm: string }>;
   preferredParticipantNames: PreferredParticipantName[];
   ruleSuggestions: RuleSuggestionRecord[];
+  structureInferenceRules?: StructureInferenceRuleRecord[];
   assistantQueryMemories?: AssistantQueryMemoryRecord[];
   promptProfile: PromptProfile;
 }

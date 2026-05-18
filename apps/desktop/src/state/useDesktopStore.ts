@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ActivityRecord, ArchivedTaskRecord, CaptureMode, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, DeletedEntityRecord, DesktopAppSnapshot, TaskRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, ArchivedTaskRecord, CaptureMode, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, DeletedEntityRecord, DesktopAppSnapshot, StructureInferenceRuleKind, TaskRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCaptureMode } from "@notesmith/domain";
 import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
 import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
@@ -17,7 +17,7 @@ import { normalizeTaskRecord, taskToTodoRecord, todoToTaskRecord } from "../lib/
 import { removePersistedAttachment } from "../lib/files/attachmentStore";
 import { findSessionIdForActivity, findSessionIdForTodo, upsertEntityLink } from "../lib/links/entityLinks";
 import { loadRecentLocalSnapshotBackups } from "../lib/storage/desktopStorage";
-import { inferStructureFromTitle } from "../lib/structure/inferStructure";
+import { inferStructureFromTitle, normalizeStructureInferenceRules, upsertStructureInferenceRule } from "../lib/structure/inferStructure";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 import {
   formatStockholmDate as formatLocalDate,
@@ -46,6 +46,7 @@ const COMPLETED_TASK_PURGE_DAYS = 90;
 const COMPLETED_TASK_PURGE_MS = COMPLETED_TASK_PURGE_DAYS * 24 * 60 * 60 * 1000;
 const DEFAULT_CHECKLIST_TEMPLATE_CATEGORY = "General";
 const DEFAULT_CHECKLIST_RECURRENCE_CADENCE: ChecklistRecurrenceCadence = "monthly";
+const STRUCTURE_RULE_LEARN_DEBOUNCE_MS = 1200;
 type Snapshot = DesktopAppSnapshot;
 type Todo = TodoRecord;
 type Task = TaskRecord;
@@ -219,6 +220,54 @@ const slotToTime = (slot: number) => {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+};
+
+const normalizeStructureValue = (value: string | undefined | null) => (typeof value === "string" ? value.trim() : "");
+
+const didStructureAssignmentChange = (
+  previous: { domain?: string; project?: string; activity?: string } | undefined,
+  next: { domain?: string; project?: string; activity?: string },
+) =>
+  normalizeStructureValue(previous?.domain) !== normalizeStructureValue(next.domain) ||
+  normalizeStructureValue(previous?.project) !== normalizeStructureValue(next.project) ||
+  normalizeStructureValue(previous?.activity) !== normalizeStructureValue(next.activity);
+
+const learnStructureRuleForItem = (
+  settings: DesktopAppSnapshot["settings"],
+  title: string,
+  kind: StructureInferenceRuleKind,
+  structure: { domain?: string; project?: string; activity?: string },
+  updatedAt: string,
+) => ({
+  ...settings,
+  structureInferenceRules: upsertStructureInferenceRule(
+    settings.structureInferenceRules,
+    title,
+    kind,
+    structure,
+    updatedAt,
+  ),
+});
+
+const renameStructureInferenceRuleField = (
+  rules: DesktopAppSnapshot["settings"]["structureInferenceRules"],
+  field: "domain" | "project",
+  previousValue: string,
+  nextValue: string,
+) => {
+  const normalizedPrevious = normalizeStructureValue(previousValue);
+  const normalizedNext = normalizeStructureValue(nextValue);
+  return normalizeStructureInferenceRules(
+    (rules ?? []).map((rule) =>
+      normalizeStructureValue(rule[field]) === normalizedPrevious
+        ? {
+            ...rule,
+            [field]: normalizedNext,
+            updatedAt: new Date().toISOString(),
+          }
+        : rule,
+    ),
+  );
 };
 const durationFromTimes = (startTime: string, endTime: string) => {
   const startSlot = timeToSlot(startTime);
@@ -1358,6 +1407,7 @@ const applyRecurringChecklistInstantiation = (
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingSnapshot: DesktopAppSnapshot | null = null;
+const structureRuleLearningTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 const logPersistError = (error: unknown) => {
   console.error("NoteSmith desktop persistence failed", error);
@@ -1501,7 +1551,53 @@ interface DesktopState {
   saveAttachments: (attachments: DesktopAppSnapshot["attachments"]) => Promise<void>;
 }
 
-export const useDesktopStore = create<DesktopState>((set, get) => ({
+export const useDesktopStore = create<DesktopState>((set, get) => {
+  const scheduleStructureRuleLearning = (
+    entityType: "todo" | "activity",
+    entityId: string,
+    kind: StructureInferenceRuleKind,
+  ) => {
+    const timerKey = `${entityType}:${entityId}:${kind}`;
+    const existingTimer = structureRuleLearningTimers.get(timerKey);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    structureRuleLearningTimers.set(
+      timerKey,
+      setTimeout(() => {
+        structureRuleLearningTimers.delete(timerKey);
+        const snapshot = get().snapshot;
+        if (!snapshot) return;
+
+        const item =
+          entityType === "todo"
+            ? snapshot.todos.find((entry) => entry.id === entityId)
+            : snapshot.activities.find((entry) => entry.id === entityId);
+        if (!item || !item.description.trim()) return;
+
+        const nextSettings = learnStructureRuleForItem(
+          snapshot.settings,
+          item.description,
+          kind,
+          item,
+          new Date().toISOString(),
+        );
+        const currentRules = JSON.stringify(snapshot.settings.structureInferenceRules ?? []);
+        const nextRules = JSON.stringify(nextSettings.structureInferenceRules ?? []);
+        if (currentRules === nextRules) return;
+
+        const nextSnapshot = {
+          ...snapshot,
+          settings: nextSettings,
+        };
+        set({ snapshot: nextSnapshot });
+        scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+      }, STRUCTURE_RULE_LEARN_DEBOUNCE_MS),
+    );
+  };
+
+  return {
   snapshot: null,
   activeSessionId: null,
   activeView: "capture",
@@ -1716,37 +1812,41 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     });
     await flushSnapshotPersist(get().repository, nextSnapshot, set);
   },
-  saveTodo: async (todo) => {
-    const snapshot = get().snapshot;
-    if (!snapshot) return;
-    const existingTodo = snapshot.todos.find((entry) => entry.id === todo.id);
-    const normalizedTask = normalizeTaskRecord({
-      ...todoToTaskRecord(todo),
-      ...applyActivityInheritance(snapshot, {
-        domain: todo.domain,
-        project: todo.project,
-        activity: todo.activity,
-        activityId: todo.activityId,
-      }),
-    } as Task);
-    const nextTodo = normalizeCompletionState(existingTodo, taskToTodoRecord({
-      ...normalizedTask,
-      updatedAt: new Date().toISOString(),
-    }));
-    const nextSnapshot = {
-      ...snapshot,
-      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "todo", nextTodo.id),
-      todos: upsertTodo(snapshot.todos, nextTodo),
-    };
-    const calendarSyncedSnapshot = syncCalendarItemForTodo(nextSnapshot, nextTodo);
-    const syncedSnapshot = syncLinkedSessionForTodo(calendarSyncedSnapshot, nextTodo);
-    set({ snapshot: syncedSnapshot });
-    scheduleSnapshotPersist(get().repository, syncedSnapshot, set);
-  },
+    saveTodo: async (todo) => {
+      const snapshot = get().snapshot;
+      if (!snapshot) return;
+      const existingTodo = snapshot.todos.find((entry) => entry.id === todo.id);
+      const updatedAt = new Date().toISOString();
+      const normalizedTask = normalizeTaskRecord({
+        ...todoToTaskRecord(todo),
+        ...applyActivityInheritance(snapshot, {
+          domain: todo.domain,
+          project: todo.project,
+          activity: todo.activity,
+          activityId: todo.activityId,
+        }),
+      } as Task);
+      const nextTodo = normalizeCompletionState(existingTodo, taskToTodoRecord({
+        ...normalizedTask,
+        updatedAt,
+      }));
+      const nextSnapshot = {
+        ...snapshot,
+        deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "todo", nextTodo.id),
+        todos: upsertTodo(snapshot.todos, nextTodo),
+      };
+      const calendarSyncedSnapshot = syncCalendarItemForTodo(nextSnapshot, nextTodo);
+      const syncedSnapshot = syncLinkedSessionForTodo(calendarSyncedSnapshot, nextTodo);
+      set({ snapshot: syncedSnapshot });
+      scheduleSnapshotPersist(get().repository, syncedSnapshot, set);
+      if (existingTodo && didStructureAssignmentChange(existingTodo, nextTodo)) {
+        scheduleStructureRuleLearning("todo", nextTodo.id, "todo");
+      }
+    },
   addTodo: async (description, options) => {
-    const snapshot = get().snapshot;
-    if (!snapshot || !description.trim()) return;
-    const createdAt = new Date().toISOString();
+      const snapshot = get().snapshot;
+      if (!snapshot || !description.trim()) return;
+      const createdAt = new Date().toISOString();
     const trimmedDescription = description.trim();
     const scheduledDate = options?.doOn || formatLocalDate();
     const todoId = crypto.randomUUID();
@@ -1763,7 +1863,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       project: inferredStructure.project,
       activity: inferredStructure.activity,
     });
-    const nextTask = normalizeTaskRecord({
+      const nextTask = normalizeTaskRecord({
       id: todoId,
       description: trimmedDescription,
       participantText: "",
@@ -1780,14 +1880,14 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       dueDate: "",
       detailsHtml: "",
       createdAt,
-      updatedAt: createdAt,
-      sessionIds: toSessionIds(get().activeSessionId),
-    });
-    const nextSnapshot = {
-      ...snapshot,
-      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "todo", todoId),
-      todos: [taskToTodoRecord(nextTask), ...snapshot.todos],
-      calendarItems: upsertCalendarItem(snapshot.calendarItems, {
+        updatedAt: createdAt,
+        sessionIds: toSessionIds(get().activeSessionId),
+      });
+        const nextSnapshot = {
+          ...snapshot,
+          deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "todo", todoId),
+          todos: [taskToTodoRecord(nextTask), ...snapshot.todos],
+          calendarItems: upsertCalendarItem(snapshot.calendarItems, {
         id: calendarItemId,
         targetType: "todo",
         targetId: todoId,
@@ -1797,10 +1897,13 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         createdAt,
         updatedAt: createdAt,
       }),
-    };
-    set({ snapshot: nextSnapshot });
-    await flushSnapshotPersist(get().repository, nextSnapshot, set);
-  },
+      };
+      set({ snapshot: nextSnapshot });
+      await flushSnapshotPersist(get().repository, nextSnapshot, set);
+      if (options?.activityId || options?.domain || options?.project || options?.activityLabel) {
+        scheduleStructureRuleLearning("todo", todoId, "todo");
+      }
+    },
   deleteTodo: async (id) => {
     const snapshot = get().snapshot;
     if (!snapshot) return;
@@ -1833,29 +1936,38 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     await flushSnapshotPersist(get().repository, nextSnapshot, set);
   },
   saveActivity: async (activity) => {
-    const snapshot = get().snapshot;
-    if (!snapshot) return;
-    const actualTimeSpentMinutes = computeTrackedMinutes(snapshot.timelogs, "activity", activity.id);
-    const nextActivity =
-      snapshot.settings.baselineWorkActivityId === activity.id
-        ? normalizeBaselineWorkActivity(activity, actualTimeSpentMinutes)
-        : normalizeActivityStructure({
-            ...activity,
-            actualTimeSpentMinutes,
-            updatedAt: new Date().toISOString(),
-          });
-    let nextSnapshot: DesktopAppSnapshot = {
-      ...snapshot,
-      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "activity", nextActivity.id),
-      activities: upsertActivity(snapshot.activities, nextActivity),
-    };
+      const snapshot = get().snapshot;
+      if (!snapshot) return;
+      const existingActivity = snapshot.activities.find((entry) => entry.id === activity.id);
+      const updatedAt = new Date().toISOString();
+      const actualTimeSpentMinutes = computeTrackedMinutes(snapshot.timelogs, "activity", activity.id);
+      const nextActivity =
+        snapshot.settings.baselineWorkActivityId === activity.id
+          ? normalizeBaselineWorkActivity(activity, actualTimeSpentMinutes)
+          : normalizeActivityStructure({
+              ...activity,
+              actualTimeSpentMinutes,
+              updatedAt,
+            });
+      let nextSnapshot: DesktopAppSnapshot = {
+        ...snapshot,
+        deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "activity", nextActivity.id),
+        activities: upsertActivity(snapshot.activities, nextActivity),
+      };
     if (nextActivity.type === "meeting") {
       nextSnapshot = syncCalendarItemForMeeting(nextSnapshot, nextActivity);
       nextSnapshot = syncLinkedSessionForMeeting(nextSnapshot, nextActivity);
-    }
-    set({ snapshot: nextSnapshot });
-    scheduleSnapshotPersist(get().repository, nextSnapshot, set);
-  },
+      }
+      set({ snapshot: nextSnapshot });
+      scheduleSnapshotPersist(get().repository, nextSnapshot, set);
+      if (existingActivity && nextActivity.description.trim() && didStructureAssignmentChange(existingActivity, nextActivity)) {
+        scheduleStructureRuleLearning(
+          "activity",
+          nextActivity.id,
+          nextActivity.type === "meeting" ? "meeting" : "activity",
+        );
+      }
+    },
   addActivity: async (description, type = "task", options) => {
     const snapshot = get().snapshot;
     if (!snapshot || !description.trim()) return;
@@ -1871,7 +1983,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
         activity: options?.activityLabel || parentActivity?.description || "",
       },
     );
-    const nextActivity: DesktopAppSnapshot["activities"][number] = normalizeActivityStructure({
+      const nextActivity: DesktopAppSnapshot["activities"][number] = normalizeActivityStructure({
       id: crypto.randomUUID(),
       type,
       parentActivityId: options?.parentActivityId || "",
@@ -1891,17 +2003,24 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       timeRequiredMinutes: 0,
       actualTimeSpentMinutes: 0,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      sessionIds: toSessionIds(get().activeSessionId),
-    });
-    const nextSnapshot = {
-      ...snapshot,
-      deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "activity", nextActivity.id),
-      activities: [nextActivity, ...snapshot.activities],
-    };
-    set({ snapshot: nextSnapshot });
-    await flushSnapshotPersist(get().repository, nextSnapshot, set);
-  },
+        updatedAt: new Date().toISOString(),
+        sessionIds: toSessionIds(get().activeSessionId),
+      });
+        const nextSnapshot = {
+          ...snapshot,
+          deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "activity", nextActivity.id),
+          activities: [nextActivity, ...snapshot.activities],
+        };
+      set({ snapshot: nextSnapshot });
+      await flushSnapshotPersist(get().repository, nextSnapshot, set);
+      if (options?.parentActivityId || options?.domain || options?.project || options?.activityLabel) {
+        scheduleStructureRuleLearning(
+          "activity",
+          nextActivity.id,
+          type === "meeting" ? "meeting" : "activity",
+        );
+      }
+    },
   deleteActivity: async (id) => {
     const snapshot = get().snapshot;
     if (!snapshot) return;
@@ -2644,10 +2763,10 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     set({ snapshot: nextSnapshot });
     scheduleSnapshotPersist(get().repository, nextSnapshot, set);
   },
-  renameDomainValue: async (previousValue, nextValue) => {
-    const snapshot = get().snapshot;
-    const previous = previousValue.trim();
-    const next = nextValue.trim();
+    renameDomainValue: async (previousValue, nextValue) => {
+      const snapshot = get().snapshot;
+      const previous = previousValue.trim();
+      const next = nextValue.trim();
     if (!snapshot || !previous || !next || previous === next) return;
     const nextSnapshot: DesktopAppSnapshot = {
       ...snapshot,
@@ -2660,14 +2779,20 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       activities: snapshot.activities.map((activity) =>
         activity.domain === previous ? { ...activity, domain: next, updatedAt: new Date().toISOString() } : activity,
       ),
-      settings: {
-        ...snapshot.settings,
-        savedDomains: Array.from(
-          new Set(snapshot.settings.savedDomains.map((entry) => (entry === previous ? next : entry)).concat(next)),
-        ).sort((left, right) => left.localeCompare(right)),
-        projectLinks: snapshot.settings.projectLinks.map((entry) =>
-          entry.domain === previous ? { ...entry, domain: next } : entry,
-        ),
+        settings: {
+          ...snapshot.settings,
+          savedDomains: Array.from(
+            new Set(snapshot.settings.savedDomains.map((entry) => (entry === previous ? next : entry)).concat(next)),
+          ).sort((left, right) => left.localeCompare(right)),
+          structureInferenceRules: renameStructureInferenceRuleField(
+            snapshot.settings.structureInferenceRules,
+            "domain",
+            previous,
+            next,
+          ),
+          projectLinks: snapshot.settings.projectLinks.map((entry) =>
+            entry.domain === previous ? { ...entry, domain: next } : entry,
+          ),
         timeReportPresets: snapshot.settings.timeReportPresets.map((entry) =>
           entry.domain === previous ? { ...entry, domain: next } : entry,
         ),
@@ -2676,10 +2801,10 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     set({ snapshot: nextSnapshot });
     await flushSnapshotPersist(get().repository, nextSnapshot, set);
   },
-  renameProjectValue: async (previousValue, nextValue) => {
-    const snapshot = get().snapshot;
-    const previous = previousValue.trim();
-    const next = nextValue.trim();
+    renameProjectValue: async (previousValue, nextValue) => {
+      const snapshot = get().snapshot;
+      const previous = previousValue.trim();
+      const next = nextValue.trim();
     if (!snapshot || !previous || !next || previous === next) return;
     const nextSnapshot: DesktopAppSnapshot = {
       ...snapshot,
@@ -2702,14 +2827,20 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       activities: snapshot.activities.map((activity) =>
         activity.project === previous ? { ...activity, project: next, updatedAt: new Date().toISOString() } : activity,
       ),
-      settings: {
-        ...snapshot.settings,
-        savedProjects: Array.from(
-          new Set(snapshot.settings.savedProjects.map((entry) => (entry === previous ? next : entry)).concat(next)),
-        ).sort((left, right) => left.localeCompare(right)),
-        projectLinks: snapshot.settings.projectLinks.map((entry) =>
-          entry.project === previous ? { ...entry, project: next } : entry,
-        ),
+        settings: {
+          ...snapshot.settings,
+          savedProjects: Array.from(
+            new Set(snapshot.settings.savedProjects.map((entry) => (entry === previous ? next : entry)).concat(next)),
+          ).sort((left, right) => left.localeCompare(right)),
+          structureInferenceRules: renameStructureInferenceRuleField(
+            snapshot.settings.structureInferenceRules,
+            "project",
+            previous,
+            next,
+          ),
+          projectLinks: snapshot.settings.projectLinks.map((entry) =>
+            entry.project === previous ? { ...entry, project: next } : entry,
+          ),
         timeReportPresets: snapshot.settings.timeReportPresets.map((entry) =>
           entry.project === previous ? { ...entry, project: next } : entry,
         ),
@@ -2802,4 +2933,5 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
     });
     await flushSnapshotPersist(get().repository, nextSnapshot, set);
   },
-}));
+  };
+});
