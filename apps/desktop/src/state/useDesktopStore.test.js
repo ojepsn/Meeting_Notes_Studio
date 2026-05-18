@@ -129,17 +129,52 @@ describe("findNearestAvailableTodoSlot", () => {
     });
 });
 describe("reconcileCalendarBackedScheduleFields", () => {
-    it("realigns todo do-on dates from authoritative calendar items", () => {
+    it("keeps the todo do-on date authoritative and rewrites the calendar row to match", () => {
         const snapshot = createDefaultSnapshot();
         snapshot.todos = [buildTodo("todo-1", "Mismatch", "2026-04-23")];
         snapshot.calendarItems = [buildCalendarTodo("calendar-1", "todo-1", "2026-04-22", 120)];
         const result = reconcileCalendarBackedScheduleFields(snapshot);
         expect(result.changed).toBe(true);
+        expect(result.snapshot.todos[0]?.doOn).toBe("2026-04-23");
+        expect(result.snapshot.calendarItems[0]).toMatchObject({
+            id: "calendar-1",
+            date: "2026-04-23",
+        });
+    });
+    it("backfills a missing todo do-on date from the calendar row", () => {
+        const snapshot = createDefaultSnapshot();
+        snapshot.todos = [buildTodo("todo-1", "Missing date", "")];
+        snapshot.calendarItems = [buildCalendarTodo("calendar-1", "todo-1", "2026-04-22", 120)];
+        const result = reconcileCalendarBackedScheduleFields(snapshot);
+        expect(result.changed).toBe(true);
         expect(result.snapshot.todos[0]?.doOn).toBe("2026-04-22");
     });
-    it("realigns meeting dates and times from authoritative calendar items", () => {
+    it("keeps the meeting date and times authoritative and rewrites the calendar row to match", () => {
         const snapshot = createDefaultSnapshot();
         snapshot.activities = [buildActivity("activity-1", "Meeting", "2026-04-23", "09:00", "10:00")];
+        snapshot.calendarItems = [
+            {
+                ...buildCalendarActivity("activity-1", "2026-04-22", 132, 18),
+                targetId: "activity-1",
+            },
+        ];
+        const result = reconcileCalendarBackedScheduleFields(snapshot);
+        expect(result.changed).toBe(true);
+        expect(result.snapshot.activities[0]).toMatchObject({
+            doOn: "2026-04-23",
+            startTime: "09:00",
+            endTime: "10:00",
+        });
+        expect(result.snapshot.calendarItems[0]).toMatchObject({
+            targetId: "activity-1",
+            date: "2026-04-23",
+            startSlot: 108,
+            durationSlots: 12,
+        });
+    });
+    it("backfills missing meeting date and times from the calendar row", () => {
+        const snapshot = createDefaultSnapshot();
+        snapshot.activities = [buildActivity("activity-1", "Meeting", "", "", "")];
         snapshot.calendarItems = [
             {
                 ...buildCalendarActivity("activity-1", "2026-04-22", 132, 18),
