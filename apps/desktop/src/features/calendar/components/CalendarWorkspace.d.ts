@@ -12,7 +12,7 @@ export declare const formatDay: (date: string) => string;
 export declare const getLocalDateString: (date?: Date) => string;
 export declare const initialCalendarScrollTop: (date: Date, slotHeight: number) => number;
 export declare const durationLabel: (slots: number) => string;
-export declare const dayColumnWidthForView: (daysInView: (typeof DAYS)[number]) => 118 | 156 | 220 | 280;
+export declare const dayColumnWidthForView: (daysInView: (typeof DAYS)[number]) => 280 | 220 | 118 | 156;
 export declare const layoutCalendarItems: <T extends {
     date: string;
     startSlot: number;
