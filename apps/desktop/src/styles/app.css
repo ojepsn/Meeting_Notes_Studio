@@ -3890,6 +3890,131 @@ select {
   gap: 0.35rem;
 }
 
+.calendar-quick-start-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--app-surface-soft);
+}
+
+.calendar-quick-start-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.calendar-quick-start-heading strong {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.calendar-quick-start-heading .muted {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.calendar-quick-start-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.55rem;
+}
+
+.calendar-quick-start-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  background: var(--app-surface);
+}
+
+.calendar-quick-start-card-running {
+  border-color: var(--app-accent-border);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-accent-border) 55%, transparent 45%);
+}
+
+.calendar-quick-start-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-quick-start-open strong,
+.calendar-quick-start-suggestion span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-quick-start-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.calendar-quick-start-actions .shell-button,
+.calendar-quick-start-actions .primary-button,
+.calendar-quick-start-actions .small-button {
+  min-height: 2rem;
+  padding: 0.42rem 0.62rem;
+  font-size: 0.78rem;
+}
+
+.calendar-quick-start-empty {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.calendar-quick-start-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.calendar-quick-start-suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.calendar-quick-start-suggestion {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.42rem 0.7rem;
+  border: 1px dashed var(--app-border-strong);
+  border-radius: 999px;
+  background: var(--app-surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+.calendar-quick-start-suggestion:hover {
+  border-color: var(--app-accent-border);
+  background: color-mix(in srgb, var(--app-surface) 70%, var(--app-accent-soft) 30%);
+}
+
 .calendar-controls-dense .calendar-calendar-summary {
   gap: 0.35rem;
   align-items: center;

@@ -5,7 +5,7 @@ import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
-import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
+import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog, isTimeLogRunning } from "../../../lib/time/tracking";
 import {
   addDaysIso,
   daysBetweenIso,
@@ -401,6 +401,10 @@ export const CalendarWorkspace = ({
     () => activities.filter((entry) => !entry.parentActivityId).sort((left, right) => left.description.localeCompare(right.description)),
     [activities],
   );
+  const todoLookup = useMemo(
+    () => Object.fromEntries((Array.isArray(todos) ? todos : []).map((todo) => [todo.id, todo])) as Record<string, TodoRecord>,
+    [todos],
+  );
   const activityLookup = useMemo(
     () => Object.fromEntries(activities.map((activity) => [activity.id, activity])) as Record<string, ActivityRecord>,
     [activities],
@@ -413,13 +417,19 @@ export const CalendarWorkspace = ({
     });
     return grouped;
   }, [timeLogs]);
+  const quickStartTodoIds = useMemo(
+    () =>
+      Array.isArray(settings.calendarQuickStartTodoIds)
+        ? Array.from(new Set(settings.calendarQuickStartTodoIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)))
+        : [],
+    [settings.calendarQuickStartTodoIds],
+  );
   const items = useMemo<Item[]>(() => {
-    const todoMap = new Map((Array.isArray(todos) ? todos : []).map((todo) => [todo.id, todo]));
     const activityMap = new Map((Array.isArray(activities) ? activities : []).map((activity) => [activity.id, activity]));
     return (Array.isArray(calendarItems) ? calendarItems : [])
       .map((item) => {
         if (item.targetType === "todo") {
-          const todo = todoMap.get(item.targetId);
+          const todo = todoLookup[item.targetId];
           if (!todo) return null;
           return {
             id: item.id,
@@ -459,7 +469,7 @@ export const CalendarWorkspace = ({
       })
       .filter((item): item is Item => item !== null)
       .sort((left, right) => left.date.localeCompare(right.date) || left.startSlot - right.startSlot || left.title.localeCompare(right.title));
-  }, [activities, calendarItems, todos]);
+  }, [activities, calendarItems, todoLookup]);
 
   const runningItemCount = useMemo(
     () =>
@@ -512,6 +522,71 @@ export const CalendarWorkspace = ({
       editorDraft ? getRunningTimeLog(timeLogsByTarget.get(`${editorDraft.targetType}:${editorDraft.targetId}`) || []) : null,
     [editorDraft, timeLogsByTarget],
   );
+  const quickStartStatsByTodoId = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        totalMinutes: number;
+        todayMinutes: number;
+        latestTimestamp: number;
+        isRunning: boolean;
+      }
+    >();
+    timeLogs.forEach((entry) => {
+      if (entry.targetType !== "todo") return;
+      const current = grouped.get(entry.targetId) ?? {
+        totalMinutes: 0,
+        todayMinutes: 0,
+        latestTimestamp: 0,
+        isRunning: false,
+      };
+      const latestCandidate = Date.parse(entry.updatedAt || entry.endTime || entry.startTime || entry.date || "") || 0;
+      const durationMinutes = isTimeLogRunning(entry) ? calculateLiveDurationMinutes(entry, now) : entry.durationMinutes;
+      current.totalMinutes += durationMinutes;
+      if (entry.date === today) {
+        current.todayMinutes += durationMinutes;
+      }
+      current.latestTimestamp = Math.max(current.latestTimestamp, latestCandidate);
+      current.isRunning = current.isRunning || isTimeLogRunning(entry);
+      grouped.set(entry.targetId, current);
+    });
+    return grouped;
+  }, [now, timeLogs, today]);
+  const quickStartTodos = useMemo(
+    () => quickStartTodoIds.map((todoId) => todoLookup[todoId]).filter((todo): todo is TodoRecord => Boolean(todo)),
+    [quickStartTodoIds, todoLookup],
+  );
+  const suggestedQuickStartTodos = useMemo(() => {
+    const excluded = new Set(quickStartTodoIds);
+    return (Array.isArray(todos) ? todos : [])
+      .filter((todo) => !todo.isDone && !excluded.has(todo.id))
+      .map((todo) => {
+        const stats = quickStartStatsByTodoId.get(todo.id);
+        const normalizedTitle = todo.description.toLowerCase();
+        const recencyScore = stats?.latestTimestamp
+          ? Math.max(0, 240 - Math.round((Date.now() - stats.latestTimestamp) / 3600000))
+          : 0;
+        const runningBonus = stats?.isRunning ? 2000 : 0;
+        const todayBonus = stats?.todayMinutes ?? 0;
+        const totalBonus = stats?.totalMinutes ?? 0;
+        const utilityTitleBonus =
+          normalizedTitle.includes("planning") ||
+          normalizedTitle.includes("planering") ||
+          normalizedTitle.includes("teams") ||
+          normalizedTitle.includes("e-mail") ||
+          normalizedTitle.includes("email")
+            ? 120
+            : 0;
+        return {
+          todo,
+          score: runningBonus + todayBonus * 5 + totalBonus * 2 + recencyScore + utilityTitleBonus,
+        };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((left, right) => right.score - left.score || left.todo.description.localeCompare(right.todo.description))
+      .slice(0, 6)
+      .map((entry) => entry.todo);
+  }, [quickStartStatsByTodoId, quickStartTodoIds, todos]);
   const currentTaskChecklists = useMemo(
     () =>
       editorDraft?.targetType === "todo"
@@ -1610,6 +1685,32 @@ export const CalendarWorkspace = ({
     setEditorDraft(null);
   };
 
+  const saveQuickStartTodoIds = (nextIds: string[]) => {
+    onSaveSettings({
+      ...settings,
+      calendarQuickStartTodoIds: Array.from(new Set(nextIds.filter(Boolean))),
+    });
+  };
+
+  const pinQuickStartTodo = (todoId: string) => {
+    if (quickStartTodoIds.includes(todoId)) return;
+    saveQuickStartTodoIds([...quickStartTodoIds, todoId].slice(0, 8));
+  };
+
+  const unpinQuickStartTodo = (todoId: string) => {
+    if (!quickStartTodoIds.includes(todoId)) return;
+    saveQuickStartTodoIds(quickStartTodoIds.filter((id) => id !== todoId));
+  };
+
+  const openQuickStartTodo = (todoId: string) => {
+    const calendarItem = items.find((item) => item.targetType === "todo" && item.targetId === todoId);
+    if (calendarItem) {
+      selectCalendarItem(calendarItem.id, false);
+      return;
+    }
+    onOpenTodoDetail(todoId);
+  };
+
   const singleRowTodoFontSize = slotHeight === 12 ? "0.42rem" : slotHeight === 16 ? "0.54rem" : "0.72rem";
 
   return (
@@ -1651,6 +1752,81 @@ export const CalendarWorkspace = ({
             {hideCompletedTodos ? "Unhide completed" : "Hide completed"}
           </button>
         </div>
+      </div>
+
+      <div className="calendar-quick-start-panel">
+        <div className="calendar-quick-start-heading">
+          <div>
+            <strong>Quick start tasks</strong>
+            <span className="muted">
+              Keep frequently used work like Planning or E-mail / Teams one click away without crowding the grid.
+            </span>
+          </div>
+        </div>
+        {quickStartTodos.length ? (
+          <div className="calendar-quick-start-list">
+            {quickStartTodos.map((todo) => {
+              const runningLog = getRunningTimeLog(timeLogsByTarget.get(`todo:${todo.id}`) || []);
+              const stats = quickStartStatsByTodoId.get(todo.id);
+              return (
+                <div key={todo.id} className={`calendar-quick-start-card${runningLog ? " calendar-quick-start-card-running" : ""}`}>
+                  <button
+                    className="calendar-quick-start-open"
+                    type="button"
+                    onClick={() => openQuickStartTodo(todo.id)}
+                  >
+                    <strong>{todo.description}</strong>
+                    <span className="tiny-text">
+                      {runningLog
+                        ? `Running | ${formatTrackedMinutes(calculateLiveDurationMinutes(runningLog, now))}`
+                        : `Today ${formatTrackedMinutes(stats?.todayMinutes ?? 0)}`}
+                    </span>
+                  </button>
+                  <div className="calendar-quick-start-actions">
+                    <button
+                      className={runningLog ? "primary-button" : "shell-button"}
+                      type="button"
+                      onClick={() => {
+                        if (runningLog) {
+                          onStopTracking("todo", todo.id);
+                          return;
+                        }
+                        onStartTracking("todo", todo.id);
+                      }}
+                    >
+                      {runningLog ? "Stop" : "Start"}
+                    </button>
+                    <button className="small-button" type="button" onClick={() => unpinQuickStartTodo(todo.id)}>
+                      Unpin
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="muted calendar-quick-start-empty">
+            No pinned quick-start tasks yet. Pin a recurring task below or from a selected task in the Calendar pane.
+          </p>
+        )}
+        {suggestedQuickStartTodos.length ? (
+          <div className="calendar-quick-start-suggestions">
+            <span className="tiny-text">Suggested from recent time logging</span>
+            <div className="calendar-quick-start-suggestion-list">
+              {suggestedQuickStartTodos.map((todo) => (
+                <button
+                  key={todo.id}
+                  className="calendar-quick-start-suggestion"
+                  type="button"
+                  onClick={() => pinQuickStartTodo(todo.id)}
+                >
+                  <span>{todo.description}</span>
+                  <span className="tiny-text">Pin</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
         <div className="calendar-controls calendar-controls-compact calendar-controls-dense">
@@ -2703,6 +2879,17 @@ export const CalendarWorkspace = ({
                 </button>
                 {editorDraft.targetType === "todo" ? (
                   <>
+                    <button
+                      className="shell-button"
+                      type="button"
+                      onClick={() =>
+                        quickStartTodoIds.includes(editorDraft.targetId)
+                          ? unpinQuickStartTodo(editorDraft.targetId)
+                          : pinQuickStartTodo(editorDraft.targetId)
+                      }
+                    >
+                      {quickStartTodoIds.includes(editorDraft.targetId) ? "Unpin quick start" : "Pin quick start"}
+                    </button>
                     <button className="shell-button" type="button" onClick={convertEditorTodoToMeeting}>
                       Convert to meeting
                     </button>

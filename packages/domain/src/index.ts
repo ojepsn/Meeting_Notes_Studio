@@ -337,6 +337,7 @@ export interface LocalAppSettings {
   calendarShowPrivate?: boolean;
   calendarShowBusiness?: boolean;
   calendarShowPriorityOnly?: boolean;
+  calendarQuickStartTodoIds?: string[];
   todosShowPrivate?: boolean;
   todosShowBusiness?: boolean;
   todosShowPriorityOnly?: boolean;

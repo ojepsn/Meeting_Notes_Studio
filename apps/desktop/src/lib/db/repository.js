@@ -264,6 +264,7 @@ export const createDefaultSettings = () => ({
     calendarShowPrivate: true,
     calendarShowBusiness: true,
     calendarShowPriorityOnly: false,
+    calendarQuickStartTodoIds: [],
     todosShowPrivate: true,
     todosShowBusiness: true,
     todosShowPriorityOnly: false,
@@ -357,6 +358,9 @@ const normalizeSettings = (settings) => ({
             ? false
             : true,
     calendarShowPriorityOnly: Boolean(settings.calendarShowPriorityOnly),
+    calendarQuickStartTodoIds: Array.isArray(settings.calendarQuickStartTodoIds)
+        ? Array.from(new Set(settings.calendarQuickStartTodoIds.filter((value) => typeof value === "string" && value.trim().length > 0)))
+        : [],
     todosShowPrivate: typeof settings.todosShowPrivate === "boolean" ? settings.todosShowPrivate : true,
     todosShowBusiness: typeof settings.todosShowBusiness === "boolean" ? settings.todosShowBusiness : true,
     todosShowPriorityOnly: Boolean(settings.todosShowPriorityOnly),
