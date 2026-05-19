@@ -15,6 +15,7 @@ export declare const rollForwardOverdueCalendarTodos: (snapshot: Snapshot, today
     snapshot: DesktopAppSnapshot;
     changed: boolean;
 };
+export declare const isSuspiciouslyReducedSnapshot: (snapshot: Snapshot) => boolean;
 export declare const inferTodoStructureAssignment: (snapshot: Snapshot, title: string, payload: Pick<Todo, "domain" | "project" | "activity" | "activityId">) => {
     domain: string;
     project: string;

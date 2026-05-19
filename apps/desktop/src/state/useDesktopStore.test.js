@@ -1,5 +1,5 @@
 import { createDefaultSnapshot } from "../lib/db/repository";
-import { findNearestAvailableTodoSlot, inferTodoStructureAssignment, reconcileCalendarBackedScheduleFields, rollForwardOverdueCalendarTodos, } from "./useDesktopStore";
+import { findNearestAvailableTodoSlot, inferTodoStructureAssignment, isSuspiciouslyReducedSnapshot, reconcileCalendarBackedScheduleFields, rollForwardOverdueCalendarTodos, } from "./useDesktopStore";
 const buildTodo = (id, description, doOn, isDone = false) => ({
     id,
     description,
@@ -254,5 +254,19 @@ describe("inferTodoStructureAssignment", () => {
             project: "Regnora",
             activity: "Meetings",
         });
+    });
+});
+describe("isSuspiciouslyReducedSnapshot", () => {
+    it("flags snapshots where many calendar todo rows have lost their source todos", () => {
+        const snapshot = createDefaultSnapshot();
+        snapshot.todos = [buildTodo("todo-1", "Only survivor", "2026-05-19")];
+        snapshot.calendarItems = Array.from({ length: 12 }, (_, index) => buildCalendarTodo(`calendar-${index + 1}`, `todo-${index + 1}`, "2026-05-19", 96 + index));
+        expect(isSuspiciouslyReducedSnapshot(snapshot)).toBe(true);
+    });
+    it("does not flag snapshots when calendar todo rows still have matching todo records", () => {
+        const snapshot = createDefaultSnapshot();
+        snapshot.todos = Array.from({ length: 12 }, (_, index) => buildTodo(`todo-${index + 1}`, `Todo ${index + 1}`, "2026-05-19"));
+        snapshot.calendarItems = snapshot.todos.map((todo, index) => buildCalendarTodo(`calendar-${index + 1}`, todo.id, "2026-05-19", 96 + index));
+        expect(isSuspiciouslyReducedSnapshot(snapshot)).toBe(false);
     });
 });

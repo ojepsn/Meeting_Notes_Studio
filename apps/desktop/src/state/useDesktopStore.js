@@ -651,16 +651,40 @@ const buildSnapshotRichnessScore = (snapshot) => snapshot.todos.length * 8 +
     snapshot.checklistTemplates.length * 2 +
     snapshot.activities.length * 2 +
     snapshot.timelogs.length;
-const isSuspiciouslyReducedSnapshot = (snapshot) => {
+const countOrphanedCalendarTargetIds = (snapshot, targetType) => {
+    const knownIds = new Set((targetType === "todo" ? snapshot.todos : snapshot.activities).map((entry) => entry.id));
+    const scheduledTargetIds = new Set(snapshot.calendarItems
+        .filter((item) => item.targetType === targetType)
+        .map((item) => item.targetId));
+    let orphanedCount = 0;
+    scheduledTargetIds.forEach((targetId) => {
+        if (!knownIds.has(targetId)) {
+            orphanedCount += 1;
+        }
+    });
+    return {
+        orphanedCount,
+        scheduledCount: scheduledTargetIds.size,
+    };
+};
+export const isSuspiciouslyReducedSnapshot = (snapshot) => {
     const meaningfulSessionCount = countMeaningfulSessions(snapshot);
-    return (snapshot.timelogs.length > 0 &&
+    const orphanedTodoTargets = countOrphanedCalendarTargetIds(snapshot, "todo");
+    const orphanedActivityTargets = countOrphanedCalendarTargetIds(snapshot, "activity");
+    const hasSuspiciousTodoCollapse = orphanedTodoTargets.scheduledCount > 0 &&
+        orphanedTodoTargets.orphanedCount >= Math.max(8, Math.floor(orphanedTodoTargets.scheduledCount * 0.25));
+    const hasSuspiciousActivityCollapse = orphanedActivityTargets.scheduledCount > 0 &&
+        orphanedActivityTargets.orphanedCount >= Math.max(6, Math.floor(orphanedActivityTargets.scheduledCount * 0.2));
+    return ((snapshot.timelogs.length > 0 &&
         snapshot.activities.length > 0 &&
         snapshot.todos.length === 0 &&
         snapshot.calendarItems.length === 0 &&
         snapshot.attachments.length === 0 &&
         snapshot.entityLinks.length === 0 &&
         snapshot.checklists.length === 0 &&
-        meaningfulSessionCount <= 1);
+        meaningfulSessionCount <= 1) ||
+        hasSuspiciousTodoCollapse ||
+        hasSuspiciousActivityCollapse);
 };
 const selectRecoverySnapshot = async (snapshot) => {
     const currentScore = buildSnapshotRichnessScore(snapshot);
@@ -1944,27 +1968,11 @@ export const useDesktopStore = create((set, get) => {
             if (!snapshot)
                 return;
             const now = new Date();
-            const baselineActivityId = snapshot.settings.baselineWorkActivityId;
             const nextSettings = {
                 ...snapshot.settings,
                 baselineWorkEnabled: false,
             };
-            const openBaselineLog = baselineActivityId
-                ? snapshot.timelogs.find((entry) => entry.targetType === "activity" &&
-                    entry.targetId === baselineActivityId &&
-                    isOpenTimeLog(entry))
-                : null;
-            let nextTimeLogs = snapshot.timelogs;
-            if (openBaselineLog) {
-                const nextDate = openBaselineLog.date || formatLocalDate(now);
-                const nextEndTime = getClosingTime(nextDate, openBaselineLog.startTime, now);
-                nextTimeLogs = upsertTimeLog(snapshot.timelogs, {
-                    ...openBaselineLog,
-                    endTime: nextEndTime,
-                    durationMinutes: calculateDurationMinutes(nextDate, openBaselineLog.startTime, nextEndTime),
-                    updatedAt: now.toISOString(),
-                });
-            }
+            const { nextTimeLogs } = closeOpenTimeLogs(snapshot.timelogs, now);
             const nextSnapshot = {
                 ...snapshot,
                 settings: nextSettings,
