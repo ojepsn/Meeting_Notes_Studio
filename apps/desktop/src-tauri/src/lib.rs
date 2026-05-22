@@ -1,5 +1,6 @@
 use flate2::write::DeflateEncoder;
 use flate2::Compression;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -85,6 +86,24 @@ struct LocalBackupFile {
     path: String,
     modified_ms: u64,
     bytes: Vec<u8>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeHttpRequest {
+    url: String,
+    method: String,
+    headers: HashMap<String, String>,
+    body: String,
+    timeout_ms: Option<u64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeHttpResponse {
+    status: u16,
+    body: String,
+    content_type: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -760,6 +779,52 @@ async fn download_url_to_path(url: String, path: String) -> Result<String, Strin
     Ok(destination.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+async fn openai_http_request(request: NativeHttpRequest) -> Result<NativeHttpResponse, String> {
+    let method = reqwest::Method::from_bytes(request.method.as_bytes())
+        .map_err(|error| format!("Unsupported HTTP method: {error}"))?;
+
+    let mut header_map = HeaderMap::new();
+    for (key, value) in request.headers {
+        let name = HeaderName::from_bytes(key.as_bytes())
+            .map_err(|error| format!("Invalid header name '{key}': {error}"))?;
+        let header_value = HeaderValue::from_str(&value)
+            .map_err(|error| format!("Invalid header value for '{key}': {error}"))?;
+        header_map.insert(name, header_value);
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(request.timeout_ms.unwrap_or(45_000)))
+        .build()
+        .map_err(|error| format!("Could not create HTTP client: {error}"))?;
+
+    let response = client
+        .request(method, &request.url)
+        .headers(header_map)
+        .body(request.body)
+        .send()
+        .await
+        .map_err(|error| format!("Could not reach OpenAI: {error}"))?;
+
+    let status = response.status().as_u16();
+    let content_type = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("application/json")
+        .to_string();
+    let body = response
+        .text()
+        .await
+        .map_err(|error| format!("Could not read OpenAI response body: {error}"))?;
+
+    Ok(NativeHttpResponse {
+        status,
+        body,
+        content_type,
+    })
+}
+
 fn drain_sidecar_stdout(
     stdout: impl std::io::Read + Send + 'static,
     ready_tx: mpsc::Sender<AgentSidecarReady>,
@@ -1125,6 +1190,7 @@ pub fn run() {
             launch_installer_file,
             load_update_manifest,
             download_url_to_path,
+            openai_http_request,
             start_agent_sidecar,
             stop_agent_sidecar,
             get_agent_sidecar_status

@@ -1,3 +1,4 @@
+import { isTauriRuntime } from "../../storage/environment";
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions";
 const DEFAULT_TIMEOUT_MS = 45_000;
@@ -102,15 +103,43 @@ const parseJsonResponse = async (response, operation) => {
         });
     }
 };
+const sendNativeTauriHttpRequest = async ({ url, init, timeoutMs, }) => {
+    const core = await import("@tauri-apps/api/core");
+    const headers = Object.fromEntries(new Headers(init.headers ?? undefined).entries());
+    const nativeResponse = await core.invoke("openai_http_request", {
+        request: {
+            url,
+            method: init.method || "GET",
+            headers,
+            body: typeof init.body === "string" ? init.body : "",
+            timeoutMs,
+        },
+    });
+    return new Response(nativeResponse.body, {
+        status: nativeResponse.status,
+        headers: { "Content-Type": nativeResponse.contentType || "application/json" },
+    });
+};
 const performRequest = async ({ url, init, operation, timeoutMs, maxRetries, failurePrefix, onRetry, }) => {
+    const useNativeTauriTransport = isTauriRuntime() &&
+        operation !== "transcribe-audio" &&
+        typeof init.body === "string";
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-        const controller = new AbortController();
-        const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
+        const controller = useNativeTauriTransport ? null : new AbortController();
+        const timeoutId = controller
+            ? globalThis.setTimeout(() => controller.abort(), timeoutMs)
+            : null;
         try {
-            const response = await fetch(url, {
-                ...init,
-                signal: controller.signal,
-            });
+            const response = useNativeTauriTransport
+                ? await sendNativeTauriHttpRequest({
+                    url,
+                    init,
+                    timeoutMs,
+                })
+                : await fetch(url, {
+                    ...init,
+                    signal: controller?.signal,
+                });
             if (!response.ok) {
                 throw await createHttpError({ response, operation, failurePrefix });
             }
@@ -132,7 +161,9 @@ const performRequest = async ({ url, init, operation, timeoutMs, maxRetries, fai
             await delay(delayMs);
         }
         finally {
-            globalThis.clearTimeout(timeoutId);
+            if (timeoutId !== null) {
+                globalThis.clearTimeout(timeoutId);
+            }
         }
     }
     throw new AIRequestError({

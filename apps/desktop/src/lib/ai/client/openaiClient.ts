@@ -1,3 +1,5 @@
+import { isTauriRuntime } from "../../storage/environment";
+
 export type AIOperation = "generate-notes" | "revise-output" | "translate-output" | "transcribe-audio";
 
 export type AIErrorCode =
@@ -67,6 +69,12 @@ interface OpenAITextResponse {
   incomplete_details?: {
     reason?: string;
   };
+}
+
+interface NativeHttpResponse {
+  status: number;
+  body: string;
+  contentType: string;
 }
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
@@ -208,6 +216,32 @@ const parseJsonResponse = async <T>(response: Response, operation: AIOperation) 
   }
 };
 
+const sendNativeTauriHttpRequest = async ({
+  url,
+  init,
+  timeoutMs,
+}: {
+  url: string;
+  init: RequestInit;
+  timeoutMs: number;
+}) => {
+  const core = await import("@tauri-apps/api/core");
+  const headers = Object.fromEntries(new Headers(init.headers ?? undefined).entries());
+  const nativeResponse = await core.invoke<NativeHttpResponse>("openai_http_request", {
+    request: {
+      url,
+      method: init.method || "GET",
+      headers,
+      body: typeof init.body === "string" ? init.body : "",
+      timeoutMs,
+    },
+  });
+  return new Response(nativeResponse.body, {
+    status: nativeResponse.status,
+    headers: { "Content-Type": nativeResponse.contentType || "application/json" },
+  });
+};
+
 const performRequest = async <T>({
   url,
   init,
@@ -225,15 +259,28 @@ const performRequest = async <T>({
   failurePrefix: string;
   onRetry?: (event: { operation: AIOperation; attempt: number; maxRetries: number; delayMs: number; error: AIRequestError }) => void;
 }) => {
+  const useNativeTauriTransport =
+    isTauriRuntime() &&
+    operation !== "transcribe-audio" &&
+    typeof init.body === "string";
+
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-    const controller = new AbortController();
-    const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
+    const controller = useNativeTauriTransport ? null : new AbortController();
+    const timeoutId = controller
+      ? globalThis.setTimeout(() => controller.abort(), timeoutMs)
+      : null;
 
     try {
-      const response = await fetch(url, {
-        ...init,
-        signal: controller.signal,
-      });
+      const response = useNativeTauriTransport
+        ? await sendNativeTauriHttpRequest({
+            url,
+            init,
+            timeoutMs,
+          })
+        : await fetch(url, {
+            ...init,
+            signal: controller?.signal,
+          });
 
       if (!response.ok) {
         throw await createHttpError({ response, operation, failurePrefix });
@@ -255,7 +302,9 @@ const performRequest = async <T>({
       });
       await delay(delayMs);
     } finally {
-      globalThis.clearTimeout(timeoutId);
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
     }
   }
 
