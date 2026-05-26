@@ -3929,13 +3929,14 @@ select {
 }
 
 .calendar-quick-start-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.45rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  justify-content: stretch;
+  gap: 0.3rem;
   flex: 0 0 198px;
   min-width: 0;
-  padding: 0.4rem 0.5rem;
+  padding: 0.34rem 0.44rem;
   border: 1px solid var(--app-border);
   border-radius: 14px;
   background: var(--app-surface);
@@ -3970,29 +3971,30 @@ select {
 }
 
 .calendar-quick-start-open strong {
-  font-size: 0.8rem;
-  line-height: 1.15;
+  font-size: 0.76rem;
+  line-height: 1.12;
 }
 
 .calendar-quick-start-open .tiny-text {
-  font-size: 0.68rem;
-  line-height: 1.15;
+  font-size: 0.64rem;
+  line-height: 1.1;
 }
 
 .calendar-quick-start-actions {
   display: flex;
   flex-wrap: nowrap;
-  justify-content: flex-end;
-  gap: 0.25rem;
+  justify-content: flex-start;
+  gap: 0.22rem;
   flex: 0 0 auto;
+  width: 100%;
 }
 
 .calendar-quick-start-actions .shell-button,
 .calendar-quick-start-actions .primary-button,
 .calendar-quick-start-actions .small-button {
-  min-height: 1.68rem;
-  padding: 0.24rem 0.45rem;
-  font-size: 0.72rem;
+  min-height: 1.44rem;
+  padding: 0.16rem 0.38rem;
+  font-size: 0.66rem;
 }
 
 .calendar-quick-start-empty {
