@@ -44,6 +44,32 @@ describe("meetingOutput", () => {
             "Important update",
         ].join("\n"));
     });
+    it("replaces a spaced-out leading meeting header without duplicating later lines", () => {
+        const existingOutput = [
+            "Meeting title: Older title",
+            "",
+            "Date: 2025-01-01",
+            "",
+            "Start time: 08:00",
+            "",
+            "End time: 08:15",
+            "",
+            "Participants: Someone Else",
+            "",
+            "Summary",
+            "Important update",
+        ].join("\n");
+        expect(ensureMeetingOutputHeader(meetingSession, existingOutput)).toBe([
+            "Meeting title: Weekly project sync",
+            "Date: 2026-05-15",
+            "Start time: 09:00",
+            "End time: 09:30",
+            "Participants: Anna, Marcus",
+            "",
+            "Summary",
+            "Important update",
+        ].join("\n"));
+    });
     it("leaves non-meeting output unchanged", () => {
         expect(ensureMeetingOutputHeader({
             ...meetingSession,

@@ -37,10 +37,6 @@ const stripLeadingMeetingHeader = (output: string, title: string) => {
   while (index < lines.length) {
     const trimmed = lines[index].trim();
     if (!trimmed) {
-      if (consumedHeaderLine) {
-        index += 1;
-        break;
-      }
       index += 1;
       continue;
     }
@@ -50,6 +46,7 @@ const stripLeadingMeetingHeader = (output: string, title: string) => {
       continue;
     }
     if (!consumedHeaderLine && title.trim() && sameText(trimmed, title.trim())) {
+      consumedHeaderLine = true;
       index += 1;
       continue;
     }
