@@ -1694,7 +1694,7 @@ export const CalendarWorkspace = ({
 
   const pinQuickStartTodo = (todoId: string) => {
     if (quickStartTodoIds.includes(todoId)) return;
-    saveQuickStartTodoIds([...quickStartTodoIds, todoId].slice(0, 8));
+    saveQuickStartTodoIds([...quickStartTodoIds, todoId]);
   };
 
   const unpinQuickStartTodo = (todoId: string) => {

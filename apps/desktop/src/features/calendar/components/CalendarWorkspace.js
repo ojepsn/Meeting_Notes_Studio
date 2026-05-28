@@ -1412,7 +1412,7 @@ export const CalendarWorkspace = ({ todos, checklists, activities, timeLogs, cal
     const pinQuickStartTodo = (todoId) => {
         if (quickStartTodoIds.includes(todoId))
             return;
-        saveQuickStartTodoIds([...quickStartTodoIds, todoId].slice(0, 8));
+        saveQuickStartTodoIds([...quickStartTodoIds, todoId]);
     };
     const unpinQuickStartTodo = (todoId) => {
         if (!quickStartTodoIds.includes(todoId))
