@@ -3920,12 +3920,11 @@ select {
 }
 
 .calendar-quick-start-list {
-  display: flex;
-  gap: 0.4rem;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  padding-bottom: 0.08rem;
-  scrollbar-width: thin;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(146px, 1fr));
+  gap: 0.32rem;
+  overflow: visible;
+  padding-bottom: 0;
 }
 
 .calendar-quick-start-card {
@@ -3933,12 +3932,11 @@ select {
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
   justify-content: stretch;
-  gap: 0.3rem;
-  flex: 0 0 198px;
+  gap: 0.24rem;
   min-width: 0;
-  padding: 0.34rem 0.44rem;
+  padding: 0.28rem 0.36rem;
   border: 1px solid var(--app-border);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--app-surface);
 }
 
@@ -3971,20 +3969,26 @@ select {
 }
 
 .calendar-quick-start-open strong {
-  font-size: 0.76rem;
-  line-height: 1.12;
+  font-size: 0.7rem;
+  line-height: 1.08;
+  width: 100%;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-overflow: clip;
 }
 
 .calendar-quick-start-open .tiny-text {
-  font-size: 0.64rem;
+  font-size: 0.6rem;
   line-height: 1.1;
 }
 
 .calendar-quick-start-actions {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   justify-content: flex-start;
-  gap: 0.22rem;
+  gap: 0.18rem;
   flex: 0 0 auto;
   width: 100%;
 }
@@ -3992,9 +3996,9 @@ select {
 .calendar-quick-start-actions .shell-button,
 .calendar-quick-start-actions .primary-button,
 .calendar-quick-start-actions .small-button {
-  min-height: 1.44rem;
-  padding: 0.16rem 0.38rem;
-  font-size: 0.66rem;
+  min-height: 1.28rem;
+  padding: 0.12rem 0.32rem;
+  font-size: 0.6rem;
 }
 
 .calendar-quick-start-empty {
@@ -4010,12 +4014,10 @@ select {
 
 .calendar-quick-start-suggestion-list {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 0.32rem;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  padding-bottom: 0.06rem;
-  scrollbar-width: thin;
+  flex-wrap: wrap;
+  gap: 0.26rem;
+  overflow: visible;
+  padding-bottom: 0;
 }
 
 .calendar-quick-start-suggestion {
@@ -4025,13 +4027,13 @@ select {
   min-width: 0;
   max-width: none;
   flex: 0 0 auto;
-  padding: 0.28rem 0.55rem;
+  padding: 0.22rem 0.46rem;
   border: 1px dashed var(--app-border-strong);
   border-radius: 999px;
   background: var(--app-surface);
   color: inherit;
   cursor: pointer;
-  font-size: 0.76rem;
+  font-size: 0.68rem;
 }
 
 .calendar-quick-start-suggestion:hover {
