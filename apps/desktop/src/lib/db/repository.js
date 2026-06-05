@@ -593,22 +593,20 @@ class BrowserEntityRepository {
         };
     }
     async saveSnapshot(snapshot) {
-        await Promise.all([
-            this.saveSessions(snapshot.sessions),
-            this.saveTemplates(snapshot.templates),
-            this.saveTodos(snapshot.todos),
-            this.saveChecklists(snapshot.checklists),
-            this.saveChecklistTemplates(snapshot.checklistTemplates),
-            this.saveChecklistRecurrences(snapshot.checklistRecurrences),
-            this.saveArchivedTasks(snapshot.archivedTasks),
-            this.saveActivities(snapshot.activities),
-            this.saveTimeLogs(snapshot.timelogs),
-            this.saveCalendarItems(snapshot.calendarItems),
-            this.saveEntityLinks(snapshot.entityLinks),
-            this.saveAttachments(snapshot.attachments),
-            this.saveDeletedEntities(snapshot.deletedEntities ?? []),
-            this.saveSettings(snapshot.settings),
-        ]);
+        await this.saveSessions(snapshot.sessions);
+        await this.saveTemplates(snapshot.templates);
+        await this.saveTodos(snapshot.todos);
+        await this.saveChecklists(snapshot.checklists);
+        await this.saveChecklistTemplates(snapshot.checklistTemplates);
+        await this.saveChecklistRecurrences(snapshot.checklistRecurrences);
+        await this.saveArchivedTasks(snapshot.archivedTasks);
+        await this.saveActivities(snapshot.activities);
+        await this.saveTimeLogs(snapshot.timelogs);
+        await this.saveCalendarItems(snapshot.calendarItems);
+        await this.saveEntityLinks(snapshot.entityLinks);
+        await this.saveAttachments(snapshot.attachments);
+        await this.saveDeletedEntities(snapshot.deletedEntities ?? []);
+        await this.saveSettings(snapshot.settings);
     }
 }
 class TauriSqliteRepository {
