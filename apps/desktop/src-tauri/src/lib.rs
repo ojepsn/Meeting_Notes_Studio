@@ -63,6 +63,19 @@ fn copy_dir_contents_if_missing(source_dir: &Path, destination_dir: &Path) -> Re
     Ok(())
 }
 
+fn directory_has_entries(path: &Path) -> Result<bool, String> {
+    if !path.exists() {
+        return Ok(false);
+    }
+
+    Ok(fs::read_dir(path)
+        .map_err(|error| error.to_string())?
+        .next()
+        .transpose()
+        .map_err(|error| error.to_string())?
+        .is_some())
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DesktopStorageInfo {
@@ -199,25 +212,34 @@ fn prepare_storage(app: &tauri::AppHandle) -> Result<DesktopStorageInfo, String>
     fs::create_dir_all(&attachments_dir).map_err(|error| error.to_string())?;
     fs::create_dir_all(&backups_dir).map_err(|error| error.to_string())?;
 
-    for candidate in candidate_database_paths(&app_config_dir, &app_data_dir) {
-        if !database_path.exists() {
+    let needs_database_migration = !database_path.exists();
+    let needs_attachment_migration = !directory_has_entries(&attachments_dir)?;
+    let needs_backup_migration = !directory_has_entries(&backups_dir)?;
+
+    if needs_database_migration {
+        for candidate in candidate_database_paths(&app_config_dir, &app_data_dir) {
             copy_file_if_missing(&candidate, &database_path)?;
-        }
-        for sidecar in candidate_database_sidecar_paths(&candidate) {
-            let destination = stable_root_dir.join(
-                sidecar
-                    .file_name()
-                    .map(|name| name.to_string_lossy().to_string())
-                    .unwrap_or_default(),
-            );
-            copy_file_if_missing(&sidecar, &destination)?;
+            for sidecar in candidate_database_sidecar_paths(&candidate) {
+                let destination = stable_root_dir.join(
+                    sidecar
+                        .file_name()
+                        .map(|name| name.to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                );
+                copy_file_if_missing(&sidecar, &destination)?;
+            }
         }
     }
 
-    copy_dir_contents_if_missing(&app_config_dir.join("attachments"), &attachments_dir)?;
-    copy_dir_contents_if_missing(&app_data_dir.join("attachments"), &attachments_dir)?;
-    copy_dir_contents_if_missing(&app_config_dir.join("backups"), &backups_dir)?;
-    copy_dir_contents_if_missing(&app_data_dir.join("backups"), &backups_dir)?;
+    if needs_attachment_migration {
+        copy_dir_contents_if_missing(&app_config_dir.join("attachments"), &attachments_dir)?;
+        copy_dir_contents_if_missing(&app_data_dir.join("attachments"), &attachments_dir)?;
+    }
+
+    if needs_backup_migration {
+        copy_dir_contents_if_missing(&app_config_dir.join("backups"), &backups_dir)?;
+        copy_dir_contents_if_missing(&app_data_dir.join("backups"), &backups_dir)?;
+    }
 
     Ok(DesktopStorageInfo {
         app_config_dir: stable_root_dir.to_string_lossy().to_string(),
