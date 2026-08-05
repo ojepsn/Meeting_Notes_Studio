@@ -40,10 +40,21 @@ const normalizeTranscriptionFile = (file) => !file.type || file.type === "applic
     ? new File([file], file.name, { type: inferTranscriptionMimeType(file.name) })
     : file;
 const resolvePreferredTranscriptionModel = (settings) => settings.transcriptionModel === "gpt-4o-transcribe-diarize" ? "gpt-4o-transcribe" : settings.transcriptionModel;
-const getFallbackTranscriptionModels = (model) => (model === "gpt-4o-mini-transcribe" ? ["gpt-4o-transcribe"] : []);
+const getFallbackTranscriptionModels = (model) => {
+    if (model === "gpt-transcribe") {
+        return ["gpt-4o-transcribe", "gpt-4o-mini-transcribe"];
+    }
+    if (model === "gpt-4o-mini-transcribe") {
+        return ["gpt-4o-transcribe", "gpt-transcribe"];
+    }
+    if (model === "gpt-4o-transcribe") {
+        return ["gpt-transcribe", "gpt-4o-mini-transcribe"];
+    }
+    return ["gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"].filter((candidate) => candidate !== model);
+};
 const resolveTranscriptionModels = ({ preferredModel, useChunking, }) => {
     if (useChunking) {
-        return ["gpt-4o-transcribe"];
+        return ["gpt-transcribe", "gpt-4o-transcribe"];
     }
     return [preferredModel, ...getFallbackTranscriptionModels(preferredModel)];
 };

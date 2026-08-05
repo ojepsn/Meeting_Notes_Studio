@@ -371,11 +371,11 @@ const REMOTE_VERSION_CHECK_INTERVAL_MS = 2 * 60 * 1000;
 const SUPPORTS_FILE_SAVE = typeof window.showSaveFilePicker === "function";
 const SUPPORTS_AUDIO_RECORDING = typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
 const SUPPORTS_MEETING_CAPTURE = typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getDisplayMedia;
-const MAX_MODEL_INPUT_PRICE_PER_MILLION = 2.5;
+const MAX_MODEL_INPUT_PRICE_PER_MILLION = 5;
 const APPROX_TOKENS_PER_PAGE = 750;
   const MAX_AUDIO_UPLOAD_BYTES = 25 * 1024 * 1024;
   const AUDIO_CHUNK_TARGET_BYTES = 23 * 1024 * 1024;
-  const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+  const DEFAULT_TRANSCRIPTION_MODEL = "gpt-transcribe";
   const DEFAULT_OUTPUT_PANEL_WIDTH = 460;
   const MIN_WORKSPACE_PANEL_WIDTH = 260;
   const MIN_OUTPUT_PANEL_WIDTH = MIN_WORKSPACE_PANEL_WIDTH;
@@ -543,29 +543,32 @@ const STORAGE_MODES = {
   file: "file",
 };
 const TRANSCRIPTION_MODELS = {
+  "gpt-transcribe": {
+    label: "GPT Transcribe",
+    description: "Current OpenAI default for accurate everyday recordings and uploaded audio.",
+    pricing: "$0.0045 per minute",
+    pricingDate: "2026-08-05",
+    docUrl: "https://developers.openai.com/api/docs/models/gpt-transcribe",
+  },
   "gpt-4o-mini-transcribe": {
     label: "GPT-4o mini transcribe",
-    description: "Best value for most recorded meeting audio and speaker playback.",
+    description: "Lower-cost GPT-4o-family transcription for routine recordings.",
     pricing: "$0.003 per minute",
-    pricingDate: "2026-03-29",
+    pricingDate: "2026-08-05",
+    docUrl: "https://developers.openai.com/api/docs/models/gpt-4o-mini-transcribe",
   },
   "gpt-4o-transcribe": {
     label: "GPT-4o transcribe",
-    description: "Higher-quality transcription when accuracy matters more than speed or cost.",
+    description: "Established GPT-4o transcription profile for important recordings.",
     pricing: "$0.006 per minute",
-    pricingDate: "2026-03-29",
-  },
-  "gpt-4o-transcribe-diarize": {
-    label: "GPT-4o transcribe diarize",
-    description: "Best when you want stronger speaker separation in addition to transcription.",
-    pricing: "$0.009 per minute",
-    pricingDate: "2026-03-29",
+    pricingDate: "2026-08-05",
+    docUrl: "https://developers.openai.com/api/docs/models/gpt-4o-transcribe",
   },
 };
 const RELEVANT_TRANSCRIPTION_MODEL_IDS = [
+  "gpt-transcribe",
   "gpt-4o-mini-transcribe",
   "gpt-4o-transcribe",
-  "gpt-4o-transcribe-diarize",
 ];
 const LEGACY_MEETING_MINUTES_BULLET_RULE =
   "- For each discussion point heading, provide 2-5 crisp bullets that capture the substance of the discussion.";
@@ -771,130 +774,37 @@ const EXPORT_STYLE_PRESETS = {
 };
 const DEFAULT_AI_MODEL_CATALOG = [
   {
-    id: "gpt-5.4",
-    label: "GPT-5.4",
-    docUrl: "https://developers.openai.com/api/docs/models/gpt-5.4",
-    fallbackDocUrl: "https://developers.openai.com/api/docs/models",
-    useCase: "Use when you want the strongest note quality, nuanced restructuring, and the best professional polish.",
+    id: "gpt-5.6-sol",
+    label: "GPT-5.6 Sol",
+    docUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+    fallbackDocUrl: "https://developers.openai.com/api/docs/models/compare",
+    useCase: "Use when you want the strongest current OpenAI quality for difficult drafting, restructuring, and high-stakes note output.",
+    inputPrice: "$5.00",
+    cachedInputPrice: "$0.50",
+    outputPrice: "$30.00",
+    pricingDate: "2026-08-05",
+  },
+  {
+    id: "gpt-5.6-terra",
+    label: "GPT-5.6 Terra",
+    docUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+    fallbackDocUrl: "https://developers.openai.com/api/docs/models/compare",
+    useCase: "Use for the best balance of current quality and cost. This is the recommended default for most work.",
     inputPrice: "$2.50",
     cachedInputPrice: "$0.25",
     outputPrice: "$15.00",
-    pricingDate: "2026-03-28",
+    pricingDate: "2026-08-05",
   },
   {
-    id: "gpt-5.4-pro",
-    label: "GPT-5.4 pro",
-    docUrl: "https://developers.openai.com/api/docs/models/gpt-5.4-pro",
-    useCase: "Use for especially high-stakes notes where precision matters more than latency or cost.",
-    inputPrice: "$15.00",
-    cachedInputPrice: null,
-    outputPrice: "$120.00",
-    pricingDate: "2026-03-28",
-  },
-  {
-    id: "gpt-5",
-    label: "GPT-5",
-    docUrl: "https://developers.openai.com/api/docs/models/gpt-5",
-    useCase: "Use for premium note polishing when you want very strong reasoning but lower cost than GPT-5.4.",
-    inputPrice: "$1.25",
-    cachedInputPrice: "$0.125",
-    outputPrice: "$10.00",
-    pricingDate: "2026-03-28",
-  },
-  {
-    id: "gpt-5-mini",
-    label: "GPT-5 mini",
-    docUrl: "https://developers.openai.com/api/docs/models/gpt-5-mini",
-    fallbackDocUrl: "https://developers.openai.com/api/docs/models/gpt-5",
-    useCase: "Use for the best quality-to-cost balance for everyday meetings. This is the recommended default.",
-    inputPrice: "$0.25",
-    cachedInputPrice: "$0.025",
-    outputPrice: "$2.00",
-    pricingDate: "2026-03-28",
-  },
-  {
-    id: "gpt-5.4-mini",
-    label: "GPT-5.4 mini",
-    docUrl: "https://developers.openai.com/api/docs/models/gpt-5.4-mini",
-    fallbackDocUrl: "https://developers.openai.com/api/docs/models",
-    useCase: "Use when you want near-frontier note quality at low cost and fast turnaround.",
-    inputPrice: "$0.25",
-    cachedInputPrice: "$0.025",
-    outputPrice: "$2.00",
-    pricingDate: "2026-03-28",
-  },
-  {
-    id: "gpt-5.4-nano",
-    label: "GPT-5.4 nano",
-    docUrl: "https://developers.openai.com/api/docs/models/gpt-5.4-nano",
-    fallbackDocUrl: "https://developers.openai.com/api/docs/models",
-    useCase: "Use for ultra-fast, lowest-cost cleanup where light polishing is enough.",
-    inputPrice: "$0.05",
-    cachedInputPrice: "$0.005",
-    outputPrice: "$0.40",
-    pricingDate: "2026-03-28",
-  },
-  {
-    id: "gpt-5-nano",
-    label: "GPT-5 nano",
-    docUrl: "https://developers.openai.com/api/docs/models/gpt-5-nano",
-    fallbackDocUrl: "https://developers.openai.com/api/docs/models/gpt-5",
-    useCase: "Use for the lowest-cost cleanup when speed matters more than nuanced phrasing or structure.",
-    inputPrice: "$0.05",
-    cachedInputPrice: "$0.005",
-    outputPrice: "$0.40",
-    pricingDate: "2026-03-28",
-  },
-  {
-    id: "gpt-4.1",
-    label: "GPT-4.1",
-    docUrl: "https://developers.openai.com/api/docs/models/gpt-4.1",
-    useCase: "Use if you want a strong non-reasoning model with stable text quality for polished summaries.",
-    inputPrice: "$2.00",
-    cachedInputPrice: "$0.50",
-    outputPrice: "$8.00",
-    pricingDate: "2026-03-28",
-  },
-  {
-    id: "gpt-4.1-mini",
-    label: "GPT-4.1 mini",
-    docUrl: "https://developers.openai.com/api/docs/models/gpt-4.1-mini",
-    useCase: "Use for fast, lower-cost note formatting with solid quality on typical business meetings.",
-    inputPrice: "$0.40",
+    id: "gpt-5.6-luna",
+    label: "GPT-5.6 Luna",
+    docUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+    fallbackDocUrl: "https://developers.openai.com/api/docs/models/compare",
+    useCase: "Use for cost-sensitive, high-volume note cleanup and lighter transformations.",
+    inputPrice: "$1.00",
     cachedInputPrice: "$0.10",
-    outputPrice: "$1.60",
-    pricingDate: "2026-03-28",
-  },
-  {
-    id: "gpt-4.1-nano",
-    label: "GPT-4.1 nano",
-    docUrl: "https://developers.openai.com/api/docs/models/gpt-4.1-nano",
-    useCase: "Use for extremely cost-sensitive workflows where you mainly want lightweight cleanup.",
-    inputPrice: "$0.10",
-    cachedInputPrice: "$0.025",
-    outputPrice: "$0.40",
-    pricingDate: "2026-03-28",
-  },
-  {
-    id: "gpt-4o",
-    label: "GPT-4o",
-    docUrl: "https://developers.openai.com/api/docs/models/gpt-4o",
-    useCase: "Use for versatile multimodal work or when you want a familiar general-purpose model for polished notes.",
-    inputPrice: "$2.50",
-    cachedInputPrice: "$1.25",
-    outputPrice: "$10.00",
-    pricingDate: "2026-03-28",
-  },
-  {
-    id: "gpt-4o-mini",
-    label: "GPT-4o mini",
-    docUrl: "https://developers.openai.com/api/docs/models/gpt-4o-mini",
-    fallbackDocUrl: "https://developers.openai.com/api/docs/models/gpt-4o",
-    useCase: "Use for inexpensive, responsive note cleanup when you still want a capable mainstream model.",
-    inputPrice: "$0.15",
-    cachedInputPrice: "$0.075",
-    outputPrice: "$0.60",
-    pricingDate: "2026-03-28",
+    outputPrice: "$6.00",
+    pricingDate: "2026-08-05",
   },
 ];
 
@@ -951,7 +861,7 @@ function getTemplateDefinition(templateId) {
 function createDefaultSettings() {
   return {
     apiKey: "",
-    model: "gpt-5-mini",
+    model: "gpt-5.6-terra",
     transcriptionModel: DEFAULT_TRANSCRIPTION_MODEL,
     dictationLanguage: "auto",
     lastBackupAt: 0,
@@ -1021,7 +931,7 @@ let activeAudioCaptureMode = "meeting";
 const audioDrafts = new Map();
 let pendingAudioDbPromise = null;
 let appStateDbPromise = null;
-const AI_MODEL_REFRESH_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const AI_MODEL_REFRESH_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 async function initializeApp() {
   if (!eventsBound) {
@@ -1064,6 +974,9 @@ async function initializeApp() {
   registerServiceWorker();
   updateHeroMeta();
   maybeRefreshAiModelCatalog({ force: true });
+  window.setInterval(() => {
+    maybeRefreshAiModelCatalog({ force: true });
+  }, AI_MODEL_REFRESH_MIN_INTERVAL_MS);
   try {
     await initializeStorageMode();
   } catch (error) {
@@ -4859,13 +4772,13 @@ function resolveSelectedModel(modelId) {
     return modelId;
   }
 
-  return visibleModels.find((model) => model.id === "gpt-5-mini")?.id
+  return visibleModels.find((model) => model.id === "gpt-5.6-terra")?.id
     || visibleModels[0]?.id
-    || "gpt-5-mini";
+    || "gpt-5.6-terra";
 }
 
 function getAiModelLabel(modelId) {
-  return getVisibleAiModels().find((model) => model.id === resolveSelectedModel(modelId))?.label || "GPT-5 mini";
+  return getVisibleAiModels().find((model) => model.id === resolveSelectedModel(modelId))?.label || "GPT-5.6 Terra";
 }
 
 function updateHeroMeta() {
@@ -4891,8 +4804,8 @@ function updateModelPricingStatus(message) {
     .at(-1);
 
   modelPricingStatus.textContent = latestDate
-    ? `Showing cost-eligible OpenAI models from the latest saved snapshot on ${formatCatalogDate(latestDate)}. Live catalog refresh starts automatically when the app opens.`
-    : "Showing bundled model guidance. Live catalog refresh starts automatically when the app opens.";
+    ? `Showing the latest saved OpenAI model snapshot from ${formatCatalogDate(latestDate)}. Live catalog refresh starts automatically when the app opens and then daily.`
+    : "Showing bundled OpenAI model guidance. Live catalog refresh starts automatically when the app opens and then daily.";
 }
 
 function getVisibleAiModels() {
@@ -4922,13 +4835,17 @@ async function refreshAiModelCatalog() {
 
   try {
     const refreshedCatalog = await fetchLatestAiModelCatalog();
+    const refreshedTranscriptionModels = await fetchLatestTranscriptionModelCatalog();
     if (refreshId !== aiCatalogRefreshCounter) {
       return;
     }
 
     aiModelCatalog = refreshedCatalog;
+    Object.assign(TRANSCRIPTION_MODELS, refreshedTranscriptionModels);
     persistAiModelCatalog();
     renderAiModelOptions();
+    renderTranscriptionModelOptions();
+    updateTranscriptionModelDescription();
     updateModelPricingStatus(`Catalog refreshed from official OpenAI docs on ${formatCatalogDate(new Date().toISOString())}.`);
   } catch {
     if (refreshId !== aiCatalogRefreshCounter) {
@@ -4980,6 +4897,35 @@ async function fetchLatestAiModelCatalog() {
   }
 
   return mergedCatalog;
+}
+
+async function fetchLatestTranscriptionModelCatalog() {
+  const entries = await Promise.allSettled(
+    RELEVANT_TRANSCRIPTION_MODEL_IDS.map(async (modelId) => {
+      const model = TRANSCRIPTION_MODELS[modelId];
+      const pricing = await fetchOfficialTranscriptionPricing(model);
+      return [modelId, { ...model, ...pricing, pricingDate: new Date().toISOString() }];
+    }),
+  );
+
+  const refreshedModels = {};
+  let successCount = 0;
+  entries.forEach((entry, index) => {
+    const modelId = RELEVANT_TRANSCRIPTION_MODEL_IDS[index];
+    if (entry.status === "fulfilled") {
+      successCount += 1;
+      refreshedModels[modelId] = entry.value[1];
+      return;
+    }
+
+    refreshedModels[modelId] = TRANSCRIPTION_MODELS[modelId];
+  });
+
+  if (!successCount) {
+    throw new Error("No official transcription pricing could be refreshed.");
+  }
+
+  return refreshedModels;
 }
 
 async function fetchAvailableOpenAiModelIds() {
@@ -5050,6 +4996,26 @@ async function fetchOfficialModelPricing(model) {
   }
 
   throw lastError || new Error(`Pricing could not be loaded for ${model.label}.`);
+}
+
+async function fetchOfficialTranscriptionPricing(model) {
+  const response = await fetch(model.docUrl, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const html = await response.text();
+  const text = new DOMParser().parseFromString(html, "text/html").body.textContent || "";
+  const normalizedText = text.replace(/\s+/g, " ").trim();
+  const perMinuteMatch = normalizedText.match(/Per minute\s+Price\s+\$([\d.]+)/i);
+
+  if (!perMinuteMatch) {
+    throw new Error(`Per-minute pricing could not be loaded for ${model.label}.`);
+  }
+
+  return {
+    pricing: `$${perMinuteMatch[1]} per minute`,
+  };
 }
 
 function extractModelPrices(pageText, modelLabel) {
@@ -6243,7 +6209,7 @@ async function polishWithOpenAI(session, activeSettings) {
       Authorization: `Bearer ${activeSettings.apiKey}`,
     },
     body: JSON.stringify({
-      model: activeSettings.model || "gpt-5-mini",
+      model: activeSettings.model || "gpt-5.6-terra",
       input: [
         {
           role: "system",
@@ -6353,7 +6319,7 @@ async function translateOutputWithOpenAI(session, activeSettings, targetLanguage
       Authorization: `Bearer ${activeSettings.apiKey}`,
     },
     body: JSON.stringify({
-      model: activeSettings.model || "gpt-5-mini",
+      model: activeSettings.model || "gpt-5.6-terra",
       input: [
         {
           role: "system",
@@ -6643,7 +6609,7 @@ async function revisePolishedNotesWithOpenAI(session, activeSettings, feedback) 
       Authorization: `Bearer ${activeSettings.apiKey}`,
     },
     body: JSON.stringify({
-      model: activeSettings.model || "gpt-5-mini",
+      model: activeSettings.model || "gpt-5.6-terra",
       input: [
         {
           role: "system",

@@ -369,8 +369,8 @@ const buildLegacySnapshot = (
       baselineWorkEnabled: false,
       baselineWorkActivityId: "",
       apiKey: "",
-      textModel: "gpt-5.4-mini",
-      transcriptionModel: "gpt-4o-mini-transcribe",
+      textModel: "gpt-5.6-terra",
+      transcriptionModel: "gpt-transcribe",
       savedParticipants: Array.isArray(parsedSettings?.participantDirectory)
         ? parsedSettings.participantDirectory.filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
         : [],

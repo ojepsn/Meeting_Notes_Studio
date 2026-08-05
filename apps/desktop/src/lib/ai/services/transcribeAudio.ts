@@ -49,7 +49,18 @@ const normalizeTranscriptionFile = (file: File) =>
 const resolvePreferredTranscriptionModel = (settings: LocalAppSettings) =>
   settings.transcriptionModel === "gpt-4o-transcribe-diarize" ? "gpt-4o-transcribe" : settings.transcriptionModel;
 
-const getFallbackTranscriptionModels = (model: string) => (model === "gpt-4o-mini-transcribe" ? ["gpt-4o-transcribe"] : []);
+const getFallbackTranscriptionModels = (model: string) => {
+  if (model === "gpt-transcribe") {
+    return ["gpt-4o-transcribe", "gpt-4o-mini-transcribe"];
+  }
+  if (model === "gpt-4o-mini-transcribe") {
+    return ["gpt-4o-transcribe", "gpt-transcribe"];
+  }
+  if (model === "gpt-4o-transcribe") {
+    return ["gpt-transcribe", "gpt-4o-mini-transcribe"];
+  }
+  return ["gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"].filter((candidate) => candidate !== model);
+};
 
 const resolveTranscriptionModels = ({
   preferredModel,
@@ -59,7 +70,7 @@ const resolveTranscriptionModels = ({
   useChunking: boolean;
 }) => {
   if (useChunking) {
-    return ["gpt-4o-transcribe"];
+    return ["gpt-transcribe", "gpt-4o-transcribe"];
   }
 
   return [preferredModel, ...getFallbackTranscriptionModels(preferredModel)];

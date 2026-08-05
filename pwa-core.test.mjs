@@ -278,14 +278,14 @@ runTest("only relevant OpenAI transcription models are exposed in the selector",
 
   assert.deepEqual(
     normalizeVmObject(RELEVANT_TRANSCRIPTION_MODEL_IDS),
-    ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "gpt-4o-transcribe-diarize"]
+    ["gpt-transcribe", "gpt-4o-mini-transcribe", "gpt-4o-transcribe"]
   );
+  assert.ok(TRANSCRIPTION_MODELS["gpt-transcribe"]);
   assert.ok(TRANSCRIPTION_MODELS["gpt-4o-mini-transcribe"]);
   assert.ok(TRANSCRIPTION_MODELS["gpt-4o-transcribe"]);
-  assert.ok(TRANSCRIPTION_MODELS["gpt-4o-transcribe-diarize"]);
   assert.deepEqual(
     normalizeVmObject(getVisibleTranscriptionModels().map(([modelId]) => modelId)),
-    ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "gpt-4o-transcribe-diarize"]
+    ["gpt-transcribe", "gpt-4o-mini-transcribe", "gpt-4o-transcribe"]
   );
   assert.match(indexHtmlSource, /Only OpenAI transcription models relevant for this app are shown here/);
 });

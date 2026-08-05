@@ -1,5 +1,5 @@
-export type TextModelId = "gpt-5.4" | "gpt-5.4-mini" | "gpt-5.4-nano" | "gpt-5.4-pro";
-export type TranscriptionModelId = "gpt-4o-mini-transcribe" | "gpt-4o-transcribe" | "gpt-4o-transcribe-diarize";
+export type TextModelId = "gpt-5.6-sol" | "gpt-5.6-terra" | "gpt-5.6-luna";
+export type TranscriptionModelId = "gpt-transcribe" | "gpt-4o-transcribe" | "gpt-4o-mini-transcribe";
 export interface TextModelPricingEntry {
     id: TextModelId;
     label: string;
@@ -65,13 +65,13 @@ export declare const isPricingRefreshDue: ({ snapshot, now, }: {
 export declare const msUntilNextPricingCheck: (now?: Date) => number;
 export declare const createDefaultModelPricingSnapshot: () => AIModelPricingSnapshot;
 export declare const normalizeAIModelPricingSnapshot: (snapshot: PartialAIModelPricingSnapshot | null | undefined) => AIModelPricingSnapshot | null;
-export declare const parseModelPricingPage: ({ pageText, fetchedAt, currentSnapshot, modelsPageText, latestModelPageText, speechPageText, }: {
+export declare const parseModelPricingPage: ({ pageText, fetchedAt, currentSnapshot, modelsPageText, latestModelPageText, speechPageTexts, }: {
     pageText: string;
     fetchedAt: string;
     currentSnapshot?: AIModelPricingSnapshot | null;
     modelsPageText?: string;
     latestModelPageText?: string;
-    speechPageText?: string;
+    speechPageTexts?: Partial<Record<TranscriptionModelId, string>>;
 }) => AIModelPricingSnapshot;
 export declare const fetchLatestModelPricingSnapshot: ({ currentSnapshot, }?: {
     currentSnapshot?: AIModelPricingSnapshot | null;
