@@ -199,6 +199,7 @@ const SECONDARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.filter(
 );
 const SINGLE_PANE_WORKSPACES: AppWorkspace[] = ["todos", "time", "now", "analytics", "structure"];
 const HIDE_SHARED_INSPECTOR_WORKSPACES: AppWorkspace[] = ["notes", "todos", "time", "analytics", "now", "structure"];
+const WORKSPACE_RAIL_COLLAPSED_KEY = "notesmith.workspaceRailCollapsed";
 
 const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
   recordAIRequestHistory(event);
@@ -384,6 +385,13 @@ export const App = () => {
   const [modelPricingSnapshot, setModelPricingSnapshot] = useState<AIModelPricingSnapshot>(createDefaultModelPricingSnapshot);
   const [modelPricingStatus, setModelPricingStatus] = useState(buildModelPricingStatus(createDefaultModelPricingSnapshot()));
   const [isRefreshingModelPricing, setIsRefreshingModelPricing] = useState(false);
+  const [isWorkspaceRailCollapsed, setIsWorkspaceRailCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(WORKSPACE_RAIL_COLLAPSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
   const [metadataSuggestions, setMetadataSuggestions] = useState<MetadataReviewState>(EMPTY_METADATA_REVIEW);
   const [selectedMetadataSuggestions, setSelectedMetadataSuggestions] = useState<MetadataReviewState>(EMPTY_METADATA_REVIEW);
   const [visibleRuleSuggestions, setVisibleRuleSuggestions] = useState<RuleSuggestionRecord[]>([]);
@@ -427,6 +435,14 @@ export const App = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(WORKSPACE_RAIL_COLLAPSED_KEY, String(isWorkspaceRailCollapsed));
+    } catch {
+      // The rail still works for this session when browser storage is unavailable.
+    }
+  }, [isWorkspaceRailCollapsed]);
 
   useEffect(() => {
     if (!isLoaded || loadError) return;
@@ -4022,11 +4038,28 @@ export const App = () => {
   };
 
   return (
-    <div className="app-shell desktop-shell" data-theme={snapshot.settings.theme} onKeyDownCapture={(event) => void handleGlobalTodoShortcut(event)}>
-      <aside className="workspace-rail">
+    <div
+      className="app-shell desktop-shell"
+      data-theme={snapshot.settings.theme}
+      data-workspace-rail-collapsed={isWorkspaceRailCollapsed}
+      onKeyDownCapture={(event) => void handleGlobalTodoShortcut(event)}
+    >
+      <aside className="workspace-rail" data-collapsed={isWorkspaceRailCollapsed}>
         <div className="workspace-rail-brand">
-          <strong>NoteSmith</strong>
-          <span className="tiny-text">Desktop</span>
+          <div className="workspace-rail-brand-copy">
+            <strong>NoteSmith</strong>
+            <span className="tiny-text">Desktop</span>
+          </div>
+          <button
+            className="workspace-rail-toggle"
+            type="button"
+            aria-label={isWorkspaceRailCollapsed ? "Expand workspace navigation" : "Collapse workspace navigation"}
+            aria-expanded={!isWorkspaceRailCollapsed}
+            title={isWorkspaceRailCollapsed ? "Expand workspace navigation" : "Collapse workspace navigation"}
+            onClick={() => setIsWorkspaceRailCollapsed((current) => !current)}
+          >
+            {isWorkspaceRailCollapsed ? ">" : "<"}
+          </button>
         </div>
         <nav className="workspace-nav">
           {PRIMARY_WORKSPACE_ITEMS.map((item) => (

@@ -399,6 +399,10 @@ select {
   overflow: hidden;
 }
 
+.desktop-shell[data-workspace-rail-collapsed="true"] {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+
 .workspace-rail {
   position: sticky;
   top: 0;
@@ -418,9 +422,49 @@ select {
 
 .workspace-rail-brand {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 0.15rem;
   padding: 0.4rem 0.35rem;
+}
+
+.workspace-rail-brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.workspace-rail-toggle {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface-soft);
+  color: var(--app-text);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.workspace-rail-toggle:hover {
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
+}
+
+.workspace-rail[data-collapsed="true"] {
+  padding: 0.65rem 0.5rem;
+  overflow: hidden;
+}
+
+.workspace-rail[data-collapsed="true"] .workspace-rail-brand {
+  padding: 0;
+}
+
+.workspace-rail[data-collapsed="true"] .workspace-rail-brand-copy,
+.workspace-rail[data-collapsed="true"] .workspace-nav {
+  display: none;
 }
 
 .workspace-nav {
@@ -5998,6 +6042,10 @@ select {
 
 @media (max-width: 960px) {
   .desktop-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .desktop-shell[data-workspace-rail-collapsed="true"] {
     grid-template-columns: 1fr;
   }
 

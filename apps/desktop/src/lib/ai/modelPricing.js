@@ -268,12 +268,12 @@ export const normalizeAIModelPricingSnapshot = (snapshot) => {
         ? DEFAULT_TEXT_MODEL_PRICING.filter((entry) => savedTextModelIds.has(entry.id))
         : DEFAULT_TEXT_MODEL_PRICING;
     const textModels = textFallbacks.map((fallback) => {
-        const current = snapshot.textModels?.find((entry) => normalizeTextModelId(entry?.id) === fallback.id);
+        const current = snapshot.textModels?.find((entry) => entry?.id === fallback.id);
         return {
             ...fallback,
             ...current,
             id: fallback.id,
-            label: typeof current?.label === "string" && current.label.trim() ? current.label : fallback.label,
+            label: fallback.label,
             summary: typeof current?.summary === "string" && current.summary.trim() ? current.summary : fallback.summary,
             recommendedFor: typeof current?.recommendedFor === "string" && current.recommendedFor.trim()
                 ? current.recommendedFor
@@ -305,12 +305,12 @@ export const normalizeAIModelPricingSnapshot = (snapshot) => {
         ? DEFAULT_TRANSCRIPTION_MODEL_PRICING.filter((entry) => savedTranscriptionModelIds.has(entry.id))
         : DEFAULT_TRANSCRIPTION_MODEL_PRICING;
     const transcriptionModels = transcriptionFallbacks.map((fallback) => {
-        const current = snapshot.transcriptionModels?.find((entry) => normalizeTranscriptionModelId(entry?.id) === fallback.id);
+        const current = snapshot.transcriptionModels?.find((entry) => entry?.id === fallback.id);
         return {
             ...fallback,
             ...current,
             id: fallback.id,
-            label: typeof current?.label === "string" && current.label.trim() ? current.label : fallback.label,
+            label: fallback.label,
             summary: typeof current?.summary === "string" && current.summary.trim() ? current.summary : fallback.summary,
             recommendedFor: typeof current?.recommendedFor === "string" && current.recommendedFor.trim()
                 ? current.recommendedFor

@@ -125,6 +125,14 @@ describe("modelPricing", () => {
 
     expect(snapshot?.textModels.find((model) => model.id === "gpt-5.6-terra")?.tags.length).toBeGreaterThan(0);
     expect(snapshot?.textModels).toHaveLength(3);
+    expect(snapshot?.textModels.find((model) => model.id === "gpt-5.6-terra")).toMatchObject({
+      label: "GPT-5.6 Terra",
+      inputPer1MTokens: 2,
+      outputPer1MTokens: 12,
+    });
+    expect(snapshot?.transcriptionModels.find((model) => model.id === "gpt-4o-mini-transcribe")?.label).toBe(
+      "GPT-4o mini Transcribe",
+    );
     expect(snapshot?.textModels.find((model) => model.id === "gpt-5.6-terra")?.summary).toBeTruthy();
     expect(snapshot?.transcriptionModels.find((model) => model.id === "gpt-4o-mini-transcribe")?.recommendation).toBeTruthy();
   });
