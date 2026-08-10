@@ -73,11 +73,11 @@ export const NotebookTodosPanel = ({ todos, onAddTodo, onSaveTodo, onAddNote }: 
   };
 
   return (
-    <details className="notebook-todos-section">
-      <summary>
+    <section className="notebook-todos-section">
+      <header className="notebook-todos-header">
         <span>Todos</span>
         <span className="status-chip">{openTodos.length} open</span>
-      </summary>
+      </header>
       <div className="notebook-todos-body">
         <div className="notebook-todo-add-row">
           <input
@@ -182,6 +182,6 @@ export const NotebookTodosPanel = ({ todos, onAddTodo, onSaveTodo, onAddNote }: 
           </div>
         ) : null}
       </div>
-    </details>
+    </section>
   );
 };

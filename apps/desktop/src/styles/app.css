@@ -787,7 +787,7 @@ select {
   box-shadow: 0 22px 48px color-mix(in srgb, var(--app-text) 8%, transparent 92%);
 }
 
-.notebook-workspace[data-tools-open="true"] {
+.notebook-workspace[data-side-panel-open="true"] {
   grid-template-columns: 250px minmax(360px, 1fr) minmax(390px, 450px);
 }
 
@@ -995,18 +995,31 @@ select {
   background: color-mix(in srgb, var(--app-surface-strong) 92%, var(--app-bg-end) 8%);
 }
 
+.notebook-side-toggle-rail {
+  display: flex;
+  flex: 0 0 47px;
+  flex-direction: column;
+  border-right: 1px solid var(--app-border);
+}
+
 .notebook-tools-toggle {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.7rem;
-  width: 47px;
+  width: 46px;
+  min-height: 112px;
   padding: 0.9rem 0.4rem;
   border: none;
-  border-right: 1px solid var(--app-border);
+  border-bottom: 1px solid var(--app-border);
   background: transparent;
   color: var(--app-text);
   cursor: pointer;
+}
+
+.notebook-tools-toggle[data-active="true"] {
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
 }
 
 .notebook-tools-toggle strong {
@@ -1064,19 +1077,16 @@ select {
 }
 
 .notebook-todos-section {
-  flex: 0 1 auto;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   min-height: 0;
-  border-bottom: 1px solid var(--app-border);
   background: color-mix(in srgb, var(--app-surface-soft) 78%, transparent 22%);
 }
 
-.notebook-todos-section[open] {
-  flex-basis: min(64%, 610px);
-  overflow: hidden;
-}
-
-.notebook-todos-section > summary {
+.notebook-todos-header {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
@@ -1084,25 +1094,11 @@ select {
   color: var(--app-text);
   font-size: 0.82rem;
   font-weight: 800;
-  cursor: pointer;
-  list-style: none;
-}
-
-.notebook-todos-section > summary::-webkit-details-marker {
-  display: none;
-}
-
-.notebook-todos-section > summary::before {
-  content: "+";
-  color: var(--app-muted);
-}
-
-.notebook-todos-section[open] > summary::before {
-  content: "-";
+  border-bottom: 1px solid var(--app-border);
 }
 
 .notebook-todos-body {
-  height: calc(100% - 45px);
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1461,7 +1457,7 @@ select {
 }
 
 @media (max-width: 1280px) {
-  .notebook-workspace[data-tools-open="true"] {
+  .notebook-workspace[data-side-panel-open="true"] {
     grid-template-columns: 230px minmax(0, 1fr) 430px;
   }
 }

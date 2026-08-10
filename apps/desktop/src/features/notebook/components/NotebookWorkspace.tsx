@@ -97,6 +97,7 @@ export const NotebookWorkspace = ({
 }: NotebookWorkspaceProps) => {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const [isTodosOpen, setIsTodosOpen] = useState(false);
   const [toolsTab, setToolsTab] = useState<"capture" | "output">("capture");
   const isDatedNotebookPage = activeSession.captureMode === "quick-note";
   const titleText = isDatedNotebookPage ? getNotebookTitleText(activeSession) : activeSession.title;
@@ -137,13 +138,30 @@ export const NotebookWorkspace = ({
   };
 
   const generateOutput = () => {
+    setIsTodosOpen(false);
     setIsToolsOpen(true);
     setToolsTab("output");
     onGenerateOutput();
   };
 
+  const toggleTools = () => {
+    setIsToolsOpen((current) => {
+      const next = !current;
+      if (next) setIsTodosOpen(false);
+      return next;
+    });
+  };
+
+  const toggleTodos = () => {
+    setIsTodosOpen((current) => {
+      const next = !current;
+      if (next) setIsToolsOpen(false);
+      return next;
+    });
+  };
+
   return (
-    <div className="notebook-workspace" data-tools-open={isToolsOpen}>
+    <div className="notebook-workspace" data-side-panel-open={isToolsOpen || isTodosOpen}>
       <aside className="notebook-list-pane" aria-label="Notebook pages">
         <div className="notebook-list-header">
           <div>
@@ -247,25 +265,35 @@ export const NotebookWorkspace = ({
         <RichTextCommandMenu editorRef={editorRef} onContentChange={updateManualNotes} />
       </section>
 
-      <aside className="notebook-tools-pane" data-open={isToolsOpen}>
-        <button
-          className="notebook-tools-toggle"
-          type="button"
-          aria-expanded={isToolsOpen}
-          aria-label={isToolsOpen ? "Collapse notebook tools" : "Expand notebook tools"}
-          onClick={() => setIsToolsOpen((current) => !current)}
-        >
-          <span>{isToolsOpen ? ">" : "<"}</span>
-          {!isToolsOpen ? <strong>Tools</strong> : null}
-        </button>
+      <aside className="notebook-tools-pane" data-open={isToolsOpen || isTodosOpen}>
+        <div className="notebook-side-toggle-rail">
+          <button
+            className="notebook-tools-toggle"
+            type="button"
+            data-active={isToolsOpen}
+            aria-expanded={isToolsOpen}
+            aria-controls="notebook-tools-content"
+            aria-label={isToolsOpen ? "Collapse notebook tools" : "Expand notebook tools"}
+            onClick={toggleTools}
+          >
+            <span>{isToolsOpen ? ">" : "<"}</span>
+            <strong>Tools</strong>
+          </button>
+          <button
+            className="notebook-tools-toggle"
+            type="button"
+            data-active={isTodosOpen}
+            aria-expanded={isTodosOpen}
+            aria-controls="notebook-todos-content"
+            aria-label={isTodosOpen ? "Collapse notebook todos" : "Expand notebook todos"}
+            onClick={toggleTodos}
+          >
+            <span>{isTodosOpen ? ">" : "<"}</span>
+            <strong>Todos</strong>
+          </button>
+        </div>
         {isToolsOpen ? (
-          <div className="notebook-tools-content">
-            <NotebookTodosPanel
-              todos={todos}
-              onAddTodo={onAddTodo}
-              onSaveTodo={onSaveTodo}
-              onAddNote={onAddNoteForTodo}
-            />
+          <div id="notebook-tools-content" className="notebook-tools-content">
             <div className="notebook-tools-tabs" role="tablist" aria-label="Notebook tools">
               <button type="button" data-active={toolsTab === "capture"} onClick={() => setToolsTab("capture")}>
                 Capture
@@ -303,6 +331,16 @@ export const NotebookWorkspace = ({
                 {outputContent}
               </div>
             )}
+          </div>
+        ) : null}
+        {isTodosOpen ? (
+          <div id="notebook-todos-content" className="notebook-tools-content notebook-todos-content">
+            <NotebookTodosPanel
+              todos={todos}
+              onAddTodo={onAddTodo}
+              onSaveTodo={onSaveTodo}
+              onAddNote={onAddNoteForTodo}
+            />
           </div>
         ) : null}
       </aside>

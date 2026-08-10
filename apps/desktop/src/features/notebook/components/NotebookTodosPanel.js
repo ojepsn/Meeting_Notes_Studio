@@ -54,7 +54,7 @@ export const NotebookTodosPanel = ({ todos, onAddTodo, onSaveTodo, onAddNote }) 
             return;
         onSaveTodo({ ...selectedTodo, ...updates });
     };
-    return (_jsxs("details", { className: "notebook-todos-section", children: [_jsxs("summary", { children: [_jsx("span", { children: "Todos" }), _jsxs("span", { className: "status-chip", children: [openTodos.length, " open"] })] }), _jsxs("div", { className: "notebook-todos-body", children: [_jsxs("div", { className: "notebook-todo-add-row", children: [_jsx("input", { value: draft, "aria-label": "New todo title", placeholder: "Add a todo", onChange: (event) => setDraft(event.target.value), onKeyDown: (event) => {
+    return (_jsxs("section", { className: "notebook-todos-section", children: [_jsxs("header", { className: "notebook-todos-header", children: [_jsx("span", { children: "Todos" }), _jsxs("span", { className: "status-chip", children: [openTodos.length, " open"] })] }), _jsxs("div", { className: "notebook-todos-body", children: [_jsxs("div", { className: "notebook-todo-add-row", children: [_jsx("input", { value: draft, "aria-label": "New todo title", placeholder: "Add a todo", onChange: (event) => setDraft(event.target.value), onKeyDown: (event) => {
                                     if (event.key === "Enter") {
                                         event.preventDefault();
                                         submitTodo();

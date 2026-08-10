@@ -1,6 +1,6 @@
 [package]
 name = "notesmith_desktop"
-version = "0.1.170"
+version = "0.1.171"
 description = "NoteSmith local-first desktop app"
 authors = ["Ola Jeppsson"]
 edition = "2021"
