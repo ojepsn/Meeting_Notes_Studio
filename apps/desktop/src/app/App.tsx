@@ -16,6 +16,7 @@ import { AnalyticsWorkspace } from "../features/analytics/components/AnalyticsWo
 import { NowWorkspace } from "../features/now/components/NowWorkspace";
 import { StructureWorkspace } from "../features/structure/components/StructureWorkspace";
 import { AssistantWorkspace } from "../features/assistant/components/AssistantWorkspace";
+import { NotebookWorkspace } from "../features/notebook/components/NotebookWorkspace";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
 import type { SettingsSection } from "../features/settings/components/SettingsCard";
 import { hydrateAITextCache, snapshotAITextCache } from "../lib/ai/cache";
@@ -93,8 +94,9 @@ import { buildStructureOptions, createEmptyStructureOptions, getActivitiesForSel
 import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "../lib/todos/shortcut";
 import { parseTokenList } from "../components/peoplePickerUtils";
 import { formatStockholmDate as getStockholmDateKey } from "../lib/time/stockholm";
+import { createSessionRecord } from "../lib/db/repository";
 
-type AppWorkspace = "notes" | "now" | "todos" | "calendar" | "time" | "analytics" | "structure" | "assistant" | "files";
+type AppWorkspace = "notebook" | "notes" | "now" | "todos" | "calendar" | "time" | "analytics" | "structure" | "assistant" | "files";
 type OverlayPanel = "new-note" | "metadata-review" | "sessions" | "backup" | "settings" | "more" | "capture-details" | "output-details" | "calendar-output-preview" | "instructions" | null;
 type CalendarSessionOverlayTab = "capture" | "output" | "details";
 type NotesWorkspaceTab = "capture" | "output" | "details";
@@ -181,6 +183,7 @@ const isStructuredHeading = (line: string) => {
 };
 
 const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: string; available: boolean }> = [
+  { id: "notebook", label: "Notebook", description: "Fast dated pages with optional recording and output", available: true },
   { id: "calendar", label: "Calendar", description: "Schedule and meeting context", available: true },
   { id: "notes", label: "Notes", description: "Capture and shape structured notes", available: true },
   { id: "now", label: "Now", description: "Quick access to recent work, meetings, and active context", available: true },
@@ -192,13 +195,13 @@ const WORKSPACE_ITEMS: Array<{ id: AppWorkspace; label: string; description: str
   { id: "files", label: "Files", description: "Documents, audio, and references", available: false },
 ];
 
-const PRIMARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.filter((item) => item.id === "calendar" || item.id === "notes");
+const PRIMARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.filter((item) => ["notebook", "calendar", "notes"].includes(item.id));
 const DAILY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.filter((item) => item.id === "now");
 const SECONDARY_WORKSPACE_ITEMS = WORKSPACE_ITEMS.filter(
-  (item) => !["calendar", "notes", "now", "todos"].includes(item.id),
+  (item) => !["notebook", "calendar", "notes", "now", "todos"].includes(item.id),
 );
-const SINGLE_PANE_WORKSPACES: AppWorkspace[] = ["todos", "time", "now", "analytics", "structure"];
-const HIDE_SHARED_INSPECTOR_WORKSPACES: AppWorkspace[] = ["notes", "todos", "time", "analytics", "now", "structure"];
+const SINGLE_PANE_WORKSPACES: AppWorkspace[] = ["notebook", "todos", "time", "now", "analytics", "structure"];
+const HIDE_SHARED_INSPECTOR_WORKSPACES: AppWorkspace[] = ["notebook", "notes", "todos", "time", "analytics", "now", "structure"];
 const WORKSPACE_RAIL_COLLAPSED_KEY = "notesmith.workspaceRailCollapsed";
 
 const logAIRuntimeEvent = (event: AIRuntimeEvent) => {
@@ -338,7 +341,7 @@ export const App = () => {
     saveAttachments,
   } = useDesktopStore();
 
-  const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("calendar");
+  const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("notebook");
   const [openPanel, setOpenPanel] = useState<OverlayPanel>(null);
   const [isNotesSessionsOpen, setIsNotesSessionsOpen] = useState(false);
   const [selectedOutputVersionId, setSelectedOutputVersionId] = useState<string | null>(null);
@@ -407,6 +410,7 @@ export const App = () => {
   const recordingSessionIdRef = useRef<string | null>(null);
   const todoRolloverDateRef = useRef(getStockholmDateKey());
   const localSafetyBackupDateRef = useRef<string | null>(null);
+  const notebookStartupCreatedRef = useRef(false);
 
   const buildDesktopBackupBundle = (): DesktopBackupBundle | null => {
     if (!snapshot) {
@@ -435,6 +439,16 @@ export const App = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!isLoaded || loadError || !snapshot || notebookStartupCreatedRef.current) {
+      return;
+    }
+    notebookStartupCreatedRef.current = true;
+    const session = createSessionRecord("personal-note", "quick-note");
+    session.title = session.date;
+    void saveSession(session);
+  }, [isLoaded, loadError, saveSession, snapshot]);
 
   useEffect(() => {
     try {
@@ -2628,6 +2642,16 @@ export const App = () => {
     );
   };
 
+  const handleCreateNotebookPage = async () => {
+    const session = createSessionRecord("personal-note", "quick-note");
+    session.title = session.date;
+    await saveSession(session);
+    setSelectedOutputVersionId(null);
+    setActiveView("capture");
+    setActiveWorkspace("notebook");
+    setStatusNote("Created a new Notebook page.");
+  };
+
   const openSettingsSection = (section: SettingsSection) => {
     setSettingsSection(section);
     setOpenPanel("settings");
@@ -2777,7 +2801,7 @@ export const App = () => {
       setLinkedCalendarReturnItemId(null);
     }
     setActiveWorkspace(nextWorkspace);
-    setStatusNote(`Returned to ${nextWorkspace === "time" ? "Time" : nextWorkspace === "calendar" ? "Calendar" : nextWorkspace === "now" ? "Now" : "the previous workspace"}.`);
+    setStatusNote(`Returned to ${nextWorkspace === "notebook" ? "Notebook" : nextWorkspace === "time" ? "Time" : nextWorkspace === "calendar" ? "Calendar" : nextWorkspace === "now" ? "Now" : "the previous workspace"}.`);
   };
   const openCalendarOutputPreview = (sessionId: string) => {
     openCalendarSessionTarget({
@@ -2819,6 +2843,13 @@ export const App = () => {
   const closeCommandPalette = () => setIsCommandPaletteOpen(false);
 
   const commandActions: CommandAction[] = [
+      {
+        id: "notebook",
+        label: "Open Notebook",
+        description: "Write, record, and revisit dated pages and meetings.",
+        keywords: ["notebook pages daily notes meetings"],
+        action: () => setActiveWorkspace("notebook"),
+      },
       {
         id: "new-session",
         label: "New note",
@@ -4106,7 +4137,7 @@ export const App = () => {
       </aside>
 
       <div className="workspace-shell">
-        <header className={`topbar app-header${activeWorkspace === "notes" ? " app-header-notes-pwa" : ""}${activeWorkspace === "calendar" ? " app-header-compact app-header-calendar-home" : ""}${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " app-header-compact" : ""}`}>
+        <header className={`topbar app-header${activeWorkspace === "notes" ? " app-header-notes-pwa" : ""}${activeWorkspace === "notebook" ? " app-header-compact" : ""}${activeWorkspace === "calendar" ? " app-header-compact app-header-calendar-home" : ""}${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " app-header-compact" : ""}`}>
           <div className="topbar-copy">
             {activeWorkspace === "notes" ? (
               <div className="topbar-status-strip topbar-status-strip-notes" />
@@ -4220,13 +4251,15 @@ export const App = () => {
           className={`notes-shell${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " notes-shell-calendar-fullscreen" : ""}${
             activeWorkspace === "notes" && isNotesSessionsOpen ? " notes-shell-with-sessions" : ""
           }${activeWorkspace === "notes" ? " notes-shell-notes-mode" : ""}${
+            activeWorkspace === "notebook" ? " notes-shell-notebook" : ""
+          }${
             SINGLE_PANE_WORKSPACES.includes(activeWorkspace) ? " notes-shell-single-pane" : ""
           }`}
         >
           <section
-            className={`workspace-canvas${activeWorkspace === "calendar" ? " workspace-canvas-calendar" : ""}`}
+            className={`workspace-canvas${activeWorkspace === "calendar" ? " workspace-canvas-calendar" : ""}${activeWorkspace === "notebook" ? " workspace-canvas-notebook" : ""}`}
           >
-            {activeWorkspace !== "notes" && !(activeWorkspace === "calendar" || activeWorkspace === "now") ? (
+            {activeWorkspace !== "notes" && !(activeWorkspace === "notebook" || activeWorkspace === "calendar" || activeWorkspace === "now") ? (
             <div className="workspace-header card">
               <div className="card-header">
                 <div>
@@ -4237,7 +4270,87 @@ export const App = () => {
             </div>
             ) : null}
 
-            {activeWorkspace === "todos" ? (
+            {activeWorkspace === "notebook" ? (
+              <NotebookWorkspace
+                sessions={activeSessions}
+                activeSession={activeSession}
+                isRecordingAudio={isRecordingAudio}
+                isTranscribingAudio={isTranscribingAudio}
+                isGenerating={isGenerating}
+                recordingStatusNote={recordingStatusNote}
+                onSelect={(sessionId) => {
+                  setSelectedOutputVersionId(null);
+                  setActiveSessionId(sessionId);
+                }}
+                onCreate={() => void handleCreateNotebookPage()}
+                onChange={handleCaptureSessionChange}
+                onToggleRecording={() =>
+                  void (isRecordingAudio ? handleStopRecording() : handleStartRecording("microphone"))
+                }
+                onUploadAudio={() => void handleImportAudio()}
+                onTranscribeAudio={() => void handleTranscribeAudio()}
+                onGenerateOutput={() => void handleGenerate()}
+                onOpenInNotes={(view) =>
+                  openNotesTarget({
+                    sessionId: activeSession.id,
+                    view,
+                    returnWorkspace: "notebook",
+                    status: "Opened the Notebook page in the full Notes workspace.",
+                  })
+                }
+                outputContent={(
+                  <OutputWorkspace
+                    session={activeSession}
+                    template={activeTemplate}
+                    displayedOutput={displayedOutput}
+                    layoutPresetId={snapshot.settings.outputLayoutPresetId}
+                    outputVersions={activeOutputVersions}
+                    selectedOutputVersionId={selectedOutputVersionId}
+                    attachments={activeAttachments}
+                    presentation="minimal"
+                    showPresentationActions={false}
+                    showPanelHeading={false}
+                    showDetailsSection={false}
+                    onChange={(session) => void handleOutputWorkspaceChange(session)}
+                    savedPeople={snapshot.settings.savedParticipants}
+                    suggestedPeople={suggestedPeople}
+                    savedProjects={snapshot.settings.savedProjects}
+                    suggestedProjects={suggestedProjects}
+                    savedDomains={snapshot.settings.savedDomains}
+                    suggestedDomains={suggestedDomains}
+                    savedActivities={snapshot.settings.savedActivities}
+                    suggestedActivities={suggestedActivities}
+                    structureOptions={structureOptions}
+                    savedTags={snapshot.settings.savedTags}
+                    suggestedTags={suggestedTags}
+                    isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
+                    isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
+                    isRevising={isRevising}
+                    onPrimaryAction={outputActionConfig.onPrimary}
+                    onSecondaryAction={outputActionConfig.onSecondary}
+                    onCopyOutput={() => void handleCopyOutput()}
+                    onTranslate={() => void handleTranslate()}
+                    onRevise={(instructions) => void handleRevise(instructions)}
+                    onRevertOutputVersion={handleRevertOutputVersion}
+                    onOpenOutputVersion={handleOpenOutputVersion}
+                    onOpenLatestOutputVersion={handleOpenLatestOutputVersion}
+                    onExportText={() => exportOutputAsText({ title: activeSession.title, output: displayedOutput })}
+                    onExportMarkdown={() => exportOutputAsMarkdown({ title: activeSession.title, output: displayedOutput })}
+                    onExportHtml={() => exportOutputAsHtml({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                    onExportDocx={() => void exportOutputAsDocx({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                    onExportPdf={() => void exportOutputAsPdf({ title: activeSession.title, output: displayedOutput, attachments: activeAttachments, layoutPresetId: snapshot.settings.outputLayoutPresetId })}
+                    ruleSuggestions={visibleRuleSuggestions.filter((entry) => !dismissedRuleSuggestionIds.includes(entry.id))}
+                    onAcceptRuleSuggestion={(suggestionId) => void handleAcceptVisibleRuleSuggestion(suggestionId)}
+                    onDismissRuleSuggestion={handleDismissVisibleRuleSuggestion}
+                    onIgnoreRuleSuggestion={(suggestionId) => void handleIgnoreVisibleRuleSuggestion(suggestionId)}
+                    primaryActionLabel={outputActionConfig.primaryLabel}
+                    secondaryActionLabel={outputActionConfig.secondaryLabel}
+                    emptyStatePrimaryLabel={outputActionConfig.emptyStatePrimaryLabel}
+                    emptyStateSecondaryLabel={outputActionConfig.emptyStateSecondaryLabel}
+                  />
+                )}
+              />
+            ) : activeWorkspace === "todos" ? (
               <TodosWorkspace
                 todos={snapshot.todos}
                 checklists={snapshot.checklists}
@@ -4535,7 +4648,7 @@ export const App = () => {
                 {linkedDetailReturnWorkspace ? (
                   <div className="notes-pwa-toolbar">
                     <button className="shell-button" type="button" onClick={returnFromLinkedDetail}>
-                      Back to {linkedDetailReturnWorkspace === "calendar" ? "Calendar" : linkedDetailReturnWorkspace === "time" ? "Time" : linkedDetailReturnWorkspace === "now" ? "Now" : linkedDetailReturnWorkspace === "structure" ? "Structure" : "previous workspace"}
+                      Back to {linkedDetailReturnWorkspace === "notebook" ? "Notebook" : linkedDetailReturnWorkspace === "calendar" ? "Calendar" : linkedDetailReturnWorkspace === "time" ? "Time" : linkedDetailReturnWorkspace === "now" ? "Now" : linkedDetailReturnWorkspace === "structure" ? "Structure" : "previous workspace"}
                     </button>
                     {activeLinkedActivity ? (
                       <button className="shell-button" type="button" onClick={() => openActivityFromLink(activeLinkedActivity.id, "notes")}>
