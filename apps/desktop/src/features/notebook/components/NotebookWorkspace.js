@@ -8,6 +8,18 @@ const NOTEBOOK_BLOCK_COMMANDS = [
     { id: "h1", label: "H1", value: "H1" },
     { id: "h2", label: "H2", value: "H2" },
 ];
+const NOTEBOOK_TODOS_MODE_KEY = "notesmith:notebook-todos-mode";
+const readNotebookTodosMode = () => {
+    try {
+        const saved = window.localStorage.getItem(NOTEBOOK_TODOS_MODE_KEY);
+        if (saved === "minimized" || saved === "standard" || saved === "maximized")
+            return saved;
+    }
+    catch {
+        // Storage may be unavailable in restricted browser contexts.
+    }
+    return "closed";
+};
 const richTextToPlainText = (value) => {
     if (!value)
         return "";
@@ -47,8 +59,10 @@ export const getNotebookListTitle = (session) => {
 };
 export const NotebookWorkspace = ({ sessions, todos, activeSession, isRecordingAudio, isTranscribingAudio, isGenerating, recordingStatusNote, outputContent, onSelect, onCreate, onDelete, onAddTodo, onSaveTodo, onAddNoteForTodo, onChange, onToggleRecording, onUploadAudio, onTranscribeAudio, onGenerateOutput, onOpenInNotes, }) => {
     const editorRef = useRef(null);
+    const todosOverlayRef = useRef(null);
     const [isToolsOpen, setIsToolsOpen] = useState(false);
-    const [isTodosOpen, setIsTodosOpen] = useState(false);
+    const [todosMode, setTodosMode] = useState(readNotebookTodosMode);
+    const [lastExpandedTodosMode, setLastExpandedTodosMode] = useState(todosMode === "maximized" ? "maximized" : "standard");
     const [toolsTab, setToolsTab] = useState("capture");
     const isDatedNotebookPage = activeSession.captureMode === "quick-note";
     const titleText = isDatedNotebookPage ? getNotebookTitleText(activeSession) : activeSession.title;
@@ -64,6 +78,14 @@ export const NotebookWorkspace = ({ sessions, todos, activeSession, isRecordingA
         }
         editor.dataset.empty = richTextToPlainText(activeSession.manualNotes) ? "false" : "true";
     }, [activeSession.id, activeSession.manualNotes]);
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(NOTEBOOK_TODOS_MODE_KEY, todosMode);
+        }
+        catch {
+            // The panel still works when storage is unavailable.
+        }
+    }, [todosMode]);
     const updateManualNotes = (html) => {
         const normalizedHtml = normalizeNotebookHtml(html);
         if (editorRef.current) {
@@ -79,7 +101,7 @@ export const NotebookWorkspace = ({ sessions, todos, activeSession, isRecordingA
         updateManualNotes(editorRef.current.innerHTML);
     };
     const generateOutput = () => {
-        setIsTodosOpen(false);
+        setTodosMode((current) => current === "standard" || current === "maximized" ? "minimized" : current);
         setIsToolsOpen(true);
         setToolsTab("output");
         onGenerateOutput();
@@ -88,19 +110,39 @@ export const NotebookWorkspace = ({ sessions, todos, activeSession, isRecordingA
         setIsToolsOpen((current) => {
             const next = !current;
             if (next)
-                setIsTodosOpen(false);
+                setTodosMode((mode) => mode === "standard" || mode === "maximized" ? "minimized" : mode);
             return next;
         });
     };
     const toggleTodos = () => {
-        setIsTodosOpen((current) => {
-            const next = !current;
-            if (next)
-                setIsToolsOpen(false);
-            return next;
+        setIsToolsOpen(false);
+        setTodosMode((current) => current === "standard" || current === "maximized" ? "minimized" : lastExpandedTodosMode);
+    };
+    const expandTodos = (mode) => {
+        setIsToolsOpen(false);
+        setLastExpandedTodosMode(mode);
+        setTodosMode(mode);
+    };
+    const minimizeTodos = () => {
+        setTodosMode((current) => {
+            if (current === "standard" || current === "maximized") {
+                setLastExpandedTodosMode(current);
+                return "minimized";
+            }
+            return current;
         });
     };
-    return (_jsxs("div", { className: "notebook-workspace", "data-side-panel-open": isToolsOpen || isTodosOpen, children: [_jsxs("aside", { className: "notebook-list-pane", "aria-label": "Notebook pages", children: [_jsxs("div", { className: "notebook-list-header", children: [_jsxs("div", { children: [_jsx("span", { className: "section-label", children: "Notebook" }), _jsxs("strong", { children: [sessions.length, " pages"] })] }), _jsx("button", { className: "primary-button notebook-new-button", type: "button", onClick: onCreate, children: "New page" })] }), _jsx("div", { className: "notebook-page-list", children: sortedSessions.map((session) => {
+    const handleWorkspacePointerDownCapture = (event) => {
+        if (todosMode !== "standard" && todosMode !== "maximized")
+            return;
+        const target = event.target;
+        if (todosOverlayRef.current?.contains(target))
+            return;
+        if (target instanceof Element && target.closest("[data-notebook-todos-control]"))
+            return;
+        minimizeTodos();
+    };
+    return (_jsxs("div", { className: "notebook-workspace", "data-side-panel-open": isToolsOpen, onPointerDownCapture: handleWorkspacePointerDownCapture, children: [_jsxs("aside", { className: "notebook-list-pane", "aria-label": "Notebook pages", children: [_jsxs("div", { className: "notebook-list-header", children: [_jsxs("div", { children: [_jsx("span", { className: "section-label", children: "Notebook" }), _jsxs("strong", { children: [sessions.length, " pages"] })] }), _jsx("button", { className: "primary-button notebook-new-button", type: "button", onClick: onCreate, children: "New page" })] }), _jsx("div", { className: "notebook-page-list", children: sortedSessions.map((session) => {
                             const preview = richTextToPlainText(session.manualNotes);
                             return (_jsxs("div", { className: "notebook-page-item", "data-active": session.id === activeSession.id, children: [_jsxs("button", { className: "notebook-page-select", type: "button", onClick: () => onSelect(session.id), children: [_jsx("strong", { children: getNotebookListTitle(session) }), _jsx("span", { children: preview || "Empty page" })] }), _jsx("button", { className: "notebook-page-delete", type: "button", "aria-label": `Delete ${getNotebookListTitle(session)}`, title: "Move to deleted sessions", onClick: () => onDelete(session.id), children: "x" })] }, session.id));
                         }) })] }), _jsxs("section", { className: "notebook-editor-pane", children: [_jsxs("header", { className: "notebook-title-row", children: [_jsx(DateInput, { id: "notebook-date", value: activeSession.date, onChange: (event) => onChange({
@@ -114,5 +156,5 @@ export const NotebookWorkspace = ({ sessions, todos, activeSession, isRecordingA
                                     title: isDatedNotebookPage
                                         ? buildNotebookSessionTitle(activeSession.date, event.target.value)
                                         : event.target.value,
-                                }) })] }), _jsxs("div", { className: "notebook-rich-toolbar", "aria-label": "Notebook formatting", children: [_jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("bold"), children: "Bold" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("italic"), children: "Italic" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("insertUnorderedList"), children: "Bullets" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("insertOrderedList"), children: "Numbered" }), NOTEBOOK_BLOCK_COMMANDS.map((option) => (_jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("formatBlock", option.value), children: option.label }, option.id)))] }), _jsx("div", { id: "manual-notes", ref: editorRef, className: "notebook-rich-editor", contentEditable: true, suppressContentEditableWarning: true, "data-placeholder": "Start writing...", "data-empty": "true", onInput: (event) => updateManualNotes(event.currentTarget.innerHTML) }), _jsx(RichTextCommandMenu, { editorRef: editorRef, onContentChange: updateManualNotes })] }), _jsxs("aside", { className: "notebook-tools-pane", "data-open": isToolsOpen || isTodosOpen, children: [_jsxs("div", { className: "notebook-side-toggle-rail", children: [_jsxs("button", { className: "notebook-tools-toggle", type: "button", "data-active": isToolsOpen, "aria-expanded": isToolsOpen, "aria-controls": "notebook-tools-content", "aria-label": isToolsOpen ? "Collapse notebook tools" : "Expand notebook tools", onClick: toggleTools, children: [_jsx("span", { children: isToolsOpen ? ">" : "<" }), _jsx("strong", { children: "Tools" })] }), _jsxs("button", { className: "notebook-tools-toggle", type: "button", "data-active": isTodosOpen, "aria-expanded": isTodosOpen, "aria-controls": "notebook-todos-content", "aria-label": isTodosOpen ? "Collapse notebook todos" : "Expand notebook todos", onClick: toggleTodos, children: [_jsx("span", { children: isTodosOpen ? ">" : "<" }), _jsx("strong", { children: "Todos" })] })] }), isToolsOpen ? (_jsxs("div", { id: "notebook-tools-content", className: "notebook-tools-content", children: [_jsxs("div", { className: "notebook-tools-tabs", role: "tablist", "aria-label": "Notebook tools", children: [_jsx("button", { type: "button", "data-active": toolsTab === "capture", onClick: () => setToolsTab("capture"), children: "Capture" }), _jsx("button", { type: "button", "data-active": toolsTab === "output", onClick: () => setToolsTab("output"), children: "Output" })] }), toolsTab === "capture" ? (_jsxs("div", { className: "notebook-capture-tools", children: [_jsxs("div", { children: [_jsx("span", { className: "section-label", children: "Recording and output" }), _jsx("h3", { children: "Bring more into this page" }), _jsx("p", { children: "Record or upload audio, transcribe it, then create an editable Output." })] }), _jsx("button", { className: isRecordingAudio ? "primary-button" : "secondary-button", type: "button", onClick: onToggleRecording, children: isRecordingAudio ? "Stop recording" : "Record microphone" }), _jsx("button", { className: "shell-button", type: "button", onClick: onUploadAudio, children: "Upload audio" }), _jsx("button", { className: "shell-button", type: "button", disabled: isTranscribingAudio, onClick: onTranscribeAudio, children: isTranscribingAudio ? "Transcribing..." : "Transcribe" }), _jsx("button", { className: "primary-button", type: "button", disabled: isGenerating, onClick: generateOutput, children: isGenerating ? "Generating..." : "Generate output" }), _jsx("p", { className: "tiny-text", children: recordingStatusNote || "Microphone recording is saved with this notebook session." }), _jsx("button", { className: "small-button", type: "button", onClick: () => onOpenInNotes("capture"), children: "Open full session in Notes" })] })) : (_jsx("div", { className: "notebook-output-tools", children: outputContent }))] })) : null, isTodosOpen ? (_jsx("div", { id: "notebook-todos-content", className: "notebook-tools-content notebook-todos-content", children: _jsx(NotebookTodosPanel, { todos: todos, onAddTodo: onAddTodo, onSaveTodo: onSaveTodo, onAddNote: onAddNoteForTodo }) })) : null] })] }));
+                                }) })] }), _jsxs("div", { className: "notebook-rich-toolbar", "aria-label": "Notebook formatting", children: [_jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("bold"), children: "Bold" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("italic"), children: "Italic" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("insertUnorderedList"), children: "Bullets" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("insertOrderedList"), children: "Numbered" }), NOTEBOOK_BLOCK_COMMANDS.map((option) => (_jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("formatBlock", option.value), children: option.label }, option.id)))] }), _jsx("div", { id: "manual-notes", ref: editorRef, className: "notebook-rich-editor", contentEditable: true, suppressContentEditableWarning: true, "data-placeholder": "Start writing...", "data-empty": "true", onInput: (event) => updateManualNotes(event.currentTarget.innerHTML) }), _jsx(RichTextCommandMenu, { editorRef: editorRef, onContentChange: updateManualNotes })] }), _jsxs("aside", { className: "notebook-tools-pane", "data-open": isToolsOpen, children: [_jsxs("div", { className: "notebook-side-toggle-rail", children: [_jsxs("button", { className: "notebook-tools-toggle", type: "button", "data-active": isToolsOpen, "aria-expanded": isToolsOpen, "aria-controls": "notebook-tools-content", "aria-label": isToolsOpen ? "Collapse notebook tools" : "Expand notebook tools", onClick: toggleTools, children: [_jsx("span", { children: isToolsOpen ? ">" : "<" }), _jsx("strong", { children: "Tools" })] }), _jsxs("button", { className: "notebook-tools-toggle", type: "button", "data-active": todosMode !== "closed", "data-notebook-todos-control": true, "aria-expanded": todosMode === "standard" || todosMode === "maximized", "aria-controls": "notebook-todos-overlay", "aria-label": todosMode === "standard" || todosMode === "maximized" ? "Minimize notebook todos" : "Open notebook todos", onClick: toggleTodos, children: [_jsx("span", { children: todosMode === "standard" || todosMode === "maximized" ? ">" : "<" }), _jsx("strong", { children: "Todos" })] })] }), isToolsOpen ? (_jsxs("div", { id: "notebook-tools-content", className: "notebook-tools-content", children: [_jsxs("div", { className: "notebook-tools-tabs", role: "tablist", "aria-label": "Notebook tools", children: [_jsx("button", { type: "button", "data-active": toolsTab === "capture", onClick: () => setToolsTab("capture"), children: "Capture" }), _jsx("button", { type: "button", "data-active": toolsTab === "output", onClick: () => setToolsTab("output"), children: "Output" })] }), toolsTab === "capture" ? (_jsxs("div", { className: "notebook-capture-tools", children: [_jsxs("div", { children: [_jsx("span", { className: "section-label", children: "Recording and output" }), _jsx("h3", { children: "Bring more into this page" }), _jsx("p", { children: "Record or upload audio, transcribe it, then create an editable Output." })] }), _jsx("button", { className: isRecordingAudio ? "primary-button" : "secondary-button", type: "button", onClick: onToggleRecording, children: isRecordingAudio ? "Stop recording" : "Record microphone" }), _jsx("button", { className: "shell-button", type: "button", onClick: onUploadAudio, children: "Upload audio" }), _jsx("button", { className: "shell-button", type: "button", disabled: isTranscribingAudio, onClick: onTranscribeAudio, children: isTranscribingAudio ? "Transcribing..." : "Transcribe" }), _jsx("button", { className: "primary-button", type: "button", disabled: isGenerating, onClick: generateOutput, children: isGenerating ? "Generating..." : "Generate output" }), _jsx("p", { className: "tiny-text", children: recordingStatusNote || "Microphone recording is saved with this notebook session." }), _jsx("button", { className: "small-button", type: "button", onClick: () => onOpenInNotes("capture"), children: "Open full session in Notes" })] })) : (_jsx("div", { className: "notebook-output-tools", children: outputContent }))] })) : null] }), todosMode === "standard" || todosMode === "maximized" ? (_jsx("section", { id: "notebook-todos-overlay", ref: todosOverlayRef, className: "notebook-todos-overlay", "data-size": todosMode, "aria-label": "Todos workspace", children: _jsx(NotebookTodosPanel, { todos: todos, onAddTodo: onAddTodo, onSaveTodo: onSaveTodo, onAddNote: onAddNoteForTodo, headerActions: (_jsxs("div", { className: "notebook-todos-window-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: minimizeTodos, children: "Minimize" }), _jsx("button", { className: "small-button", type: "button", onClick: () => expandTodos(todosMode === "maximized" ? "standard" : "maximized"), children: todosMode === "maximized" ? "Restore" : "Maximize" }), _jsx("button", { className: "small-button", type: "button", onClick: () => setTodosMode("closed"), children: "Close" })] })) }) })) : null, todosMode === "minimized" ? (_jsxs("button", { className: "notebook-todos-launcher", type: "button", "data-notebook-todos-control": true, onClick: () => expandTodos(lastExpandedTodosMode), children: [_jsx("strong", { children: "Todos" }), _jsxs("span", { children: [todos.filter((todo) => !todo.isDone).length, " open"] })] })) : null] }));
 };

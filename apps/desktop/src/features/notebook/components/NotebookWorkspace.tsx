@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { SessionRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { NotebookTodosPanel } from "./NotebookTodosPanel";
@@ -9,6 +9,20 @@ const NOTEBOOK_BLOCK_COMMANDS = [
   { id: "h1", label: "H1", value: "H1" },
   { id: "h2", label: "H2", value: "H2" },
 ] as const;
+
+type NotebookTodosMode = "closed" | "minimized" | "standard" | "maximized";
+
+const NOTEBOOK_TODOS_MODE_KEY = "notesmith:notebook-todos-mode";
+
+const readNotebookTodosMode = (): NotebookTodosMode => {
+  try {
+    const saved = window.localStorage.getItem(NOTEBOOK_TODOS_MODE_KEY);
+    if (saved === "minimized" || saved === "standard" || saved === "maximized") return saved;
+  } catch {
+    // Storage may be unavailable in restricted browser contexts.
+  }
+  return "closed";
+};
 
 const richTextToPlainText = (value: string) => {
   if (!value) return "";
@@ -96,8 +110,12 @@ export const NotebookWorkspace = ({
   onOpenInNotes,
 }: NotebookWorkspaceProps) => {
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const todosOverlayRef = useRef<HTMLElement | null>(null);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
-  const [isTodosOpen, setIsTodosOpen] = useState(false);
+  const [todosMode, setTodosMode] = useState<NotebookTodosMode>(readNotebookTodosMode);
+  const [lastExpandedTodosMode, setLastExpandedTodosMode] = useState<"standard" | "maximized">(
+    todosMode === "maximized" ? "maximized" : "standard",
+  );
   const [toolsTab, setToolsTab] = useState<"capture" | "output">("capture");
   const isDatedNotebookPage = activeSession.captureMode === "quick-note";
   const titleText = isDatedNotebookPage ? getNotebookTitleText(activeSession) : activeSession.title;
@@ -122,6 +140,14 @@ export const NotebookWorkspace = ({
     editor.dataset.empty = richTextToPlainText(activeSession.manualNotes) ? "false" : "true";
   }, [activeSession.id, activeSession.manualNotes]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NOTEBOOK_TODOS_MODE_KEY, todosMode);
+    } catch {
+      // The panel still works when storage is unavailable.
+    }
+  }, [todosMode]);
+
   const updateManualNotes = (html: string) => {
     const normalizedHtml = normalizeNotebookHtml(html);
     if (editorRef.current) {
@@ -138,7 +164,7 @@ export const NotebookWorkspace = ({
   };
 
   const generateOutput = () => {
-    setIsTodosOpen(false);
+    setTodosMode((current) => current === "standard" || current === "maximized" ? "minimized" : current);
     setIsToolsOpen(true);
     setToolsTab("output");
     onGenerateOutput();
@@ -147,21 +173,42 @@ export const NotebookWorkspace = ({
   const toggleTools = () => {
     setIsToolsOpen((current) => {
       const next = !current;
-      if (next) setIsTodosOpen(false);
+      if (next) setTodosMode((mode) => mode === "standard" || mode === "maximized" ? "minimized" : mode);
       return next;
     });
   };
 
   const toggleTodos = () => {
-    setIsTodosOpen((current) => {
-      const next = !current;
-      if (next) setIsToolsOpen(false);
-      return next;
+    setIsToolsOpen(false);
+    setTodosMode((current) => current === "standard" || current === "maximized" ? "minimized" : lastExpandedTodosMode);
+  };
+
+  const expandTodos = (mode: "standard" | "maximized") => {
+    setIsToolsOpen(false);
+    setLastExpandedTodosMode(mode);
+    setTodosMode(mode);
+  };
+
+  const minimizeTodos = () => {
+    setTodosMode((current) => {
+      if (current === "standard" || current === "maximized") {
+        setLastExpandedTodosMode(current);
+        return "minimized";
+      }
+      return current;
     });
   };
 
+  const handleWorkspacePointerDownCapture = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (todosMode !== "standard" && todosMode !== "maximized") return;
+    const target = event.target as Node;
+    if (todosOverlayRef.current?.contains(target)) return;
+    if (target instanceof Element && target.closest("[data-notebook-todos-control]")) return;
+    minimizeTodos();
+  };
+
   return (
-    <div className="notebook-workspace" data-side-panel-open={isToolsOpen || isTodosOpen}>
+    <div className="notebook-workspace" data-side-panel-open={isToolsOpen} onPointerDownCapture={handleWorkspacePointerDownCapture}>
       <aside className="notebook-list-pane" aria-label="Notebook pages">
         <div className="notebook-list-header">
           <div>
@@ -265,7 +312,7 @@ export const NotebookWorkspace = ({
         <RichTextCommandMenu editorRef={editorRef} onContentChange={updateManualNotes} />
       </section>
 
-      <aside className="notebook-tools-pane" data-open={isToolsOpen || isTodosOpen}>
+      <aside className="notebook-tools-pane" data-open={isToolsOpen}>
         <div className="notebook-side-toggle-rail">
           <button
             className="notebook-tools-toggle"
@@ -282,13 +329,14 @@ export const NotebookWorkspace = ({
           <button
             className="notebook-tools-toggle"
             type="button"
-            data-active={isTodosOpen}
-            aria-expanded={isTodosOpen}
-            aria-controls="notebook-todos-content"
-            aria-label={isTodosOpen ? "Collapse notebook todos" : "Expand notebook todos"}
+            data-active={todosMode !== "closed"}
+            data-notebook-todos-control
+            aria-expanded={todosMode === "standard" || todosMode === "maximized"}
+            aria-controls="notebook-todos-overlay"
+            aria-label={todosMode === "standard" || todosMode === "maximized" ? "Minimize notebook todos" : "Open notebook todos"}
             onClick={toggleTodos}
           >
-            <span>{isTodosOpen ? ">" : "<"}</span>
+            <span>{todosMode === "standard" || todosMode === "maximized" ? ">" : "<"}</span>
             <strong>Todos</strong>
           </button>
         </div>
@@ -333,17 +381,49 @@ export const NotebookWorkspace = ({
             )}
           </div>
         ) : null}
-        {isTodosOpen ? (
-          <div id="notebook-todos-content" className="notebook-tools-content notebook-todos-content">
-            <NotebookTodosPanel
-              todos={todos}
-              onAddTodo={onAddTodo}
-              onSaveTodo={onSaveTodo}
-              onAddNote={onAddNoteForTodo}
-            />
-          </div>
-        ) : null}
       </aside>
+
+      {todosMode === "standard" || todosMode === "maximized" ? (
+        <section
+          id="notebook-todos-overlay"
+          ref={todosOverlayRef}
+          className="notebook-todos-overlay"
+          data-size={todosMode}
+          aria-label="Todos workspace"
+        >
+          <NotebookTodosPanel
+            todos={todos}
+            onAddTodo={onAddTodo}
+            onSaveTodo={onSaveTodo}
+            onAddNote={onAddNoteForTodo}
+            headerActions={(
+              <div className="notebook-todos-window-actions">
+                <button className="small-button" type="button" onClick={minimizeTodos}>Minimize</button>
+                <button
+                  className="small-button"
+                  type="button"
+                  onClick={() => expandTodos(todosMode === "maximized" ? "standard" : "maximized")}
+                >
+                  {todosMode === "maximized" ? "Restore" : "Maximize"}
+                </button>
+                <button className="small-button" type="button" onClick={() => setTodosMode("closed")}>Close</button>
+              </div>
+            )}
+          />
+        </section>
+      ) : null}
+
+      {todosMode === "minimized" ? (
+        <button
+          className="notebook-todos-launcher"
+          type="button"
+          data-notebook-todos-control
+          onClick={() => expandTodos(lastExpandedTodosMode)}
+        >
+          <strong>Todos</strong>
+          <span>{todos.filter((todo) => !todo.isDone).length} open</span>
+        </button>
+      ) : null}
     </div>
   );
 };

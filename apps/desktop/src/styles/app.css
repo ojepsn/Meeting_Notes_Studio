@@ -1076,6 +1076,63 @@ select {
   box-shadow: none;
 }
 
+.notebook-todos-overlay {
+  position: absolute;
+  top: 4%;
+  right: 64px;
+  z-index: 24;
+  width: min(760px, calc(100% - 104px));
+  height: min(78%, 760px);
+  min-height: 430px;
+  overflow: hidden;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 20px;
+  background: var(--app-surface);
+  box-shadow: 0 26px 72px color-mix(in srgb, var(--app-text) 24%, transparent 76%);
+  animation: notebook-todos-enter 180ms ease-out both;
+}
+
+.notebook-todos-overlay[data-size="maximized"] {
+  top: 1.25rem;
+  right: 64px;
+  bottom: 1.25rem;
+  width: min(78%, 1180px);
+  height: auto;
+}
+
+@keyframes notebook-todos-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.notebook-todos-launcher {
+  position: absolute;
+  right: 64px;
+  bottom: 1rem;
+  z-index: 23;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.62rem 0.85rem;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 999px;
+  background: var(--app-accent);
+  color: var(--app-accent-contrast);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--app-text) 18%, transparent 82%);
+  cursor: pointer;
+}
+
+.notebook-todos-launcher span {
+  opacity: 0.82;
+  font-size: 0.7rem;
+}
+
 .notebook-todos-section {
   display: flex;
   flex: 1 1 auto;
@@ -1090,19 +1147,47 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
-  padding: 0.7rem 0.8rem;
+  min-height: 54px;
+  padding: 0.65rem 0.8rem;
   color: var(--app-text);
   font-size: 0.82rem;
   font-weight: 800;
   border-bottom: 1px solid var(--app-border);
 }
 
+.notebook-todos-header > div:first-child,
+.notebook-todos-window-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.notebook-todos-window-actions {
+  justify-content: flex-end;
+}
+
+.notebook-todos-window-actions button {
+  min-height: 30px;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.68rem;
+}
+
 .notebook-todos-body {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.65rem;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
-  padding: 0 0.75rem 0.85rem;
+  padding: 0.7rem 0.75rem 0.85rem;
+}
+
+.notebook-todos-controls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .notebook-todo-add-row {
@@ -1113,27 +1198,111 @@ select {
 
 .notebook-todo-add-row input,
 .notebook-todo-add-row button,
-.notebook-todo-sort select {
+.notebook-todo-search input {
   min-height: 34px;
   padding: 0.36rem 0.52rem;
   font-size: 0.75rem;
 }
 
-.notebook-todo-sort {
+.notebook-todo-search {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 42px minmax(0, 1fr);
   align-items: center;
   gap: 0.5rem;
-  margin-top: 0.55rem;
   color: var(--app-muted);
   font-size: 0.72rem;
+}
+
+.notebook-todo-control-row,
+.notebook-todo-sort-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.notebook-todo-choice-group {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.28rem 0.4rem 0.38rem;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+}
+
+.notebook-todo-choice-group legend {
+  padding: 0 0.22rem;
+  color: var(--app-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.notebook-todo-choice-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.24rem;
+  padding: 0.2rem 0.32rem;
+  border-radius: 999px;
+  color: var(--app-muted);
+  font-size: 0.67rem;
+  white-space: nowrap;
+}
+
+.notebook-todo-choice-group label:has(input:checked) {
+  background: var(--app-accent-soft);
+  color: var(--app-text);
+}
+
+.notebook-todo-choice-group input {
+  margin: 0;
+}
+
+.notebook-todos-work-area {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(235px, 0.75fr) minmax(300px, 1.25fr);
+  gap: 0.65rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.notebook-todo-list-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--app-surface-soft) 72%, transparent 28%);
+}
+
+.notebook-todo-results-row {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  min-height: 36px;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--app-border);
+  font-size: 0.7rem;
 }
 
 .notebook-todo-list {
   display: flex;
   flex-direction: column;
   gap: 0.28rem;
-  margin-top: 0.55rem;
+  min-height: 0;
+  margin: 0;
+  padding: 0.4rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .notebook-todo-row {
@@ -1149,6 +1318,23 @@ select {
 .notebook-todo-row[data-selected="true"] {
   border-color: var(--app-accent-border);
   background: var(--app-accent-soft);
+}
+
+.notebook-todo-row[data-completed="true"] {
+  border-color: color-mix(in srgb, var(--app-border) 72%, transparent 28%);
+  background: color-mix(in srgb, var(--app-surface-soft) 45%, transparent 55%);
+  opacity: 0.58;
+}
+
+.notebook-todo-row[data-completed="true"] > button strong,
+.notebook-todo-row[data-completed="true"] > button span {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.notebook-todo-row[data-completed="true"][data-selected="true"] {
+  border-color: var(--app-accent-border);
+  opacity: 0.72;
 }
 
 .notebook-todo-row > input {
@@ -1188,11 +1374,33 @@ select {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
-  margin-top: 0.7rem;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
   padding: 0.7rem;
   border: 1px solid var(--app-accent-border);
   border-radius: 12px;
   background: var(--app-surface);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.notebook-todo-empty-editor {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-content: center;
+  padding: 2rem;
+  border: 1px dashed var(--app-border);
+  border-radius: 12px;
+  color: var(--app-muted);
+  text-align: center;
+}
+
+.notebook-todo-empty-editor p {
+  max-width: 260px;
+  margin: 0.35rem 0 0;
+  font-size: 0.76rem;
 }
 
 .notebook-todo-editor .field {
