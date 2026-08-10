@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { SessionRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { NotebookTodosPanel } from "./NotebookTodosPanel";
@@ -11,6 +11,44 @@ const NOTEBOOK_BLOCK_COMMANDS = [
 ] as const;
 
 type NotebookTodosMode = "closed" | "minimized" | "standard" | "maximized";
+type ExpandedNotebookTodosMode = Extract<NotebookTodosMode, "standard" | "maximized">;
+type TodosResizeEdge = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
+
+const TODOS_RESIZE_EDGES: TodosResizeEdge[] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
+
+interface TodosDragState {
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  startLeft: number;
+  startTop: number;
+  panelWidth: number;
+  panelHeight: number;
+  workspaceLeft: number;
+  workspaceTop: number;
+  workspaceRight: number;
+  workspaceBottom: number;
+  originX: number;
+  originY: number;
+}
+
+interface TodosResizeState {
+  pointerId: number;
+  edge: TodosResizeEdge;
+  mode: ExpandedNotebookTodosMode;
+  startClientX: number;
+  startClientY: number;
+  startLeft: number;
+  startTop: number;
+  startWidth: number;
+  startHeight: number;
+  workspaceLeft: number;
+  workspaceTop: number;
+  workspaceRight: number;
+  workspaceBottom: number;
+  originX: number;
+  originY: number;
+}
 
 const NOTEBOOK_TODOS_MODE_KEY = "notesmith:notebook-todos-mode";
 
@@ -78,6 +116,7 @@ interface NotebookWorkspaceProps {
   onDelete: (sessionId: string) => void;
   onAddTodo: (description: string) => void;
   onSaveTodo: (todo: TodoRecord) => void;
+  onDeleteTodo: (todoId: string) => void;
   onAddNoteForTodo: (todoId: string) => void;
   onChange: (session: SessionRecord) => void;
   onToggleRecording: () => void;
@@ -101,6 +140,7 @@ export const NotebookWorkspace = ({
   onDelete,
   onAddTodo,
   onSaveTodo,
+  onDeleteTodo,
   onAddNoteForTodo,
   onChange,
   onToggleRecording,
@@ -109,9 +149,19 @@ export const NotebookWorkspace = ({
   onGenerateOutput,
   onOpenInNotes,
 }: NotebookWorkspaceProps) => {
+  const workspaceRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const todosOverlayRef = useRef<HTMLElement | null>(null);
+  const todosDragRef = useRef<TodosDragState | null>(null);
+  const todosResizeRef = useRef<TodosResizeState | null>(null);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const [isTodosDragging, setIsTodosDragging] = useState(false);
+  const [isTodosResizing, setIsTodosResizing] = useState(false);
+  const [todosPosition, setTodosPosition] = useState({ x: 0, y: 0 });
+  const [todosSizes, setTodosSizes] = useState<Record<ExpandedNotebookTodosMode, { width: number; height: number } | null>>({
+    standard: null,
+    maximized: null,
+  });
   const [todosMode, setTodosMode] = useState<NotebookTodosMode>(readNotebookTodosMode);
   const [lastExpandedTodosMode, setLastExpandedTodosMode] = useState<"standard" | "maximized">(
     todosMode === "maximized" ? "maximized" : "standard",
@@ -207,8 +257,180 @@ export const NotebookWorkspace = ({
     minimizeTodos();
   };
 
+  const startTodosDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const target = event.target as Element;
+    if (target.closest("button, input, select, textarea, [contenteditable='true']")) return;
+    const overlay = todosOverlayRef.current;
+    const workspace = workspaceRef.current;
+    if (!overlay || !workspace) return;
+    const panelRect = overlay.getBoundingClientRect();
+    const workspaceRect = workspace.getBoundingClientRect();
+    todosDragRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startLeft: panelRect.left,
+      startTop: panelRect.top,
+      panelWidth: panelRect.width,
+      panelHeight: panelRect.height,
+      workspaceLeft: workspaceRect.left,
+      workspaceTop: workspaceRect.top,
+      workspaceRight: workspaceRect.right,
+      workspaceBottom: workspaceRect.bottom,
+      originX: todosPosition.x,
+      originY: todosPosition.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    setIsTodosDragging(true);
+  };
+
+  const moveTodosDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const drag = todosDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const desiredLeft = drag.startLeft + event.clientX - drag.startClientX;
+    const desiredTop = drag.startTop + event.clientY - drag.startClientY;
+    const minLeft = drag.workspaceLeft + 8;
+    const maxLeft = Math.max(minLeft, drag.workspaceRight - drag.panelWidth - 8);
+    const minTop = drag.workspaceTop + 8;
+    const maxTop = Math.max(minTop, drag.workspaceBottom - drag.panelHeight - 8);
+    const boundedLeft = Math.min(Math.max(desiredLeft, minLeft), maxLeft);
+    const boundedTop = Math.min(Math.max(desiredTop, minTop), maxTop);
+    setTodosPosition({
+      x: drag.originX + boundedLeft - drag.startLeft,
+      y: drag.originY + boundedTop - drag.startTop,
+    });
+  };
+
+  const endTodosDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const drag = todosDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    todosDragRef.current = null;
+    setIsTodosDragging(false);
+  };
+
+  const startTodosResize = (edge: TodosResizeEdge, event: ReactPointerEvent<HTMLElement>) => {
+    if (todosMode !== "standard" && todosMode !== "maximized") return;
+    const overlay = todosOverlayRef.current;
+    const workspace = workspaceRef.current;
+    if (!overlay || !workspace) return;
+    const panelRect = overlay.getBoundingClientRect();
+    const workspaceRect = workspace.getBoundingClientRect();
+    todosResizeRef.current = {
+      pointerId: event.pointerId,
+      edge,
+      mode: todosMode,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startLeft: panelRect.left,
+      startTop: panelRect.top,
+      startWidth: panelRect.width,
+      startHeight: panelRect.height,
+      workspaceLeft: workspaceRect.left,
+      workspaceTop: workspaceRect.top,
+      workspaceRight: workspaceRect.right,
+      workspaceBottom: workspaceRect.bottom,
+      originX: todosPosition.x,
+      originY: todosPosition.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    setIsTodosResizing(true);
+  };
+
+  const moveTodosResize = (event: ReactPointerEvent<HTMLElement>) => {
+    const resize = todosResizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - resize.startClientX;
+    const deltaY = event.clientY - resize.startClientY;
+    const startRight = resize.startLeft + resize.startWidth;
+    const startBottom = resize.startTop + resize.startHeight;
+    const minimumWidth = Math.min(520, resize.workspaceRight - resize.workspaceLeft - 16);
+    const minimumHeight = Math.min(360, resize.workspaceBottom - resize.workspaceTop - 16);
+    let left = resize.startLeft;
+    let right = startRight;
+    let top = resize.startTop;
+    let bottom = startBottom;
+
+    if (resize.edge.includes("e")) {
+      right = Math.min(Math.max(startRight + deltaX, left + minimumWidth), resize.workspaceRight - 8);
+    }
+    if (resize.edge.includes("w")) {
+      left = Math.max(Math.min(resize.startLeft + deltaX, right - minimumWidth), resize.workspaceLeft + 8);
+    }
+    if (resize.edge.includes("s")) {
+      bottom = Math.min(Math.max(startBottom + deltaY, top + minimumHeight), resize.workspaceBottom - 8);
+    }
+    if (resize.edge.includes("n")) {
+      top = Math.max(Math.min(resize.startTop + deltaY, bottom - minimumHeight), resize.workspaceTop + 8);
+    }
+
+    const nextWidth = right - left;
+    const nextHeight = bottom - top;
+    setTodosSizes((current) => ({
+      ...current,
+      [resize.mode]: { width: nextWidth, height: nextHeight },
+    }));
+    setTodosPosition({
+      // The overlay is right-anchored, so compensate for the left shift caused by width changes.
+      x: resize.originX + left - resize.startLeft + nextWidth - resize.startWidth,
+      y: resize.originY + top - resize.startTop,
+    });
+  };
+
+  const endTodosResize = (event: ReactPointerEvent<HTMLElement>) => {
+    const resize = todosResizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    todosResizeRef.current = null;
+    setIsTodosResizing(false);
+  };
+
+  const constrainTodosToWorkspace = () => {
+    const overlay = todosOverlayRef.current;
+    const workspace = workspaceRef.current;
+    if (!overlay || !workspace) return;
+    const panelRect = overlay.getBoundingClientRect();
+    const workspaceRect = workspace.getBoundingClientRect();
+    const minLeft = workspaceRect.left + 8;
+    const maxLeft = Math.max(minLeft, workspaceRect.right - panelRect.width - 8);
+    const minTop = workspaceRect.top + 8;
+    const maxTop = Math.max(minTop, workspaceRect.bottom - panelRect.height - 8);
+    const boundedLeft = Math.min(Math.max(panelRect.left, minLeft), maxLeft);
+    const boundedTop = Math.min(Math.max(panelRect.top, minTop), maxTop);
+    const correctionX = boundedLeft - panelRect.left;
+    const correctionY = boundedTop - panelRect.top;
+    if (!correctionX && !correctionY) return;
+    setTodosPosition((current) => ({ x: current.x + correctionX, y: current.y + correctionY }));
+  };
+
+  useEffect(() => {
+    if (todosMode !== "standard" && todosMode !== "maximized") return;
+    const frame = window.requestAnimationFrame(constrainTodosToWorkspace);
+    window.addEventListener("resize", constrainTodosToWorkspace);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", constrainTodosToWorkspace);
+    };
+  }, [todosMode]);
+
+  const activeTodosSize = todosMode === "standard" || todosMode === "maximized" ? todosSizes[todosMode] : null;
+
   return (
-    <div className="notebook-workspace" data-side-panel-open={isToolsOpen} onPointerDownCapture={handleWorkspacePointerDownCapture}>
+    <div
+      ref={workspaceRef}
+      className="notebook-workspace"
+      data-side-panel-open={isToolsOpen}
+      onPointerDownCapture={handleWorkspacePointerDownCapture}
+      onPointerMove={moveTodosResize}
+      onPointerUp={endTodosResize}
+      onPointerCancel={endTodosResize}
+    >
       <aside className="notebook-list-pane" aria-label="Notebook pages">
         <div className="notebook-list-header">
           <div>
@@ -388,14 +610,24 @@ export const NotebookWorkspace = ({
           id="notebook-todos-overlay"
           ref={todosOverlayRef}
           className="notebook-todos-overlay"
+          data-dragging={isTodosDragging}
+          data-resizing={isTodosResizing}
           data-size={todosMode}
           aria-label="Todos workspace"
+          style={{
+            translate: `${todosPosition.x}px ${todosPosition.y}px`,
+            ...(activeTodosSize ? { width: `${activeTodosSize.width}px`, height: `${activeTodosSize.height}px` } : {}),
+          } as CSSProperties}
         >
           <NotebookTodosPanel
             todos={todos}
             onAddTodo={onAddTodo}
             onSaveTodo={onSaveTodo}
+            onDeleteTodo={onDeleteTodo}
             onAddNote={onAddNoteForTodo}
+            onHeaderPointerDown={startTodosDrag}
+            onHeaderPointerMove={moveTodosDrag}
+            onHeaderPointerUp={endTodosDrag}
             headerActions={(
               <div className="notebook-todos-window-actions">
                 <button className="small-button" type="button" onClick={minimizeTodos}>Minimize</button>
@@ -410,6 +642,18 @@ export const NotebookWorkspace = ({
               </div>
             )}
           />
+          {TODOS_RESIZE_EDGES.map((edge) => (
+            <span
+              aria-hidden="true"
+              className="notebook-todos-resize-handle"
+              data-edge={edge}
+              key={edge}
+              onPointerDown={(event) => startTodosResize(edge, event)}
+              onPointerMove={moveTodosResize}
+              onPointerUp={endTodosResize}
+              onPointerCancel={endTodosResize}
+            />
+          ))}
         </section>
       ) : null}
 

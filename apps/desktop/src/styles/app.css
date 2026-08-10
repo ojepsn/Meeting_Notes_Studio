@@ -1100,6 +1100,97 @@ select {
   height: auto;
 }
 
+.notebook-todos-overlay[data-resizing="true"] {
+  user-select: none;
+}
+
+.notebook-todos-resize-handle {
+  position: absolute;
+  z-index: 30;
+  display: block;
+  touch-action: none;
+}
+
+.notebook-todos-resize-handle[data-edge="n"],
+.notebook-todos-resize-handle[data-edge="s"] {
+  right: 14px;
+  left: 14px;
+  height: 9px;
+  cursor: ns-resize;
+}
+
+.notebook-todos-resize-handle[data-edge="n"] {
+  top: 0;
+}
+
+.notebook-todos-resize-handle[data-edge="s"] {
+  bottom: 0;
+}
+
+.notebook-todos-resize-handle[data-edge="e"],
+.notebook-todos-resize-handle[data-edge="w"] {
+  top: 14px;
+  bottom: 14px;
+  width: 9px;
+  cursor: ew-resize;
+}
+
+.notebook-todos-resize-handle[data-edge="e"] {
+  right: 0;
+}
+
+.notebook-todos-resize-handle[data-edge="w"] {
+  left: 0;
+}
+
+.notebook-todos-resize-handle[data-edge="ne"],
+.notebook-todos-resize-handle[data-edge="se"],
+.notebook-todos-resize-handle[data-edge="sw"],
+.notebook-todos-resize-handle[data-edge="nw"] {
+  width: 16px;
+  height: 16px;
+}
+
+.notebook-todos-resize-handle[data-edge="ne"],
+.notebook-todos-resize-handle[data-edge="sw"] {
+  cursor: nesw-resize;
+}
+
+.notebook-todos-resize-handle[data-edge="nw"],
+.notebook-todos-resize-handle[data-edge="se"] {
+  cursor: nwse-resize;
+}
+
+.notebook-todos-resize-handle[data-edge="n"]:hover,
+.notebook-todos-resize-handle[data-edge="s"]:hover {
+  background: color-mix(in srgb, var(--app-accent) 40%, transparent 60%);
+}
+
+.notebook-todos-resize-handle[data-edge="e"]:hover,
+.notebook-todos-resize-handle[data-edge="w"]:hover {
+  background: color-mix(in srgb, var(--app-accent) 40%, transparent 60%);
+}
+
+.notebook-todos-resize-handle[data-edge="ne"] {
+  top: 0;
+  right: 0;
+}
+
+.notebook-todos-resize-handle[data-edge="se"] {
+  right: 0;
+  bottom: 0;
+}
+
+.notebook-todos-resize-handle[data-edge="sw"] {
+  bottom: 0;
+  left: 0;
+}
+
+.notebook-todos-resize-handle[data-edge="nw"] {
+  top: 0;
+  left: 0;
+}
+
 @keyframes notebook-todos-enter {
   from {
     opacity: 0;
@@ -1155,6 +1246,24 @@ select {
   border-bottom: 1px solid var(--app-border);
 }
 
+.notebook-todos-header[data-drag-handle] {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.notebook-todos-overlay[data-dragging="true"] .notebook-todos-header[data-drag-handle] {
+  cursor: grabbing;
+}
+
+.notebook-todos-drag-grip {
+  color: var(--app-muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  transform: rotate(90deg);
+}
+
 .notebook-todos-header > div:first-child,
 .notebook-todos-window-actions {
   display: flex;
@@ -1164,6 +1273,7 @@ select {
 
 .notebook-todos-window-actions {
   justify-content: flex-end;
+  cursor: default;
 }
 
 .notebook-todos-window-actions button {
@@ -1296,20 +1406,23 @@ select {
 
 .notebook-todo-list {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: 0.28rem;
+  gap: 0.12rem;
+  width: 100%;
   min-height: 0;
   margin: 0;
   padding: 0.4rem;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .notebook-todo-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.24rem;
   border: 1px solid transparent;
   border-radius: 9px;
   background: color-mix(in srgb, var(--app-surface) 74%, transparent 26%);
@@ -1338,19 +1451,42 @@ select {
 }
 
 .notebook-todo-row > input {
-  margin-left: 0.55rem;
+  margin-left: 0.4rem;
 }
 
-.notebook-todo-row > button {
+.notebook-todo-select {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0.48rem 0.5rem 0.48rem 0;
+  gap: 0.08rem;
+  padding: 0.3rem 0.38rem 0.3rem 0;
   border: 0;
   background: transparent;
   color: var(--app-text);
   text-align: left;
   cursor: pointer;
+}
+
+.notebook-todo-delete {
+  align-self: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--app-muted);
+  font-size: 0.62rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.notebook-todo-delete:hover,
+.notebook-todo-delete:focus-visible {
+  border-color: color-mix(in srgb, var(--app-danger) 45%, var(--app-border) 55%);
+  background: color-mix(in srgb, var(--app-danger) 14%, transparent 86%);
+  color: var(--app-danger);
 }
 
 .notebook-todo-row strong,
@@ -1361,13 +1497,45 @@ select {
 }
 
 .notebook-todo-row strong {
-  font-size: 0.76rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.71rem;
 }
 
 .notebook-todo-row span {
   color: var(--app-muted);
-  font-size: 0.66rem;
+  font-size: 0.61rem;
   text-transform: capitalize;
+}
+
+.notebook-todo-row-main {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  color: var(--app-text) !important;
+}
+
+.notebook-todo-priority {
+  flex: 0 0 auto;
+  padding: 0.08rem 0.28rem;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: var(--app-surface-soft);
+  font-size: 0.55rem !important;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.notebook-todo-row-meta {
+  width: 100%;
+}
+
+.notebook-todo-add-note-button {
+  align-self: center;
+  min-height: 34px;
+  padding: 0.36rem 0.7rem;
+  white-space: nowrap;
 }
 
 .notebook-todo-editor {
@@ -1405,6 +1573,22 @@ select {
 
 .notebook-todo-editor .field {
   gap: 0.25rem;
+}
+
+.notebook-todo-details-field {
+  flex: 1 1 auto;
+  min-height: 150px;
+}
+
+.notebook-todo-details-field .todo-details-editor {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 120px;
+}
+
+.notebook-todo-details-field .todo-details-rich-text {
+  flex: 1 1 auto;
 }
 
 .notebook-todo-checks {

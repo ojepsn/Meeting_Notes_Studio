@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { TodoPriority, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { getTodoPriority } from "../../../lib/tasks/model";
@@ -20,8 +20,12 @@ interface NotebookTodosPanelProps {
   todos: TodoRecord[];
   onAddTodo: (description: string) => void;
   onSaveTodo: (todo: TodoRecord) => void;
+  onDeleteTodo: (todoId: string) => void;
   onAddNote: (todoId: string) => void;
   headerActions?: ReactNode;
+  onHeaderPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
+  onHeaderPointerMove?: (event: ReactPointerEvent<HTMLElement>) => void;
+  onHeaderPointerUp?: (event: ReactPointerEvent<HTMLElement>) => void;
 }
 
 export interface NotebookTodoFilters {
@@ -87,7 +91,17 @@ export const applyNotebookTodoCompletionAnchors = (todos: TodoRecord[], anchors:
   return ordered;
 };
 
-export const NotebookTodosPanel = ({ todos, onAddTodo, onSaveTodo, onAddNote, headerActions }: NotebookTodosPanelProps) => {
+export const NotebookTodosPanel = ({
+  todos,
+  onAddTodo,
+  onSaveTodo,
+  onDeleteTodo,
+  onAddNote,
+  headerActions,
+  onHeaderPointerDown,
+  onHeaderPointerMove,
+  onHeaderPointerUp,
+}: NotebookTodosPanelProps) => {
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const [sortField, setSortField] = useState<"priority" | "title" | "created" | "updated" | "due">("priority");
@@ -155,8 +169,16 @@ export const NotebookTodosPanel = ({ todos, onAddTodo, onSaveTodo, onAddNote, he
 
   return (
     <section className="notebook-todos-section">
-      <header className="notebook-todos-header">
+      <header
+        className="notebook-todos-header"
+        data-drag-handle
+        onPointerDown={onHeaderPointerDown}
+        onPointerMove={onHeaderPointerMove}
+        onPointerUp={onHeaderPointerUp}
+        onPointerCancel={onHeaderPointerUp}
+      >
         <div>
+          <span className="notebook-todos-drag-grip" aria-hidden="true">::</span>
           <strong>Todos</strong>
           <span className="status-chip">{openTodoCount} open</span>
         </div>
@@ -213,6 +235,14 @@ export const NotebookTodosPanel = ({ todos, onAddTodo, onSaveTodo, onAddNote, he
                 </label>
               ))}
             </fieldset>
+            <button
+              className="primary-button notebook-todo-add-note-button"
+              type="button"
+              disabled={!selectedTodo}
+              onClick={() => selectedTodo && onAddNote(selectedTodo.id)}
+            >
+              Add note
+            </button>
           </div>
 
           <div className="notebook-todo-sort-controls">
@@ -279,9 +309,25 @@ export const NotebookTodosPanel = ({ todos, onAddTodo, onSaveTodo, onAddNote, he
                     checked={todo.isDone}
                     onChange={(event) => setTodoDone(todo, event.target.checked)}
                   />
-                  <button type="button" onClick={() => setSelectedTodoId(todo.id)}>
-                    <strong>{todo.description}</strong>
-                    <span>{getTodoPriority(todo)}{todo.isUrgent ? " | Urgent" : ""}{todo.doOn ? ` | ${todo.doOn}` : ""}</span>
+                  <button className="notebook-todo-select" type="button" onClick={() => setSelectedTodoId(todo.id)}>
+                    <span className="notebook-todo-row-main">
+                      <strong>{todo.description}</strong>
+                      <span className="notebook-todo-priority">{getTodoPriority(todo)}</span>
+                    </span>
+                    {todo.isUrgent || todo.doOn ? (
+                      <span className="notebook-todo-row-meta">
+                        {todo.isUrgent ? "Urgent" : ""}{todo.isUrgent && todo.doOn ? " | " : ""}{todo.doOn || ""}
+                      </span>
+                    ) : null}
+                  </button>
+                  <button
+                    className="notebook-todo-delete"
+                    type="button"
+                    aria-label={`Delete ${todo.description}`}
+                    title="Delete todo"
+                    onClick={() => onDeleteTodo(todo.id)}
+                  >
+                    x
                   </button>
                 </div>
               ))}
@@ -291,7 +337,7 @@ export const NotebookTodosPanel = ({ todos, onAddTodo, onSaveTodo, onAddNote, he
 
           {selectedTodo ? (
             <div className="notebook-todo-editor" data-expanded="true">
-            <div className="field">
+            <div className="field notebook-todo-details-field">
               <label htmlFor="notebook-todo-title">Todo</label>
               <input id="notebook-todo-title" value={selectedTodo.description} onChange={(event) => saveSelected({ description: event.target.value })} />
             </div>
@@ -338,7 +384,6 @@ export const NotebookTodosPanel = ({ todos, onAddTodo, onSaveTodo, onAddNote, he
               />
             </div>
 
-            <button className="primary-button" type="button" onClick={() => onAddNote(selectedTodo.id)}>Add note</button>
             </div>
           ) : (
             <div className="notebook-todo-empty-editor">

@@ -4289,6 +4289,7 @@ export const App = () => {
                 onDelete={(sessionId) => void deleteSession(sessionId)}
                 onAddTodo={(description) => void addTodo(description)}
                 onSaveTodo={(todo) => void saveTodo(todo)}
+                onDeleteTodo={(todoId) => void deleteTodo(todoId)}
                 onAddNoteForTodo={(todoId) => {
                   void ensureSessionForTodo(todoId).then((sessionId) => {
                     if (!sessionId) return;

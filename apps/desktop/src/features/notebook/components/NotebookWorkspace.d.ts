@@ -17,6 +17,7 @@ interface NotebookWorkspaceProps {
     onDelete: (sessionId: string) => void;
     onAddTodo: (description: string) => void;
     onSaveTodo: (todo: TodoRecord) => void;
+    onDeleteTodo: (todoId: string) => void;
     onAddNoteForTodo: (todoId: string) => void;
     onChange: (session: SessionRecord) => void;
     onToggleRecording: () => void;
@@ -25,5 +26,5 @@ interface NotebookWorkspaceProps {
     onGenerateOutput: () => void;
     onOpenInNotes: (view: "capture" | "output") => void;
 }
-export declare const NotebookWorkspace: ({ sessions, todos, activeSession, isRecordingAudio, isTranscribingAudio, isGenerating, recordingStatusNote, outputContent, onSelect, onCreate, onDelete, onAddTodo, onSaveTodo, onAddNoteForTodo, onChange, onToggleRecording, onUploadAudio, onTranscribeAudio, onGenerateOutput, onOpenInNotes, }: NotebookWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const NotebookWorkspace: ({ sessions, todos, activeSession, isRecordingAudio, isTranscribingAudio, isGenerating, recordingStatusNote, outputContent, onSelect, onCreate, onDelete, onAddTodo, onSaveTodo, onDeleteTodo, onAddNoteForTodo, onChange, onToggleRecording, onUploadAudio, onTranscribeAudio, onGenerateOutput, onOpenInNotes, }: NotebookWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};
