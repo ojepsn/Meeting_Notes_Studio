@@ -1,5 +1,7 @@
 const OPENAI_COMPARE_MODELS_URL = "https://developers.openai.com/api/docs/models/compare";
 const OPENAI_MODELS_URL = "https://developers.openai.com/api/docs/models/text";
+const OPENAI_ALL_MODELS_URL = "https://developers.openai.com/api/docs/models/all";
+const OPENAI_MODEL_CATALOG_URL = "https://developers.openai.com/api/docs/models";
 const OPENAI_LATEST_MODEL_URL = "https://developers.openai.com/api/docs/guides/latest-model";
 const OPENAI_GPT_TRANSCRIBE_URL = "https://developers.openai.com/api/docs/models/gpt-transcribe";
 const OPENAI_GPT_4O_TRANSCRIBE_URL = "https://developers.openai.com/api/docs/models/gpt-4o-transcribe";
@@ -7,6 +9,8 @@ const OPENAI_GPT_4O_MINI_TRANSCRIBE_URL = "https://developers.openai.com/api/doc
 const OPENAI_DOC_URLS = [
     OPENAI_COMPARE_MODELS_URL,
     OPENAI_MODELS_URL,
+    OPENAI_ALL_MODELS_URL,
+    OPENAI_MODEL_CATALOG_URL,
     OPENAI_LATEST_MODEL_URL,
     OPENAI_GPT_TRANSCRIBE_URL,
     OPENAI_GPT_4O_TRANSCRIBE_URL,
@@ -30,7 +34,7 @@ const DEFAULT_TEXT_MODEL_PRICING = [
         inputPer1MTokens: 5,
         cachedInputPer1MTokens: 0.5,
         outputPer1MTokens: 30,
-        pricingDate: "2026-08-05",
+        pricingDate: "2026-08-10",
         summary: "Frontier model for complex professional work.",
         recommendedFor: "Flagship drafting, coding, restructuring, and high-stakes note generation where strongest quality matters most.",
         recommendation: "Choose this when you want OpenAI's flagship GPT-5.6 capability and are comfortable paying more for it.",
@@ -41,10 +45,10 @@ const DEFAULT_TEXT_MODEL_PRICING = [
     {
         id: "gpt-5.6-terra",
         label: "GPT-5.6 Terra",
-        inputPer1MTokens: 2.5,
-        cachedInputPer1MTokens: 0.25,
-        outputPer1MTokens: 15,
-        pricingDate: "2026-08-05",
+        inputPer1MTokens: 2,
+        cachedInputPer1MTokens: 0.2,
+        outputPer1MTokens: 12,
+        pricingDate: "2026-08-10",
         summary: "GPT-5.6 model that balances intelligence and cost.",
         recommendedFor: "Default day-to-day note generation, revision, and meeting output when you want strong quality at a lower price than Sol.",
         recommendation: "Use this as the practical default when you want current GPT-5.6 quality without paying frontier rates for every run.",
@@ -55,10 +59,10 @@ const DEFAULT_TEXT_MODEL_PRICING = [
     {
         id: "gpt-5.6-luna",
         label: "GPT-5.6 Luna",
-        inputPer1MTokens: 1,
-        cachedInputPer1MTokens: 0.1,
-        outputPer1MTokens: 6,
-        pricingDate: "2026-08-05",
+        inputPer1MTokens: 0.2,
+        cachedInputPer1MTokens: 0.02,
+        outputPer1MTokens: 1.2,
+        pricingDate: "2026-08-10",
         summary: "GPT-5.6 model optimized for cost-sensitive workloads.",
         recommendedFor: "High-volume drafting, formatting, and lighter transformations where cost efficiency matters more than maximum reasoning strength.",
         recommendation: "Use this for efficient everyday throughput and bulk transformations where you still want a current GPT-5.6 family model.",
@@ -73,7 +77,7 @@ const DEFAULT_TRANSCRIPTION_MODEL_PRICING = [
         label: "GPT Transcribe",
         tokenPer1MTokens: 0,
         perMinute: 0.0045,
-        pricingDate: "2026-08-05",
+        pricingDate: "2026-08-10",
         summary: "High-accuracy speech-to-text model for file and Realtime input transcription.",
         recommendedFor: "Default transcription for uploaded audio, meetings, and desktop capture when you want the current OpenAI transcription default.",
         recommendation: "Use this as the main transcription default unless you have a specific reason to prefer the older GPT-4o transcription models.",
@@ -85,7 +89,7 @@ const DEFAULT_TRANSCRIPTION_MODEL_PRICING = [
         label: "GPT-4o Transcribe",
         tokenPer1MTokens: 2.5,
         perMinute: 0.006,
-        pricingDate: "2026-08-05",
+        pricingDate: "2026-08-10",
         summary: "Speech-to-text model powered by GPT-4o.",
         recommendedFor: "Important recordings where transcript fidelity matters and you want the established GPT-4o transcription behavior.",
         recommendation: "Choose this when you intentionally want GPT-4o transcription rather than the newer GPT Transcribe default.",
@@ -97,7 +101,7 @@ const DEFAULT_TRANSCRIPTION_MODEL_PRICING = [
         label: "GPT-4o mini Transcribe",
         tokenPer1MTokens: 1.25,
         perMinute: 0.003,
-        pricingDate: "2026-08-05",
+        pricingDate: "2026-08-10",
         summary: "Speech-to-text model powered by GPT-4o mini.",
         recommendedFor: "Routine recordings and higher-volume audio workflows where lower transcription cost matters.",
         recommendation: "Choose this when you want the lowest-cost GPT-4o-family transcription option for routine audio.",
@@ -258,7 +262,12 @@ export const normalizeAIModelPricingSnapshot = (snapshot) => {
         return null;
     }
     const defaultSnapshot = createDefaultModelPricingSnapshot();
-    const textModels = DEFAULT_TEXT_MODEL_PRICING.map((fallback) => {
+    const hasOnlyCurrentTextModels = Boolean(snapshot.textModels?.length && snapshot.textModels.every((entry) => CURRENT_TEXT_MODEL_IDS.has(entry?.id)));
+    const savedTextModelIds = new Set((snapshot.textModels || []).map((entry) => normalizeTextModelId(entry?.id)));
+    const textFallbacks = hasOnlyCurrentTextModels
+        ? DEFAULT_TEXT_MODEL_PRICING.filter((entry) => savedTextModelIds.has(entry.id))
+        : DEFAULT_TEXT_MODEL_PRICING;
+    const textModels = textFallbacks.map((fallback) => {
         const current = snapshot.textModels?.find((entry) => normalizeTextModelId(entry?.id) === fallback.id);
         return {
             ...fallback,
@@ -289,7 +298,13 @@ export const normalizeAIModelPricingSnapshot = (snapshot) => {
                 : fallback.outputPer1MTokens,
         };
     });
-    const transcriptionModels = DEFAULT_TRANSCRIPTION_MODEL_PRICING.map((fallback) => {
+    const hasOnlyCurrentTranscriptionModels = Boolean(snapshot.transcriptionModels?.length
+        && snapshot.transcriptionModels.every((entry) => CURRENT_TRANSCRIPTION_MODEL_IDS.has(entry?.id)));
+    const savedTranscriptionModelIds = new Set((snapshot.transcriptionModels || []).map((entry) => normalizeTranscriptionModelId(entry?.id)));
+    const transcriptionFallbacks = hasOnlyCurrentTranscriptionModels
+        ? DEFAULT_TRANSCRIPTION_MODEL_PRICING.filter((entry) => savedTranscriptionModelIds.has(entry.id))
+        : DEFAULT_TRANSCRIPTION_MODEL_PRICING;
+    const transcriptionModels = transcriptionFallbacks.map((fallback) => {
         const current = snapshot.transcriptionModels?.find((entry) => normalizeTranscriptionModelId(entry?.id) === fallback.id);
         return {
             ...fallback,
@@ -322,6 +337,22 @@ export const normalizeAIModelPricingSnapshot = (snapshot) => {
         textModels,
         transcriptionModels,
     };
+};
+export const resolveAvailableTextModelId = (value, snapshot) => {
+    const normalized = normalizeTextModelId(value);
+    return snapshot.textModels.some((entry) => entry.id === normalized)
+        ? normalized
+        : snapshot.textModels.find((entry) => entry.id === DEFAULT_TEXT_MODEL_ID)?.id
+            || snapshot.textModels[0]?.id
+            || DEFAULT_TEXT_MODEL_ID;
+};
+export const resolveAvailableTranscriptionModelId = (value, snapshot) => {
+    const normalized = normalizeTranscriptionModelId(value);
+    return snapshot.transcriptionModels.some((entry) => entry.id === normalized)
+        ? normalized
+        : snapshot.transcriptionModels.find((entry) => entry.id === DEFAULT_TRANSCRIPTION_MODEL_ID)?.id
+            || snapshot.transcriptionModels[0]?.id
+            || DEFAULT_TRANSCRIPTION_MODEL_ID;
 };
 const parseTextModelPricing = (pageText, fallback, pricingDate) => {
     const pattern = new RegExp(`${escapeRegExp(fallback.label)}[\\s\\S]*?Per 1M tokens[\\s\\S]*?Input\\s+\\$([0-9.]+)[\\s\\S]*?Cached Input\\s+\\$([0-9.]+)[\\s\\S]*?Output\\s+\\$([0-9.]+)`, "i");
@@ -388,17 +419,26 @@ const parseTranscriptionModelRecommendation = (pageText, fallback) => {
                 : "Choose this when you want a lower-cost GPT-4o-family transcription option for routine audio.",
     };
 };
-export const parseModelPricingPage = ({ pageText, fetchedAt, currentSnapshot, modelsPageText = "", latestModelPageText = "", speechPageTexts = {}, }) => {
+export const parseModelPricingPage = ({ pageText, fetchedAt, currentSnapshot, modelsPageText = "", latestModelPageText = "", availabilityPageText = "", speechPageTexts = {}, }) => {
     const normalizedPricingText = normalizePageText(pageText);
     const normalizedDocsText = normalizePageText(`${modelsPageText} ${latestModelPageText}`);
+    const normalizedAvailabilityText = normalizePageText(availabilityPageText).toLowerCase();
     const pricingDate = fetchedAt.slice(0, 10);
     const currentTextModels = new Map((currentSnapshot?.textModels || []).map((model) => [model.id, model]));
     const currentTranscriptionModels = new Map((currentSnapshot?.transcriptionModels || []).map((model) => [model.id, model]));
-    const textModels = DEFAULT_TEXT_MODEL_PRICING.map((fallback) => {
+    const advertisedTextModels = normalizedAvailabilityText
+        ? DEFAULT_TEXT_MODEL_PRICING.filter((entry) => normalizedAvailabilityText.includes(entry.id))
+        : DEFAULT_TEXT_MODEL_PRICING;
+    const advertisedTranscriptionModels = normalizedAvailabilityText
+        ? DEFAULT_TRANSCRIPTION_MODEL_PRICING.filter((entry) => normalizedAvailabilityText.includes(entry.id))
+        : DEFAULT_TRANSCRIPTION_MODEL_PRICING;
+    const textModels = (advertisedTextModels.length ? advertisedTextModels : DEFAULT_TEXT_MODEL_PRICING).map((fallback) => {
         const withPricing = parseTextModelPricing(normalizedPricingText, currentTextModels.get(fallback.id) || fallback, pricingDate);
         return parseTextModelRecommendation(normalizedDocsText, withPricing);
     });
-    const transcriptionModels = DEFAULT_TRANSCRIPTION_MODEL_PRICING.map((fallback) => {
+    const transcriptionModels = (advertisedTranscriptionModels.length
+        ? advertisedTranscriptionModels
+        : DEFAULT_TRANSCRIPTION_MODEL_PRICING).map((fallback) => {
         const speechText = normalizePageText(speechPageTexts[fallback.id] || "");
         const withPricing = parseTranscriptionModelPricing(speechText, currentTranscriptionModels.get(fallback.id) || fallback, pricingDate);
         return parseTranscriptionModelRecommendation(speechText, withPricing);
@@ -412,30 +452,40 @@ export const parseModelPricingPage = ({ pageText, fetchedAt, currentSnapshot, mo
         transcriptionModels,
     };
 };
-export const fetchLatestModelPricingSnapshot = async ({ currentSnapshot, } = {}) => {
-    const [compareResponse, modelsResponse, latestModelResponse, gptTranscribeResponse, gpt4oTranscribeResponse, gpt4oMiniTranscribeResponse] = await Promise.all(OPENAI_DOC_URLS.map((url) => fetch(url, { cache: "no-store" })));
-    const responses = [
-        compareResponse,
-        modelsResponse,
-        latestModelResponse,
-        gptTranscribeResponse,
-        gpt4oTranscribeResponse,
-        gpt4oMiniTranscribeResponse,
-    ];
-    const failedResponse = responses.find((response) => !response.ok);
-    if (failedResponse) {
-        throw new Error(`OpenAI model metadata refresh failed with HTTP ${failedResponse.status}.`);
+const loadOfficialModelDocument = async (url) => {
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        return invoke("load_openai_model_document", { url });
     }
-    const [compareHtml, modelsHtml, latestModelHtml, gptTranscribeHtml, gpt4oTranscribeHtml, gpt4oMiniTranscribeHtml] = await Promise.all(responses.map((response) => response.text()));
-    const parseHtmlText = (html) => new DOMParser().parseFromString(html, "text/html").body.textContent || "";
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+        throw new Error(`OpenAI model metadata refresh failed with HTTP ${response.status}.`);
+    }
+    return response.text();
+};
+export const fetchLatestModelPricingSnapshot = async ({ currentSnapshot, documentLoader = loadOfficialModelDocument, } = {}) => {
+    const results = await Promise.allSettled(OPENAI_DOC_URLS.map(async (url) => [url, await documentLoader(url)]));
+    const documents = new Map(results
+        .filter((result) => result.status === "fulfilled")
+        .map((result) => result.value));
+    if (!documents.size) {
+        throw new Error("OpenAI model metadata refresh could not load any official documentation pages.");
+    }
+    const parseHtmlText = (html) => {
+        if (typeof DOMParser !== "undefined") {
+            return new DOMParser().parseFromString(html, "text/html").body.textContent || "";
+        }
+        return html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
+    };
     return parseModelPricingPage({
-        pageText: parseHtmlText(compareHtml),
-        modelsPageText: parseHtmlText(modelsHtml),
-        latestModelPageText: parseHtmlText(latestModelHtml),
+        pageText: parseHtmlText(documents.get(OPENAI_COMPARE_MODELS_URL) || ""),
+        modelsPageText: parseHtmlText(documents.get(OPENAI_MODELS_URL) || ""),
+        latestModelPageText: parseHtmlText(documents.get(OPENAI_LATEST_MODEL_URL) || ""),
+        availabilityPageText: parseHtmlText(`${documents.get(OPENAI_ALL_MODELS_URL) || ""} ${documents.get(OPENAI_MODEL_CATALOG_URL) || ""}`),
         speechPageTexts: {
-            "gpt-transcribe": parseHtmlText(gptTranscribeHtml),
-            "gpt-4o-transcribe": parseHtmlText(gpt4oTranscribeHtml),
-            "gpt-4o-mini-transcribe": parseHtmlText(gpt4oMiniTranscribeHtml),
+            "gpt-transcribe": parseHtmlText(documents.get(OPENAI_GPT_TRANSCRIBE_URL) || ""),
+            "gpt-4o-transcribe": parseHtmlText(documents.get(OPENAI_GPT_4O_TRANSCRIBE_URL) || ""),
+            "gpt-4o-mini-transcribe": parseHtmlText(documents.get(OPENAI_GPT_4O_MINI_TRANSCRIBE_URL) || ""),
         },
         fetchedAt: new Date().toISOString(),
         currentSnapshot,

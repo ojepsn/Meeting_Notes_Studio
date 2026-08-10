@@ -205,7 +205,7 @@ export const SettingsCard = ({ settings, templates, initialSection = "ai", onCha
                             }), _jsx("div", { className: "inline-row", children: _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => setShowAdvancedTextModels((current) => !current), children: showAdvancedTextModels ? "Hide detailed text models" : "Show detailed text models" }) }), showAdvancedTextModels
                                 ? renderModelCards({
                                     title: "Detailed text models",
-                                    description: "Choose between the current OpenAI GPT-5.4 text models for note generation, revision, and translation.",
+                                    description: "Choose between the current OpenAI text models for note generation, revision, and translation. The catalog refreshes from OpenAI every day.",
                                     options: textModelOptions,
                                     selectedId: selectedTextModel?.id || settings.textModel,
                                     onSelect: (textModel) => onChange({ ...settings, textModel }),

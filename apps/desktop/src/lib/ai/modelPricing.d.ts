@@ -65,16 +65,20 @@ export declare const isPricingRefreshDue: ({ snapshot, now, }: {
 export declare const msUntilNextPricingCheck: (now?: Date) => number;
 export declare const createDefaultModelPricingSnapshot: () => AIModelPricingSnapshot;
 export declare const normalizeAIModelPricingSnapshot: (snapshot: PartialAIModelPricingSnapshot | null | undefined) => AIModelPricingSnapshot | null;
-export declare const parseModelPricingPage: ({ pageText, fetchedAt, currentSnapshot, modelsPageText, latestModelPageText, speechPageTexts, }: {
+export declare const resolveAvailableTextModelId: (value: string | null | undefined, snapshot: AIModelPricingSnapshot) => TextModelId;
+export declare const resolveAvailableTranscriptionModelId: (value: string | null | undefined, snapshot: AIModelPricingSnapshot) => TranscriptionModelId;
+export declare const parseModelPricingPage: ({ pageText, fetchedAt, currentSnapshot, modelsPageText, latestModelPageText, availabilityPageText, speechPageTexts, }: {
     pageText: string;
     fetchedAt: string;
     currentSnapshot?: AIModelPricingSnapshot | null;
     modelsPageText?: string;
     latestModelPageText?: string;
+    availabilityPageText?: string;
     speechPageTexts?: Partial<Record<TranscriptionModelId, string>>;
 }) => AIModelPricingSnapshot;
-export declare const fetchLatestModelPricingSnapshot: ({ currentSnapshot, }?: {
+export declare const fetchLatestModelPricingSnapshot: ({ currentSnapshot, documentLoader, }?: {
     currentSnapshot?: AIModelPricingSnapshot | null;
+    documentLoader?: (url: string) => Promise<string>;
 }) => Promise<AIModelPricingSnapshot>;
 export declare const formatPricingDate: (value: string) => string;
 export declare const formatPricingRefreshDateTime: (value: string) => string;

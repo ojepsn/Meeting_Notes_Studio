@@ -801,6 +801,47 @@ async fn download_url_to_path(url: String, path: String) -> Result<String, Strin
     Ok(destination.to_string_lossy().to_string())
 }
 
+fn validate_openai_model_doc_url(value: &str) -> Result<reqwest::Url, String> {
+    let url = reqwest::Url::parse(value)
+        .map_err(|error| format!("Invalid OpenAI documentation URL: {error}"))?;
+    if url.scheme() != "https"
+        || url.host_str() != Some("developers.openai.com")
+        || !url.path().starts_with("/api/docs/")
+    {
+        return Err("Only official OpenAI API documentation URLs are allowed.".to_string());
+    }
+    Ok(url)
+}
+
+#[tauri::command]
+async fn load_openai_model_document(url: String) -> Result<String, String> {
+    let validated_url = validate_openai_model_doc_url(&url)?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .user_agent("NoteSmith Desktop model catalog refresh")
+        .build()
+        .map_err(|error| format!("Could not create OpenAI documentation client: {error}"))?;
+    let response = client
+        .get(validated_url)
+        .header("Accept", "text/html,application/xhtml+xml")
+        .send()
+        .await
+        .map_err(|error| format!("Could not load OpenAI model documentation: {error}"))?;
+
+    validate_openai_model_doc_url(response.url().as_str())?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!(
+            "OpenAI model documentation returned HTTP {status}."
+        ));
+    }
+
+    response
+        .text()
+        .await
+        .map_err(|error| format!("Could not read OpenAI model documentation: {error}"))
+}
+
 #[tauri::command]
 async fn openai_http_request(request: NativeHttpRequest) -> Result<NativeHttpResponse, String> {
     let method = reqwest::Method::from_bytes(request.method.as_bytes())
@@ -1184,6 +1225,22 @@ fn get_agent_sidecar_status(
     Ok(None)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::validate_openai_model_doc_url;
+
+    #[test]
+    fn model_document_urls_are_restricted_to_official_api_docs() {
+        assert!(validate_openai_model_doc_url(
+            "https://developers.openai.com/api/docs/models/compare"
+        )
+        .is_ok());
+        assert!(validate_openai_model_doc_url("http://developers.openai.com/api/docs/models").is_err());
+        assert!(validate_openai_model_doc_url("https://example.com/api/docs/models").is_err());
+        assert!(validate_openai_model_doc_url("https://developers.openai.com/other").is_err());
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1212,6 +1269,7 @@ pub fn run() {
             launch_installer_file,
             load_update_manifest,
             download_url_to_path,
+            load_openai_model_document,
             openai_http_request,
             start_agent_sidecar,
             stop_agent_sidecar,

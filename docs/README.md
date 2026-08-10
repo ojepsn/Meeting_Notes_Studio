@@ -30,6 +30,7 @@ It is intentionally split by audience and task:
 
 - [Desktop architecture](./architecture/desktop-architecture.md)
 - [AI and prompts architecture](./architecture/ai-and-prompts.md)
+- [Web cloud storage and successor app options](./architecture/web-cloud-storage-and-successor-options.md)
 - [Desktop migration blueprint](./desktop-migration-blueprint.md)
 - [Desktop migration handoff](./handoff-desktop-migration.md)
 

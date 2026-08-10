@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTextModelOption, buildTranscriptionModelOption, createDefaultModelPricingSnapshot, getPricingRefreshDay, isPricingRefreshDue, normalizeAIModelPricingSnapshot, normalizeTextModelId, normalizeTranscriptionModelId, parseModelPricingPage, } from "./modelPricing";
+import { buildTextModelOption, buildTranscriptionModelOption, createDefaultModelPricingSnapshot, fetchLatestModelPricingSnapshot, getPricingRefreshDay, isPricingRefreshDue, normalizeAIModelPricingSnapshot, normalizeTextModelId, normalizeTranscriptionModelId, parseModelPricingPage, resolveAvailableTextModelId, } from "./modelPricing";
 describe("modelPricing", () => {
     it("computes the pricing refresh day around the 05:00 Stockholm cutoff", () => {
         expect(getPricingRefreshDay(new Date("2026-04-01T02:30:00.000Z"))).toBe("2026-03-31");
@@ -7,12 +7,12 @@ describe("modelPricing", () => {
     });
     it("marks snapshots due when the pricing refresh day changes", () => {
         const snapshot = createDefaultModelPricingSnapshot();
-        expect(isPricingRefreshDue({ snapshot, now: new Date("2026-04-01T20:00:00.000Z") })).toBe(false);
-        expect(isPricingRefreshDue({ snapshot, now: new Date("2026-04-02T04:30:00.000Z") })).toBe(true);
+        expect(isPricingRefreshDue({ snapshot, now: new Date("2026-08-10T20:00:00.000Z") })).toBe(false);
+        expect(isPricingRefreshDue({ snapshot, now: new Date("2026-08-11T04:30:00.000Z") })).toBe(true);
     });
     it("parses pricing rows from the OpenAI pricing page text", () => {
         const snapshot = parseModelPricingPage({
-            pageText: `GPT-5.6 Sol Pricing Per 1M tokens Input $5.00 Cached Input $0.50 Output $30.00 GPT-5.6 Terra Pricing Per 1M tokens Input $2.50 Cached Input $0.25 Output $15.00 GPT-5.6 Luna Pricing Per 1M tokens Input $1.00 Cached Input $0.10 Output $6.00`,
+            pageText: `GPT-5.6 Sol Pricing Per 1M tokens Input $5.00 Cached Input $0.50 Output $30.00 GPT-5.6 Terra Pricing Per 1M tokens Input $2.00 Cached Input $0.20 Output $12.00 GPT-5.6 Luna Pricing Per 1M tokens Input $0.20 Cached Input $0.02 Output $1.20`,
             modelsPageText: `If you're not sure where to start, use GPT-5.6 Sol, our flagship model for complex reasoning and coding. Choose GPT-5.6 Terra to balance intelligence and cost, or GPT-5.6 Luna for cost-sensitive, high-volume workloads. GPT-5.6 Sol Frontier model for complex professional work Model ID gpt-5.6-sol GPT-5.6 Terra GPT-5.6 model that balances intelligence and cost Model ID gpt-5.6-terra GPT-5.6 Luna GPT-5.6 model optimized for cost-sensitive workloads Model ID gpt-5.6-luna`,
             latestModelPageText: `GPT-5.6 sets a new quality and efficiency baseline for complex production workflows. The gpt-5.6 alias routes requests to gpt-5.6-sol, the model for flagship capability. Use gpt-5.6-terra for strong performance at a lower price and gpt-5.6-luna for efficient, high-volume workloads.`,
             speechPageTexts: {
@@ -20,14 +20,46 @@ describe("modelPricing", () => {
                 "gpt-4o-transcribe": `GPT-4o Transcribe Speech-to-text model powered by GPT-4o Pricing Audio tokens Per 1M tokens Input $2.50 Output $10.00`,
                 "gpt-4o-mini-transcribe": `GPT-4o mini Transcribe Speech-to-text model powered by GPT-4o mini Pricing Audio tokens Per 1M tokens Input $1.25 Output $5.00`,
             },
-            fetchedAt: "2026-08-05T04:00:00.000Z",
+            fetchedAt: "2026-08-10T04:00:00.000Z",
         });
-        expect(snapshot.textModels.find((model) => model.id === "gpt-5.6-terra")).toMatchObject({ inputPer1MTokens: 2.5, outputPer1MTokens: 15 });
+        expect(snapshot.textModels.find((model) => model.id === "gpt-5.6-terra")).toMatchObject({ inputPer1MTokens: 2, outputPer1MTokens: 12 });
         expect(snapshot.textModels.find((model) => model.id === "gpt-5.6-sol")).toMatchObject({ inputPer1MTokens: 5, outputPer1MTokens: 30 });
         expect(snapshot.transcriptionModels.find((model) => model.id === "gpt-4o-transcribe")).toMatchObject({ tokenPer1MTokens: 2.5, perMinute: 0.006 });
         expect(snapshot.transcriptionModels.find((model) => model.id === "gpt-transcribe")).toMatchObject({ perMinute: 0.0045 });
         expect(snapshot.textModels.find((model) => model.id === "gpt-5.6-sol")?.recommendedFor).toContain("GPT-5.6 Sol");
         expect(snapshot.transcriptionModels.find((model) => model.id === "gpt-transcribe")?.summary).toContain("High-accuracy speech-to-text");
+    });
+    it("keeps only models advertised by the current OpenAI catalog", () => {
+        const snapshot = parseModelPricingPage({
+            pageText: "",
+            availabilityPageText: "gpt-5.6-sol gpt-5.6-terra gpt-transcribe",
+            fetchedAt: "2026-08-10T06:00:00.000Z",
+        });
+        expect(snapshot.textModels.map((model) => model.id)).toEqual(["gpt-5.6-sol", "gpt-5.6-terra"]);
+        expect(snapshot.transcriptionModels.map((model) => model.id)).toEqual(["gpt-transcribe"]);
+        expect(normalizeAIModelPricingSnapshot(snapshot)?.textModels.map((model) => model.id)).toEqual([
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+        ]);
+        expect(resolveAvailableTextModelId("gpt-5.6-luna", snapshot)).toBe("gpt-5.6-terra");
+    });
+    it("uses the injected desktop document transport and tolerates one failed page", async () => {
+        const requestedUrls = [];
+        const snapshot = await fetchLatestModelPricingSnapshot({
+            documentLoader: async (url) => {
+                requestedUrls.push(url);
+                if (url.endsWith("/models/text")) {
+                    throw new Error("temporary failure");
+                }
+                if (url.endsWith("/models/all") || url.endsWith("/models")) {
+                    return "gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna gpt-transcribe gpt-4o-transcribe gpt-4o-mini-transcribe";
+                }
+                return "";
+            },
+        });
+        expect(requestedUrls.length).toBeGreaterThan(6);
+        expect(snapshot.textModels.map((model) => model.id)).toEqual(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]);
+        expect(snapshot.transcriptionModels).toHaveLength(3);
     });
     it("builds option data with recommendations and human-readable pricing", () => {
         const snapshot = createDefaultModelPricingSnapshot();
@@ -68,6 +100,7 @@ describe("modelPricing", () => {
             ],
         });
         expect(snapshot?.textModels.find((model) => model.id === "gpt-5.6-terra")?.tags.length).toBeGreaterThan(0);
+        expect(snapshot?.textModels).toHaveLength(3);
         expect(snapshot?.textModels.find((model) => model.id === "gpt-5.6-terra")?.summary).toBeTruthy();
         expect(snapshot?.transcriptionModels.find((model) => model.id === "gpt-4o-mini-transcribe")?.recommendation).toBeTruthy();
     });

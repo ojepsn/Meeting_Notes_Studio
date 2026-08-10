@@ -24,7 +24,7 @@ import { getAIRequestHistory, hydrateAIRequestHistory, recordAIRequestHistory } 
 import { formatAIErrorMessage } from "../lib/ai/messages";
 import { AIRequestError } from "../lib/ai/client/openaiClient";
 import { getAIDiagnosticsItems, getAIMetricsSnapshot } from "../lib/ai/metrics";
-import { buildModelPricingStatus, buildTextModelOption, buildTranscriptionModelOption, createDefaultModelPricingSnapshot, fetchLatestModelPricingSnapshot, isPricingRefreshDue, msUntilNextPricingCheck, } from "../lib/ai/modelPricing";
+import { buildModelPricingStatus, buildTextModelOption, buildTranscriptionModelOption, createDefaultModelPricingSnapshot, fetchLatestModelPricingSnapshot, isPricingRefreshDue, msUntilNextPricingCheck, resolveAvailableTextModelId, resolveAvailableTranscriptionModelId, } from "../lib/ai/modelPricing";
 import { reviseOutput } from "../lib/ai/services/reviseOutput";
 import { createAIRuntimeStatusHandler } from "../lib/ai/status";
 import { transcribeAudio } from "../lib/ai/services/transcribeAudio";
@@ -537,6 +537,16 @@ export const App = () => {
             }
         };
     }, [isLoaded, loadError, repository]);
+    useEffect(() => {
+        if (!snapshot) {
+            return;
+        }
+        const textModel = resolveAvailableTextModelId(snapshot.settings.textModel, modelPricingSnapshot);
+        const transcriptionModel = resolveAvailableTranscriptionModelId(snapshot.settings.transcriptionModel, modelPricingSnapshot);
+        if (textModel !== snapshot.settings.textModel || transcriptionModel !== snapshot.settings.transcriptionModel) {
+            void saveSettings({ ...snapshot.settings, textModel, transcriptionModel });
+        }
+    }, [modelPricingSnapshot, saveSettings, snapshot]);
     const handleRefreshModelPricing = async () => {
         setIsRefreshingModelPricing(true);
         setModelPricingStatus("Refreshing pricing from OpenAI...");

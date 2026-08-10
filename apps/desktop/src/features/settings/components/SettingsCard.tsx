@@ -527,7 +527,7 @@ export const SettingsCard = ({
               ? renderModelCards({
                   title: "Detailed text models",
                   description:
-                    "Choose between the current OpenAI GPT-5.4 text models for note generation, revision, and translation.",
+                    "Choose between the current OpenAI text models for note generation, revision, and translation. The catalog refreshes from OpenAI every day.",
                   options: textModelOptions,
                   selectedId: selectedTextModel?.id || settings.textModel,
                   onSelect: (textModel) => onChange({ ...settings, textModel }),

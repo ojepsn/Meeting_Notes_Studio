@@ -1225,6 +1225,7 @@ export const useDesktopStore = create((set, get) => {
         repository: createAppRepository(),
         load: async () => {
             try {
+                let recoveredFromBackup = false;
                 let [loadedSnapshot, aiTextCache, aiRequestHistory] = await Promise.all([
                     get().repository.loadSnapshot(),
                     get().repository.loadAITextCache(),
@@ -1234,7 +1235,7 @@ export const useDesktopStore = create((set, get) => {
                     const recoverySnapshot = await selectRecoverySnapshot(loadedSnapshot);
                     if (recoverySnapshot) {
                         loadedSnapshot = recoverySnapshot;
-                        await get().repository.saveSnapshot(recoverySnapshot);
+                        recoveredFromBackup = true;
                     }
                 }
                 const nowMs = Date.now();
@@ -1266,9 +1267,6 @@ export const useDesktopStore = create((set, get) => {
                         sessions: [replacement, ...snapshot.sessions],
                     };
                 }
-                if (expiredSessionIds.size || scheduleReconciliation.changed || rolloverResult.changed) {
-                    await get().repository.saveSnapshot(snapshot);
-                }
                 configureAITextCachePersistence({
                     save: (records) => get().repository.saveAITextCache(records),
                 });
@@ -1285,6 +1283,9 @@ export const useDesktopStore = create((set, get) => {
                     saveState: "saved",
                     lastSavedAt: new Date().toISOString(),
                 });
+                if (recoveredFromBackup || expiredSessionIds.size || scheduleReconciliation.changed || rolloverResult.changed) {
+                    scheduleSnapshotPersist(get().repository, snapshot, set);
+                }
             }
             catch (error) {
                 set({

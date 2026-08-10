@@ -32,6 +32,8 @@ import {
   fetchLatestModelPricingSnapshot,
   isPricingRefreshDue,
   msUntilNextPricingCheck,
+  resolveAvailableTextModelId,
+  resolveAvailableTranscriptionModelId,
   type AIModelPricingSnapshot,
 } from "../lib/ai/modelPricing";
 import { reviseOutput } from "../lib/ai/services/reviseOutput";
@@ -736,6 +738,21 @@ export const App = () => {
       }
     };
   }, [isLoaded, loadError, repository]);
+
+  useEffect(() => {
+    if (!snapshot) {
+      return;
+    }
+
+    const textModel = resolveAvailableTextModelId(snapshot.settings.textModel, modelPricingSnapshot);
+    const transcriptionModel = resolveAvailableTranscriptionModelId(
+      snapshot.settings.transcriptionModel,
+      modelPricingSnapshot,
+    );
+    if (textModel !== snapshot.settings.textModel || transcriptionModel !== snapshot.settings.transcriptionModel) {
+      void saveSettings({ ...snapshot.settings, textModel, transcriptionModel });
+    }
+  }, [modelPricingSnapshot, saveSettings, snapshot]);
 
   const handleRefreshModelPricing = async () => {
     setIsRefreshingModelPricing(true);
