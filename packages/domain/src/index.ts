@@ -66,6 +66,8 @@ export interface SessionRecord {
   updatedAt: string;
 }
 
+export type TodoPriority = "low" | "normal" | "high";
+
 export interface TodoRecord {
   id: string;
   description: string;
@@ -74,6 +76,8 @@ export interface TodoRecord {
   completedAt?: string | null;
   isPrivate: boolean;
   isPriority?: boolean;
+  priority?: TodoPriority;
+  isUrgent?: boolean;
   comments: string;
   activityId: string;
   domain: string;
@@ -318,6 +322,13 @@ export interface AssistantQueryMemoryRecord {
   updatedAt: string;
 }
 
+export interface RichTextCommandRecord {
+  id: string;
+  trigger: string;
+  label: string;
+  template: string;
+}
+
 export interface LocalAppSettings {
   theme: string;
   outputLanguage: "same" | "sv" | "en";
@@ -351,6 +362,7 @@ export interface LocalAppSettings {
   savedDomains: string[];
   savedActivities: string[];
   savedTags: string[];
+  richTextCommands?: RichTextCommandRecord[];
   projectLinks: ProjectLinkRecord[];
   timeReportPresets: TimeReportPreset[];
   abbreviations: Array<{ id: string; shortForm: string; fullForm: string }>;

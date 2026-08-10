@@ -3,7 +3,7 @@ import type { DesktopStorageInfo, LocalBackupInfo } from "../../../lib/storage/d
 import type { AIRequestHistoryEntry } from "../../../lib/ai/history";
 import type { AIDiagnosticsItem } from "../../../lib/ai/metrics";
 import type { SelectModelOption } from "../../../lib/ai/modelPricing";
-export type SettingsSection = "ai" | "diagnostics" | "themes" | "output" | "people" | "prompts" | "templates" | "other";
+export type SettingsSection = "ai" | "diagnostics" | "themes" | "output" | "commands" | "people" | "prompts" | "templates" | "other";
 interface SettingsCardProps {
     settings: LocalAppSettings;
     templates: TemplateDefinition[];

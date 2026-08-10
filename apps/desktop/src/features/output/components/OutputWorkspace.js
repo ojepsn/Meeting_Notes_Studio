@@ -1,4 +1,4 @@
-import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-runtime";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
@@ -7,6 +7,7 @@ import { DateInput } from "../../../components/DateInput";
 import { getActivitiesForSelection, getProjectsForDomain } from "../../../lib/structure/options";
 import { buildHtmlMarkup, buildStructuredOutput } from "../../../lib/export/exportService";
 import { getOutputLayoutPreset } from "../../../lib/export/outputLayouts";
+import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useEffect, useMemo, useRef, useState } from "react";
 const OUTPUT_LANGUAGE_OPTIONS = [
     { value: "same", label: "Same as notes" },
@@ -203,12 +204,19 @@ export const OutputWorkspace = ({ session, template, displayedOutput = session.o
         ["--output-preview-section-spacing"]: `${layout.style.sectionSpacing}px`,
         ["--output-preview-heading-case"]: layout.style.headingCase === "uppercase" ? "uppercase" : "none",
     }), [layout]);
-    const renderOutputSurface = (className) => (_jsx("div", { ref: outputEditorRef, className: `rich-text-surface output-rich-text-surface ${className}`, style: outputPreviewStyle, id: "session-output", contentEditable: !isViewingHistoricalVersion, suppressContentEditableWarning: true, "data-placeholder": "Generated notes will appear here.", "data-empty": "true", onInput: (event) => {
-            const normalizedHtml = normalizeOutputRichTextHtml(event.currentTarget.innerHTML);
-            const nextOutput = outputRichTextToPlainText(normalizedHtml);
-            event.currentTarget.dataset.empty = nextOutput.trim() ? "false" : "true";
-            onChange({ ...session, output: nextOutput });
-        }, onMouseUp: updateSelectedExcerptFromEditor, onKeyUp: updateSelectedExcerptFromEditor }));
+    const commitOutputHtml = (html) => {
+        const normalizedHtml = normalizeOutputRichTextHtml(html);
+        const nextOutput = outputRichTextToPlainText(normalizedHtml);
+        if (outputEditorRef.current)
+            outputEditorRef.current.dataset.empty = nextOutput.trim() ? "false" : "true";
+        onChange({ ...session, output: nextOutput });
+    };
+    const renderOutputSurface = (className) => (_jsxs(_Fragment, { children: [_jsx("div", { ref: outputEditorRef, className: `rich-text-surface output-rich-text-surface ${className}`, style: outputPreviewStyle, id: "session-output", contentEditable: !isViewingHistoricalVersion, suppressContentEditableWarning: true, "data-placeholder": "Generated notes will appear here.", "data-empty": "true", onInput: (event) => {
+                    const normalizedHtml = normalizeOutputRichTextHtml(event.currentTarget.innerHTML);
+                    const nextOutput = outputRichTextToPlainText(normalizedHtml);
+                    event.currentTarget.dataset.empty = nextOutput.trim() ? "false" : "true";
+                    onChange({ ...session, output: nextOutput });
+                }, onMouseUp: updateSelectedExcerptFromEditor, onKeyUp: updateSelectedExcerptFromEditor }), !isViewingHistoricalVersion ? _jsx(RichTextCommandMenu, { editorRef: outputEditorRef, onContentChange: commitOutputHtml }) : null] }));
     const formatOutputVersionLabel = (generatedAt) => {
         const parsed = new Date(generatedAt);
         if (Number.isNaN(parsed.getTime())) {

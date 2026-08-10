@@ -6,6 +6,7 @@ import { DateInput } from "../../../components/DateInput";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { buildHtmlMarkup, buildStructuredOutput } from "../../../lib/export/exportService";
 import { getOutputLayoutPreset } from "../../../lib/export/outputLayouts";
+import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import type {
   ActivityRecord,
   AttachmentRecord,
@@ -338,25 +339,35 @@ export const OutputWorkspace = ({
     [layout],
   );
 
+  const commitOutputHtml = (html: string) => {
+    const normalizedHtml = normalizeOutputRichTextHtml(html);
+    const nextOutput = outputRichTextToPlainText(normalizedHtml);
+    if (outputEditorRef.current) outputEditorRef.current.dataset.empty = nextOutput.trim() ? "false" : "true";
+    onChange({ ...session, output: nextOutput });
+  };
+
   const renderOutputSurface = (className: string) => (
-    <div
-      ref={outputEditorRef}
-      className={`rich-text-surface output-rich-text-surface ${className}`}
-      style={outputPreviewStyle}
-      id="session-output"
-      contentEditable={!isViewingHistoricalVersion}
-      suppressContentEditableWarning
-      data-placeholder="Generated notes will appear here."
-      data-empty="true"
-      onInput={(event) => {
+    <>
+      <div
+        ref={outputEditorRef}
+        className={`rich-text-surface output-rich-text-surface ${className}`}
+        style={outputPreviewStyle}
+        id="session-output"
+        contentEditable={!isViewingHistoricalVersion}
+        suppressContentEditableWarning
+        data-placeholder="Generated notes will appear here."
+        data-empty="true"
+        onInput={(event) => {
         const normalizedHtml = normalizeOutputRichTextHtml((event.currentTarget as HTMLDivElement).innerHTML);
         const nextOutput = outputRichTextToPlainText(normalizedHtml);
         (event.currentTarget as HTMLDivElement).dataset.empty = nextOutput.trim() ? "false" : "true";
         onChange({ ...session, output: nextOutput });
-      }}
-      onMouseUp={updateSelectedExcerptFromEditor}
-      onKeyUp={updateSelectedExcerptFromEditor}
-    />
+        }}
+        onMouseUp={updateSelectedExcerptFromEditor}
+        onKeyUp={updateSelectedExcerptFromEditor}
+      />
+      {!isViewingHistoricalVersion ? <RichTextCommandMenu editorRef={outputEditorRef} onContentChange={commitOutputHtml} /> : null}
+    </>
   );
   const formatOutputVersionLabel = (generatedAt: string) => {
     const parsed = new Date(generatedAt);

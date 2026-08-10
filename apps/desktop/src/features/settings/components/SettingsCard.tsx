@@ -15,12 +15,14 @@ import type { AIDiagnosticsItem } from "../../../lib/ai/metrics";
 import type { SelectModelOption } from "../../../lib/ai/modelPricing";
 import { OUTPUT_LAYOUT_PRESETS } from "../../../lib/export/outputLayouts";
 import { TemplatesCard } from "../../templates/components/TemplatesCard";
+import { buildRichTextCommands } from "../../richTextCommands/RichTextCommandMenu";
 
 export type SettingsSection =
   | "ai"
   | "diagnostics"
   | "themes"
   | "output"
+  | "commands"
   | "people"
   | "prompts"
   | "templates"
@@ -65,6 +67,7 @@ const SETTINGS_SECTIONS: Array<{ id: SettingsSection; label: string; description
   { id: "diagnostics", label: "AI Diagnostics", description: "Metrics, cache, and recent AI history" },
   { id: "themes", label: "Themes", description: "Look and feel" },
   { id: "output", label: "Output formatting", description: "Language and output defaults" },
+  { id: "commands", label: "Text commands", description: "Fast snippets in rich-text fields" },
   { id: "people", label: "People, Domains & Projects", description: "Reusable people, structure, and shorthand" },
   { id: "prompts", label: "Prompts", description: "Generation and revision instructions" },
   { id: "templates", label: "Templates for meetings/notes", description: "Built-in and custom note structures" },
@@ -265,6 +268,9 @@ export const SettingsCard = ({
   const [tagDraft, setTagDraft] = useState("");
   const [abbrShort, setAbbrShort] = useState("");
   const [abbrFull, setAbbrFull] = useState("");
+  const [commandTrigger, setCommandTrigger] = useState("");
+  const [commandLabel, setCommandLabel] = useState("");
+  const [commandTemplate, setCommandTemplate] = useState("");
   const [extraBlockLabel, setExtraBlockLabel] = useState("");
   const [extraBlockBody, setExtraBlockBody] = useState("");
 
@@ -279,6 +285,16 @@ export const SettingsCard = ({
       ...settings,
       promptProfile: nextPromptProfile,
     });
+
+  const normalizedCommandTrigger = commandTrigger.replace(/^@+/, "").trim().toLowerCase();
+  const builtInTextCommands = buildRichTextCommands();
+  const reservedCommandTriggers = new Set(builtInTextCommands.map((command) => command.trigger));
+  const savedCommandTriggers = new Set((settings.richTextCommands || []).map((command) => command.trigger));
+  const canAddTextCommand =
+    /^[a-z0-9_-]{1,24}$/.test(normalizedCommandTrigger) &&
+    commandTemplate.trim().length > 0 &&
+    !reservedCommandTriggers.has(normalizedCommandTrigger) &&
+    !savedCommandTriggers.has(normalizedCommandTrigger);
 
   const updateExtraBlock = (id: string, updates: Partial<PromptBlock>) =>
     updatePromptProfile({
@@ -726,6 +742,125 @@ export const SettingsCard = ({
                   </button>
                 );
               })}
+            </div>
+          </div>
+        ) : null}
+
+        {activeSection === "commands" ? (
+          <div className="sidebar-card settings-text-commands-card">
+            <div>
+              <h3>Text commands</h3>
+              <p>Type @ in any rich-text field to search commands. Press Space after an exact command, or use Enter, Tab, or the command menu to insert it.</p>
+            </div>
+
+            <div className="section-divider">
+              <div className="settings-subsection-heading">
+                <strong>Built-in commands</strong>
+                <span className="tiny-text">Dates and times use this computer's current timezone.</span>
+              </div>
+              <div className="text-command-reference-grid">
+                {builtInTextCommands.map((command) => (
+                  <div className="text-command-reference" key={command.trigger}>
+                    <strong>@{command.trigger}</strong>
+                    <span>{command.label}</span>
+                    <small>{command.description}</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="section-divider">
+              <div className="settings-subsection-heading">
+                <strong>Custom commands</strong>
+                <span className="tiny-text">Available placeholders: {"{date}"}, {"{time}"}, {"{datetime}"}, {"{tomorrow}"}, {"{yesterday}"}, {"{week}"}, and {"{day}"}.</span>
+              </div>
+              <div className="text-command-form">
+                <div className="field">
+                  <label htmlFor="text-command-trigger">Command</label>
+                  <div className="text-command-trigger-input">
+                    <span>@</span>
+                    <input
+                      id="text-command-trigger"
+                      value={commandTrigger}
+                      onChange={(event) => setCommandTrigger(event.target.value)}
+                      placeholder="followup"
+                    />
+                  </div>
+                </div>
+                <div className="field">
+                  <label htmlFor="text-command-label">Menu label</label>
+                  <input
+                    id="text-command-label"
+                    value={commandLabel}
+                    onChange={(event) => setCommandLabel(event.target.value)}
+                    placeholder="Follow-up reminder"
+                  />
+                </div>
+                <div className="field field-wide">
+                  <label htmlFor="text-command-template">Inserted text</label>
+                  <textarea
+                    id="text-command-template"
+                    value={commandTemplate}
+                    onChange={(event) => setCommandTemplate(event.target.value)}
+                    placeholder="Follow up by {tomorrow}: "
+                    rows={4}
+                  />
+                </div>
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={!canAddTextCommand}
+                  onClick={() => {
+                    if (!canAddTextCommand) return;
+                    onChange({
+                      ...settings,
+                      richTextCommands: [
+                        ...(settings.richTextCommands || []),
+                        {
+                          id: crypto.randomUUID(),
+                          trigger: normalizedCommandTrigger,
+                          label: commandLabel.trim() || normalizedCommandTrigger,
+                          template: commandTemplate,
+                        },
+                      ],
+                    });
+                    setCommandTrigger("");
+                    setCommandLabel("");
+                    setCommandTemplate("");
+                  }}
+                >
+                  Add command
+                </button>
+                {normalizedCommandTrigger && reservedCommandTriggers.has(normalizedCommandTrigger) ? (
+                  <span className="tiny-text settings-command-warning">@{normalizedCommandTrigger} is a built-in command.</span>
+                ) : null}
+                {normalizedCommandTrigger && savedCommandTriggers.has(normalizedCommandTrigger) ? (
+                  <span className="tiny-text settings-command-warning">@{normalizedCommandTrigger} is already saved.</span>
+                ) : null}
+              </div>
+
+              <div className="section-list">
+                {(settings.richTextCommands || []).map((command) => (
+                  <div className="list-item text-command-saved-item" key={command.id}>
+                    <strong>@{command.trigger}</strong>
+                    <span>{command.label}</span>
+                    <small>{command.template}</small>
+                    <div className="list-item-actions">
+                      <button
+                        className="small-button danger-button"
+                        type="button"
+                        onClick={() => onChange({
+                          ...settings,
+                          richTextCommands: (settings.richTextCommands || []).filter((entry) => entry.id !== command.id),
+                        })}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {!(settings.richTextCommands || []).length ? <p className="tiny-text">No custom commands yet.</p> : null}
+              </div>
             </div>
           </div>
         ) : null}

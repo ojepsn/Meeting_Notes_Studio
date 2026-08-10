@@ -1,10 +1,11 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DateInput } from "../../../components/DateInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getProjectsForDomain } from "../../../lib/structure/options";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
+import { TodoDetailsEditor } from "../../todos/components/TodoDetailsEditor";
 const createBlankActivityDraft = (description = "") => ({
     id: "",
     type: "task",
@@ -65,7 +66,6 @@ export const ActivitiesWorkspace = ({ activities, todos, timeLogs, structureOpti
     const [editingTimeLogId, setEditingTimeLogId] = useState(null);
     const [timeLogDraft, setTimeLogDraft] = useState(null);
     const [now, setNow] = useState(() => new Date());
-    const detailsEditorRef = useRef(null);
     const topLevelActivities = useMemo(() => activities.filter((entry) => !entry.parentActivityId), [activities]);
     const domainOptions = useMemo(() => structureOptions.domains, [structureOptions.domains]);
     const projectOptions = useMemo(() => getProjectsForDomain(structureOptions, domainFilter === "all" ? "" : domainFilter), [domainFilter, structureOptions]);
@@ -177,14 +177,6 @@ export const ActivitiesWorkspace = ({ activities, todos, timeLogs, structureOpti
         }
         setEditingDraft(entry);
     }, [activities, selectedActivityId]);
-    useEffect(() => {
-        if (!detailsEditorRef.current)
-            return;
-        const nextHtml = editingDraft.detailsHtml || "<p></p>";
-        if (detailsEditorRef.current.innerHTML !== nextHtml) {
-            detailsEditorRef.current.innerHTML = nextHtml;
-        }
-    }, [editingDraft.detailsHtml, editingDraft.id]);
     const submitDraft = () => {
         const nextValue = draft.trim();
         if (!nextValue)
@@ -245,7 +237,7 @@ export const ActivitiesWorkspace = ({ activities, todos, timeLogs, structureOpti
                                                         ? selectedLinkedSessionState?.hasOutput
                                                             ? "Linked session exists and already has polished output."
                                                             : "Linked session exists. Capture and output can continue in Notes."
-                                                        : "Create a session when this meeting should move into Notes." })] }), _jsx("div", { className: "page-actions", children: selectedLinkedSessionId ? (_jsxs(_Fragment, { children: [_jsx("button", { className: "small-button", type: "button", onClick: () => onOpenSession(selectedLinkedSessionId), children: "Open linked Meeting Session" }), selectedLinkedSessionState?.hasOutput && onPreviewSessionOutput ? (_jsx("button", { className: "small-button", type: "button", onClick: () => onPreviewSessionOutput(selectedLinkedSessionId), children: "Preview output" })) : null] })) : (_jsx("button", { className: "small-button", type: "button", onClick: () => onCreateLinkedMeetingSession(editingDraft.id), children: "Create linked Meeting Session" })) })] })) : null, _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "activity-edit-details", children: "Details" }), _jsx("div", { id: "activity-edit-details", ref: detailsEditorRef, className: "rich-text-surface todo-rich-text-surface", contentEditable: true, suppressContentEditableWarning: true, onInput: (event) => setEditingDraft({ ...editingDraft, detailsHtml: event.currentTarget.innerHTML }) })] }), _jsxs("div", { className: "activities-detail-sections", children: [_jsxs("details", { className: "workspace-disclosure", open: true, children: [_jsx("summary", { children: "Fast add inside this activity" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsxs("div", { className: "todos-workspace-input-row", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "child-todo-draft", children: "Add todo" }), _jsx("input", { id: "child-todo-draft", value: childTodoDraft, onChange: (event) => setChildTodoDraft(event.target.value), onKeyDown: (event) => {
+                                                        : "Create a session when this meeting should move into Notes." })] }), _jsx("div", { className: "page-actions", children: selectedLinkedSessionId ? (_jsxs(_Fragment, { children: [_jsx("button", { className: "small-button", type: "button", onClick: () => onOpenSession(selectedLinkedSessionId), children: "Open linked Meeting Session" }), selectedLinkedSessionState?.hasOutput && onPreviewSessionOutput ? (_jsx("button", { className: "small-button", type: "button", onClick: () => onPreviewSessionOutput(selectedLinkedSessionId), children: "Preview output" })) : null] })) : (_jsx("button", { className: "small-button", type: "button", onClick: () => onCreateLinkedMeetingSession(editingDraft.id), children: "Create linked Meeting Session" })) })] })) : null, _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "activity-edit-details", children: "Details" }), _jsx(TodoDetailsEditor, { id: "activity-edit-details", value: editingDraft.detailsHtml, onChange: (detailsHtml) => setEditingDraft({ ...editingDraft, detailsHtml }) })] }), _jsxs("div", { className: "activities-detail-sections", children: [_jsxs("details", { className: "workspace-disclosure", open: true, children: [_jsx("summary", { children: "Fast add inside this activity" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsxs("div", { className: "todos-workspace-input-row", children: [_jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "child-todo-draft", children: "Add todo" }), _jsx("input", { id: "child-todo-draft", value: childTodoDraft, onChange: (event) => setChildTodoDraft(event.target.value), onKeyDown: (event) => {
                                                                                 if (event.key === "Enter" && !event.shiftKey && childTodoDraft.trim()) {
                                                                                     event.preventDefault();
                                                                                     onAddChildTodo(childTodoDraft.trim(), editingDraft.id);

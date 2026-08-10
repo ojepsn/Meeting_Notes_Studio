@@ -9,6 +9,7 @@ import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions 
 import type { RecordingMode } from "../../../lib/files/recording";
 import { createAttachmentPreviewUrl } from "../../../lib/files/attachmentStore";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type AttachmentRecord, type CaptureWorkspaceDensity, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
+import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 
 const richTextToPlainText = (value: string) => {
   if (!value) return "";
@@ -709,6 +710,8 @@ export const SessionEditor = ({
   if (isMinimal) {
     return (
       <div className="card session-editor session-editor-minimal session-editor-pwa">
+        <RichTextCommandMenu editorRef={agendaEditorRef} onContentChange={(html) => updateAgenda(normalizeRichTextHtml(html))} />
+        <RichTextCommandMenu editorRef={manualNotesEditorRef} onContentChange={(html) => updateManualNotes(normalizeRichTextHtml(html))} />
         {showPanelHeading ? (
           <div className="panel-heading session-editor-pwa-heading">
             <div className="panel-heading-copy">
@@ -1053,6 +1056,8 @@ export const SessionEditor = ({
 
   return (
     <div className={`card session-editor${isMinimal ? " session-editor-minimal" : ""}`}>
+      <RichTextCommandMenu editorRef={agendaEditorRef} onContentChange={(html) => updateAgenda(normalizeRichTextHtml(html))} />
+      <RichTextCommandMenu editorRef={manualNotesEditorRef} onContentChange={(html) => updateManualNotes(normalizeRichTextHtml(html))} />
       <div className={`card-header${isMinimal ? " session-editor-header-minimal" : ""}`}>
         <div />
         <div className="capture-header-actions">

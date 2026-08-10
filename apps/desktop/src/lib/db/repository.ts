@@ -116,7 +116,14 @@ const normalizeTodoRecord = (todo: TodoRecord): TodoRecord => ({
   participantText: typeof todo.participantText === "string" ? todo.participantText : "",
   completedAt: typeof todo.completedAt === "string" ? todo.completedAt : null,
   isPrivate: Boolean(todo.isPrivate),
-  isPriority: Boolean(todo.isPriority),
+  priority:
+    todo.priority === "low" || todo.priority === "normal" || todo.priority === "high"
+      ? todo.priority
+      : todo.isPriority
+        ? "high"
+        : "normal",
+  isPriority: todo.priority === "high" || (!todo.priority && Boolean(todo.isPriority)),
+  isUrgent: Boolean(todo.isUrgent),
   comments: typeof todo.comments === "string" ? todo.comments : "",
   activityId: typeof todo.activityId === "string" ? todo.activityId : "",
   domain: typeof todo.domain === "string" ? todo.domain : "",
@@ -328,6 +335,7 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   savedDomains: [],
   savedActivities: [],
   savedTags: [],
+  richTextCommands: [],
   projectLinks: [],
   timeReportPresets: [],
   abbreviations: [],
@@ -486,6 +494,16 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
     : [],
   savedTags: Array.isArray(settings.savedTags)
     ? settings.savedTags.filter((value): value is string => typeof value === "string")
+    : [],
+  richTextCommands: Array.isArray(settings.richTextCommands)
+    ? settings.richTextCommands
+        .map((entry) => ({
+          id: typeof entry?.id === "string" && entry.id.trim() ? entry.id : crypto.randomUUID(),
+          trigger: typeof entry?.trigger === "string" ? entry.trigger.replace(/^@+/, "").trim().toLowerCase() : "",
+          label: typeof entry?.label === "string" ? entry.label.trim() : "",
+          template: typeof entry?.template === "string" ? entry.template : "",
+        }))
+        .filter((entry) => /^[a-z0-9_-]{1,24}$/.test(entry.trigger) && entry.template.trim())
     : [],
   projectLinks: Array.isArray(settings.projectLinks)
     ? settings.projectLinks
@@ -971,7 +989,14 @@ class TauriSqliteRepository implements AppRepository {
         completedAt: typeof payload.completedAt === "string" ? payload.completedAt : null,
         isDone: Boolean(row.is_done ?? payload.isDone),
         isPrivate: Boolean(payload.isPrivate),
-        isPriority: Boolean(payload.isPriority),
+        priority:
+          payload.priority === "low" || payload.priority === "normal" || payload.priority === "high"
+            ? payload.priority
+            : payload.isPriority
+              ? "high"
+              : "normal",
+        isPriority: payload.priority === "high" || (!payload.priority && Boolean(payload.isPriority)),
+        isUrgent: Boolean(payload.isUrgent),
         comments: row.comments || (typeof payload.comments === "string" ? payload.comments : ""),
         activityId: typeof payload.activityId === "string" ? payload.activityId : "",
         domain: typeof payload.domain === "string" ? payload.domain : "",

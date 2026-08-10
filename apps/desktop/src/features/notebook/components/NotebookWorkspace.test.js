@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNotebookSessionTitle, getNotebookListTitle, getNotebookTitleText } from "./NotebookWorkspace";
+import { buildNotebookSessionTitle, getNotebookListTitle, getNotebookTitleText, } from "./NotebookWorkspace";
 describe("NotebookWorkspace title helpers", () => {
     it("stores the editable date as the canonical session title prefix", () => {
         expect(buildNotebookSessionTitle("2026-08-10", "Planning")).toBe("2026-08-10 Planning");

@@ -89,6 +89,7 @@ const mergeSettings = (current, imported) => ({
     savedDomains: Array.from(new Set([...(current.savedDomains || []), ...(imported.savedDomains || [])])).sort(),
     savedActivities: Array.from(new Set([...(current.savedActivities || []), ...(imported.savedActivities || [])])).sort(),
     savedTags: Array.from(new Set([...(current.savedTags || []), ...(imported.savedTags || [])])).sort(),
+    richTextCommands: uniqueBy([...(current.richTextCommands || []), ...(imported.richTextCommands || [])], (entry) => entry.trigger.replace(/^@+/, "").trim().toLowerCase()),
     projectLinks: uniqueBy([...(current.projectLinks || []), ...(imported.projectLinks || [])], (entry) => `${entry.project}::${entry.domain}`),
     timeReportPresets: uniqueBy([...(current.timeReportPresets || []), ...(imported.timeReportPresets || [])], (entry) => entry.id),
     abbreviations: uniqueBy([...(current.abbreviations || []), ...(imported.abbreviations || [])], (entry) => entry.id || `${entry.shortForm}::${entry.fullForm}`),

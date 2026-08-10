@@ -11,5 +11,6 @@ interface SessionsSidebarProps {
     compact?: boolean;
     title?: string;
 }
+export declare const getPermanentSessionDeleteConfirmation: (title: string) => string;
 export declare const SessionsSidebar: ({ sessions, activeSessionId, onSelect, onCreate, onClose, onDelete, onRestore, onDeleteForever, compact, title, }: SessionsSidebarProps) => import("react/jsx-runtime").JSX.Element;
 export {};

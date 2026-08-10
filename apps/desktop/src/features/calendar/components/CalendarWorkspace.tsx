@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ActivityRecord, CalendarItemRecord, ChecklistRecord, LocalAppSettings, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, CalendarItemRecord, ChecklistRecord, LocalAppSettings, TimeLogRecord, TodoPriority, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog, isTimeLogRunning } from "../../../lib/time/tracking";
+import { getTodoPriority } from "../../../lib/tasks/model";
+import { TodoDetailsEditor } from "../../todos/components/TodoDetailsEditor";
 import {
   addDaysIso,
   daysBetweenIso,
@@ -197,6 +199,9 @@ type EditorDraft = {
   isPrivate: boolean;
   isDone: boolean;
   isPriority: boolean;
+  priority: TodoPriority;
+  isUrgent: boolean;
+  detailsHtml: string;
   isMeeting: boolean;
 };
 
@@ -443,7 +448,7 @@ export const CalendarWorkspace = ({
             isMeeting: false,
             isPrivate: todo.isPrivate,
             isDone: todo.isDone,
-            isPriority: Boolean(todo.isPriority),
+            isPriority: getTodoPriority(todo) === "high",
             lane: 0,
             laneCount: 1,
           };
@@ -885,7 +890,7 @@ export const CalendarWorkspace = ({
     if (calendarItem.targetType === "todo") {
       const todo = todos.find((entry) => entry.id === calendarItem.targetId);
       if (!todo) return;
-      const nextDraft = { itemId: calendarItem.id, targetType: "todo" as const, targetId: todo.id, title: todo.description, participantText: todo.participantText ?? "", activityId: todo.activityId, parentActivityId: "", doOn: todo.doOn || calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: Boolean(todo.isPriority), isMeeting: false };
+      const nextDraft = { itemId: calendarItem.id, targetType: "todo" as const, targetId: todo.id, title: todo.description, participantText: todo.participantText ?? "", activityId: todo.activityId, parentActivityId: "", doOn: todo.doOn || calendarItem.date, dueDate: todo.dueDate, startTime: slotToTime(calendarItem.startSlot), endTime: slotToTime(calendarItem.startSlot + DEFAULT_MEETING_DURATION_SLOTS), domain: todo.domain, project: todo.project, activity: todo.activity, isPrivate: todo.isPrivate, isDone: todo.isDone, isPriority: getTodoPriority(todo) === "high", priority: getTodoPriority(todo), isUrgent: Boolean(todo.isUrgent), detailsHtml: todo.detailsHtml || "", isMeeting: false };
       if (
         editorDraft &&
         editorDraft.itemId === nextDraft.itemId &&
@@ -905,6 +910,9 @@ export const CalendarWorkspace = ({
         editorDraft.isPrivate === nextDraft.isPrivate &&
         editorDraft.isDone === nextDraft.isDone &&
         editorDraft.isPriority === nextDraft.isPriority &&
+        editorDraft.priority === nextDraft.priority &&
+        editorDraft.isUrgent === nextDraft.isUrgent &&
+        editorDraft.detailsHtml === nextDraft.detailsHtml &&
         editorDraft.isMeeting === nextDraft.isMeeting
       ) {
         return;
@@ -914,7 +922,7 @@ export const CalendarWorkspace = ({
     }
     const activity = activities.find((entry) => entry.id === calendarItem.targetId);
     if (!activity) return;
-    const nextDraft = { itemId: calendarItem.id, targetType: "activity" as const, targetId: activity.id, title: activity.description, participantText: activity.participantText ?? "", activityId: "", parentActivityId: activity.parentActivityId, doOn: activity.doOn || calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, isMeeting: activity.type === "meeting" };
+    const nextDraft = { itemId: calendarItem.id, targetType: "activity" as const, targetId: activity.id, title: activity.description, participantText: activity.participantText ?? "", activityId: "", parentActivityId: activity.parentActivityId, doOn: activity.doOn || calendarItem.date, dueDate: activity.dueDate, startTime: activity.startTime || slotToTime(calendarItem.startSlot), endTime: activity.endTime || slotToTime(calendarItem.startSlot + Math.max(1, calendarItem.durationSlots)), domain: activity.domain, project: activity.project, activity: activity.activity, isPrivate: activity.isPrivate, isDone: activity.isDone, isPriority: false, priority: "normal" as const, isUrgent: false, detailsHtml: activity.detailsHtml || "", isMeeting: activity.type === "meeting" };
     if (
       editorDraft &&
       editorDraft.itemId === nextDraft.itemId &&
@@ -934,6 +942,9 @@ export const CalendarWorkspace = ({
       editorDraft.isPrivate === nextDraft.isPrivate &&
       editorDraft.isDone === nextDraft.isDone &&
       editorDraft.isPriority === nextDraft.isPriority &&
+      editorDraft.priority === nextDraft.priority &&
+      editorDraft.isUrgent === nextDraft.isUrgent &&
+      editorDraft.detailsHtml === nextDraft.detailsHtml &&
       editorDraft.isMeeting === nextDraft.isMeeting
     ) {
       return;
@@ -1438,7 +1449,7 @@ export const CalendarWorkspace = ({
       const todo = todos.find((entry) => entry.id === draft.targetId);
       if (!todo) return;
       const nextDescription = draft.title.trim().length ? draft.title : todo.description;
-      onSaveTodo({ ...todo, description: nextDescription, participantText: draft.participantText, activityId: draft.activityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone, isPriority: draft.isPriority });
+      onSaveTodo({ ...todo, description: nextDescription, participantText: draft.participantText, activityId: draft.activityId, doOn: draft.doOn, dueDate: draft.dueDate, domain: draft.domain, project: draft.project, activity: draft.activity, isPrivate: draft.isPrivate, isDone: draft.isDone, isPriority: draft.priority === "high", priority: draft.priority, isUrgent: draft.isUrgent, detailsHtml: draft.detailsHtml });
     } else {
       const activity = activities.find((entry) => entry.id === draft.targetId);
       if (!activity) return;
@@ -2415,13 +2426,29 @@ export const CalendarWorkspace = ({
                   </label>
                 ) : null}
                 {editorDraft.targetType === "todo" ? (
+                  <label className="calendar-priority-control">
+                    <span>Priority</span>
+                    <select
+                      value={editorDraft.priority}
+                      onChange={(event) => {
+                        const priority = event.target.value as TodoPriority;
+                        updateEditorDraft({ ...editorDraft, priority, isPriority: priority === "high" });
+                      }}
+                    >
+                      <option value="low">Low</option>
+                      <option value="normal">Normal</option>
+                      <option value="high">High</option>
+                    </select>
+                  </label>
+                ) : null}
+                {editorDraft.targetType === "todo" ? (
                   <label className="compact-private-toggle calendar-done-toggle">
                     <input
                       type="checkbox"
-                      checked={editorDraft.isPriority}
-                      onChange={(event) => updateEditorDraft({ ...editorDraft, isPriority: event.target.checked })}
+                      checked={editorDraft.isUrgent}
+                      onChange={(event) => updateEditorDraft({ ...editorDraft, isUrgent: event.target.checked })}
                     />
-                    <span>Prio</span>
+                    <span>Urgent</span>
                   </label>
                 ) : null}
                 <label className="compact-private-toggle calendar-done-toggle">
@@ -2539,6 +2566,17 @@ export const CalendarWorkspace = ({
                     </div>
                   ) : null}
                 </>
+              ) : null}
+              {editorDraft.targetType === "todo" ? (
+                <div className="field">
+                  <label htmlFor="calendar-task-details">Task details</label>
+                  <TodoDetailsEditor
+                    id="calendar-task-details"
+                    compact
+                    value={editorDraft.detailsHtml}
+                    onChange={(detailsHtml) => updateEditorDraft({ ...editorDraft, detailsHtml })}
+                  />
+                </div>
               ) : null}
               {editorDraft.targetType === "todo" ? (
                 <div className="field">

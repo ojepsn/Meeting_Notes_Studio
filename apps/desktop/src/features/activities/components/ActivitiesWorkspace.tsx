@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ActivityRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog } from "../../../lib/time/tracking";
+import { TodoDetailsEditor } from "../../todos/components/TodoDetailsEditor";
 
 type ActivitySortKey = "dueDate" | "description" | "type" | "domain" | "project" | "actualTimeSpentMinutes" | "createdAt";
 
@@ -126,7 +127,6 @@ export const ActivitiesWorkspace = ({
   const [editingTimeLogId, setEditingTimeLogId] = useState<string | null>(null);
   const [timeLogDraft, setTimeLogDraft] = useState<TimeLogRecord | null>(null);
   const [now, setNow] = useState(() => new Date());
-  const detailsEditorRef = useRef<HTMLDivElement | null>(null);
 
   const topLevelActivities = useMemo(() => activities.filter((entry) => !entry.parentActivityId), [activities]);
   const domainOptions = useMemo(() => structureOptions.domains, [structureOptions.domains]);
@@ -258,14 +258,6 @@ export const ActivitiesWorkspace = ({
     }
     setEditingDraft(entry);
   }, [activities, selectedActivityId]);
-
-  useEffect(() => {
-    if (!detailsEditorRef.current) return;
-    const nextHtml = editingDraft.detailsHtml || "<p></p>";
-    if (detailsEditorRef.current.innerHTML !== nextHtml) {
-      detailsEditorRef.current.innerHTML = nextHtml;
-    }
-  }, [editingDraft.detailsHtml, editingDraft.id]);
 
   const submitDraft = () => {
     const nextValue = draft.trim();
@@ -625,7 +617,11 @@ export const ActivitiesWorkspace = ({
 
               <div className="field">
                 <label htmlFor="activity-edit-details">Details</label>
-                <div id="activity-edit-details" ref={detailsEditorRef} className="rich-text-surface todo-rich-text-surface" contentEditable suppressContentEditableWarning onInput={(event) => setEditingDraft({ ...editingDraft, detailsHtml: (event.currentTarget as HTMLDivElement).innerHTML })} />
+                <TodoDetailsEditor
+                  id="activity-edit-details"
+                  value={editingDraft.detailsHtml}
+                  onChange={(detailsHtml) => setEditingDraft({ ...editingDraft, detailsHtml })}
+                />
               </div>
 
               <div className="activities-detail-sections">

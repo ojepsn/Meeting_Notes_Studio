@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { SessionRecord } from "@notesmith/domain";
+import type { SessionRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
+import { NotebookTodosPanel } from "./NotebookTodosPanel";
+import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 
 const NOTEBOOK_BLOCK_COMMANDS = [
   { id: "body", label: "Body", value: "P" },
@@ -50,6 +52,7 @@ export const getNotebookListTitle = (session: Pick<SessionRecord, "captureMode" 
 
 interface NotebookWorkspaceProps {
   sessions: SessionRecord[];
+  todos: TodoRecord[];
   activeSession: SessionRecord;
   isRecordingAudio: boolean;
   isTranscribingAudio: boolean;
@@ -58,6 +61,10 @@ interface NotebookWorkspaceProps {
   outputContent: ReactNode;
   onSelect: (sessionId: string) => void;
   onCreate: () => void;
+  onDelete: (sessionId: string) => void;
+  onAddTodo: (description: string) => void;
+  onSaveTodo: (todo: TodoRecord) => void;
+  onAddNoteForTodo: (todoId: string) => void;
   onChange: (session: SessionRecord) => void;
   onToggleRecording: () => void;
   onUploadAudio: () => void;
@@ -68,6 +75,7 @@ interface NotebookWorkspaceProps {
 
 export const NotebookWorkspace = ({
   sessions,
+  todos,
   activeSession,
   isRecordingAudio,
   isTranscribingAudio,
@@ -76,6 +84,10 @@ export const NotebookWorkspace = ({
   outputContent,
   onSelect,
   onCreate,
+  onDelete,
+  onAddTodo,
+  onSaveTodo,
+  onAddNoteForTodo,
   onChange,
   onToggleRecording,
   onUploadAudio,
@@ -146,16 +158,21 @@ export const NotebookWorkspace = ({
           {sortedSessions.map((session) => {
             const preview = richTextToPlainText(session.manualNotes);
             return (
-              <button
-                key={session.id}
-                className="notebook-page-item"
-                type="button"
-                data-active={session.id === activeSession.id}
-                onClick={() => onSelect(session.id)}
-              >
-                <strong>{getNotebookListTitle(session)}</strong>
-                <span>{preview || "Empty page"}</span>
-              </button>
+              <div className="notebook-page-item" data-active={session.id === activeSession.id} key={session.id}>
+                <button className="notebook-page-select" type="button" onClick={() => onSelect(session.id)}>
+                  <strong>{getNotebookListTitle(session)}</strong>
+                  <span>{preview || "Empty page"}</span>
+                </button>
+                <button
+                  className="notebook-page-delete"
+                  type="button"
+                  aria-label={`Delete ${getNotebookListTitle(session)}`}
+                  title="Move to deleted sessions"
+                  onClick={() => onDelete(session.id)}
+                >
+                  x
+                </button>
+              </div>
             );
           })}
         </div>
@@ -227,6 +244,7 @@ export const NotebookWorkspace = ({
           data-empty="true"
           onInput={(event) => updateManualNotes(event.currentTarget.innerHTML)}
         />
+        <RichTextCommandMenu editorRef={editorRef} onContentChange={updateManualNotes} />
       </section>
 
       <aside className="notebook-tools-pane" data-open={isToolsOpen}>
@@ -242,6 +260,12 @@ export const NotebookWorkspace = ({
         </button>
         {isToolsOpen ? (
           <div className="notebook-tools-content">
+            <NotebookTodosPanel
+              todos={todos}
+              onAddTodo={onAddTodo}
+              onSaveTodo={onSaveTodo}
+              onAddNote={onAddNoteForTodo}
+            />
             <div className="notebook-tools-tabs" role="tablist" aria-label="Notebook tools">
               <button type="button" data-active={toolsTab === "capture"} onClick={() => setToolsTab("capture")}>
                 Capture

@@ -834,33 +834,68 @@ select {
 }
 
 .notebook-page-item {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
   width: 100%;
-  padding: 0.72rem 0.75rem;
   border: 1px solid transparent;
   border-radius: 12px;
   background: transparent;
   color: var(--app-text);
+}
+
+.notebook-page-select {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.72rem 2.25rem 0.72rem 0.75rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.notebook-page-item strong,
-.notebook-page-item span {
+.notebook-page-select strong,
+.notebook-page-select span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.notebook-page-item strong {
+.notebook-page-select strong {
   font-size: 0.85rem;
 }
 
-.notebook-page-item span {
+.notebook-page-select span {
   color: var(--app-muted);
   font-size: 0.76rem;
+}
+
+.notebook-page-delete {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  display: grid;
+  width: 1.45rem;
+  height: 1.45rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--app-muted);
+  font-size: 0.76rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.notebook-page-delete:hover,
+.notebook-page-delete:focus-visible {
+  border-color: color-mix(in srgb, var(--app-danger) 45%, var(--app-border) 55%);
+  background: color-mix(in srgb, var(--app-danger) 14%, transparent 86%);
+  color: var(--app-danger);
 }
 
 .notebook-page-item:hover {
@@ -982,6 +1017,8 @@ select {
 }
 
 .notebook-tools-content {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
@@ -990,6 +1027,7 @@ select {
 
 .notebook-tools-tabs {
   display: flex;
+  flex: 0 0 auto;
   gap: 0.4rem;
   padding: 0.75rem;
   border-bottom: 1px solid var(--app-border);
@@ -997,7 +1035,8 @@ select {
 
 .notebook-capture-tools,
 .notebook-output-tools {
-  height: calc(100% - 55px);
+  flex: 1 1 auto;
+  height: auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1022,6 +1061,403 @@ select {
 .notebook-output-tools > .output-workspace {
   border: none;
   box-shadow: none;
+}
+
+.notebook-todos-section {
+  flex: 0 1 auto;
+  min-height: 0;
+  border-bottom: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-surface-soft) 78%, transparent 22%);
+}
+
+.notebook-todos-section[open] {
+  flex-basis: min(64%, 610px);
+  overflow: hidden;
+}
+
+.notebook-todos-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  color: var(--app-text);
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+
+.notebook-todos-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.notebook-todos-section > summary::before {
+  content: "+";
+  color: var(--app-muted);
+}
+
+.notebook-todos-section[open] > summary::before {
+  content: "-";
+}
+
+.notebook-todos-body {
+  height: calc(100% - 45px);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 0.75rem 0.85rem;
+}
+
+.notebook-todo-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.4rem;
+}
+
+.notebook-todo-add-row input,
+.notebook-todo-add-row button,
+.notebook-todo-sort select {
+  min-height: 34px;
+  padding: 0.36rem 0.52rem;
+  font-size: 0.75rem;
+}
+
+.notebook-todo-sort {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+  color: var(--app-muted);
+  font-size: 0.72rem;
+}
+
+.notebook-todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  margin-top: 0.55rem;
+}
+
+.notebook-todo-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--app-surface) 74%, transparent 26%);
+}
+
+.notebook-todo-row[data-selected="true"] {
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
+}
+
+.notebook-todo-row > input {
+  margin-left: 0.55rem;
+}
+
+.notebook-todo-row > button {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0.48rem 0.5rem 0.48rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--app-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.notebook-todo-row strong,
+.notebook-todo-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notebook-todo-row strong {
+  font-size: 0.76rem;
+}
+
+.notebook-todo-row span {
+  color: var(--app-muted);
+  font-size: 0.66rem;
+  text-transform: capitalize;
+}
+
+.notebook-todo-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.7rem;
+  padding: 0.7rem;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.notebook-todo-editor .field {
+  gap: 0.25rem;
+}
+
+.notebook-todo-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.7rem;
+}
+
+.notebook-todo-checks label {
+  display: flex;
+  align-items: center;
+  gap: 0.28rem;
+  color: var(--app-muted);
+  font-size: 0.7rem;
+}
+
+.notebook-todo-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.notebook-todo-meta-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  color: var(--app-muted);
+  font-size: 0.68rem;
+}
+
+.notebook-todo-meta-grid input,
+.notebook-todo-meta-grid select {
+  min-width: 0;
+  padding: 0.32rem 0.38rem;
+  font-size: 0.68rem;
+}
+
+.todo-details-editor {
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 11px;
+  background: var(--app-surface-soft);
+}
+
+.todo-details-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.42rem;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.todo-details-toolbar button {
+  padding: 0.28rem 0.4rem;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.todo-details-rich-text {
+  min-height: 150px;
+  padding: 0.65rem;
+  outline: none;
+  color: var(--app-text);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.todo-details-rich-text:empty::before {
+  content: attr(data-placeholder);
+  color: var(--app-muted);
+  pointer-events: none;
+}
+
+.todo-details-editor-compact .todo-details-rich-text {
+  min-height: 92px;
+}
+
+.calendar-priority-control {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--app-muted);
+  font-size: 0.72rem;
+}
+
+.calendar-priority-control select {
+  min-height: 30px;
+  padding: 0.25rem 0.38rem;
+  font-size: 0.72rem;
+}
+
+.rich-text-command-menu {
+  position: fixed;
+  z-index: 220;
+  display: flex;
+  flex-direction: column;
+  width: min(320px, calc(100vw - 16px));
+  max-height: 250px;
+  overflow-y: auto;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 12px;
+  background: var(--app-surface-strong);
+  box-shadow: 0 16px 38px var(--app-shadow);
+}
+
+.rich-text-command-menu-heading,
+.rich-text-command-menu-hint {
+  padding: 0.46rem 0.62rem;
+  color: var(--app-muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.rich-text-command-menu-heading {
+  border-bottom: 1px solid var(--app-border);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.rich-text-command-menu-hint {
+  border-top: 1px solid var(--app-border);
+}
+
+.rich-text-command-menu > button {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 0.08rem 0.5rem;
+  padding: 0.48rem 0.62rem;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 68%, transparent 32%);
+  background: transparent;
+  color: var(--app-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rich-text-command-menu > button[data-active="true"],
+.rich-text-command-menu > button:hover {
+  background: var(--app-accent-soft);
+}
+
+.rich-text-command-menu > button strong {
+  grid-row: 1 / span 2;
+  color: var(--app-accent);
+  font-size: 0.74rem;
+}
+
+.rich-text-command-menu > button span {
+  overflow: hidden;
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rich-text-command-menu > button small {
+  color: var(--app-muted);
+  font-size: 0.62rem;
+}
+
+.text-command-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.45rem;
+}
+
+.text-command-reference {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 0.12rem 0.45rem;
+  padding: 0.6rem;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface-soft);
+}
+
+.text-command-reference strong {
+  grid-row: 1 / span 2;
+  color: var(--app-accent);
+}
+
+.text-command-reference span {
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.text-command-reference small,
+.text-command-saved-item small {
+  color: var(--app-muted);
+  font-size: 0.66rem;
+}
+
+.text-command-form {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.55fr) minmax(220px, 1fr);
+  gap: 0.7rem;
+  align-items: end;
+}
+
+.text-command-form .field-wide,
+.text-command-form .primary-button,
+.text-command-form .settings-command-warning {
+  grid-column: 1 / -1;
+}
+
+.text-command-form .primary-button {
+  justify-self: start;
+}
+
+.text-command-trigger-input {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface);
+}
+
+.text-command-trigger-input > span {
+  padding-left: 0.7rem;
+  color: var(--app-accent);
+  font-weight: 800;
+}
+
+.text-command-trigger-input input {
+  border: 0;
+  background: transparent;
+}
+
+.settings-command-warning {
+  color: var(--app-danger);
+}
+
+.text-command-saved-item {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.4fr) minmax(140px, 0.7fr) minmax(220px, 1.5fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+@media (max-width: 760px) {
+  .text-command-form,
+  .text-command-saved-item {
+    grid-template-columns: 1fr;
+  }
+
+  .text-command-form .field-wide,
+  .text-command-form .primary-button,
+  .text-command-form .settings-command-warning {
+    grid-column: 1;
+  }
 }
 
 @media (max-width: 1280px) {

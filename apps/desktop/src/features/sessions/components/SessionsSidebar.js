@@ -18,11 +18,17 @@ const richTextToPlainText = (value) => {
     const text = typeof wrapper.innerText === "string" ? wrapper.innerText : wrapper.textContent || "";
     return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 };
+export const getPermanentSessionDeleteConfirmation = (title) => `Permanently delete "${title || "Untitled session"}"?\n\nThis cannot be undone. Attached recordings and files will also be deleted.`;
 export const SessionsSidebar = ({ sessions, activeSessionId, onSelect, onCreate, onClose, onDelete, onRestore, onDeleteForever, compact = false, title = "All Sessions", }) => {
     const [filter, setFilter] = useState("");
     const [showPublic, setShowPublic] = useState(true);
     const [showPrivate, setShowPrivate] = useState(true);
     const [showTrash, setShowTrash] = useState(false);
+    const handleDeleteForever = (session) => {
+        if (window.confirm(getPermanentSessionDeleteConfirmation(session.title))) {
+            onDeleteForever(session.id);
+        }
+    };
     const filteredSessions = useMemo(() => {
         const query = filter.trim().toLowerCase();
         return sessions.filter((session) => {
@@ -83,10 +89,10 @@ export const SessionsSidebar = ({ sessions, activeSessionId, onSelect, onCreate,
                                         if (showTrash)
                                             return;
                                         onSelect(session.id);
-                                    }, disabled: showTrash, children: _jsxs("div", { className: "compact-session-main", children: [_jsx("strong", { children: session.title || "Untitled session" }), _jsx("span", { className: "muted", children: metadata.filter(Boolean).join(" | ") })] }) }), _jsx("div", { className: "compact-session-actions", children: showTrash ? (_jsxs(_Fragment, { children: [_jsx("button", { className: "compact-session-restore", type: "button", onClick: () => onRestore(session.id), children: "Restore" }), _jsx("button", { className: "compact-session-delete", type: "button", onClick: () => onDeleteForever(session.id), children: "Delete now" })] })) : (_jsx("button", { className: "compact-session-delete", type: "button", onClick: () => onDelete(session.id), children: "Delete" })) })] })) : (_jsxs(_Fragment, { children: [_jsxs("button", { className: "session-item-button", type: "button", onClick: () => {
+                                    }, disabled: showTrash, children: _jsxs("div", { className: "compact-session-main", children: [_jsx("strong", { children: session.title || "Untitled session" }), _jsx("span", { className: "muted", children: metadata.filter(Boolean).join(" | ") })] }) }), _jsx("div", { className: "compact-session-actions", children: showTrash ? (_jsxs(_Fragment, { children: [_jsx("button", { className: "compact-session-restore", type: "button", onClick: () => onRestore(session.id), children: "Restore" }), _jsx("button", { className: "compact-session-delete", type: "button", onClick: () => handleDeleteForever(session), children: "Delete permanently" })] })) : (_jsx("button", { className: "compact-session-delete", type: "button", onClick: () => onDelete(session.id), children: "Delete" })) })] })) : (_jsxs(_Fragment, { children: [_jsxs("button", { className: "session-item-button", type: "button", onClick: () => {
                                         if (showTrash)
                                             return;
                                         onSelect(session.id);
-                                    }, disabled: showTrash, children: [_jsx("strong", { children: session.title || "Untitled session" }), _jsx("span", { className: "muted", children: secondaryMetadata.filter(Boolean).join(" | ") || "No metadata yet" })] }), _jsx("div", { className: "list-item-actions", children: showTrash ? (_jsxs(_Fragment, { children: [_jsx("button", { className: "small-button", type: "button", onClick: () => onRestore(session.id), children: "Restore" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onDeleteForever(session.id), children: "Delete now" })] })) : (_jsxs(_Fragment, { children: [_jsx("button", { className: "small-button", type: "button", onClick: () => onSelect(session.id), children: "Open" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onDelete(session.id), children: "Delete" })] })) })] })) }, session.id));
+                                    }, disabled: showTrash, children: [_jsx("strong", { children: session.title || "Untitled session" }), _jsx("span", { className: "muted", children: secondaryMetadata.filter(Boolean).join(" | ") || "No metadata yet" })] }), _jsx("div", { className: "list-item-actions", children: showTrash ? (_jsxs(_Fragment, { children: [_jsx("button", { className: "small-button", type: "button", onClick: () => onRestore(session.id), children: "Restore" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => handleDeleteForever(session), children: "Delete permanently" })] })) : (_jsxs(_Fragment, { children: [_jsx("button", { className: "small-button", type: "button", onClick: () => onSelect(session.id), children: "Open" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onDelete(session.id), children: "Delete" })] })) })] })) }, session.id));
                 }) })] }));
 };

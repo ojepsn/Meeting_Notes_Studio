@@ -4,11 +4,13 @@ import { getTemplatesForCaptureMode } from "@notesmith/domain";
 import { DEFAULT_MEETING_MINUTES_RULES, DEFAULT_MEETING_MINUTES_SYSTEM_PROMPT, DEFAULT_PERSONAL_NOTES_RULES, DEFAULT_PERSONAL_NOTES_SYSTEM_PROMPT, DEFAULT_REVISION_RULES, DEFAULT_TRANSLATION_RULES, } from "@notesmith/prompts";
 import { OUTPUT_LAYOUT_PRESETS } from "../../../lib/export/outputLayouts";
 import { TemplatesCard } from "../../templates/components/TemplatesCard";
+import { buildRichTextCommands } from "../../richTextCommands/RichTextCommandMenu";
 const SETTINGS_SECTIONS = [
     { id: "ai", label: "AI Settings", description: "Models, API key, transcription" },
     { id: "diagnostics", label: "AI Diagnostics", description: "Metrics, cache, and recent AI history" },
     { id: "themes", label: "Themes", description: "Look and feel" },
     { id: "output", label: "Output formatting", description: "Language and output defaults" },
+    { id: "commands", label: "Text commands", description: "Fast snippets in rich-text fields" },
     { id: "people", label: "People, Domains & Projects", description: "Reusable people, structure, and shorthand" },
     { id: "prompts", label: "Prompts", description: "Generation and revision instructions" },
     { id: "templates", label: "Templates for meetings/notes", description: "Built-in and custom note structures" },
@@ -149,6 +151,9 @@ export const SettingsCard = ({ settings, templates, initialSection = "ai", onCha
     const [tagDraft, setTagDraft] = useState("");
     const [abbrShort, setAbbrShort] = useState("");
     const [abbrFull, setAbbrFull] = useState("");
+    const [commandTrigger, setCommandTrigger] = useState("");
+    const [commandLabel, setCommandLabel] = useState("");
+    const [commandTemplate, setCommandTemplate] = useState("");
     const [extraBlockLabel, setExtraBlockLabel] = useState("");
     const [extraBlockBody, setExtraBlockBody] = useState("");
     useEffect(() => {
@@ -160,6 +165,14 @@ export const SettingsCard = ({ settings, templates, initialSection = "ai", onCha
         ...settings,
         promptProfile: nextPromptProfile,
     });
+    const normalizedCommandTrigger = commandTrigger.replace(/^@+/, "").trim().toLowerCase();
+    const builtInTextCommands = buildRichTextCommands();
+    const reservedCommandTriggers = new Set(builtInTextCommands.map((command) => command.trigger));
+    const savedCommandTriggers = new Set((settings.richTextCommands || []).map((command) => command.trigger));
+    const canAddTextCommand = /^[a-z0-9_-]{1,24}$/.test(normalizedCommandTrigger) &&
+        commandTemplate.trim().length > 0 &&
+        !reservedCommandTriggers.has(normalizedCommandTrigger) &&
+        !savedCommandTriggers.has(normalizedCommandTrigger);
     const updateExtraBlock = (id, updates) => updatePromptProfile({
         ...settings.promptProfile,
         extraBlocks: settings.promptProfile.extraBlocks.map((block) => block.id === id ? { ...block, ...updates } : block),
@@ -237,7 +250,28 @@ export const SettingsCard = ({ settings, templates, initialSection = "ai", onCha
                                         }), children: [_jsx("option", { value: "same", children: "Same as source" }), _jsx("option", { value: "sv", children: "Swedish" }), _jsx("option", { value: "en", children: "English" })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "output-layout-preset", children: "Document layout preset" }), _jsx("select", { id: "output-layout-preset", value: settings.outputLayoutPresetId, onChange: (event) => onChange({ ...settings, outputLayoutPresetId: event.target.value }), children: OUTPUT_LAYOUT_PRESETS.map((preset) => (_jsx("option", { value: preset.id, children: preset.label }, preset.id))) })] }), _jsx("div", { className: "settings-option-grid", children: OUTPUT_LAYOUT_PRESETS.map((preset) => {
                                     const isSelected = settings.outputLayoutPresetId === preset.id;
                                     return (_jsxs("button", { className: `settings-option-card${isSelected ? " settings-option-card-selected" : ""}`, type: "button", onClick: () => onChange({ ...settings, outputLayoutPresetId: preset.id }), children: [_jsxs("div", { className: "model-option-title-row", children: [_jsx("strong", { children: preset.label }), isSelected ? _jsx("span", { className: "model-option-selected", children: "Selected" }) : null] }), _jsx("p", { children: preset.description }), _jsxs("div", { className: "model-option-copy-block model-option-copy-block-compact", children: [_jsx("span", { className: "model-option-label", children: "Typography" }), _jsxs("span", { className: "tiny-text", children: ["Headers: ", preset.style.headingFont.split(",")[0].replaceAll("\"", "")] }), _jsxs("span", { className: "tiny-text", children: ["Body: ", preset.style.bodyFont.split(",")[0].replaceAll("\"", ""), " \u00B7 ", preset.style.bodySize, " pt \u00B7 ", preset.style.lineHeight, " line height"] })] }), _jsxs("div", { className: "model-option-copy-block model-option-copy-block-compact", children: [_jsx("span", { className: "model-option-label", children: "Best for" }), _jsx("span", { className: "tiny-text", children: preset.bestFor })] })] }, preset.id));
-                                }) })] })) : null, activeSection === "people" ? (_jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "People, Domains & Projects" }), _jsx("p", { children: "Manage the slower shared structure here, so the execution workspaces can stay focused on fast capture, scheduling, and time." })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "settings-subsection-heading", children: [_jsx("strong", { children: "People" }), _jsx("span", { className: "tiny-text", children: "Reusable contacts and meeting participants." })] }), _jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "person-draft", children: "Saved people" }), _jsx("input", { id: "person-draft", value: personDraft, onChange: (event) => setPersonDraft(event.target.value), placeholder: "Add person" })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => {
+                                }) })] })) : null, activeSection === "commands" ? (_jsxs("div", { className: "sidebar-card settings-text-commands-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "Text commands" }), _jsx("p", { children: "Type @ in any rich-text field to search commands. Press Space after an exact command, or use Enter, Tab, or the command menu to insert it." })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "settings-subsection-heading", children: [_jsx("strong", { children: "Built-in commands" }), _jsx("span", { className: "tiny-text", children: "Dates and times use this computer's current timezone." })] }), _jsx("div", { className: "text-command-reference-grid", children: builtInTextCommands.map((command) => (_jsxs("div", { className: "text-command-reference", children: [_jsxs("strong", { children: ["@", command.trigger] }), _jsx("span", { children: command.label }), _jsx("small", { children: command.description })] }, command.trigger))) })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "settings-subsection-heading", children: [_jsx("strong", { children: "Custom commands" }), _jsxs("span", { className: "tiny-text", children: ["Available placeholders: ", "{date}", ", ", "{time}", ", ", "{datetime}", ", ", "{tomorrow}", ", ", "{yesterday}", ", ", "{week}", ", and ", "{day}", "."] })] }), _jsxs("div", { className: "text-command-form", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "text-command-trigger", children: "Command" }), _jsxs("div", { className: "text-command-trigger-input", children: [_jsx("span", { children: "@" }), _jsx("input", { id: "text-command-trigger", value: commandTrigger, onChange: (event) => setCommandTrigger(event.target.value), placeholder: "followup" })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "text-command-label", children: "Menu label" }), _jsx("input", { id: "text-command-label", value: commandLabel, onChange: (event) => setCommandLabel(event.target.value), placeholder: "Follow-up reminder" })] }), _jsxs("div", { className: "field field-wide", children: [_jsx("label", { htmlFor: "text-command-template", children: "Inserted text" }), _jsx("textarea", { id: "text-command-template", value: commandTemplate, onChange: (event) => setCommandTemplate(event.target.value), placeholder: "Follow up by {tomorrow}: ", rows: 4 })] }), _jsx("button", { className: "primary-button", type: "button", disabled: !canAddTextCommand, onClick: () => {
+                                                    if (!canAddTextCommand)
+                                                        return;
+                                                    onChange({
+                                                        ...settings,
+                                                        richTextCommands: [
+                                                            ...(settings.richTextCommands || []),
+                                                            {
+                                                                id: crypto.randomUUID(),
+                                                                trigger: normalizedCommandTrigger,
+                                                                label: commandLabel.trim() || normalizedCommandTrigger,
+                                                                template: commandTemplate,
+                                                            },
+                                                        ],
+                                                    });
+                                                    setCommandTrigger("");
+                                                    setCommandLabel("");
+                                                    setCommandTemplate("");
+                                                }, children: "Add command" }), normalizedCommandTrigger && reservedCommandTriggers.has(normalizedCommandTrigger) ? (_jsxs("span", { className: "tiny-text settings-command-warning", children: ["@", normalizedCommandTrigger, " is a built-in command."] })) : null, normalizedCommandTrigger && savedCommandTriggers.has(normalizedCommandTrigger) ? (_jsxs("span", { className: "tiny-text settings-command-warning", children: ["@", normalizedCommandTrigger, " is already saved."] })) : null] }), _jsxs("div", { className: "section-list", children: [(settings.richTextCommands || []).map((command) => (_jsxs("div", { className: "list-item text-command-saved-item", children: [_jsxs("strong", { children: ["@", command.trigger] }), _jsx("span", { children: command.label }), _jsx("small", { children: command.template }), _jsx("div", { className: "list-item-actions", children: _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onChange({
+                                                                ...settings,
+                                                                richTextCommands: (settings.richTextCommands || []).filter((entry) => entry.id !== command.id),
+                                                            }), children: "Remove" }) })] }, command.id))), !(settings.richTextCommands || []).length ? _jsx("p", { className: "tiny-text", children: "No custom commands yet." }) : null] })] })] })) : null, activeSection === "people" ? (_jsxs("div", { className: "sidebar-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "People, Domains & Projects" }), _jsx("p", { children: "Manage the slower shared structure here, so the execution workspaces can stay focused on fast capture, scheduling, and time." })] }), _jsxs("div", { className: "section-divider", children: [_jsxs("div", { className: "settings-subsection-heading", children: [_jsx("strong", { children: "People" }), _jsx("span", { className: "tiny-text", children: "Reusable contacts and meeting participants." })] }), _jsxs("div", { className: "inline-row", children: [_jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "person-draft", children: "Saved people" }), _jsx("input", { id: "person-draft", value: personDraft, onChange: (event) => setPersonDraft(event.target.value), placeholder: "Add person" })] }), _jsx("button", { className: "small-button inline-action", type: "button", onClick: () => {
                                                     const nextValue = personDraft.trim();
                                                     if (!nextValue)
                                                         return;

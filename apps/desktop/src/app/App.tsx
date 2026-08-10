@@ -17,6 +17,7 @@ import { NowWorkspace } from "../features/now/components/NowWorkspace";
 import { StructureWorkspace } from "../features/structure/components/StructureWorkspace";
 import { AssistantWorkspace } from "../features/assistant/components/AssistantWorkspace";
 import { NotebookWorkspace } from "../features/notebook/components/NotebookWorkspace";
+import { RichTextCommandProvider } from "../features/richTextCommands/RichTextCommandMenu";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
 import type { SettingsSection } from "../features/settings/components/SettingsCard";
 import { hydrateAITextCache, snapshotAITextCache } from "../lib/ai/cache";
@@ -4069,6 +4070,7 @@ export const App = () => {
   };
 
   return (
+    <RichTextCommandProvider customCommands={snapshot.settings.richTextCommands}>
     <div
       className="app-shell desktop-shell"
       data-theme={snapshot.settings.theme}
@@ -4273,6 +4275,7 @@ export const App = () => {
             {activeWorkspace === "notebook" ? (
               <NotebookWorkspace
                 sessions={activeSessions}
+                todos={snapshot.todos}
                 activeSession={activeSession}
                 isRecordingAudio={isRecordingAudio}
                 isTranscribingAudio={isTranscribingAudio}
@@ -4283,6 +4286,16 @@ export const App = () => {
                   setActiveSessionId(sessionId);
                 }}
                 onCreate={() => void handleCreateNotebookPage()}
+                onDelete={(sessionId) => void deleteSession(sessionId)}
+                onAddTodo={(description) => void addTodo(description)}
+                onSaveTodo={(todo) => void saveTodo(todo)}
+                onAddNoteForTodo={(todoId) => {
+                  void ensureSessionForTodo(todoId).then((sessionId) => {
+                    if (!sessionId) return;
+                    setSelectedOutputVersionId(null);
+                    setActiveSessionId(sessionId);
+                  });
+                }}
                 onChange={handleCaptureSessionChange}
                 onToggleRecording={() =>
                   void (isRecordingAudio ? handleStopRecording() : handleStartRecording("microphone"))
@@ -5173,6 +5186,7 @@ export const App = () => {
         </div>
       ) : null}
     </div>
+    </RichTextCommandProvider>
   );
 };
 

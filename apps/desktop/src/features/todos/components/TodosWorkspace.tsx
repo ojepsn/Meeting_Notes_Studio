@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, SyntheticEvent } from "react";
-import type { ActivityRecord, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, LocalAppSettings, TaskRecord, TimeLogRecord } from "@notesmith/domain";
+import type { ActivityRecord, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, LocalAppSettings, TaskRecord, TimeLogRecord, TodoPriority } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog, isTimeLogRunning } from "../../../lib/time/tracking";
+import { getTodoPriority } from "../../../lib/tasks/model";
+import { TodoDetailsEditor } from "./TodoDetailsEditor";
 
 type TodoSortKey = "createdAt" | "description" | "domain" | "project" | "activity" | "doOn" | "dueDate" | "details";
 type TodoSortDirection = "asc" | "desc";
@@ -62,6 +64,8 @@ const createBlankTodoDraft = (description = ""): TaskRecord => ({
   isDone: false,
   isPrivate: false,
   isPriority: false,
+  priority: "normal",
+  isUrgent: false,
   comments: "",
   activityId: "",
   domain: "",
@@ -245,7 +249,6 @@ export const TodosWorkspace = ({
   const [editingTemplateCategory, setEditingTemplateCategory] = useState("General");
   const [checklistItemDrafts, setChecklistItemDrafts] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => new Date());
-  const detailsEditorRef = useRef<HTMLDivElement | null>(null);
 
   const activityLookup = useMemo(
     () => Object.fromEntries(activities.map((activity) => [activity.id, activity])) as Record<string, ActivityRecord>,
@@ -329,7 +332,7 @@ export const TodosWorkspace = ({
     const filtered = statusFiltered.filter((todo) => {
       if (!showPrivateTodos && todo.isPrivate) return false;
       if (!showBusinessTodos && !todo.isPrivate) return false;
-      if (showPriorityOnly && !todo.isPriority) return false;
+      if (showPriorityOnly && getTodoPriority(todo) !== "high") return false;
       return (Object.entries(columnFilters) as [TodoSortKey, string][]).every(([key, filterValue]) => {
         const normalizedFilter = normalizeValue(filterValue);
         if (!normalizedFilter) return true;
@@ -409,14 +412,6 @@ export const TodosWorkspace = ({
     }
     setEditingDraft(todo);
   }, [selectedTodoId, todos]);
-
-  useEffect(() => {
-    if (!detailsEditorRef.current) return;
-    const nextHtml = editingDraft.detailsHtml || "<p></p>";
-    if (detailsEditorRef.current.innerHTML !== nextHtml) {
-      detailsEditorRef.current.innerHTML = nextHtml;
-    }
-  }, [editingDraft.detailsHtml, editingDraft.id]);
 
   useEffect(() => {
     setAddingChecklist(false);
@@ -1240,6 +1235,30 @@ export const TodosWorkspace = ({
                     <label htmlFor="todo-edit-private" className="checkbox-label">Private</label>
                   </div>
                 </div>
+
+                <div className="field">
+                  <label htmlFor="todo-edit-priority">Priority</label>
+                  <select
+                    id="todo-edit-priority"
+                    value={getTodoPriority(editingDraft)}
+                    onChange={(event) => {
+                      const priority = event.target.value as TodoPriority;
+                      setEditingDraft({ ...editingDraft, priority, isPriority: priority === "high" });
+                    }}
+                  >
+                    <option value="low">Low</option>
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+
+                <div className="field activity-private-field">
+                  <span>Urgency</span>
+                  <div className="compact-private-toggle">
+                    <input id="todo-edit-urgent" type="checkbox" checked={Boolean(editingDraft.isUrgent)} onChange={(event) => setEditingDraft({ ...editingDraft, isUrgent: event.target.checked })} />
+                    <label htmlFor="todo-edit-urgent" className="checkbox-label">Urgent</label>
+                  </div>
+                </div>
               </div>
 
               {currentActivity ? (
@@ -1258,7 +1277,11 @@ export const TodosWorkspace = ({
 
               <div className="field">
                 <label htmlFor="todo-edit-details">Details</label>
-                <div id="todo-edit-details" ref={detailsEditorRef} className="rich-text-surface todo-rich-text-surface" contentEditable suppressContentEditableWarning onInput={(event) => setEditingDraft({ ...editingDraft, detailsHtml: (event.currentTarget as HTMLDivElement).innerHTML })} />
+                <TodoDetailsEditor
+                  id="todo-edit-details"
+                  value={editingDraft.detailsHtml}
+                  onChange={(detailsHtml) => setEditingDraft({ ...editingDraft, detailsHtml })}
+                />
               </div>
               <details className="workspace-disclosure" open>
                 <summary>Checklists</summary>

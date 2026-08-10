@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildNotebookSessionTitle, getNotebookListTitle, getNotebookTitleText } from "./NotebookWorkspace";
+import {
+  buildNotebookSessionTitle,
+  getNotebookListTitle,
+  getNotebookTitleText,
+} from "./NotebookWorkspace";
 
 describe("NotebookWorkspace title helpers", () => {
   it("stores the editable date as the canonical session title prefix", () => {

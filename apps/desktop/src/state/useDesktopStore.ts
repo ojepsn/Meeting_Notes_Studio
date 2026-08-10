@@ -1978,6 +1978,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       completedAt: null,
       isPrivate: false,
       isPriority: false,
+      priority: "normal",
+      isUrgent: false,
       comments: options?.comments || "",
       activityId: inferredStructure.activityId,
       domain: inferredStructure.domain,
@@ -2447,6 +2449,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       completedAt: null,
       isPrivate: false,
       isPriority: false,
+      priority: "normal",
+      isUrgent: false,
       comments: "",
       participantText: "",
       activityId: "",
@@ -2532,7 +2536,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         activity: "",
       });
       const inferred = inferTodoStructureAssignment(snapshot, parsed.description, inherited);
-      const todo = {
+      const todo: TodoRecord = {
         id: crypto.randomUUID(),
         description: parsed.description,
         participantText: "",
@@ -2540,6 +2544,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         completedAt: null,
         isPrivate: false,
         isPriority: false,
+        priority: "normal",
+        isUrgent: false,
         comments: "",
         activityId: inferred.activityId,
         domain: inferred.domain,

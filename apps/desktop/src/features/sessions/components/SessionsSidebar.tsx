@@ -33,6 +33,9 @@ const richTextToPlainText = (value: string) => {
   return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 };
 
+export const getPermanentSessionDeleteConfirmation = (title: string) =>
+  `Permanently delete "${title || "Untitled session"}"?\n\nThis cannot be undone. Attached recordings and files will also be deleted.`;
+
 export const SessionsSidebar = ({
   sessions,
   activeSessionId,
@@ -49,6 +52,12 @@ export const SessionsSidebar = ({
   const [showPublic, setShowPublic] = useState(true);
   const [showPrivate, setShowPrivate] = useState(true);
   const [showTrash, setShowTrash] = useState(false);
+
+  const handleDeleteForever = (session: SessionRecord) => {
+    if (window.confirm(getPermanentSessionDeleteConfirmation(session.title))) {
+      onDeleteForever(session.id);
+    }
+  };
 
   const filteredSessions = useMemo(() => {
     const query = filter.trim().toLowerCase();
@@ -239,9 +248,9 @@ export const SessionsSidebar = ({
                         <button
                           className="compact-session-delete"
                           type="button"
-                          onClick={() => onDeleteForever(session.id)}
+                          onClick={() => handleDeleteForever(session)}
                         >
-                          Delete now
+                          Delete permanently
                         </button>
                       </>
                     ) : (
@@ -273,8 +282,8 @@ export const SessionsSidebar = ({
                         <button className="small-button" type="button" onClick={() => onRestore(session.id)}>
                           Restore
                         </button>
-                        <button className="small-button danger-button" type="button" onClick={() => onDeleteForever(session.id)}>
-                          Delete now
+                        <button className="small-button danger-button" type="button" onClick={() => handleDeleteForever(session)}>
+                          Delete permanently
                         </button>
                       </>
                     ) : (
