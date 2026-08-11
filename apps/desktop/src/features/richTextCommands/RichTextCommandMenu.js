@@ -1,5 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 const RichTextCommandContext = createContext([]);
 const BUILTIN_COMMANDS = [
     { trigger: "now", label: "Current time", description: "24-hour time, HH:mm", template: "{time}" },
@@ -97,6 +97,10 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }) => {
     const commands = useMemo(() => buildRichTextCommands(customCommands), [customCommands]);
     const [activeQuery, setActiveQuery] = useState(null);
     const [activeIndex, setActiveIndex] = useState(0);
+    const activeIndexRef = useRef(activeIndex);
+    const onContentChangeRef = useRef(onContentChange);
+    activeIndexRef.current = activeIndex;
+    onContentChangeRef.current = onContentChange;
     const filteredCommands = useMemo(() => {
         if (!activeQuery)
             return [];
@@ -149,7 +153,7 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }) => {
             if (suffix === "line")
                 document.execCommand("insertLineBreak");
             setActiveQuery(null);
-            onContentChange(editor.innerHTML);
+            onContentChangeRef.current(editor.innerHTML);
         };
         const handleKeyDown = (event) => {
             const match = getCommandQuery(editor);
@@ -184,7 +188,7 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }) => {
             if ((event.key === "Enter" || event.key === "Tab") && matching.length) {
                 event.preventDefault();
                 const exact = commands.find((command) => command.trigger === match.query);
-                insertCommand(exact || matching[Math.min(activeIndex, matching.length - 1)], event.key === "Enter" ? "line" : "none");
+                insertCommand(exact || matching[Math.min(activeIndexRef.current, matching.length - 1)], event.key === "Enter" ? "line" : "none");
             }
         };
         const handleInput = () => refreshQuery();
@@ -205,7 +209,7 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }) => {
             editor.removeEventListener("blur", handleBlur);
             editor.removeEventListener("notesmith-rich-text-command", handleMenuCommand);
         };
-    }, [activeIndex, commands, editorRef, onContentChange]);
+    }, [commands, editorRef]);
     if (!activeQuery || !filteredCommands.length)
         return null;
     return (_jsxs("div", { className: "rich-text-command-menu", role: "listbox", "aria-label": "Text commands", style: { top: activeQuery.top, left: activeQuery.left }, children: [_jsx("div", { className: "rich-text-command-menu-heading", children: "Text commands" }), filteredCommands.map((command, index) => (_jsxs("button", { type: "button", role: "option", "aria-selected": index === activeIndex, "data-active": index === activeIndex, onMouseDown: (event) => event.preventDefault(), onClick: () => {

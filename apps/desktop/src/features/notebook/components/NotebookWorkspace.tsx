@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import type { SessionRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { NotebookTodosPanel } from "./NotebookTodosPanel";
+import { openDetachedTodosWindow } from "../todosWindowBridge";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
+import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
 
 const NOTEBOOK_BLOCK_COMMANDS = [
   { id: "body", label: "Body", value: "P" },
@@ -198,19 +200,24 @@ export const NotebookWorkspace = ({
     }
   }, [todosMode]);
 
-  const updateManualNotes = (html: string) => {
+  const commitManualNotes = (html: string) => {
     const normalizedHtml = normalizeNotebookHtml(html);
-    if (editorRef.current) {
-      editorRef.current.dataset.empty = richTextToPlainText(normalizedHtml) ? "false" : "true";
-    }
     onChange({ ...activeSession, manualNotes: normalizedHtml });
+  };
+  const deferredManualNotes = useDeferredRichTextChange(commitManualNotes);
+
+  const updateManualNotes = (html: string) => {
+    if (editorRef.current) {
+      editorRef.current.dataset.empty = editorRef.current.textContent?.trim() ? "false" : "true";
+    }
+    deferredManualNotes.schedule(html);
   };
 
   const applyCommand = (command: string, value?: string) => {
     if (!editorRef.current) return;
     editorRef.current.focus();
     document.execCommand(command, false, value);
-    updateManualNotes(editorRef.current.innerHTML);
+    deferredManualNotes.commitNow(editorRef.current.innerHTML);
   };
 
   const generateOutput = () => {
@@ -290,15 +297,9 @@ export const NotebookWorkspace = ({
     if (!drag || drag.pointerId !== event.pointerId) return;
     const desiredLeft = drag.startLeft + event.clientX - drag.startClientX;
     const desiredTop = drag.startTop + event.clientY - drag.startClientY;
-    const minLeft = drag.workspaceLeft + 8;
-    const maxLeft = Math.max(minLeft, drag.workspaceRight - drag.panelWidth - 8);
-    const minTop = drag.workspaceTop + 8;
-    const maxTop = Math.max(minTop, drag.workspaceBottom - drag.panelHeight - 8);
-    const boundedLeft = Math.min(Math.max(desiredLeft, minLeft), maxLeft);
-    const boundedTop = Math.min(Math.max(desiredTop, minTop), maxTop);
     setTodosPosition({
-      x: drag.originX + boundedLeft - drag.startLeft,
-      y: drag.originY + boundedTop - drag.startTop,
+      x: drag.originX + desiredLeft - drag.startLeft,
+      y: drag.originY + desiredTop - drag.startTop,
     });
   };
 
@@ -530,8 +531,9 @@ export const NotebookWorkspace = ({
           data-placeholder="Start writing..."
           data-empty="true"
           onInput={(event) => updateManualNotes(event.currentTarget.innerHTML)}
+          onBlur={deferredManualNotes.flush}
         />
-        <RichTextCommandMenu editorRef={editorRef} onContentChange={updateManualNotes} />
+        <RichTextCommandMenu editorRef={editorRef} onContentChange={deferredManualNotes.commitNow} />
       </section>
 
       <aside className="notebook-tools-pane" data-open={isToolsOpen}>
@@ -631,6 +633,17 @@ export const NotebookWorkspace = ({
             headerActions={(
               <div className="notebook-todos-window-actions">
                 <button className="small-button" type="button" onClick={minimizeTodos}>Minimize</button>
+                <button
+                  className="small-button"
+                  type="button"
+                  onClick={() => {
+                    void openDetachedTodosWindow().then(minimizeTodos).catch((error) => {
+                      console.error("Could not open detached Todos window", error);
+                    });
+                  }}
+                >
+                  Pop out
+                </button>
                 <button
                   className="small-button"
                   type="button"

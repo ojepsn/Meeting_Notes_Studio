@@ -19,6 +19,7 @@ src-tauri/target/
 apps/*/node_modules/
 apps/*/dist/
 apps/*/src-tauri/target/
+apps/*/src-tauri/target-codex/
 apps/*/src-tauri/keys/*
 apps/*/src-tauri/binaries/*.exe
 apps/*/src-tauri/binaries/*-pc-windows-msvc.exe

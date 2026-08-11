@@ -3,6 +3,44 @@ import { useEffect, useMemo, useState } from "react";
 import { DateInput } from "../../../components/DateInput";
 import { getTodoPriority } from "../../../lib/tasks/model";
 import { TodoDetailsEditor } from "../../todos/components/TodoDetailsEditor";
+export const DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS = {
+    sortField: "priority",
+    sortDirection: "desc",
+    showBusiness: true,
+    showPrivate: true,
+    showCompleted: true,
+    urgentOnly: false,
+    priorityFilter: "all",
+};
+const NOTEBOOK_TODO_VIEW_SETTINGS_KEY = "notesmith:notebook-todo-view-settings";
+const TODO_SORT_FIELDS = ["priority", "title", "created", "updated", "due"];
+const TODO_PRIORITIES = ["all", "low", "normal", "high"];
+export const normalizeNotebookTodoViewSettings = (value) => {
+    const saved = value && typeof value === "object" ? value : {};
+    return {
+        sortField: TODO_SORT_FIELDS.includes(saved.sortField)
+            ? saved.sortField
+            : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.sortField,
+        sortDirection: saved.sortDirection === "asc" || saved.sortDirection === "desc"
+            ? saved.sortDirection
+            : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.sortDirection,
+        showBusiness: typeof saved.showBusiness === "boolean" ? saved.showBusiness : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.showBusiness,
+        showPrivate: typeof saved.showPrivate === "boolean" ? saved.showPrivate : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.showPrivate,
+        showCompleted: typeof saved.showCompleted === "boolean" ? saved.showCompleted : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.showCompleted,
+        urgentOnly: typeof saved.urgentOnly === "boolean" ? saved.urgentOnly : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.urgentOnly,
+        priorityFilter: TODO_PRIORITIES.includes(saved.priorityFilter)
+            ? saved.priorityFilter
+            : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.priorityFilter,
+    };
+};
+const readNotebookTodoViewSettings = () => {
+    try {
+        return normalizeNotebookTodoViewSettings(JSON.parse(window.localStorage.getItem(NOTEBOOK_TODO_VIEW_SETTINGS_KEY) || "null"));
+    }
+    catch {
+        return DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS;
+    }
+};
 const priorityRank = { low: 0, normal: 1, high: 2 };
 export const sortNotebookTodos = (todos, sort) => {
     const direction = sort.endsWith("-asc") ? 1 : -1;
@@ -64,15 +102,16 @@ export const applyNotebookTodoCompletionAnchors = (todos, anchors) => {
     return ordered;
 };
 export const NotebookTodosPanel = ({ todos, onAddTodo, onSaveTodo, onDeleteTodo, onAddNote, headerActions, onHeaderPointerDown, onHeaderPointerMove, onHeaderPointerUp, }) => {
+    const [initialViewSettings] = useState(readNotebookTodoViewSettings);
     const [draft, setDraft] = useState("");
     const [query, setQuery] = useState("");
-    const [sortField, setSortField] = useState("priority");
-    const [sortDirection, setSortDirection] = useState("desc");
-    const [showBusiness, setShowBusiness] = useState(true);
-    const [showPrivate, setShowPrivate] = useState(true);
-    const [showCompleted, setShowCompleted] = useState(true);
-    const [urgentOnly, setUrgentOnly] = useState(false);
-    const [priorityFilter, setPriorityFilter] = useState("all");
+    const [sortField, setSortField] = useState(initialViewSettings.sortField);
+    const [sortDirection, setSortDirection] = useState(initialViewSettings.sortDirection);
+    const [showBusiness, setShowBusiness] = useState(initialViewSettings.showBusiness);
+    const [showPrivate, setShowPrivate] = useState(initialViewSettings.showPrivate);
+    const [showCompleted, setShowCompleted] = useState(initialViewSettings.showCompleted);
+    const [urgentOnly, setUrgentOnly] = useState(initialViewSettings.urgentOnly);
+    const [priorityFilter, setPriorityFilter] = useState(initialViewSettings.priorityFilter);
     const [selectedTodoId, setSelectedTodoId] = useState(null);
     const [completionAnchors, setCompletionAnchors] = useState({});
     const openTodoCount = useMemo(() => todos.filter((todo) => !todo.isDone).length, [todos]);
@@ -89,6 +128,22 @@ export const NotebookTodosPanel = ({ todos, onAddTodo, onSaveTodo, onDeleteTodo,
     useEffect(() => {
         setCompletionAnchors({});
     }, [priorityFilter, query, showBusiness, showCompleted, showPrivate, sortDirection, sortField, urgentOnly]);
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(NOTEBOOK_TODO_VIEW_SETTINGS_KEY, JSON.stringify({
+                sortField,
+                sortDirection,
+                showBusiness,
+                showPrivate,
+                showCompleted,
+                urgentOnly,
+                priorityFilter,
+            }));
+        }
+        catch {
+            // The panel remains usable when local settings storage is unavailable.
+        }
+    }, [priorityFilter, showBusiness, showCompleted, showPrivate, sortDirection, sortField, urgentOnly]);
     const submitTodo = () => {
         const description = draft.trim();
         if (!description)
@@ -135,8 +190,8 @@ export const NotebookTodosPanel = ({ todos, onAddTodo, onSaveTodo, onDeleteTodo,
                                                     setShowCompleted(true);
                                                     setUrgentOnly(false);
                                                     setPriorityFilter("all");
-                                                }, children: "Clear filters" })) : null] }), _jsxs("div", { className: "notebook-todo-list", "aria-label": "Open todos", children: [sortedTodos.map((todo) => (_jsxs("div", { className: "notebook-todo-row", "data-completed": todo.isDone, "data-selected": todo.id === selectedTodoId, children: [_jsx("input", { type: "checkbox", "aria-label": `Mark ${todo.description} done`, checked: todo.isDone, onChange: (event) => setTodoDone(todo, event.target.checked) }), _jsxs("button", { className: "notebook-todo-select", type: "button", onClick: () => setSelectedTodoId(todo.id), children: [_jsxs("span", { className: "notebook-todo-row-main", children: [_jsx("strong", { children: todo.description }), _jsx("span", { className: "notebook-todo-priority", children: getTodoPriority(todo) })] }), todo.isUrgent || todo.doOn ? (_jsxs("span", { className: "notebook-todo-row-meta", children: [todo.isUrgent ? "Urgent" : "", todo.isUrgent && todo.doOn ? " | " : "", todo.doOn || ""] })) : null] }), _jsx("button", { className: "notebook-todo-delete", type: "button", "aria-label": `Delete ${todo.description}`, title: "Delete todo", onClick: () => onDeleteTodo(todo.id), children: "x" })] }, todo.id))), !sortedTodos.length ? _jsx("p", { className: "tiny-text", children: "No todos match these filters." }) : null] })] }), selectedTodo ? (_jsxs("div", { className: "notebook-todo-editor", "data-expanded": "true", children: [_jsxs("div", { className: "field notebook-todo-details-field", children: [_jsx("label", { htmlFor: "notebook-todo-title", children: "Todo" }), _jsx("input", { id: "notebook-todo-title", value: selectedTodo.description, onChange: (event) => saveSelected({ description: event.target.value }) })] }), _jsxs("div", { className: "notebook-todo-checks", children: [_jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: !selectedTodo.isPrivate, onChange: () => saveSelected({ isPrivate: false }) }), " Business"] }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: selectedTodo.isPrivate, onChange: () => saveSelected({ isPrivate: true }) }), " Private"] }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: Boolean(selectedTodo.isUrgent), onChange: (event) => saveSelected({ isUrgent: event.target.checked }) }), " Urgent"] }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: selectedTodo.isDone, onChange: (event) => setTodoDone(selectedTodo, event.target.checked) }), " Done"] })] }), _jsxs("div", { className: "notebook-todo-meta-grid", children: [_jsxs("label", { children: [_jsx("span", { children: "Priority" }), _jsxs("select", { value: getTodoPriority(selectedTodo), onChange: (event) => {
+                                                }, children: "Clear filters" })) : null] }), _jsxs("div", { className: "notebook-todo-list", "aria-label": "Open todos", children: [sortedTodos.map((todo) => (_jsxs("div", { className: "notebook-todo-row", "data-completed": todo.isDone, "data-selected": todo.id === selectedTodoId, children: [_jsx("button", { className: "notebook-todo-date", type: "button", title: todo.doOn ? `Do on ${todo.doOn}` : todo.dueDate ? `Due ${todo.dueDate}` : "No date set", onClick: () => setSelectedTodoId(todo.id), children: todo.doOn || todo.dueDate || "No date" }), _jsx("input", { type: "checkbox", "aria-label": `Mark ${todo.description} done`, checked: todo.isDone, onChange: (event) => setTodoDone(todo, event.target.checked) }), _jsxs("button", { className: "notebook-todo-select", type: "button", onClick: () => setSelectedTodoId(todo.id), children: [_jsx("strong", { children: todo.description }), _jsx("span", { className: "notebook-todo-priority", children: getTodoPriority(todo) }), todo.isUrgent ? _jsx("span", { className: "notebook-todo-urgent", children: "Urgent" }) : null] }), _jsx("button", { className: "notebook-todo-delete", type: "button", "aria-label": `Delete ${todo.description}`, title: "Delete todo", onClick: () => onDeleteTodo(todo.id), children: "x" })] }, todo.id))), !sortedTodos.length ? _jsx("p", { className: "tiny-text", children: "No todos match these filters." }) : null] })] }), selectedTodo ? (_jsxs("div", { className: "notebook-todo-editor", "data-expanded": "true", children: [_jsxs("div", { className: "field notebook-todo-title-field", children: [_jsx("label", { htmlFor: "notebook-todo-title", children: "Todo" }), _jsx("input", { id: "notebook-todo-title", value: selectedTodo.description, onChange: (event) => saveSelected({ description: event.target.value }) })] }), _jsxs("div", { className: "notebook-todo-checks", children: [_jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: !selectedTodo.isPrivate, onChange: () => saveSelected({ isPrivate: false }) }), " Business"] }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: selectedTodo.isPrivate, onChange: () => saveSelected({ isPrivate: true }) }), " Private"] }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: getTodoPriority(selectedTodo) === "high", onChange: (event) => saveSelected({ priority: event.target.checked ? "high" : "normal", isPriority: event.target.checked }) }), "Prio"] }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: Boolean(selectedTodo.isUrgent), onChange: (event) => saveSelected({ isUrgent: event.target.checked }) }), " Urgent"] }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: selectedTodo.isDone, onChange: (event) => setTodoDone(selectedTodo, event.target.checked) }), " Done"] })] }), _jsxs("div", { className: "notebook-todo-meta-grid", children: [_jsxs("label", { children: [_jsx("span", { children: "Priority" }), _jsxs("select", { value: getTodoPriority(selectedTodo), onChange: (event) => {
                                                             const priority = event.target.value;
                                                             saveSelected({ priority, isPriority: priority === "high" });
-                                                        }, children: [_jsx("option", { value: "low", children: "Low" }), _jsx("option", { value: "normal", children: "Normal" }), _jsx("option", { value: "high", children: "High" })] })] }), _jsxs("label", { children: [_jsx("span", { children: "Do on" }), _jsx(DateInput, { id: "notebook-todo-do-on", value: selectedTodo.doOn, onChange: (event) => saveSelected({ doOn: event.target.value }) })] }), _jsxs("label", { children: [_jsx("span", { children: "Due date" }), _jsx(DateInput, { id: "notebook-todo-due", value: selectedTodo.dueDate, onChange: (event) => saveSelected({ dueDate: event.target.value }) })] })] }), _jsxs("div", { className: "field", children: [_jsx("label", { htmlFor: "notebook-todo-details", children: "Details" }), _jsx(TodoDetailsEditor, { id: "notebook-todo-details", compact: true, value: selectedTodo.detailsHtml, onChange: (detailsHtml) => saveSelected({ detailsHtml }) })] })] })) : (_jsxs("div", { className: "notebook-todo-empty-editor", children: [_jsx("strong", { children: "Select a todo" }), _jsx("p", { children: "Its editable fields and rich-text details will open here." })] }))] })] })] }));
+                                                        }, children: [_jsx("option", { value: "low", children: "Low" }), _jsx("option", { value: "normal", children: "Normal" }), _jsx("option", { value: "high", children: "High" })] })] }), _jsxs("label", { children: [_jsx("span", { children: "Do on" }), _jsx(DateInput, { id: "notebook-todo-do-on", value: selectedTodo.doOn, onChange: (event) => saveSelected({ doOn: event.target.value }) })] }), _jsxs("label", { children: [_jsx("span", { children: "Due date" }), _jsx(DateInput, { id: "notebook-todo-due", value: selectedTodo.dueDate, onChange: (event) => saveSelected({ dueDate: event.target.value }) })] })] }), _jsxs("div", { className: "notebook-todo-context-grid", children: [_jsxs("label", { className: "notebook-todo-context-wide", children: [_jsx("span", { children: "Participants" }), _jsx("input", { value: selectedTodo.participantText || "", placeholder: "People involved", onChange: (event) => saveSelected({ participantText: event.target.value }) })] }), _jsxs("label", { children: [_jsx("span", { children: "Domain" }), _jsx("input", { value: selectedTodo.domain, onChange: (event) => saveSelected({ domain: event.target.value }) })] }), _jsxs("label", { children: [_jsx("span", { children: "Project" }), _jsx("input", { value: selectedTodo.project, onChange: (event) => saveSelected({ project: event.target.value }) })] }), _jsxs("label", { children: [_jsx("span", { children: "Activity" }), _jsx("input", { value: selectedTodo.activity, onChange: (event) => saveSelected({ activity: event.target.value }) })] })] }), _jsxs("div", { className: "field notebook-todo-comments-field", children: [_jsx("label", { htmlFor: "notebook-todo-comments", children: "Comments" }), _jsx("textarea", { id: "notebook-todo-comments", value: selectedTodo.comments, placeholder: "Add a short comment", onChange: (event) => saveSelected({ comments: event.target.value }) })] }), _jsxs("div", { className: "field notebook-todo-details-field", children: [_jsx("label", { htmlFor: "notebook-todo-details", children: "Todo details" }), _jsx(TodoDetailsEditor, { id: "notebook-todo-details", compact: true, value: selectedTodo.detailsHtml, onChange: (detailsHtml) => saveSelected({ detailsHtml }) })] }), _jsxs("div", { className: "notebook-todo-record-meta", "aria-label": "Todo record information", children: [_jsxs("span", { children: ["Created ", new Date(selectedTodo.createdAt).toLocaleString()] }), _jsxs("span", { children: ["Updated ", new Date(selectedTodo.updatedAt || selectedTodo.createdAt).toLocaleString()] }), _jsxs("span", { children: [selectedTodo.sessionIds.length, " linked ", selectedTodo.sessionIds.length === 1 ? "note" : "notes"] })] })] })) : (_jsxs("div", { className: "notebook-todo-empty-editor", children: [_jsx("strong", { children: "Select a todo" }), _jsx("p", { children: "Its editable fields and rich-text details will open here." })] }))] })] })] }));
 };

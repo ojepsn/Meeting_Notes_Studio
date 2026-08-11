@@ -3,8 +3,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./app/App";
+import { DetachedTodosWindow } from "./features/notebook/components/DetachedTodosWindow";
 import "./styles/app.css";
 const queryClient = new QueryClient();
+const isDetachedTodosWindow = new URLSearchParams(window.location.search).get("window") === "detached-todos";
 class StartupErrorBoundary extends React.Component {
     state = {
         errorMessage: null,
@@ -24,4 +26,4 @@ class StartupErrorBoundary extends React.Component {
         return this.props.children;
     }
 }
-ReactDOM.createRoot(document.getElementById("root")).render(_jsx(React.StrictMode, { children: _jsx(StartupErrorBoundary, { children: _jsx(QueryClientProvider, { client: queryClient, children: _jsx(App, {}) }) }) }));
+ReactDOM.createRoot(document.getElementById("root")).render(_jsx(React.StrictMode, { children: _jsx(StartupErrorBoundary, { children: _jsx(QueryClientProvider, { client: queryClient, children: isDetachedTodosWindow ? _jsx(DetachedTodosWindow, {}) : _jsx(App, {}) }) }) }));

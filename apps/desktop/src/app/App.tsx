@@ -17,6 +17,11 @@ import { NowWorkspace } from "../features/now/components/NowWorkspace";
 import { StructureWorkspace } from "../features/structure/components/StructureWorkspace";
 import { AssistantWorkspace } from "../features/assistant/components/AssistantWorkspace";
 import { NotebookWorkspace } from "../features/notebook/components/NotebookWorkspace";
+import {
+  TODOS_COMMAND_EVENT,
+  sendTodosSnapshot,
+  type TodosWindowCommand,
+} from "../features/notebook/todosWindowBridge";
 import { RichTextCommandProvider } from "../features/richTextCommands/RichTextCommandMenu";
 import { SettingsCard } from "../features/settings/components/SettingsCard";
 import type { SettingsSection } from "../features/settings/components/SettingsCard";
@@ -87,6 +92,7 @@ import {
   type DesktopStorageInfo,
 } from "../lib/storage/desktopStorage";
 import { buildMetadataReview, EMPTY_METADATA_REVIEW, type MetadataReviewState } from "../lib/metadata/review";
+import { isTauriRuntime } from "../lib/storage/environment";
 import { findActivityIdForSession, findSessionIdForActivity, findSessionIdForTodo, findTodoIdForSession } from "../lib/links/entityLinks";
 import { ensureMeetingOutputHeader } from "../lib/output/meetingOutput";
 import { polishNonAiNotesText } from "../lib/output/manualPolish";
@@ -412,6 +418,8 @@ export const App = () => {
   const todoRolloverDateRef = useRef(getStockholmDateKey());
   const localSafetyBackupDateRef = useRef<string | null>(null);
   const notebookStartupCreatedRef = useRef(false);
+  const todosSnapshotRef = useRef(snapshot?.todos ?? []);
+  const themeSnapshotRef = useRef(snapshot?.settings.theme ?? "fluent-slate-light");
 
   const buildDesktopBackupBundle = (): DesktopBackupBundle | null => {
     if (!snapshot) {
@@ -440,6 +448,54 @@ export const App = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    todosSnapshotRef.current = snapshot?.todos ?? [];
+    themeSnapshotRef.current = snapshot?.settings.theme ?? "fluent-slate-light";
+  }, [snapshot?.settings.theme, snapshot?.todos]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen<TodosWindowCommand>(TODOS_COMMAND_EVENT, (event) => {
+        const command = event.payload;
+        if (command.type === "request-snapshot") {
+          void sendTodosSnapshot(todosSnapshotRef.current, themeSnapshotRef.current);
+        } else if (command.type === "add") {
+          void addTodo(command.description);
+        } else if (command.type === "save") {
+          void saveTodo(command.todo);
+        } else if (command.type === "delete") {
+          void deleteTodo(command.todoId);
+        } else if (command.type === "add-note") {
+          void ensureSessionForTodo(command.todoId).then((sessionId) => {
+            if (!sessionId) return;
+            setSelectedOutputVersionId(null);
+            setActiveSessionId(sessionId);
+            setActiveWorkspace("notebook");
+          });
+        }
+      }),
+    ).then((disposeListener) => {
+      if (disposed) disposeListener();
+      else unlisten = disposeListener;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [addTodo, deleteTodo, ensureSessionForTodo, saveTodo, setActiveSessionId]);
+
+  useEffect(() => {
+    if (!isLoaded || !snapshot || !isTauriRuntime()) return;
+    void sendTodosSnapshot(snapshot.todos, snapshot.settings.theme).catch(() => {
+      // The detached window is optional and may not be open.
+    });
+  }, [isLoaded, snapshot?.settings.theme, snapshot?.todos]);
 
   useEffect(() => {
     if (!isLoaded || loadError || !snapshot || notebookStartupCreatedRef.current) {

@@ -8,6 +8,7 @@ import { getActivitiesForSelection, getProjectsForDomain } from "../../../lib/st
 import { buildHtmlMarkup, buildStructuredOutput } from "../../../lib/export/exportService";
 import { getOutputLayoutPreset } from "../../../lib/export/outputLayouts";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
+import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
 import { useEffect, useMemo, useRef, useState } from "react";
 const OUTPUT_LANGUAGE_OPTIONS = [
     { value: "same", label: "Same as notes" },
@@ -211,12 +212,12 @@ export const OutputWorkspace = ({ session, template, displayedOutput = session.o
             outputEditorRef.current.dataset.empty = nextOutput.trim() ? "false" : "true";
         onChange({ ...session, output: nextOutput });
     };
+    const deferredOutputChange = useDeferredRichTextChange(commitOutputHtml);
     const renderOutputSurface = (className) => (_jsxs(_Fragment, { children: [_jsx("div", { ref: outputEditorRef, className: `rich-text-surface output-rich-text-surface ${className}`, style: outputPreviewStyle, id: "session-output", contentEditable: !isViewingHistoricalVersion, suppressContentEditableWarning: true, "data-placeholder": "Generated notes will appear here.", "data-empty": "true", onInput: (event) => {
-                    const normalizedHtml = normalizeOutputRichTextHtml(event.currentTarget.innerHTML);
-                    const nextOutput = outputRichTextToPlainText(normalizedHtml);
-                    event.currentTarget.dataset.empty = nextOutput.trim() ? "false" : "true";
-                    onChange({ ...session, output: nextOutput });
-                }, onMouseUp: updateSelectedExcerptFromEditor, onKeyUp: updateSelectedExcerptFromEditor }), !isViewingHistoricalVersion ? _jsx(RichTextCommandMenu, { editorRef: outputEditorRef, onContentChange: commitOutputHtml }) : null] }));
+                    const editor = event.currentTarget;
+                    editor.dataset.empty = editor.textContent?.trim() ? "false" : "true";
+                    deferredOutputChange.schedule(editor.innerHTML);
+                }, onBlur: deferredOutputChange.flush, onMouseUp: updateSelectedExcerptFromEditor, onKeyUp: updateSelectedExcerptFromEditor }), !isViewingHistoricalVersion ? _jsx(RichTextCommandMenu, { editorRef: outputEditorRef, onContentChange: deferredOutputChange.commitNow }) : null] }));
     const formatOutputVersionLabel = (generatedAt) => {
         const parsed = new Date(generatedAt);
         if (Number.isNaN(parsed.getTime())) {

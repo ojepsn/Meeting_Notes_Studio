@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { TodoRecord } from "@notesmith/domain";
 import {
   applyNotebookTodoCompletionAnchors,
+  DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS,
   filterNotebookTodos,
+  normalizeNotebookTodoViewSettings,
   sortNotebookTodos,
 } from "./NotebookTodosPanel";
 
@@ -79,5 +81,32 @@ describe("Notebook Todos sorting", () => {
       "2",
       "3",
     ]);
+  });
+
+  it("restores every persisted checkbox and radio setting", () => {
+    expect(normalizeNotebookTodoViewSettings({
+      sortField: "updated",
+      sortDirection: "asc",
+      showBusiness: false,
+      showPrivate: true,
+      showCompleted: false,
+      urgentOnly: true,
+      priorityFilter: "high",
+    })).toEqual({
+      sortField: "updated",
+      sortDirection: "asc",
+      showBusiness: false,
+      showPrivate: true,
+      showCompleted: false,
+      urgentOnly: true,
+      priorityFilter: "high",
+    });
+  });
+
+  it("falls back safely when persisted settings are incomplete or invalid", () => {
+    expect(normalizeNotebookTodoViewSettings({ showCompleted: false, sortField: "unknown" })).toEqual({
+      ...DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS,
+      showCompleted: false,
+    });
   });
 });

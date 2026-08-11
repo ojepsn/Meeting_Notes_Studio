@@ -10,6 +10,7 @@ import type { RecordingMode } from "../../../lib/files/recording";
 import { createAttachmentPreviewUrl } from "../../../lib/files/attachmentStore";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type AttachmentRecord, type CaptureWorkspaceDensity, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
+import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
 
 const richTextToPlainText = (value: string) => {
   if (!value) return "";
@@ -142,6 +143,14 @@ const DEFAULT_RICH_TEXT_TOOLBAR_STATE: RichTextToolbarState = {
   unordered: false,
   ordered: false,
 };
+
+const toolbarStatesMatch = (left: RichTextToolbarState, right: RichTextToolbarState) =>
+  left.fontFamily === right.fontFamily &&
+  left.block === right.block &&
+  left.bold === right.bold &&
+  left.italic === right.italic &&
+  left.unordered === right.unordered &&
+  left.ordered === right.ordered;
 
 const isSelectionInsideEditor = (editor: HTMLDivElement | null, selection: Selection | null) => {
   if (!editor || !selection?.rangeCount) {
@@ -308,6 +317,14 @@ export const SessionEditor = ({
   const [uploadedTranscriptOpen, setUploadedTranscriptOpen] = useState(Boolean(session.uploadedTranscript.trim()));
   const [agendaToolbarState, setAgendaToolbarState] = useState<RichTextToolbarState>(DEFAULT_RICH_TEXT_TOOLBAR_STATE);
   const [manualNotesToolbarState, setManualNotesToolbarState] = useState<RichTextToolbarState>(DEFAULT_RICH_TEXT_TOOLBAR_STATE);
+  const refreshAgendaToolbarState = () => {
+    const next = getToolbarStateFromEditor(agendaEditorRef);
+    setAgendaToolbarState((current) => toolbarStatesMatch(current, next) ? current : next);
+  };
+  const refreshManualNotesToolbarState = () => {
+    const next = getToolbarStateFromEditor(manualNotesEditorRef);
+    setManualNotesToolbarState((current) => toolbarStatesMatch(current, next) ? current : next);
+  };
 
   useEffect(() => {
     setDetailsOpen(session.captureMode === "meeting-note");
@@ -353,6 +370,16 @@ export const SessionEditor = ({
   const hasStartTimeField = Boolean(activeTemplate?.fields.find((field) => field.key === "startTime" && field.enabled));
   const hasEndTimeField = Boolean(activeTemplate?.fields.find((field) => field.key === "endTime" && field.enabled));
   const shouldShowLiveTranscript = session.captureMode === "voice-note" || Boolean(session.liveTranscript.trim());
+  const deferredAgendaChange = useDeferredRichTextChange((html) => {
+    if (!agendaField) return;
+    update("customFieldValues", {
+      ...session.customFieldValues,
+      [agendaField.id]: normalizeRichTextHtml(html),
+    });
+  });
+  const deferredManualNotesChange = useDeferredRichTextChange((html) => {
+    update("manualNotes", normalizeRichTextHtml(html));
+  });
   const titleLabel = titleField?.label || "Title";
   const highlightTokens = useMemo(() => parseTokenList(session.quickHighlights), [session.quickHighlights]);
   const isRecordingModeLive = (mode: RecordingMode) => isRecordingAudio && recordingMode === mode;
@@ -498,17 +525,17 @@ export const SessionEditor = ({
 
   const updateAgenda = (html: string) => {
     if (!agendaField) return;
-    update("customFieldValues", { ...session.customFieldValues, [agendaField.id]: html });
     if (agendaEditorRef.current) {
-      agendaEditorRef.current.dataset.empty = richTextToPlainText(html) ? "false" : "true";
+      agendaEditorRef.current.dataset.empty = agendaEditorRef.current.textContent?.trim() ? "false" : "true";
     }
+    deferredAgendaChange.schedule(html);
   };
 
   const updateManualNotes = (html: string) => {
-    update("manualNotes", html);
     if (manualNotesEditorRef.current) {
-      manualNotesEditorRef.current.dataset.empty = richTextToPlainText(html) ? "false" : "true";
+      manualNotesEditorRef.current.dataset.empty = manualNotesEditorRef.current.textContent?.trim() ? "false" : "true";
     }
+    deferredManualNotesChange.schedule(html);
   };
 
   const insertHtmlAtSelection = (editor: HTMLDivElement, html: string) => {
@@ -557,7 +584,7 @@ export const SessionEditor = ({
     const inlineHtml = `<figure data-notesmith-attachment-id="${attachment.id}" contenteditable="false" class="notes-inline-attachment"><figcaption>${caption}</figcaption></figure><p><br></p>`;
     insertHtmlAtSelection(manualNotesEditorRef.current, inlineHtml);
     updateManualNotes(normalizeRichTextHtml(manualNotesEditorRef.current.innerHTML));
-    setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef));
+    refreshManualNotesToolbarState();
   };
 
   const applyRichTextCommand = (
@@ -604,18 +631,22 @@ export const SessionEditor = ({
   };
 
   useEffect(() => {
+    let frame: number | null = null;
     const handleSelectionChange = () => {
-      const selection = document.getSelection();
-      if (isSelectionInsideEditor(agendaEditorRef.current, selection)) {
-        setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef));
-      }
-      if (isSelectionInsideEditor(manualNotesEditorRef.current, selection)) {
-        setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef));
-      }
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        const selection = document.getSelection();
+        if (isSelectionInsideEditor(agendaEditorRef.current, selection)) refreshAgendaToolbarState();
+        if (isSelectionInsideEditor(manualNotesEditorRef.current, selection)) refreshManualNotesToolbarState();
+      });
     };
 
     document.addEventListener("selectionchange", handleSelectionChange);
-    return () => document.removeEventListener("selectionchange", handleSelectionChange);
+    return () => {
+      document.removeEventListener("selectionchange", handleSelectionChange);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
   }, []);
 
   const renderRichTextToolbar = (
@@ -710,8 +741,8 @@ export const SessionEditor = ({
   if (isMinimal) {
     return (
       <div className="card session-editor session-editor-minimal session-editor-pwa">
-        <RichTextCommandMenu editorRef={agendaEditorRef} onContentChange={(html) => updateAgenda(normalizeRichTextHtml(html))} />
-        <RichTextCommandMenu editorRef={manualNotesEditorRef} onContentChange={(html) => updateManualNotes(normalizeRichTextHtml(html))} />
+        <RichTextCommandMenu editorRef={agendaEditorRef} onContentChange={deferredAgendaChange.commitNow} />
+        <RichTextCommandMenu editorRef={manualNotesEditorRef} onContentChange={deferredManualNotesChange.commitNow} />
         {showPanelHeading ? (
           <div className="panel-heading session-editor-pwa-heading">
             <div className="panel-heading-copy">
@@ -879,11 +910,11 @@ export const SessionEditor = ({
                           data-placeholder="List the planned agenda, topics, or framing points for this meeting."
                           data-empty="true"
                           onInput={(event) => {
-                            updateAgenda(normalizeRichTextHtml((event.currentTarget as HTMLDivElement).innerHTML));
-                            setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef));
+                            updateAgenda((event.currentTarget as HTMLDivElement).innerHTML);
                           }}
-                          onKeyUp={() => setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef))}
-                          onMouseUp={() => setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef))}
+                          onBlur={deferredAgendaChange.flush}
+                          onKeyUp={refreshAgendaToolbarState}
+                          onMouseUp={refreshAgendaToolbarState}
                         />
                       </div>
                     </details>
@@ -1005,12 +1036,12 @@ export const SessionEditor = ({
                   data-placeholder="Write your own notes here, which will be included in the Output"
                   data-empty="true"
                   onInput={(event) => {
-                    updateManualNotes(normalizeRichTextHtml((event.currentTarget as HTMLDivElement).innerHTML));
-                    setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef));
+                    updateManualNotes((event.currentTarget as HTMLDivElement).innerHTML);
                   }}
+                  onBlur={deferredManualNotesChange.flush}
                   onPaste={(event) => void handleManualNotesPaste(event)}
-                  onKeyUp={() => setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef))}
-                  onMouseUp={() => setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef))}
+                  onKeyUp={refreshManualNotesToolbarState}
+                  onMouseUp={refreshManualNotesToolbarState}
                 />
               </div>
             </div>
@@ -1056,8 +1087,8 @@ export const SessionEditor = ({
 
   return (
     <div className={`card session-editor${isMinimal ? " session-editor-minimal" : ""}`}>
-      <RichTextCommandMenu editorRef={agendaEditorRef} onContentChange={(html) => updateAgenda(normalizeRichTextHtml(html))} />
-      <RichTextCommandMenu editorRef={manualNotesEditorRef} onContentChange={(html) => updateManualNotes(normalizeRichTextHtml(html))} />
+      <RichTextCommandMenu editorRef={agendaEditorRef} onContentChange={deferredAgendaChange.commitNow} />
+      <RichTextCommandMenu editorRef={manualNotesEditorRef} onContentChange={deferredManualNotesChange.commitNow} />
       <div className={`card-header${isMinimal ? " session-editor-header-minimal" : ""}`}>
         <div />
         <div className="capture-header-actions">
@@ -1109,11 +1140,11 @@ export const SessionEditor = ({
                     data-placeholder="List the planned agenda, topics, or framing points for this meeting."
                     data-empty="true"
                     onInput={(event) => {
-                      updateAgenda(normalizeRichTextHtml((event.currentTarget as HTMLDivElement).innerHTML));
-                      setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef));
+                      updateAgenda((event.currentTarget as HTMLDivElement).innerHTML);
                     }}
-                    onKeyUp={() => setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef))}
-                    onMouseUp={() => setAgendaToolbarState(getToolbarStateFromEditor(agendaEditorRef))}
+                    onBlur={deferredAgendaChange.flush}
+                    onKeyUp={refreshAgendaToolbarState}
+                    onMouseUp={refreshAgendaToolbarState}
                   />
                 </div>
               </details>
@@ -1225,12 +1256,12 @@ export const SessionEditor = ({
             data-placeholder={modeMeta.primaryFieldPlaceholder}
             data-empty="true"
             onInput={(event) => {
-              updateManualNotes(normalizeRichTextHtml((event.currentTarget as HTMLDivElement).innerHTML));
-              setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef));
+              updateManualNotes((event.currentTarget as HTMLDivElement).innerHTML);
             }}
+            onBlur={deferredManualNotesChange.flush}
             onPaste={(event) => void handleManualNotesPaste(event)}
-            onKeyUp={() => setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef))}
-            onMouseUp={() => setManualNotesToolbarState(getToolbarStateFromEditor(manualNotesEditorRef))}
+            onKeyUp={refreshManualNotesToolbarState}
+            onMouseUp={refreshManualNotesToolbarState}
           />
         </div>
 

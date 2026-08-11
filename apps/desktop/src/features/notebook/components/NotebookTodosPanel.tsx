@@ -36,6 +36,60 @@ export interface NotebookTodoFilters {
   priority: "all" | TodoPriority;
 }
 
+type NotebookTodoSortField = "priority" | "title" | "created" | "updated" | "due";
+type NotebookTodoSortDirection = "asc" | "desc";
+
+export interface NotebookTodoViewSettings {
+  sortField: NotebookTodoSortField;
+  sortDirection: NotebookTodoSortDirection;
+  showBusiness: boolean;
+  showPrivate: boolean;
+  showCompleted: boolean;
+  urgentOnly: boolean;
+  priorityFilter: "all" | TodoPriority;
+}
+
+export const DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS: NotebookTodoViewSettings = {
+  sortField: "priority",
+  sortDirection: "desc",
+  showBusiness: true,
+  showPrivate: true,
+  showCompleted: true,
+  urgentOnly: false,
+  priorityFilter: "all",
+};
+
+const NOTEBOOK_TODO_VIEW_SETTINGS_KEY = "notesmith:notebook-todo-view-settings";
+const TODO_SORT_FIELDS: NotebookTodoSortField[] = ["priority", "title", "created", "updated", "due"];
+const TODO_PRIORITIES: NotebookTodoViewSettings["priorityFilter"][] = ["all", "low", "normal", "high"];
+
+export const normalizeNotebookTodoViewSettings = (value: unknown): NotebookTodoViewSettings => {
+  const saved = value && typeof value === "object" ? value as Partial<NotebookTodoViewSettings> : {};
+  return {
+    sortField: TODO_SORT_FIELDS.includes(saved.sortField as NotebookTodoSortField)
+      ? saved.sortField as NotebookTodoSortField
+      : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.sortField,
+    sortDirection: saved.sortDirection === "asc" || saved.sortDirection === "desc"
+      ? saved.sortDirection
+      : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.sortDirection,
+    showBusiness: typeof saved.showBusiness === "boolean" ? saved.showBusiness : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.showBusiness,
+    showPrivate: typeof saved.showPrivate === "boolean" ? saved.showPrivate : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.showPrivate,
+    showCompleted: typeof saved.showCompleted === "boolean" ? saved.showCompleted : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.showCompleted,
+    urgentOnly: typeof saved.urgentOnly === "boolean" ? saved.urgentOnly : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.urgentOnly,
+    priorityFilter: TODO_PRIORITIES.includes(saved.priorityFilter as NotebookTodoViewSettings["priorityFilter"])
+      ? saved.priorityFilter as NotebookTodoViewSettings["priorityFilter"]
+      : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.priorityFilter,
+  };
+};
+
+const readNotebookTodoViewSettings = () => {
+  try {
+    return normalizeNotebookTodoViewSettings(JSON.parse(window.localStorage.getItem(NOTEBOOK_TODO_VIEW_SETTINGS_KEY) || "null"));
+  } catch {
+    return DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS;
+  }
+};
+
 const priorityRank: Record<TodoPriority, number> = { low: 0, normal: 1, high: 2 };
 
 export const sortNotebookTodos = (todos: TodoRecord[], sort: NotebookTodoSort) => {
@@ -102,15 +156,16 @@ export const NotebookTodosPanel = ({
   onHeaderPointerMove,
   onHeaderPointerUp,
 }: NotebookTodosPanelProps) => {
+  const [initialViewSettings] = useState(readNotebookTodoViewSettings);
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
-  const [sortField, setSortField] = useState<"priority" | "title" | "created" | "updated" | "due">("priority");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [showBusiness, setShowBusiness] = useState(true);
-  const [showPrivate, setShowPrivate] = useState(true);
-  const [showCompleted, setShowCompleted] = useState(true);
-  const [urgentOnly, setUrgentOnly] = useState(false);
-  const [priorityFilter, setPriorityFilter] = useState<"all" | TodoPriority>("all");
+  const [sortField, setSortField] = useState<NotebookTodoSortField>(initialViewSettings.sortField);
+  const [sortDirection, setSortDirection] = useState<NotebookTodoSortDirection>(initialViewSettings.sortDirection);
+  const [showBusiness, setShowBusiness] = useState(initialViewSettings.showBusiness);
+  const [showPrivate, setShowPrivate] = useState(initialViewSettings.showPrivate);
+  const [showCompleted, setShowCompleted] = useState(initialViewSettings.showCompleted);
+  const [urgentOnly, setUrgentOnly] = useState(initialViewSettings.urgentOnly);
+  const [priorityFilter, setPriorityFilter] = useState<"all" | TodoPriority>(initialViewSettings.priorityFilter);
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [completionAnchors, setCompletionAnchors] = useState<Record<string, number>>({});
   const openTodoCount = useMemo(() => todos.filter((todo) => !todo.isDone).length, [todos]);
@@ -138,6 +193,22 @@ export const NotebookTodosPanel = ({
   useEffect(() => {
     setCompletionAnchors({});
   }, [priorityFilter, query, showBusiness, showCompleted, showPrivate, sortDirection, sortField, urgentOnly]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NOTEBOOK_TODO_VIEW_SETTINGS_KEY, JSON.stringify({
+        sortField,
+        sortDirection,
+        showBusiness,
+        showPrivate,
+        showCompleted,
+        urgentOnly,
+        priorityFilter,
+      } satisfies NotebookTodoViewSettings));
+    } catch {
+      // The panel remains usable when local settings storage is unavailable.
+    }
+  }, [priorityFilter, showBusiness, showCompleted, showPrivate, sortDirection, sortField, urgentOnly]);
 
   const submitTodo = () => {
     const description = draft.trim();
@@ -303,6 +374,14 @@ export const NotebookTodosPanel = ({
                   data-selected={todo.id === selectedTodoId}
                   key={todo.id}
                 >
+                  <button
+                    className="notebook-todo-date"
+                    type="button"
+                    title={todo.doOn ? `Do on ${todo.doOn}` : todo.dueDate ? `Due ${todo.dueDate}` : "No date set"}
+                    onClick={() => setSelectedTodoId(todo.id)}
+                  >
+                    {todo.doOn || todo.dueDate || "No date"}
+                  </button>
                   <input
                     type="checkbox"
                     aria-label={`Mark ${todo.description} done`}
@@ -310,15 +389,9 @@ export const NotebookTodosPanel = ({
                     onChange={(event) => setTodoDone(todo, event.target.checked)}
                   />
                   <button className="notebook-todo-select" type="button" onClick={() => setSelectedTodoId(todo.id)}>
-                    <span className="notebook-todo-row-main">
-                      <strong>{todo.description}</strong>
-                      <span className="notebook-todo-priority">{getTodoPriority(todo)}</span>
-                    </span>
-                    {todo.isUrgent || todo.doOn ? (
-                      <span className="notebook-todo-row-meta">
-                        {todo.isUrgent ? "Urgent" : ""}{todo.isUrgent && todo.doOn ? " | " : ""}{todo.doOn || ""}
-                      </span>
-                    ) : null}
+                    <strong>{todo.description}</strong>
+                    <span className="notebook-todo-priority">{getTodoPriority(todo)}</span>
+                    {todo.isUrgent ? <span className="notebook-todo-urgent">Urgent</span> : null}
                   </button>
                   <button
                     className="notebook-todo-delete"
@@ -337,7 +410,7 @@ export const NotebookTodosPanel = ({
 
           {selectedTodo ? (
             <div className="notebook-todo-editor" data-expanded="true">
-            <div className="field notebook-todo-details-field">
+            <div className="field notebook-todo-title-field">
               <label htmlFor="notebook-todo-title">Todo</label>
               <input id="notebook-todo-title" value={selectedTodo.description} onChange={(event) => saveSelected({ description: event.target.value })} />
             </div>
@@ -345,6 +418,14 @@ export const NotebookTodosPanel = ({
             <div className="notebook-todo-checks">
               <label><input type="checkbox" checked={!selectedTodo.isPrivate} onChange={() => saveSelected({ isPrivate: false })} /> Business</label>
               <label><input type="checkbox" checked={selectedTodo.isPrivate} onChange={() => saveSelected({ isPrivate: true })} /> Private</label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={getTodoPriority(selectedTodo) === "high"}
+                  onChange={(event) => saveSelected({ priority: event.target.checked ? "high" : "normal", isPriority: event.target.checked })}
+                />
+                Prio
+              </label>
               <label><input type="checkbox" checked={Boolean(selectedTodo.isUrgent)} onChange={(event) => saveSelected({ isUrgent: event.target.checked })} /> Urgent</label>
               <label><input type="checkbox" checked={selectedTodo.isDone} onChange={(event) => setTodoDone(selectedTodo, event.target.checked)} /> Done</label>
             </div>
@@ -374,14 +455,53 @@ export const NotebookTodosPanel = ({
               </label>
             </div>
 
-            <div className="field">
-              <label htmlFor="notebook-todo-details">Details</label>
+            <div className="notebook-todo-context-grid">
+              <label className="notebook-todo-context-wide">
+                <span>Participants</span>
+                <input
+                  value={selectedTodo.participantText || ""}
+                  placeholder="People involved"
+                  onChange={(event) => saveSelected({ participantText: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Domain</span>
+                <input value={selectedTodo.domain} onChange={(event) => saveSelected({ domain: event.target.value })} />
+              </label>
+              <label>
+                <span>Project</span>
+                <input value={selectedTodo.project} onChange={(event) => saveSelected({ project: event.target.value })} />
+              </label>
+              <label>
+                <span>Activity</span>
+                <input value={selectedTodo.activity} onChange={(event) => saveSelected({ activity: event.target.value })} />
+              </label>
+            </div>
+
+            <div className="field notebook-todo-comments-field">
+              <label htmlFor="notebook-todo-comments">Comments</label>
+              <textarea
+                id="notebook-todo-comments"
+                value={selectedTodo.comments}
+                placeholder="Add a short comment"
+                onChange={(event) => saveSelected({ comments: event.target.value })}
+              />
+            </div>
+
+            <div className="field notebook-todo-details-field">
+              <label htmlFor="notebook-todo-details">Todo details</label>
               <TodoDetailsEditor
                 id="notebook-todo-details"
                 compact
                 value={selectedTodo.detailsHtml}
                 onChange={(detailsHtml) => saveSelected({ detailsHtml })}
               />
+            </div>
+
+            <div className="notebook-todo-record-meta" aria-label="Todo record information">
+              <span>Created {new Date(selectedTodo.createdAt).toLocaleString()}</span>
+              <span>Updated {new Date(selectedTodo.updatedAt || selectedTodo.createdAt).toLocaleString()}</span>
+              <span>{selectedTodo.sessionIds.length} linked {selectedTodo.sessionIds.length === 1 ? "note" : "notes"}</span>
             </div>
 
             </div>

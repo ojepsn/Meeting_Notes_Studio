@@ -19,6 +19,19 @@ export interface NotebookTodoFilters {
     urgentOnly: boolean;
     priority: "all" | TodoPriority;
 }
+type NotebookTodoSortField = "priority" | "title" | "created" | "updated" | "due";
+type NotebookTodoSortDirection = "asc" | "desc";
+export interface NotebookTodoViewSettings {
+    sortField: NotebookTodoSortField;
+    sortDirection: NotebookTodoSortDirection;
+    showBusiness: boolean;
+    showPrivate: boolean;
+    showCompleted: boolean;
+    urgentOnly: boolean;
+    priorityFilter: "all" | TodoPriority;
+}
+export declare const DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS: NotebookTodoViewSettings;
+export declare const normalizeNotebookTodoViewSettings: (value: unknown) => NotebookTodoViewSettings;
 export declare const sortNotebookTodos: (todos: TodoRecord[], sort: NotebookTodoSort) => TodoRecord[];
 export declare const filterNotebookTodos: (todos: TodoRecord[], filters: NotebookTodoFilters) => TodoRecord[];
 export declare const applyNotebookTodoCompletionAnchors: (todos: TodoRecord[], anchors: Record<string, number>) => TodoRecord[];

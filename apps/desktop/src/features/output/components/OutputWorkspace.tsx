@@ -7,6 +7,7 @@ import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions 
 import { buildHtmlMarkup, buildStructuredOutput } from "../../../lib/export/exportService";
 import { getOutputLayoutPreset } from "../../../lib/export/outputLayouts";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
+import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
 import type {
   ActivityRecord,
   AttachmentRecord,
@@ -345,6 +346,7 @@ export const OutputWorkspace = ({
     if (outputEditorRef.current) outputEditorRef.current.dataset.empty = nextOutput.trim() ? "false" : "true";
     onChange({ ...session, output: nextOutput });
   };
+  const deferredOutputChange = useDeferredRichTextChange(commitOutputHtml);
 
   const renderOutputSurface = (className: string) => (
     <>
@@ -358,15 +360,15 @@ export const OutputWorkspace = ({
         data-placeholder="Generated notes will appear here."
         data-empty="true"
         onInput={(event) => {
-        const normalizedHtml = normalizeOutputRichTextHtml((event.currentTarget as HTMLDivElement).innerHTML);
-        const nextOutput = outputRichTextToPlainText(normalizedHtml);
-        (event.currentTarget as HTMLDivElement).dataset.empty = nextOutput.trim() ? "false" : "true";
-        onChange({ ...session, output: nextOutput });
+        const editor = event.currentTarget as HTMLDivElement;
+        editor.dataset.empty = editor.textContent?.trim() ? "false" : "true";
+        deferredOutputChange.schedule(editor.innerHTML);
         }}
+        onBlur={deferredOutputChange.flush}
         onMouseUp={updateSelectedExcerptFromEditor}
         onKeyUp={updateSelectedExcerptFromEditor}
       />
-      {!isViewingHistoricalVersion ? <RichTextCommandMenu editorRef={outputEditorRef} onContentChange={commitOutputHtml} /> : null}
+      {!isViewingHistoricalVersion ? <RichTextCommandMenu editorRef={outputEditorRef} onContentChange={deferredOutputChange.commitNow} /> : null}
     </>
   );
   const formatOutputVersionLabel = (generatedAt: string) => {

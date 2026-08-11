@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { RichTextCommandRecord } from "@notesmith/domain";
 
 export interface RichTextCommand {
@@ -131,6 +131,10 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextComm
   const commands = useMemo(() => buildRichTextCommands(customCommands), [customCommands]);
   const [activeQuery, setActiveQuery] = useState<ActiveQuery | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const activeIndexRef = useRef(activeIndex);
+  const onContentChangeRef = useRef(onContentChange);
+  activeIndexRef.current = activeIndex;
+  onContentChangeRef.current = onContentChange;
   const filteredCommands = useMemo(() => {
     if (!activeQuery) return [];
     return commands
@@ -183,7 +187,7 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextComm
       }
       if (suffix === "line") document.execCommand("insertLineBreak");
       setActiveQuery(null);
-      onContentChange(editor.innerHTML);
+      onContentChangeRef.current(editor.innerHTML);
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -218,7 +222,7 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextComm
       if ((event.key === "Enter" || event.key === "Tab") && matching.length) {
         event.preventDefault();
         const exact = commands.find((command) => command.trigger === match.query);
-        insertCommand(exact || matching[Math.min(activeIndex, matching.length - 1)], event.key === "Enter" ? "line" : "none");
+        insertCommand(exact || matching[Math.min(activeIndexRef.current, matching.length - 1)], event.key === "Enter" ? "line" : "none");
       }
     };
 
@@ -239,7 +243,7 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextComm
       editor.removeEventListener("blur", handleBlur);
       editor.removeEventListener("notesmith-rich-text-command", handleMenuCommand);
     };
-  }, [activeIndex, commands, editorRef, onContentChange]);
+  }, [commands, editorRef]);
 
   if (!activeQuery || !filteredCommands.length) return null;
 

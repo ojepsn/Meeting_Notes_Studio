@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
+import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
 
 interface TodoDetailsEditorProps {
   value: string;
@@ -47,15 +48,19 @@ export const TodoDetailsEditor = ({
     if (editor.innerHTML !== nextHtml) editor.innerHTML = nextHtml;
   }, [value]);
 
-  const commit = () => {
+  const deferredChange = useDeferredRichTextChange((html) => onChange(normalizeTaskDetailsHtml(html)));
+
+  const commit = (immediate = false) => {
     if (!editorRef.current) return;
-    onChange(normalizeTaskDetailsHtml(editorRef.current.innerHTML));
+    const html = editorRef.current.innerHTML;
+    if (immediate) deferredChange.commitNow(html);
+    else deferredChange.schedule(html);
   };
 
   const applyCommand = (command: string, commandValue?: string) => {
     editorRef.current?.focus();
     document.execCommand(command, false, commandValue);
-    commit();
+    commit(true);
   };
 
   return (
@@ -78,9 +83,10 @@ export const TodoDetailsEditor = ({
         contentEditable
         suppressContentEditableWarning
         data-placeholder={placeholder}
-        onInput={commit}
+        onInput={() => commit()}
+        onBlur={deferredChange.flush}
       />
-      <RichTextCommandMenu editorRef={editorRef} onContentChange={(html) => onChange(normalizeTaskDetailsHtml(html))} />
+      <RichTextCommandMenu editorRef={editorRef} onContentChange={deferredChange.commitNow} />
     </div>
   );
 };
