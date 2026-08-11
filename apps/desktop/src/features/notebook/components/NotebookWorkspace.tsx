@@ -492,6 +492,7 @@ export const NotebookWorkspace = ({
         <header className="notebook-title-row">
           <DateInput
             id="notebook-date"
+            className="notebook-date-input"
             value={activeSession.date}
             onChange={(event) =>
               onChange({

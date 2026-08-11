@@ -917,7 +917,7 @@ select {
 .notebook-title-row {
   display: grid;
   grid-template-columns: 145px minmax(0, 1fr);
-  align-items: end;
+  align-items: center;
   gap: 0.8rem;
   padding-bottom: 0.8rem;
   border-bottom: 1px solid var(--app-border);
@@ -925,18 +925,19 @@ select {
 
 .notebook-title-row input {
   width: 100%;
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.25;
 }
 
 .notebook-title-input {
-  min-height: 42px;
+  min-height: 34px;
   padding: 0.35rem 0.1rem;
   border: none;
   border-radius: 0;
   outline: none;
   background: transparent;
   color: var(--app-text);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(1.45rem, 2.4vw, 2.25rem);
 }
 
 .notebook-rich-toolbar {
