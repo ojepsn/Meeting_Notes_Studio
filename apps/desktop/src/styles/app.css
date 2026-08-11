@@ -1686,16 +1686,10 @@ select {
   grid-column: 1 / -1;
 }
 
-.notebook-todo-context-grid input,
-.notebook-todo-comments-field textarea {
+.notebook-todo-context-grid input {
   min-width: 0;
   padding: 0.32rem 0.38rem;
   font-size: 0.68rem;
-}
-
-.notebook-todo-comments-field textarea {
-  min-height: 64px;
-  resize: vertical;
 }
 
 .notebook-todo-record-meta {

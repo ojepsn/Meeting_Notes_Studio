@@ -16,7 +16,7 @@ export const TodosCard = ({ todos, onToggle, onAdd, onDelete }: TodosCardProps) 
     const query = filter.trim().toLowerCase();
     if (!query) return todos;
     return todos.filter((todo) =>
-      [todo.description, todo.comments, todo.createdAt, todo.sessionIds.join(" ")]
+      [todo.description, todo.detailsHtml, todo.createdAt, todo.sessionIds.join(" ")]
         .join(" ")
         .toLowerCase()
         .includes(query),
@@ -59,7 +59,7 @@ export const TodosCard = ({ todos, onToggle, onAdd, onDelete }: TodosCardProps) 
           id="todo-filter"
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
-          placeholder="Search item text, comments, or source sessions"
+          placeholder="Search item text, details, or source sessions"
         />
       </div>
       <table className="todo-table">

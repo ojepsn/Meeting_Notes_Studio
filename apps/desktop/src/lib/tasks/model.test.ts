@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TaskRecord } from "@notesmith/domain";
-import { getTodoPriority, normalizeTaskRecord } from "./model";
+import { getTodoPriority, migrateTodoCommentsToDetails, normalizeTaskRecord } from "./model";
 
 const task = (overrides: Partial<TaskRecord> = {}): TaskRecord => ({
   id: "task-1",
@@ -32,5 +32,24 @@ describe("todo priority normalization", () => {
     expect(getTodoPriority(normalized)).toBe("low");
     expect(normalized.isPriority).toBe(false);
     expect(normalized.isUrgent).toBe(true);
+  });
+
+  it("moves legacy comments into rich-text details and clears the old field", () => {
+    const normalized = normalizeTaskRecord(task({
+      comments: "First line\nSecond line",
+      detailsHtml: "<p>Existing details</p>",
+    }));
+    expect(normalized.comments).toBe("");
+    expect(normalized.detailsHtml).toBe("<p>Existing details</p><p><br></p><p>First line<br>Second line</p>");
+  });
+
+  it("does not duplicate comments already represented by details", () => {
+    expect(migrateTodoCommentsToDetails("<p>Already moved</p>", "Already moved")).toBe("<p>Already moved</p>");
+  });
+
+  it("escapes legacy comment markup during migration", () => {
+    expect(migrateTodoCommentsToDetails("", "Use <script> safely & clearly")).toBe(
+      "<p>Use &lt;script&gt; safely &amp; clearly</p>",
+    );
   });
 });

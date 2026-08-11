@@ -118,7 +118,6 @@ const searchableTodoText = (todo: TodoRecord) => [
   todo.domain,
   todo.project,
   todo.activity,
-  todo.comments,
   todo.detailsHtml?.replace(/<[^>]*>/g, " "),
 ].filter(Boolean).join(" ").toLocaleLowerCase();
 
@@ -476,16 +475,6 @@ export const NotebookTodosPanel = ({
                 <span>Activity</span>
                 <input value={selectedTodo.activity} onChange={(event) => saveSelected({ activity: event.target.value })} />
               </label>
-            </div>
-
-            <div className="field notebook-todo-comments-field">
-              <label htmlFor="notebook-todo-comments">Comments</label>
-              <textarea
-                id="notebook-todo-comments"
-                value={selectedTodo.comments}
-                placeholder="Add a short comment"
-                onChange={(event) => saveSelected({ comments: event.target.value })}
-              />
             </div>
 
             <div className="field notebook-todo-details-field">

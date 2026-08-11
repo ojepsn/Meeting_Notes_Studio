@@ -3,6 +3,7 @@ import type { SessionRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { NotebookTodosPanel } from "./NotebookTodosPanel";
 import { openDetachedTodosWindow } from "../todosWindowBridge";
+import { isTauriRuntime } from "../../../lib/storage/environment";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
 
@@ -55,6 +56,8 @@ interface TodosResizeState {
 const NOTEBOOK_TODOS_MODE_KEY = "notesmith:notebook-todos-mode";
 
 const readNotebookTodosMode = (): NotebookTodosMode => {
+  // Desktop Todos live in their own native window and must never restore as a clipped DOM overlay.
+  if (isTauriRuntime()) return "closed";
   try {
     const saved = window.localStorage.getItem(NOTEBOOK_TODOS_MODE_KEY);
     if (saved === "minimized" || saved === "standard" || saved === "maximized") return saved;
@@ -200,6 +203,17 @@ export const NotebookWorkspace = ({
     }
   }, [todosMode]);
 
+  useEffect(() => {
+    if (todosMode !== "standard" && todosMode !== "maximized") return;
+    const closeEmbeddedTodos = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setTodosMode("closed");
+      setTodosPosition({ x: 0, y: 0 });
+    };
+    window.addEventListener("keydown", closeEmbeddedTodos);
+    return () => window.removeEventListener("keydown", closeEmbeddedTodos);
+  }, [todosMode]);
+
   const commitManualNotes = (html: string) => {
     const normalizedHtml = normalizeNotebookHtml(html);
     onChange({ ...activeSession, manualNotes: normalizedHtml });
@@ -235,8 +249,16 @@ export const NotebookWorkspace = ({
     });
   };
 
-  const toggleTodos = () => {
+  const openTodos = () => {
     setIsToolsOpen(false);
+    if (isTauriRuntime()) {
+      setTodosMode("closed");
+      void openDetachedTodosWindow().catch((error) => {
+        console.error("Could not open detached Todos window", error);
+        setTodosMode(lastExpandedTodosMode);
+      });
+      return;
+    }
     setTodosMode((current) => current === "standard" || current === "maximized" ? "minimized" : lastExpandedTodosMode);
   };
 
@@ -558,7 +580,7 @@ export const NotebookWorkspace = ({
             aria-expanded={todosMode === "standard" || todosMode === "maximized"}
             aria-controls="notebook-todos-overlay"
             aria-label={todosMode === "standard" || todosMode === "maximized" ? "Minimize notebook todos" : "Open notebook todos"}
-            onClick={toggleTodos}
+            onClick={openTodos}
           >
             <span>{todosMode === "standard" || todosMode === "maximized" ? ">" : "<"}</span>
             <strong>Todos</strong>
@@ -675,7 +697,7 @@ export const NotebookWorkspace = ({
           className="notebook-todos-launcher"
           type="button"
           data-notebook-todos-control
-          onClick={() => expandTodos(lastExpandedTodosMode)}
+          onClick={openTodos}
         >
           <strong>Todos</strong>
           <span>{todos.filter((todo) => !todo.isDone).length} open</span>

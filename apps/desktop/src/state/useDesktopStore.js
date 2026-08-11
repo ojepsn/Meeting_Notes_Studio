@@ -1246,9 +1246,12 @@ export const useDesktopStore = create((set, get) => {
                     await Promise.all(removedAttachments.map((attachment) => removePersistedAttachment(attachment.filePath)));
                 }
                 const nextAttachments = loadedSnapshot.attachments.filter((attachment) => !expiredSessionIds.has(attachment.sessionId));
+                const migratedLegacyTodoComments = loadedSnapshot.todos.some((todo) => Boolean(todo.comments?.trim()));
+                const normalizedTodos = loadedSnapshot.todos.map((todo) => taskToTodoRecord(todoToTaskRecord(todo)));
                 let snapshot = {
                     ...loadedSnapshot,
                     sessions: remainingSessions,
+                    todos: normalizedTodos,
                     attachments: nextAttachments,
                     deletedEntities: Array.isArray(loadedSnapshot.deletedEntities) ? loadedSnapshot.deletedEntities : [],
                     activities: recalculateActivitiesWithTimeLogs(loadedSnapshot.activities, loadedSnapshot.timelogs),
@@ -1283,7 +1286,7 @@ export const useDesktopStore = create((set, get) => {
                     saveState: "saved",
                     lastSavedAt: new Date().toISOString(),
                 });
-                if (recoveredFromBackup || expiredSessionIds.size || scheduleReconciliation.changed || rolloverResult.changed) {
+                if (recoveredFromBackup || expiredSessionIds.size || migratedLegacyTodoComments || scheduleReconciliation.changed || rolloverResult.changed) {
                     scheduleSnapshotPersist(get().repository, snapshot, set);
                 }
             }
