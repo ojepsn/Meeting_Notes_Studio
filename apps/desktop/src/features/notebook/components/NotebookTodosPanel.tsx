@@ -415,35 +415,30 @@ export const NotebookTodosPanel = ({
             </div>
 
             <div className="notebook-todo-checks">
-              <label><input type="checkbox" checked={!selectedTodo.isPrivate} onChange={() => saveSelected({ isPrivate: false })} /> Business</label>
-              <label><input type="checkbox" checked={selectedTodo.isPrivate} onChange={() => saveSelected({ isPrivate: true })} /> Private</label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={getTodoPriority(selectedTodo) === "high"}
-                  onChange={(event) => saveSelected({ priority: event.target.checked ? "high" : "normal", isPriority: event.target.checked })}
-                />
-                Prio
-              </label>
+              <div className="notebook-todo-choice-group" role="radiogroup" aria-label="Todo type">
+                <span>Type</span>
+                <label><input type="radio" name={`notebook-todo-type-${selectedTodo.id}`} checked={!selectedTodo.isPrivate} onChange={() => saveSelected({ isPrivate: false })} /> Business</label>
+                <label><input type="radio" name={`notebook-todo-type-${selectedTodo.id}`} checked={selectedTodo.isPrivate} onChange={() => saveSelected({ isPrivate: true })} /> Private</label>
+              </div>
+              <div className="notebook-todo-choice-group" role="radiogroup" aria-label="Todo priority">
+                <span>Priority</span>
+                {(["low", "normal", "high"] as const).map((priority) => (
+                  <label key={priority}>
+                    <input
+                      type="radio"
+                      name={`notebook-todo-priority-${selectedTodo.id}`}
+                      checked={getTodoPriority(selectedTodo) === priority}
+                      onChange={() => saveSelected({ priority, isPriority: priority === "high" })}
+                    />
+                    {priority[0].toUpperCase() + priority.slice(1)}
+                  </label>
+                ))}
+              </div>
               <label><input type="checkbox" checked={Boolean(selectedTodo.isUrgent)} onChange={(event) => saveSelected({ isUrgent: event.target.checked })} /> Urgent</label>
               <label><input type="checkbox" checked={selectedTodo.isDone} onChange={(event) => setTodoDone(selectedTodo, event.target.checked)} /> Done</label>
             </div>
 
             <div className="notebook-todo-meta-grid">
-              <label>
-                <span>Priority</span>
-                <select
-                  value={getTodoPriority(selectedTodo)}
-                  onChange={(event) => {
-                    const priority = event.target.value as TodoPriority;
-                    saveSelected({ priority, isPriority: priority === "high" });
-                  }}
-                >
-                  <option value="low">Low</option>
-                  <option value="normal">Normal</option>
-                  <option value="high">High</option>
-                </select>
-              </label>
               <label>
                 <span>Do on</span>
                 <DateInput id="notebook-todo-do-on" value={selectedTodo.doOn} onChange={(event) => saveSelected({ doOn: event.target.value })} />
