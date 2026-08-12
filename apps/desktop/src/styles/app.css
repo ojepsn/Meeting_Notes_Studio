@@ -860,10 +860,8 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.notebook-page-select strong {
   font-size: 0.78rem;
+  font-weight: 400;
 }
 
 .notebook-page-delete {
@@ -910,7 +908,7 @@ select {
 
 .notebook-title-row {
   display: grid;
-  grid-template-columns: 145px minmax(0, 1fr);
+  grid-template-columns: 145px minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.8rem;
   padding-bottom: 0.8rem;
@@ -932,6 +930,10 @@ select {
   outline: none;
   background: transparent;
   color: var(--app-text);
+}
+
+.notebook-open-session-button {
+  white-space: nowrap;
 }
 
 .notebook-rich-toolbar {

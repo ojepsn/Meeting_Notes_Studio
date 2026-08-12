@@ -514,6 +514,9 @@ export const NotebookWorkspace = ({
               })
             }
           />
+          <button className="secondary-button notebook-open-session-button" type="button" onClick={() => onOpenInNotes("capture")}>
+            Open/create Session
+          </button>
         </header>
 
         <div className="notebook-rich-toolbar" aria-label="Notebook formatting">
