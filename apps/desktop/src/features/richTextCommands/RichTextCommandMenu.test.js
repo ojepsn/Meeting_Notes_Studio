@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRichTextCommands, findRichTextCommandQuery, resolveRichTextCommandValue, richTextCommandMatchesQuery } from "./RichTextCommandMenu";
+import { buildRichTextCommands, findRichTextCommandQuery, getRichTextSpellCheckAttributes, resolveRichTextCommandValue, richTextCommandMatchesQuery } from "./RichTextCommandMenu";
 describe("rich-text commands", () => {
     const now = new Date(2026, 7, 10, 9, 5);
     it("resolves system-local date and 24-hour time placeholders", () => {
@@ -29,5 +29,12 @@ describe("rich-text commands", () => {
             "day",
         ]);
         expect(richTextCommandMatchesQuery(commands.find((command) => command.trigger === "yesterday"), "da")).toBe(false);
+    });
+    it("defaults rich-text spell checking to off and applies explicit language modes", () => {
+        expect(getRichTextSpellCheckAttributes(undefined)).toEqual({ spellCheck: false, lang: "" });
+        expect(getRichTextSpellCheckAttributes("off")).toEqual({ spellCheck: false, lang: "" });
+        expect(getRichTextSpellCheckAttributes("auto")).toEqual({ spellCheck: true, lang: "" });
+        expect(getRichTextSpellCheckAttributes("en")).toEqual({ spellCheck: true, lang: "en" });
+        expect(getRichTextSpellCheckAttributes("sv")).toEqual({ spellCheck: true, lang: "sv" });
     });
 });

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import type { RichTextCommandRecord } from "@notesmith/domain";
+import type { RichTextCommandRecord, RichTextSpellCheckMode } from "@notesmith/domain";
 
 export interface RichTextCommand {
   trigger: string;
@@ -10,6 +10,7 @@ export interface RichTextCommand {
 
 interface RichTextCommandProviderProps {
   customCommands?: RichTextCommandRecord[];
+  spellCheckMode?: RichTextSpellCheckMode;
   children: ReactNode;
 }
 
@@ -25,6 +26,7 @@ type ActiveQuery = {
 };
 
 const RichTextCommandContext = createContext<RichTextCommandRecord[]>([]);
+const RichTextSpellCheckContext = createContext<RichTextSpellCheckMode>("off");
 
 const BUILTIN_COMMANDS: RichTextCommand[] = [
   { trigger: "now", label: "Current time", description: "24-hour time, HH:mm", template: "{time}" },
@@ -104,6 +106,11 @@ export const richTextCommandMatchesQuery = (command: RichTextCommand, query: str
   command.trigger.startsWith(query) ||
   command.label.toLowerCase().split(/\s+/).some((word) => word.startsWith(query));
 
+export const getRichTextSpellCheckAttributes = (mode: RichTextSpellCheckMode | undefined) => ({
+  spellCheck: mode !== "off" && mode !== undefined,
+  lang: mode === "en" || mode === "sv" ? mode : "",
+});
+
 const getCommandQuery = (editor: HTMLDivElement) => {
   const selection = window.getSelection();
   if (!selection?.rangeCount || !selection.isCollapsed) return null;
@@ -122,12 +129,15 @@ const getCommandQuery = (editor: HTMLDivElement) => {
   };
 };
 
-export const RichTextCommandProvider = ({ customCommands = [], children }: RichTextCommandProviderProps) => (
-  <RichTextCommandContext.Provider value={customCommands}>{children}</RichTextCommandContext.Provider>
+export const RichTextCommandProvider = ({ customCommands = [], spellCheckMode = "off", children }: RichTextCommandProviderProps) => (
+  <RichTextCommandContext.Provider value={customCommands}>
+    <RichTextSpellCheckContext.Provider value={spellCheckMode}>{children}</RichTextSpellCheckContext.Provider>
+  </RichTextCommandContext.Provider>
 );
 
 export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextCommandMenuProps) => {
   const customCommands = useContext(RichTextCommandContext);
+  const spellCheckMode = useContext(RichTextSpellCheckContext);
   const commands = useMemo(() => buildRichTextCommands(customCommands), [customCommands]);
   const [activeQuery, setActiveQuery] = useState<ActiveQuery | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -143,6 +153,18 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextComm
   }, [activeQuery, commands]);
 
   useEffect(() => setActiveIndex(0), [activeQuery?.query]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const attributes = getRichTextSpellCheckAttributes(spellCheckMode);
+    editor.spellcheck = attributes.spellCheck;
+    if (attributes.lang) {
+      editor.lang = attributes.lang;
+    } else {
+      editor.removeAttribute("lang");
+    }
+  }, [editorRef, spellCheckMode]);
 
   useEffect(() => {
     const editor = editorRef.current;

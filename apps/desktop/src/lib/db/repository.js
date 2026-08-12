@@ -285,6 +285,7 @@ export const createDefaultSettings = () => ({
     savedActivities: [],
     savedTags: [],
     richTextCommands: [],
+    richTextSpellCheck: "off",
     projectLinks: [],
     timeReportPresets: [],
     abbreviations: [],
@@ -336,6 +337,9 @@ const normalizeSettings = (settings) => ({
         : 640,
     captureWorkspaceDensity: settings.captureWorkspaceDensity === "minimal" ? "minimal" : "full",
     outputWorkspaceDensity: settings.outputWorkspaceDensity === "minimal" ? "minimal" : "full",
+    richTextSpellCheck: settings.richTextSpellCheck === "auto" || settings.richTextSpellCheck === "en" || settings.richTextSpellCheck === "sv"
+        ? settings.richTextSpellCheck
+        : "off",
     calendarDaysInView: settings.calendarDaysInView === 3 || settings.calendarDaysInView === 7 || settings.calendarDaysInView === 14
         ? settings.calendarDaysInView
         : 5,

@@ -755,6 +755,29 @@ export const SettingsCard = ({
 
             <div className="section-divider">
               <div className="settings-subsection-heading">
+                <strong>Spell checking</strong>
+                <span className="tiny-text">Controls red spelling underlines in every rich-text field.</span>
+              </div>
+              <div className="field">
+                <label htmlFor="rich-text-spell-check">Rich-text spell checking</label>
+                <select
+                  id="rich-text-spell-check"
+                  value={settings.richTextSpellCheck ?? "off"}
+                  onChange={(event) => onChange({
+                    ...settings,
+                    richTextSpellCheck: event.target.value as "off" | "auto" | "en" | "sv",
+                  })}
+                >
+                  <option value="off">Off</option>
+                  <option value="auto">Automatic</option>
+                  <option value="en">English</option>
+                  <option value="sv">Swedish</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="section-divider">
+              <div className="settings-subsection-heading">
                 <strong>Built-in commands</strong>
                 <span className="tiny-text">Dates and times use this computer's current timezone.</span>
               </div>

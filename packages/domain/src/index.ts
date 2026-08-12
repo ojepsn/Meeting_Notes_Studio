@@ -329,6 +329,8 @@ export interface RichTextCommandRecord {
   template: string;
 }
 
+export type RichTextSpellCheckMode = "off" | "auto" | "en" | "sv";
+
 export interface LocalAppSettings {
   theme: string;
   outputLanguage: "same" | "sv" | "en";
@@ -363,6 +365,7 @@ export interface LocalAppSettings {
   savedActivities: string[];
   savedTags: string[];
   richTextCommands?: RichTextCommandRecord[];
+  richTextSpellCheck?: RichTextSpellCheckMode;
   projectLinks: ProjectLinkRecord[];
   timeReportPresets: TimeReportPreset[];
   abbreviations: Array<{ id: string; shortForm: string; fullForm: string }>;

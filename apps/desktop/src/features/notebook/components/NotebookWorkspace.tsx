@@ -465,26 +465,22 @@ export const NotebookWorkspace = ({
           </button>
         </div>
         <div className="notebook-page-list">
-          {sortedSessions.map((session) => {
-            const preview = richTextToPlainText(session.manualNotes);
-            return (
-              <div className="notebook-page-item" data-active={session.id === activeSession.id} key={session.id}>
-                <button className="notebook-page-select" type="button" onClick={() => onSelect(session.id)}>
-                  <strong>{getNotebookListTitle(session)}</strong>
-                  <span>{preview || "Empty page"}</span>
-                </button>
-                <button
-                  className="notebook-page-delete"
-                  type="button"
-                  aria-label={`Delete ${getNotebookListTitle(session)}`}
-                  title="Move to deleted sessions"
-                  onClick={() => onDelete(session.id)}
-                >
-                  x
-                </button>
-              </div>
-            );
-          })}
+          {sortedSessions.map((session) => (
+            <div className="notebook-page-item" data-active={session.id === activeSession.id} key={session.id}>
+              <button className="notebook-page-select" type="button" onClick={() => onSelect(session.id)}>
+                <strong>{getNotebookListTitle(session)}</strong>
+              </button>
+              <button
+                className="notebook-page-delete"
+                type="button"
+                aria-label={`Delete ${getNotebookListTitle(session)}`}
+                title="Move to deleted sessions"
+                onClick={() => onDelete(session.id)}
+              >
+                x
+              </button>
+            </div>
+          ))}
         </div>
       </aside>
 

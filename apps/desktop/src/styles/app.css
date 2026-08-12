@@ -846,10 +846,9 @@ select {
 .notebook-page-select {
   display: flex;
   flex: 1 1 auto;
-  flex-direction: column;
-  gap: 0.25rem;
+  align-items: center;
   min-width: 0;
-  padding: 0.72rem 2.25rem 0.72rem 0.75rem;
+  padding: 0.38rem 2rem 0.38rem 0.65rem;
   border: 0;
   background: transparent;
   color: inherit;
@@ -857,25 +856,19 @@ select {
   cursor: pointer;
 }
 
-.notebook-page-select strong,
-.notebook-page-select span {
+.notebook-page-select strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .notebook-page-select strong {
-  font-size: 0.85rem;
-}
-
-.notebook-page-select span {
-  color: var(--app-muted);
-  font-size: 0.76rem;
+  font-size: 0.78rem;
 }
 
 .notebook-page-delete {
   position: absolute;
-  top: 0.4rem;
+  top: 50%;
   right: 0.4rem;
   display: grid;
   width: 1.45rem;
@@ -888,6 +881,7 @@ select {
   color: var(--app-muted);
   font-size: 0.76rem;
   line-height: 1;
+  transform: translateY(-50%);
   cursor: pointer;
 }
 

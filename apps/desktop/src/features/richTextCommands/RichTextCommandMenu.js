@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 const RichTextCommandContext = createContext([]);
+const RichTextSpellCheckContext = createContext("off");
 const BUILTIN_COMMANDS = [
     { trigger: "now", label: "Current time", description: "24-hour time, HH:mm", template: "{time}" },
     { trigger: "n", label: "Current time", description: "Short alias for @now", template: "{time}" },
@@ -71,6 +72,10 @@ export const findRichTextCommandQuery = (text, offset = text.length) => {
 export const richTextCommandMatchesQuery = (command, query) => !query ||
     command.trigger.startsWith(query) ||
     command.label.toLowerCase().split(/\s+/).some((word) => word.startsWith(query));
+export const getRichTextSpellCheckAttributes = (mode) => ({
+    spellCheck: mode !== "off" && mode !== undefined,
+    lang: mode === "en" || mode === "sv" ? mode : "",
+});
 const getCommandQuery = (editor) => {
     const selection = window.getSelection();
     if (!selection?.rangeCount || !selection.isCollapsed)
@@ -91,9 +96,10 @@ const getCommandQuery = (editor) => {
         range,
     };
 };
-export const RichTextCommandProvider = ({ customCommands = [], children }) => (_jsx(RichTextCommandContext.Provider, { value: customCommands, children: children }));
+export const RichTextCommandProvider = ({ customCommands = [], spellCheckMode = "off", children }) => (_jsx(RichTextCommandContext.Provider, { value: customCommands, children: _jsx(RichTextSpellCheckContext.Provider, { value: spellCheckMode, children: children }) }));
 export const RichTextCommandMenu = ({ editorRef, onContentChange }) => {
     const customCommands = useContext(RichTextCommandContext);
+    const spellCheckMode = useContext(RichTextSpellCheckContext);
     const commands = useMemo(() => buildRichTextCommands(customCommands), [customCommands]);
     const [activeQuery, setActiveQuery] = useState(null);
     const [activeIndex, setActiveIndex] = useState(0);
@@ -109,6 +115,19 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }) => {
             .slice(0, 8);
     }, [activeQuery, commands]);
     useEffect(() => setActiveIndex(0), [activeQuery?.query]);
+    useEffect(() => {
+        const editor = editorRef.current;
+        if (!editor)
+            return;
+        const attributes = getRichTextSpellCheckAttributes(spellCheckMode);
+        editor.spellcheck = attributes.spellCheck;
+        if (attributes.lang) {
+            editor.lang = attributes.lang;
+        }
+        else {
+            editor.removeAttribute("lang");
+        }
+    }, [editorRef, spellCheckMode]);
     useEffect(() => {
         const editor = editorRef.current;
         if (!editor)

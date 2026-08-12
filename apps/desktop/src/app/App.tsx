@@ -4126,7 +4126,10 @@ export const App = () => {
   };
 
   return (
-    <RichTextCommandProvider customCommands={snapshot.settings.richTextCommands}>
+    <RichTextCommandProvider
+      customCommands={snapshot.settings.richTextCommands}
+      spellCheckMode={snapshot.settings.richTextSpellCheck}
+    >
     <div
       className="app-shell desktop-shell"
       data-theme={snapshot.settings.theme}

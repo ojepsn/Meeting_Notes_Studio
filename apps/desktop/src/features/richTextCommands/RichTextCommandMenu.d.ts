@@ -1,5 +1,5 @@
 import { type ReactNode, type RefObject } from "react";
-import type { RichTextCommandRecord } from "@notesmith/domain";
+import type { RichTextCommandRecord, RichTextSpellCheckMode } from "@notesmith/domain";
 export interface RichTextCommand {
     trigger: string;
     label: string;
@@ -8,6 +8,7 @@ export interface RichTextCommand {
 }
 interface RichTextCommandProviderProps {
     customCommands?: RichTextCommandRecord[];
+    spellCheckMode?: RichTextSpellCheckMode;
     children: ReactNode;
 }
 interface RichTextCommandMenuProps {
@@ -22,6 +23,10 @@ export declare const findRichTextCommandQuery: (text: string, offset?: number) =
     end: number;
 } | null;
 export declare const richTextCommandMatchesQuery: (command: RichTextCommand, query: string) => boolean;
-export declare const RichTextCommandProvider: ({ customCommands, children }: RichTextCommandProviderProps) => import("react/jsx-runtime").JSX.Element;
+export declare const getRichTextSpellCheckAttributes: (mode: RichTextSpellCheckMode | undefined) => {
+    spellCheck: boolean;
+    lang: string;
+};
+export declare const RichTextCommandProvider: ({ customCommands, spellCheckMode, children }: RichTextCommandProviderProps) => import("react/jsx-runtime").JSX.Element;
 export declare const RichTextCommandMenu: ({ editorRef, onContentChange }: RichTextCommandMenuProps) => import("react/jsx-runtime").JSX.Element | null;
 export {};
