@@ -3,6 +3,7 @@ import {
   buildNotebookSessionTitle,
   getNotebookListTitle,
   getNotebookTitleText,
+  preserveNotebookRowBreaks,
 } from "./NotebookWorkspace";
 
 describe("NotebookWorkspace title helpers", () => {
@@ -24,5 +25,12 @@ describe("NotebookWorkspace title helpers", () => {
         captureMode: "meeting-note",
       }),
     ).toBe("2026-08-10 Operations Meeting");
+  });
+
+  it("preserves browser-generated rows and explicit line breaks", () => {
+    expect(preserveNotebookRowBreaks("First row<div>Second row</div><div><br></div><div>Fourth row</div>")).toBe(
+      "First row<p>Second row</p><p><br></p><p>Fourth row</p>",
+    );
+    expect(preserveNotebookRowBreaks("First row<br>Second row")).toBe("First row<br>Second row");
   });
 });

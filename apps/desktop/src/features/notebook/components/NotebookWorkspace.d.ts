@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import type { SessionRecord, TodoRecord } from "@notesmith/domain";
 import { type StructureOptions } from "../../../lib/structure/options";
+export declare const preserveNotebookRowBreaks: (value: string) => string;
 export declare const getNotebookTitleText: (session: Pick<SessionRecord, "date" | "title">) => string;
 export declare const buildNotebookSessionTitle: (date: string, titleText: string) => string;
 export declare const getNotebookListTitle: (session: Pick<SessionRecord, "captureMode" | "date" | "title">) => string;

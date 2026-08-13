@@ -1018,6 +1018,7 @@ select {
   font-family: Georgia, "Times New Roman", serif;
   font-size: 1.05rem;
   line-height: 1.7;
+  white-space: pre-wrap;
 }
 
 .notebook-rich-editor[data-empty="true"]::before {
@@ -6991,6 +6992,7 @@ select {
 .single-value-combobox > input {
   width: 100%;
   padding-right: 2.25rem;
+  font-weight: 400;
 }
 
 .single-value-combobox-toggle {
@@ -7035,6 +7037,7 @@ select {
   gap: 0.75rem;
   padding: 0.55rem 0.65rem;
   text-align: left;
+  font-weight: 400;
 }
 
 .single-value-combobox-option small {

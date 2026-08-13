@@ -76,9 +76,14 @@ const richTextToPlainText = (value: string) => {
   return (wrapper.innerText || wrapper.textContent || "").replace(/\s+/g, " ").trim();
 };
 
+export const preserveNotebookRowBreaks = (value: string) =>
+  value
+    .replace(/<div(?:\s[^>]*)?>/gi, "<p>")
+    .replace(/<\/div>/gi, "</p>");
+
 const normalizeNotebookHtml = (value: string) => {
   const wrapper = document.createElement("div");
-  wrapper.innerHTML = value || "";
+  wrapper.innerHTML = preserveNotebookRowBreaks(value || "");
   const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2"]);
   wrapper.querySelectorAll("*").forEach((element) => {
     if (!allowedTags.has(element.tagName)) {
@@ -89,7 +94,7 @@ const normalizeNotebookHtml = (value: string) => {
     }
     Array.from(element.attributes).forEach((attribute) => element.removeAttribute(attribute.name));
   });
-  return wrapper.innerHTML.replace(/<div>/gi, "<p>").replace(/<\/div>/gi, "</p>").trim();
+  return wrapper.innerHTML.trim();
 };
 
 export const getNotebookTitleText = (session: Pick<SessionRecord, "date" | "title">) => {
