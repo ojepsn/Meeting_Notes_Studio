@@ -1706,6 +1706,19 @@ select {
   flex: 0 0 auto;
 }
 
+.notebook-todo-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.notebook-todo-time-button {
+  min-height: 34px;
+  padding: 0.38rem 0.7rem;
+  white-space: nowrap;
+}
+
 .notebook-todo-details-field {
   flex: 1 1 auto;
   min-height: 190px;

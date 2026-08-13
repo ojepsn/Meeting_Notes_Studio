@@ -1,4 +1,4 @@
-import type { TodoRecord } from "@notesmith/domain";
+import type { TimeLogRecord, TodoRecord } from "@notesmith/domain";
 import { isTauriRuntime } from "../../lib/storage/environment";
 
 export const DETACHED_TODOS_WINDOW_LABEL = "notesmith-todos";
@@ -10,12 +10,21 @@ export type TodosWindowCommand =
   | { type: "add"; description: string }
   | { type: "save"; todo: TodoRecord }
   | { type: "delete"; todoId: string }
-  | { type: "add-note"; todoId: string };
+  | { type: "add-note"; todoId: string }
+  | { type: "toggle-time"; todoId: string; isRunning: boolean };
 
 export interface TodosWindowSnapshot {
   todos: TodoRecord[];
   theme: string;
+  runningTodoIds: string[];
 }
+
+export const getRunningTodoIds = (timeLogs: TimeLogRecord[]) =>
+  Array.from(new Set(
+    timeLogs
+      .filter((log) => log.targetType === "todo" && log.startTime === log.endTime)
+      .map((log) => log.targetId),
+  ));
 
 export const openDetachedTodosWindow = async () => {
   if (!isTauriRuntime()) {
@@ -54,8 +63,8 @@ export const sendTodosCommand = async (command: TodosWindowCommand) => {
   await emitTo("main", TODOS_COMMAND_EVENT, command);
 };
 
-export const sendTodosSnapshot = async (todos: TodoRecord[], theme: string) => {
+export const sendTodosSnapshot = async (todos: TodoRecord[], theme: string, runningTodoIds: string[]) => {
   if (!isTauriRuntime()) return;
   const { emitTo } = await import("@tauri-apps/api/event");
-  await emitTo(DETACHED_TODOS_WINDOW_LABEL, TODOS_SNAPSHOT_EVENT, { todos, theme } satisfies TodosWindowSnapshot);
+  await emitTo(DETACHED_TODOS_WINDOW_LABEL, TODOS_SNAPSHOT_EVENT, { todos, theme, runningTodoIds } satisfies TodosWindowSnapshot);
 };

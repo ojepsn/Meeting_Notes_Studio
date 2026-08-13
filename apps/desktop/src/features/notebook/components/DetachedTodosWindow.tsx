@@ -10,6 +10,7 @@ import {
 export const DetachedTodosWindow = () => {
   const [todos, setTodos] = useState<TodoRecord[]>([]);
   const [theme, setTheme] = useState("fluent-slate-light");
+  const [runningTodoIds, setRunningTodoIds] = useState<string[]>([]);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
@@ -21,6 +22,7 @@ export const DetachedTodosWindow = () => {
         if (disposed) return;
         setTodos(event.payload.todos);
         setTheme(event.payload.theme);
+        setRunningTodoIds(event.payload.runningTodoIds);
         setIsConnected(true);
       }),
     ).then((disposeListener) => {
@@ -40,10 +42,12 @@ export const DetachedTodosWindow = () => {
       <div className="detached-todos-window-content">
         <NotebookTodosPanel
         todos={todos}
+        runningTodoIds={runningTodoIds}
         onAddTodo={(description) => void sendTodosCommand({ type: "add", description })}
         onSaveTodo={(todo) => void sendTodosCommand({ type: "save", todo })}
         onDeleteTodo={(todoId) => void sendTodosCommand({ type: "delete", todoId })}
         onAddNote={(todoId) => void sendTodosCommand({ type: "add-note", todoId })}
+        onToggleTime={(todoId, isRunning) => void sendTodosCommand({ type: "toggle-time", todoId, isRunning })}
         headerActions={(
           <div className="notebook-todos-window-actions">
             <span className="tiny-text">{isConnected ? "Synced with NoteSmith" : "Connecting..."}</span>

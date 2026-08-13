@@ -3,10 +3,12 @@ import type { TodoPriority, TodoRecord } from "@notesmith/domain";
 export type NotebookTodoSort = "priority-desc" | "priority-asc" | "title-asc" | "title-desc" | "created-desc" | "created-asc" | "updated-desc" | "updated-asc" | "due-asc" | "due-desc";
 interface NotebookTodosPanelProps {
     todos: TodoRecord[];
+    runningTodoIds: string[];
     onAddTodo: (description: string) => void;
     onSaveTodo: (todo: TodoRecord) => void;
     onDeleteTodo: (todoId: string) => void;
     onAddNote: (todoId: string) => void;
+    onToggleTime: (todoId: string, isRunning: boolean) => void;
     headerActions?: ReactNode;
     onHeaderPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
     onHeaderPointerMove?: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -41,5 +43,5 @@ export declare const normalizeNotebookTodoViewSettings: (value: unknown) => Note
 export declare const sortNotebookTodos: (todos: TodoRecord[], sort: NotebookTodoSort) => TodoRecord[];
 export declare const filterNotebookTodos: (todos: TodoRecord[], filters: NotebookTodoFilters) => TodoRecord[];
 export declare const applyNotebookTodoCompletionAnchors: (todos: TodoRecord[], anchors: Record<string, number>) => TodoRecord[];
-export declare const NotebookTodosPanel: ({ todos, onAddTodo, onSaveTodo, onDeleteTodo, onAddNote, headerActions, onHeaderPointerDown, onHeaderPointerMove, onHeaderPointerUp, }: NotebookTodosPanelProps) => import("react/jsx-runtime").JSX.Element;
+export declare const NotebookTodosPanel: ({ todos, runningTodoIds, onAddTodo, onSaveTodo, onDeleteTodo, onAddNote, onToggleTime, headerActions, onHeaderPointerDown, onHeaderPointerMove, onHeaderPointerUp, }: NotebookTodosPanelProps) => import("react/jsx-runtime").JSX.Element;
 export {};

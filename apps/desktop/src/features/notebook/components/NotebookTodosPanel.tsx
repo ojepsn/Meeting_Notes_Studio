@@ -18,10 +18,12 @@ export type NotebookTodoSort =
 
 interface NotebookTodosPanelProps {
   todos: TodoRecord[];
+  runningTodoIds: string[];
   onAddTodo: (description: string) => void;
   onSaveTodo: (todo: TodoRecord) => void;
   onDeleteTodo: (todoId: string) => void;
   onAddNote: (todoId: string) => void;
+  onToggleTime: (todoId: string, isRunning: boolean) => void;
   headerActions?: ReactNode;
   onHeaderPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
   onHeaderPointerMove?: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -172,10 +174,12 @@ export const applyNotebookTodoCompletionAnchors = (todos: TodoRecord[], anchors:
 
 export const NotebookTodosPanel = ({
   todos,
+  runningTodoIds,
   onAddTodo,
   onSaveTodo,
   onDeleteTodo,
   onAddNote,
+  onToggleTime,
   headerActions,
   onHeaderPointerDown,
   onHeaderPointerMove,
@@ -223,6 +227,7 @@ export const NotebookTodosPanel = ({
     [completionAnchors, filteredTodos, sort],
   );
   const selectedTodo = visibleByCompletion.find((todo) => todo.id === selectedTodoId) || null;
+  const isSelectedTodoRunning = Boolean(selectedTodo && runningTodoIds.includes(selectedTodo.id));
 
   useEffect(() => {
     if (selectedTodoId && !visibleByCompletion.some((todo) => todo.id === selectedTodoId)) {
@@ -479,9 +484,19 @@ export const NotebookTodosPanel = ({
 
           {selectedTodo ? (
             <div className="notebook-todo-editor" data-expanded="true">
-            <div className="field notebook-todo-title-field">
-              <label htmlFor="notebook-todo-title">Todo</label>
-              <input id="notebook-todo-title" value={selectedTodo.description} onChange={(event) => saveSelected({ description: event.target.value })} />
+            <div className="notebook-todo-title-row">
+              <div className="field notebook-todo-title-field">
+                <label htmlFor="notebook-todo-title">Todo</label>
+                <input id="notebook-todo-title" value={selectedTodo.description} onChange={(event) => saveSelected({ description: event.target.value })} />
+              </div>
+              <button
+                className={isSelectedTodoRunning ? "primary-button notebook-todo-time-button" : "small-button notebook-todo-time-button"}
+                type="button"
+                disabled={selectedTodo.isDone}
+                onClick={() => onToggleTime(selectedTodo.id, isSelectedTodoRunning)}
+              >
+                {isSelectedTodoRunning ? "Stop time" : "Start time"}
+              </button>
             </div>
 
             <div className="notebook-todo-checks">

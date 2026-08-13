@@ -18,6 +18,7 @@ import { StructureWorkspace } from "../features/structure/components/StructureWo
 import { AssistantWorkspace } from "../features/assistant/components/AssistantWorkspace";
 import { NotebookWorkspace } from "../features/notebook/components/NotebookWorkspace";
 import {
+  getRunningTodoIds,
   TODOS_COMMAND_EVENT,
   sendTodosSnapshot,
   type TodosWindowCommand,
@@ -421,6 +422,7 @@ export const App = () => {
   const notebookStartupCreatedRef = useRef(false);
   const todosSnapshotRef = useRef(snapshot?.todos ?? []);
   const themeSnapshotRef = useRef(snapshot?.settings.theme ?? "fluent-slate-light");
+  const runningTodoIdsSnapshotRef = useRef(getRunningTodoIds(snapshot?.timelogs ?? []));
 
   const buildDesktopBackupBundle = (): DesktopBackupBundle | null => {
     if (!snapshot) {
@@ -453,7 +455,8 @@ export const App = () => {
   useEffect(() => {
     todosSnapshotRef.current = snapshot?.todos ?? [];
     themeSnapshotRef.current = snapshot?.settings.theme ?? "fluent-slate-light";
-  }, [snapshot?.settings.theme, snapshot?.todos]);
+    runningTodoIdsSnapshotRef.current = getRunningTodoIds(snapshot?.timelogs ?? []);
+  }, [snapshot?.settings.theme, snapshot?.timelogs, snapshot?.todos]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -464,7 +467,7 @@ export const App = () => {
       listen<TodosWindowCommand>(TODOS_COMMAND_EVENT, (event) => {
         const command = event.payload;
         if (command.type === "request-snapshot") {
-          void sendTodosSnapshot(todosSnapshotRef.current, themeSnapshotRef.current);
+          void sendTodosSnapshot(todosSnapshotRef.current, themeSnapshotRef.current, runningTodoIdsSnapshotRef.current);
         } else if (command.type === "add") {
           void addTodo(command.description);
         } else if (command.type === "save") {
@@ -478,6 +481,10 @@ export const App = () => {
             setActiveSessionId(sessionId);
             setActiveWorkspace("notebook");
           });
+        } else if (command.type === "toggle-time") {
+          void (command.isRunning
+            ? stopTimeTracking("todo", command.todoId)
+            : startTimeTracking("todo", command.todoId));
         }
       }),
     ).then((disposeListener) => {
@@ -489,14 +496,14 @@ export const App = () => {
       disposed = true;
       unlisten?.();
     };
-  }, [addTodo, deleteTodo, ensureSessionForTodo, saveTodo, setActiveSessionId]);
+  }, [addTodo, deleteTodo, ensureSessionForTodo, saveTodo, setActiveSessionId, startTimeTracking, stopTimeTracking]);
 
   useEffect(() => {
     if (!isLoaded || !snapshot || !isTauriRuntime()) return;
-    void sendTodosSnapshot(snapshot.todos, snapshot.settings.theme).catch(() => {
+    void sendTodosSnapshot(snapshot.todos, snapshot.settings.theme, getRunningTodoIds(snapshot.timelogs)).catch(() => {
       // The detached window is optional and may not be open.
     });
-  }, [isLoaded, snapshot?.settings.theme, snapshot?.todos]);
+  }, [isLoaded, snapshot?.settings.theme, snapshot?.timelogs, snapshot?.todos]);
 
   useEffect(() => {
     if (!isLoaded || loadError || !snapshot || notebookStartupCreatedRef.current) {
@@ -4364,6 +4371,7 @@ export const App = () => {
               <NotebookWorkspace
                 sessions={activeSessions}
                 todos={snapshot.todos}
+                runningTodoIds={getRunningTodoIds(snapshot.timelogs)}
                 activeSession={activeSession}
                 structureOptions={structureOptions}
                 isTimeTracking={isActiveSessionTimeTracking}
@@ -4387,6 +4395,9 @@ export const App = () => {
                     setActiveSessionId(sessionId);
                   });
                 }}
+                onToggleTodoTime={(todoId, isRunning) => void (
+                  isRunning ? stopTimeTracking("todo", todoId) : startTimeTracking("todo", todoId)
+                )}
                 onChange={handleCaptureSessionChange}
                 onToggleRecording={() =>
                   void (isRecordingAudio ? handleStopRecording() : handleStartRecording("microphone"))

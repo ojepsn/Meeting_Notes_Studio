@@ -117,6 +117,7 @@ export const getNotebookListTitle = (session: Pick<SessionRecord, "captureMode" 
 interface NotebookWorkspaceProps {
   sessions: SessionRecord[];
   todos: TodoRecord[];
+  runningTodoIds: string[];
   activeSession: SessionRecord;
   structureOptions: StructureOptions;
   isTimeTracking: boolean;
@@ -132,6 +133,7 @@ interface NotebookWorkspaceProps {
   onSaveTodo: (todo: TodoRecord) => void;
   onDeleteTodo: (todoId: string) => void;
   onAddNoteForTodo: (todoId: string) => void;
+  onToggleTodoTime: (todoId: string, isRunning: boolean) => void;
   onChange: (session: SessionRecord) => void;
   onToggleRecording: () => void;
   onUploadAudio: () => void;
@@ -144,6 +146,7 @@ interface NotebookWorkspaceProps {
 export const NotebookWorkspace = ({
   sessions,
   todos,
+  runningTodoIds,
   activeSession,
   structureOptions,
   isTimeTracking,
@@ -159,6 +162,7 @@ export const NotebookWorkspace = ({
   onSaveTodo,
   onDeleteTodo,
   onAddNoteForTodo,
+  onToggleTodoTime,
   onChange,
   onToggleRecording,
   onUploadAudio,
@@ -720,10 +724,12 @@ export const NotebookWorkspace = ({
         >
           <NotebookTodosPanel
             todos={todos}
+            runningTodoIds={runningTodoIds}
             onAddTodo={onAddTodo}
             onSaveTodo={onSaveTodo}
             onDeleteTodo={onDeleteTodo}
             onAddNote={onAddNoteForTodo}
+            onToggleTime={onToggleTodoTime}
             onHeaderPointerDown={startTodosDrag}
             onHeaderPointerMove={moveTodosDrag}
             onHeaderPointerUp={endTodosDrag}

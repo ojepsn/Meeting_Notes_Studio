@@ -2,6 +2,9 @@ import { isTauriRuntime } from "../../lib/storage/environment";
 export const DETACHED_TODOS_WINDOW_LABEL = "notesmith-todos";
 export const TODOS_COMMAND_EVENT = "notesmith:todos-command";
 export const TODOS_SNAPSHOT_EVENT = "notesmith:todos-snapshot";
+export const getRunningTodoIds = (timeLogs) => Array.from(new Set(timeLogs
+    .filter((log) => log.targetType === "todo" && log.startTime === log.endTime)
+    .map((log) => log.targetId)));
 export const openDetachedTodosWindow = async () => {
     if (!isTauriRuntime()) {
         throw new Error("The detachable Todos window is available in the desktop app.");
@@ -36,9 +39,9 @@ export const sendTodosCommand = async (command) => {
     const { emitTo } = await import("@tauri-apps/api/event");
     await emitTo("main", TODOS_COMMAND_EVENT, command);
 };
-export const sendTodosSnapshot = async (todos, theme) => {
+export const sendTodosSnapshot = async (todos, theme, runningTodoIds) => {
     if (!isTauriRuntime())
         return;
     const { emitTo } = await import("@tauri-apps/api/event");
-    await emitTo(DETACHED_TODOS_WINDOW_LABEL, TODOS_SNAPSHOT_EVENT, { todos, theme });
+    await emitTo(DETACHED_TODOS_WINDOW_LABEL, TODOS_SNAPSHOT_EVENT, { todos, theme, runningTodoIds });
 };
