@@ -59,6 +59,9 @@ describe("Notebook Todos sorting", () => {
 
     expect(filterNotebookTodos(candidates, {
       query: "safety",
+      domain: "all",
+      project: "all",
+      activity: "all",
       showBusiness: true,
       showPrivate: true,
       urgentOnly: true,
@@ -67,11 +70,35 @@ describe("Notebook Todos sorting", () => {
 
     expect(filterNotebookTodos(candidates, {
       query: "regnora",
+      domain: "all",
+      project: "all",
+      activity: "all",
       showBusiness: true,
       showPrivate: false,
       urgentOnly: false,
       priority: "all",
     })).toEqual([]);
+  });
+
+  it("combines exact Domain, Project, and Activity filters with free text", () => {
+    const matching = {
+      ...todo("4", "Regnora planning", "normal", "2026-08-10T09:00:00Z"),
+      domain: "Clinical Success",
+      project: "Regnora",
+      activity: "Planning",
+    };
+    const wrongActivity = { ...matching, id: "5", activity: "Meetings" };
+
+    expect(filterNotebookTodos([matching, wrongActivity], {
+      query: "regnora",
+      domain: "clinical success",
+      project: "Regnora",
+      activity: "Planning",
+      showBusiness: true,
+      showPrivate: true,
+      urgentOnly: false,
+      priority: "all",
+    }).map((entry) => entry.id)).toEqual(["4"]);
   });
 
   it("keeps a newly completed todo at its previous visible index", () => {
@@ -92,6 +119,9 @@ describe("Notebook Todos sorting", () => {
       showCompleted: false,
       urgentOnly: true,
       priorityFilter: "high",
+      domainFilter: "Clinical Success",
+      projectFilter: "Regnora",
+      activityFilter: "Planning",
     })).toEqual({
       sortField: "updated",
       sortDirection: "asc",
@@ -100,6 +130,9 @@ describe("Notebook Todos sorting", () => {
       showCompleted: false,
       urgentOnly: true,
       priorityFilter: "high",
+      domainFilter: "Clinical Success",
+      projectFilter: "Regnora",
+      activityFilter: "Planning",
     });
   });
 

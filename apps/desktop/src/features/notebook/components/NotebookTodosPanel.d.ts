@@ -14,6 +14,9 @@ interface NotebookTodosPanelProps {
 }
 export interface NotebookTodoFilters {
     query: string;
+    domain: string;
+    project: string;
+    activity: string;
     showBusiness: boolean;
     showPrivate: boolean;
     urgentOnly: boolean;
@@ -29,6 +32,9 @@ export interface NotebookTodoViewSettings {
     showCompleted: boolean;
     urgentOnly: boolean;
     priorityFilter: "all" | TodoPriority;
+    domainFilter: string;
+    projectFilter: string;
+    activityFilter: string;
 }
 export declare const DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS: NotebookTodoViewSettings;
 export declare const normalizeNotebookTodoViewSettings: (value: unknown) => NotebookTodoViewSettings;

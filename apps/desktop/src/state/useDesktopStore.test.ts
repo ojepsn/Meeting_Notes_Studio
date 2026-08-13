@@ -1,10 +1,12 @@
 import { createDefaultSnapshot } from "../lib/db/repository";
 import {
   findNearestAvailableTodoSlot,
+  findSessionTimeTrackingTarget,
   inferTodoStructureAssignment,
   isSuspiciouslyReducedSnapshot,
   reconcileCalendarBackedScheduleFields,
   rollForwardOverdueCalendarTodos,
+  stopOpenTodoTimeLogs,
 } from "./useDesktopStore";
 
 const buildTodo = (id: string, description: string, doOn: string, isDone = false) => ({
@@ -66,6 +68,41 @@ const buildActivity = (id: string, description: string, doOn: string, startTime 
   actualTimeSpentMinutes: 0,
   createdAt: "2026-04-18T08:00:00.000Z",
   sessionIds: [],
+});
+
+describe("findSessionTimeTrackingTarget", () => {
+  it("prefers an existing linked Todo and otherwise uses a linked activity", () => {
+    const snapshot = createDefaultSnapshot();
+    snapshot.todos = [buildTodo("todo-1", "Planning", "2026-08-13")];
+    snapshot.activities = [buildActivity("activity-1", "Meeting", "2026-08-13")];
+    snapshot.entityLinks = [
+      { id: "link-activity", fromType: "activity", fromId: "activity-1", toType: "session", toId: "session-1", relation: "has_session", createdAt: "2026-08-13T08:00:00Z" },
+      { id: "link-todo", fromType: "todo", fromId: "todo-1", toType: "session", toId: "session-1", relation: "has_session", createdAt: "2026-08-13T08:00:00Z" },
+    ];
+
+    expect(findSessionTimeTrackingTarget(snapshot, "session-1")).toEqual({ targetType: "todo", targetId: "todo-1" });
+    expect(findSessionTimeTrackingTarget({ ...snapshot, todos: [], entityLinks: [snapshot.entityLinks[0]] }, "session-1")).toEqual({
+      targetType: "activity",
+      targetId: "activity-1",
+    });
+  });
+});
+
+describe("stopOpenTodoTimeLogs", () => {
+  it("stops running logs for the completed todo without changing other logs", () => {
+    const now = new Date("2026-08-13T10:45:00.000Z");
+    const logs = [
+      { id: "running-target", targetType: "todo" as const, targetId: "todo-1", date: "2026-08-13", startTime: "10:00", endTime: "10:00", durationMinutes: 0, notes: "", createdAt: "2026-08-13T10:00:00.000Z", updatedAt: "2026-08-13T10:00:00.000Z" },
+      { id: "finished-target", targetType: "todo" as const, targetId: "todo-1", date: "2026-08-13", startTime: "08:00", endTime: "09:00", durationMinutes: 60, notes: "", createdAt: "2026-08-13T08:00:00.000Z", updatedAt: "2026-08-13T09:00:00.000Z" },
+      { id: "running-other", targetType: "todo" as const, targetId: "todo-2", date: "2026-08-13", startTime: "10:15", endTime: "10:15", durationMinutes: 0, notes: "", createdAt: "2026-08-13T10:15:00.000Z", updatedAt: "2026-08-13T10:15:00.000Z" },
+    ];
+
+    const result = stopOpenTodoTimeLogs(logs, "todo-1", now);
+
+    expect(result[0]).toMatchObject({ endTime: "12:45", durationMinutes: 165, updatedAt: now.toISOString() });
+    expect(result[1]).toBe(logs[1]);
+    expect(result[2]).toBe(logs[2]);
+  });
 });
 
 describe("rollForwardOverdueCalendarTodos", () => {

@@ -338,6 +338,7 @@ export const App = () => {
     convertTodoToActivity,
     ensureSessionForActivity,
     ensureSessionForTodo,
+    ensureTimeTargetForSession,
     saveSettings,
     renameDomainValue,
     renameProjectValue,
@@ -1066,6 +1067,34 @@ export const App = () => {
     const todoId = findTodoIdForSession(snapshot.entityLinks, activeSession.id);
     return snapshot.todos.find((entry) => entry.id === todoId) ?? null;
   }, [activeSession, snapshot]);
+  const activeSessionTimeTarget = activeLinkedTodo
+    ? { targetType: "todo" as const, targetId: activeLinkedTodo.id }
+    : activeLinkedActivity
+      ? { targetType: "activity" as const, targetId: activeLinkedActivity.id }
+      : null;
+  const isActiveSessionTimeTracking = Boolean(
+    activeSessionTimeTarget && snapshot?.timelogs.some(
+      (log) =>
+        log.targetType === activeSessionTimeTarget.targetType
+        && log.targetId === activeSessionTimeTarget.targetId
+        && log.startTime === log.endTime,
+    ),
+  );
+
+  const toggleActiveSessionTimeTracking = async () => {
+    if (!activeSession) return;
+    const target = await ensureTimeTargetForSession(activeSession.id);
+    if (!target) return;
+    const latestSnapshot = useDesktopStore.getState().snapshot;
+    const isRunning = Boolean(latestSnapshot?.timelogs.some(
+      (log) => log.targetType === target.targetType && log.targetId === target.targetId && log.startTime === log.endTime,
+    ));
+    if (isRunning) {
+      await stopTimeTracking(target.targetType, target.targetId);
+    } else {
+      await startTimeTracking(target.targetType, target.targetId);
+    }
+  };
   const getMeetingTodoDefaults = () => {
     if (!activeSession) {
       return {
@@ -4336,6 +4365,8 @@ export const App = () => {
                 sessions={activeSessions}
                 todos={snapshot.todos}
                 activeSession={activeSession}
+                structureOptions={structureOptions}
+                isTimeTracking={isActiveSessionTimeTracking}
                 isRecordingAudio={isRecordingAudio}
                 isTranscribingAudio={isTranscribingAudio}
                 isGenerating={isGenerating}
@@ -4371,6 +4402,7 @@ export const App = () => {
                     status: "Opened the Notebook page in the full Notes workspace.",
                   })
                 }
+                onToggleTimeTracking={() => void toggleActiveSessionTimeTracking()}
                 outputContent={(
                   <OutputWorkspace
                     session={activeSession}

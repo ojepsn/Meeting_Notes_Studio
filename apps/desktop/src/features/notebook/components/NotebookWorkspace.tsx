@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { SessionRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
+import { TokenPicker } from "../../../components/TokenPicker";
+import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { NotebookTodosPanel } from "./NotebookTodosPanel";
 import { openDetachedTodosWindow } from "../todosWindowBridge";
 import { isTauriRuntime } from "../../../lib/storage/environment";
@@ -111,6 +113,8 @@ interface NotebookWorkspaceProps {
   sessions: SessionRecord[];
   todos: TodoRecord[];
   activeSession: SessionRecord;
+  structureOptions: StructureOptions;
+  isTimeTracking: boolean;
   isRecordingAudio: boolean;
   isTranscribingAudio: boolean;
   isGenerating: boolean;
@@ -129,12 +133,15 @@ interface NotebookWorkspaceProps {
   onTranscribeAudio: () => void;
   onGenerateOutput: () => void;
   onOpenInNotes: (view: "capture" | "output") => void;
+  onToggleTimeTracking: () => void;
 }
 
 export const NotebookWorkspace = ({
   sessions,
   todos,
   activeSession,
+  structureOptions,
+  isTimeTracking,
   isRecordingAudio,
   isTranscribingAudio,
   isGenerating,
@@ -153,6 +160,7 @@ export const NotebookWorkspace = ({
   onTranscribeAudio,
   onGenerateOutput,
   onOpenInNotes,
+  onToggleTimeTracking,
 }: NotebookWorkspaceProps) => {
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
@@ -174,6 +182,22 @@ export const NotebookWorkspace = ({
   const [toolsTab, setToolsTab] = useState<"capture" | "output">("capture");
   const isDatedNotebookPage = activeSession.captureMode === "quick-note";
   const titleText = isDatedNotebookPage ? getNotebookTitleText(activeSession) : activeSession.title;
+  const projectOptions = getProjectsForDomain(structureOptions, activeSession.domain);
+  const activityOptions = getActivitiesForSelection(structureOptions, activeSession.domain, activeSession.project);
+
+  const updateDomain = (domain: string) => {
+    const nextProjects = getProjectsForDomain(structureOptions, domain);
+    const project = nextProjects.includes(activeSession.project) ? activeSession.project : "Other";
+    const nextActivities = getActivitiesForSelection(structureOptions, domain, project);
+    const activity = nextActivities.includes(activeSession.activity) ? activeSession.activity : "Other";
+    onChange({ ...activeSession, domain, project, activity });
+  };
+
+  const updateProject = (project: string) => {
+    const nextActivities = getActivitiesForSelection(structureOptions, activeSession.domain, project);
+    const activity = nextActivities.includes(activeSession.activity) ? activeSession.activity : "Other";
+    onChange({ ...activeSession, project, activity });
+  };
 
   const sortedSessions = useMemo(
     () =>
@@ -518,6 +542,52 @@ export const NotebookWorkspace = ({
             Open/create Session
           </button>
         </header>
+
+        <div className="notebook-context-bar" aria-label="Notebook page context and time tracking">
+          <label>
+            <span>Domain</span>
+            <TokenPicker
+              id="notebook-page-domain"
+              value={activeSession.domain}
+              savedOptions={structureOptions.domains}
+              suggestedOptions={structureOptions.domains}
+              placeholder="Domain"
+              mode="single"
+              onChange={updateDomain}
+            />
+          </label>
+          <label>
+            <span>Project</span>
+            <TokenPicker
+              id="notebook-page-project"
+              value={activeSession.project}
+              savedOptions={projectOptions}
+              suggestedOptions={projectOptions}
+              placeholder="Project"
+              mode="single"
+              onChange={updateProject}
+            />
+          </label>
+          <label>
+            <span>Activity</span>
+            <TokenPicker
+              id="notebook-page-activity"
+              value={activeSession.activity}
+              savedOptions={activityOptions}
+              suggestedOptions={activityOptions}
+              placeholder="Activity"
+              mode="single"
+              onChange={(activity) => onChange({ ...activeSession, activity })}
+            />
+          </label>
+          <button
+            className={isTimeTracking ? "primary-button notebook-time-button" : "small-button notebook-time-button"}
+            type="button"
+            onClick={onToggleTimeTracking}
+          >
+            {isTimeTracking ? "Stop time" : "Start time"}
+          </button>
+        </div>
 
         <div className="notebook-rich-toolbar" aria-label="Notebook formatting">
           <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("bold")}>

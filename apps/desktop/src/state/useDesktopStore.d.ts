@@ -2,6 +2,10 @@ import type { ActivityRecord, CaptureMode, ChecklistRecord, ChecklistRecurrenceC
 import { createAppRepository } from "../lib/db/repository";
 type DesktopView = "capture" | "output";
 type SaveState = "saved" | "saving" | "error";
+export type SessionTimeTrackingTarget = {
+    targetType: TimeLogRecord["targetType"];
+    targetId: string;
+};
 type Snapshot = DesktopAppSnapshot;
 type Todo = TodoRecord;
 type Activity = ActivityRecord;
@@ -15,7 +19,9 @@ export declare const rollForwardOverdueCalendarTodos: (snapshot: Snapshot, today
     snapshot: DesktopAppSnapshot;
     changed: boolean;
 };
+export declare const stopOpenTodoTimeLogs: (timeLogs: TimeLog[], todoId: string, now?: Date) => TimeLogRecord[];
 export declare const isSuspiciouslyReducedSnapshot: (snapshot: Snapshot) => boolean;
+export declare const findSessionTimeTrackingTarget: (snapshot: Pick<Snapshot, "entityLinks" | "todos" | "activities">, sessionId: string) => SessionTimeTrackingTarget | null;
 export declare const inferTodoStructureAssignment: (snapshot: Snapshot, title: string, payload: Pick<Todo, "domain" | "project" | "activity" | "activityId">) => {
     domain: string;
     project: string;
@@ -115,6 +121,7 @@ interface DesktopState {
     }) => Promise<string | null>;
     ensureSessionForActivity: (activityId: string) => Promise<string | null>;
     ensureSessionForTodo: (todoId: string) => Promise<string | null>;
+    ensureTimeTargetForSession: (sessionId: string) => Promise<SessionTimeTrackingTarget | null>;
     saveSettings: (settings: DesktopAppSnapshot["settings"]) => Promise<void>;
     renameDomainValue: (previousValue: string, nextValue: string) => Promise<void>;
     renameProjectValue: (previousValue: string, nextValue: string) => Promise<void>;

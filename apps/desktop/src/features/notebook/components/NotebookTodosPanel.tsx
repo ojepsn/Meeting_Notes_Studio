@@ -30,6 +30,9 @@ interface NotebookTodosPanelProps {
 
 export interface NotebookTodoFilters {
   query: string;
+  domain: string;
+  project: string;
+  activity: string;
   showBusiness: boolean;
   showPrivate: boolean;
   urgentOnly: boolean;
@@ -47,6 +50,9 @@ export interface NotebookTodoViewSettings {
   showCompleted: boolean;
   urgentOnly: boolean;
   priorityFilter: "all" | TodoPriority;
+  domainFilter: string;
+  projectFilter: string;
+  activityFilter: string;
 }
 
 export const DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS: NotebookTodoViewSettings = {
@@ -57,6 +63,9 @@ export const DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS: NotebookTodoViewSettings = {
   showCompleted: true,
   urgentOnly: false,
   priorityFilter: "all",
+  domainFilter: "all",
+  projectFilter: "all",
+  activityFilter: "all",
 };
 
 const NOTEBOOK_TODO_VIEW_SETTINGS_KEY = "notesmith:notebook-todo-view-settings";
@@ -79,6 +88,9 @@ export const normalizeNotebookTodoViewSettings = (value: unknown): NotebookTodoV
     priorityFilter: TODO_PRIORITIES.includes(saved.priorityFilter as NotebookTodoViewSettings["priorityFilter"])
       ? saved.priorityFilter as NotebookTodoViewSettings["priorityFilter"]
       : DEFAULT_NOTEBOOK_TODO_VIEW_SETTINGS.priorityFilter,
+    domainFilter: typeof saved.domainFilter === "string" && saved.domainFilter.trim() ? saved.domainFilter : "all",
+    projectFilter: typeof saved.projectFilter === "string" && saved.projectFilter.trim() ? saved.projectFilter : "all",
+    activityFilter: typeof saved.activityFilter === "string" && saved.activityFilter.trim() ? saved.activityFilter : "all",
   };
 };
 
@@ -121,12 +133,26 @@ const searchableTodoText = (todo: TodoRecord) => [
   todo.detailsHtml?.replace(/<[^>]*>/g, " "),
 ].filter(Boolean).join(" ").toLocaleLowerCase();
 
+const matchesStructureFilter = (value: string, filter: string) =>
+  filter === "all" || value.trim().toLocaleLowerCase() === filter.trim().toLocaleLowerCase();
+
+const collectStructureValues = (todos: TodoRecord[], field: "domain" | "project" | "activity") =>
+  Array.from(new Map(
+    todos
+      .map((todo) => todo[field].trim())
+      .filter(Boolean)
+      .map((value) => [value.toLocaleLowerCase(), value]),
+  ).values()).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+
 export const filterNotebookTodos = (todos: TodoRecord[], filters: NotebookTodoFilters) => {
   const query = filters.query.trim().toLocaleLowerCase();
   return todos.filter((todo) => {
     if (todo.isPrivate ? !filters.showPrivate : !filters.showBusiness) return false;
     if (filters.urgentOnly && !todo.isUrgent) return false;
     if (filters.priority !== "all" && getTodoPriority(todo) !== filters.priority) return false;
+    if (!matchesStructureFilter(todo.domain, filters.domain)) return false;
+    if (!matchesStructureFilter(todo.project, filters.project)) return false;
+    if (!matchesStructureFilter(todo.activity, filters.activity)) return false;
     return !query || searchableTodoText(todo).includes(query);
   });
 };
@@ -165,6 +191,9 @@ export const NotebookTodosPanel = ({
   const [showCompleted, setShowCompleted] = useState(initialViewSettings.showCompleted);
   const [urgentOnly, setUrgentOnly] = useState(initialViewSettings.urgentOnly);
   const [priorityFilter, setPriorityFilter] = useState<"all" | TodoPriority>(initialViewSettings.priorityFilter);
+  const [domainFilter, setDomainFilter] = useState(initialViewSettings.domainFilter);
+  const [projectFilter, setProjectFilter] = useState(initialViewSettings.projectFilter);
+  const [activityFilter, setActivityFilter] = useState(initialViewSettings.activityFilter);
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [completionAnchors, setCompletionAnchors] = useState<Record<string, number>>({});
   const openTodoCount = useMemo(() => todos.filter((todo) => !todo.isDone).length, [todos]);
@@ -172,9 +201,21 @@ export const NotebookTodosPanel = ({
     () => showCompleted ? todos : todos.filter((todo) => !todo.isDone),
     [showCompleted, todos],
   );
+  const domainOptions = useMemo(() => collectStructureValues(todos, "domain"), [todos]);
+  const projectOptions = useMemo(() => collectStructureValues(todos, "project"), [todos]);
+  const activityOptions = useMemo(() => collectStructureValues(todos, "activity"), [todos]);
   const filteredTodos = useMemo(
-    () => filterNotebookTodos(visibleByCompletion, { query, showBusiness, showPrivate, urgentOnly, priority: priorityFilter }),
-    [priorityFilter, query, showBusiness, showPrivate, urgentOnly, visibleByCompletion],
+    () => filterNotebookTodos(visibleByCompletion, {
+      query,
+      domain: domainFilter,
+      project: projectFilter,
+      activity: activityFilter,
+      showBusiness,
+      showPrivate,
+      urgentOnly,
+      priority: priorityFilter,
+    }),
+    [activityFilter, domainFilter, priorityFilter, projectFilter, query, showBusiness, showPrivate, urgentOnly, visibleByCompletion],
   );
   const sort = `${sortField}-${sortDirection}` as NotebookTodoSort;
   const sortedTodos = useMemo(
@@ -191,7 +232,7 @@ export const NotebookTodosPanel = ({
 
   useEffect(() => {
     setCompletionAnchors({});
-  }, [priorityFilter, query, showBusiness, showCompleted, showPrivate, sortDirection, sortField, urgentOnly]);
+  }, [activityFilter, domainFilter, priorityFilter, projectFilter, query, showBusiness, showCompleted, showPrivate, sortDirection, sortField, urgentOnly]);
 
   useEffect(() => {
     try {
@@ -203,11 +244,14 @@ export const NotebookTodosPanel = ({
         showCompleted,
         urgentOnly,
         priorityFilter,
+        domainFilter,
+        projectFilter,
+        activityFilter,
       } satisfies NotebookTodoViewSettings));
     } catch {
       // The panel remains usable when local settings storage is unavailable.
     }
-  }, [priorityFilter, showBusiness, showCompleted, showPrivate, sortDirection, sortField, urgentOnly]);
+  }, [activityFilter, domainFilter, priorityFilter, projectFilter, showBusiness, showCompleted, showPrivate, sortDirection, sortField, urgentOnly]);
 
   const submitTodo = () => {
     const description = draft.trim();
@@ -272,15 +316,38 @@ export const NotebookTodosPanel = ({
             <button className="primary-button" type="button" onClick={submitTodo}>Add</button>
           </div>
 
-          <label className="notebook-todo-search">
-            <span>Filter</span>
-            <input
-              type="search"
-              value={query}
-              placeholder="Search title, details, project..."
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
+          <div className="notebook-todo-context-filters" aria-label="Todo context filters">
+            <label>
+              <span>Text</span>
+              <input
+                type="search"
+                value={query}
+                placeholder="Filter todos"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Domain</span>
+              <select value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}>
+                <option value="all">All domains</option>
+                {domainOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Project</span>
+              <select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+                <option value="all">All projects</option>
+                {projectOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Activity</span>
+              <select value={activityFilter} onChange={(event) => setActivityFilter(event.target.value)}>
+                <option value="all">All activities</option>
+                {activityOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+          </div>
 
           <div className="notebook-todo-control-row">
             <fieldset className="notebook-todo-choice-group">
@@ -348,7 +415,7 @@ export const NotebookTodosPanel = ({
           <div className="notebook-todo-list-pane">
             <div className="notebook-todo-results-row">
               <strong>{sortedTodos.length} shown</strong>
-              {(query || urgentOnly || priorityFilter !== "all" || !showBusiness || !showPrivate || !showCompleted) ? (
+              {(query || domainFilter !== "all" || projectFilter !== "all" || activityFilter !== "all" || urgentOnly || priorityFilter !== "all" || !showBusiness || !showPrivate || !showCompleted) ? (
                 <button
                   className="small-button"
                   type="button"
@@ -359,6 +426,9 @@ export const NotebookTodosPanel = ({
                     setShowCompleted(true);
                     setUrgentOnly(false);
                     setPriorityFilter("all");
+                    setDomainFilter("all");
+                    setProjectFilter("all");
+                    setActivityFilter("all");
                   }}
                 >
                   Clear filters

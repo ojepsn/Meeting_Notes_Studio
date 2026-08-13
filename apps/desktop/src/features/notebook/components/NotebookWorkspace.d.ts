@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
 import type { SessionRecord, TodoRecord } from "@notesmith/domain";
+import { type StructureOptions } from "../../../lib/structure/options";
 export declare const getNotebookTitleText: (session: Pick<SessionRecord, "date" | "title">) => string;
 export declare const buildNotebookSessionTitle: (date: string, titleText: string) => string;
 export declare const getNotebookListTitle: (session: Pick<SessionRecord, "captureMode" | "date" | "title">) => string;
@@ -7,6 +8,8 @@ interface NotebookWorkspaceProps {
     sessions: SessionRecord[];
     todos: TodoRecord[];
     activeSession: SessionRecord;
+    structureOptions: StructureOptions;
+    isTimeTracking: boolean;
     isRecordingAudio: boolean;
     isTranscribingAudio: boolean;
     isGenerating: boolean;
@@ -25,6 +28,7 @@ interface NotebookWorkspaceProps {
     onTranscribeAudio: () => void;
     onGenerateOutput: () => void;
     onOpenInNotes: (view: "capture" | "output") => void;
+    onToggleTimeTracking: () => void;
 }
-export declare const NotebookWorkspace: ({ sessions, todos, activeSession, isRecordingAudio, isTranscribingAudio, isGenerating, recordingStatusNote, outputContent, onSelect, onCreate, onDelete, onAddTodo, onSaveTodo, onDeleteTodo, onAddNoteForTodo, onChange, onToggleRecording, onUploadAudio, onTranscribeAudio, onGenerateOutput, onOpenInNotes, }: NotebookWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const NotebookWorkspace: ({ sessions, todos, activeSession, structureOptions, isTimeTracking, isRecordingAudio, isTranscribingAudio, isGenerating, recordingStatusNote, outputContent, onSelect, onCreate, onDelete, onAddTodo, onSaveTodo, onDeleteTodo, onAddNoteForTodo, onChange, onToggleRecording, onUploadAudio, onTranscribeAudio, onGenerateOutput, onOpenInNotes, onToggleTimeTracking, }: NotebookWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

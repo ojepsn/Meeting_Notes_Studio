@@ -1,4 +1,5 @@
 interface TokenPickerProps {
+    id?: string;
     value: string;
     savedOptions: string[];
     suggestedOptions: string[];
@@ -9,5 +10,5 @@ interface TokenPickerProps {
     mode?: "single" | "multi";
     onChange: (value: string) => void;
 }
-export declare const TokenPicker: ({ value, savedOptions, suggestedOptions, placeholder, helperText, suggestionSummary, suggestionBadgeText, mode, onChange, }: TokenPickerProps) => import("react/jsx-runtime").JSX.Element;
+export declare const TokenPicker: (props: TokenPickerProps) => import("react/jsx-runtime").JSX.Element;
 export {};

@@ -3,9 +3,9 @@ import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCap
 import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
 import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
 import { createAppRepository, createSessionRecord, upsertActivity, upsertCalendarItem, upsertTimeLog, upsertSession, upsertTemplate, upsertTodo, } from "../lib/db/repository";
-import { normalizeTaskRecord, taskToTodoRecord, todoToTaskRecord } from "../lib/tasks/model";
+import { DEFAULT_TODO_STRUCTURE, normalizeTaskRecord, taskToTodoRecord, todoToTaskRecord } from "../lib/tasks/model";
 import { removePersistedAttachment } from "../lib/files/attachmentStore";
-import { findSessionIdForActivity, findSessionIdForTodo, upsertEntityLink } from "../lib/links/entityLinks";
+import { findActivityIdForSession, findSessionIdForActivity, findSessionIdForTodo, findTodoIdForSession, upsertEntityLink } from "../lib/links/entityLinks";
 import { loadRecentLocalSnapshotBackups } from "../lib/storage/desktopStorage";
 import { inferStructureFromTitle, normalizeStructureInferenceRules, upsertStructureInferenceRule } from "../lib/structure/inferStructure";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
@@ -20,7 +20,7 @@ const DEFAULT_MEETING_DURATION_SLOTS = 12;
 const ROLLED_TODO_START_SLOT = 8 * SLOTS_PER_HOUR;
 const ROLLED_TODO_EARLY_MORNING_ROWS = 24;
 const ROLLED_TODO_MAX_PER_ROW = 2;
-const OTHER_STRUCTURE_VALUE = "Other";
+const OTHER_STRUCTURE_VALUE = DEFAULT_TODO_STRUCTURE.domain;
 const LEGACY_BASELINE_WORK_ACTIVITY_LABEL = "Other";
 const BACKGROUND_STRUCTURE_VALUE = "Background";
 const BASELINE_WORK_ACTIVITY_LABEL = "Background log";
@@ -513,6 +513,18 @@ const closeOpenTimeLogs = (timeLogs, now = new Date()) => {
     return { nextTimeLogs, changed };
 };
 const isOpenTimeLog = (entry) => entry.startTime === entry.endTime;
+export const stopOpenTodoTimeLogs = (timeLogs, todoId, now = new Date()) => timeLogs.map((entry) => {
+    if (entry.targetType !== "todo" || entry.targetId !== todoId || !isOpenTimeLog(entry))
+        return entry;
+    const nextDate = entry.date || formatLocalDate(now);
+    const nextEndTime = getClosingTime(nextDate, entry.startTime, now);
+    return {
+        ...entry,
+        endTime: nextEndTime,
+        durationMinutes: calculateDurationMinutes(nextDate, entry.startTime, nextEndTime),
+        updatedAt: now.toISOString(),
+    };
+});
 const ensureBaselineWorkActivity = (snapshot) => {
     const configuredActivity = snapshot.settings.baselineWorkActivityId
         ? snapshot.activities.find((activity) => activity.id === snapshot.settings.baselineWorkActivityId)
@@ -715,6 +727,17 @@ const buildTimeLog = (targetType, targetId, overrides) => {
     };
 };
 const getActivityById = (snapshot, activityId) => snapshot.activities.find((entry) => entry.id === activityId) || null;
+export const findSessionTimeTrackingTarget = (snapshot, sessionId) => {
+    const todoId = findTodoIdForSession(snapshot.entityLinks, sessionId);
+    if (todoId && snapshot.todos.some((todo) => todo.id === todoId)) {
+        return { targetType: "todo", targetId: todoId };
+    }
+    const activityId = findActivityIdForSession(snapshot.entityLinks, sessionId);
+    if (activityId && snapshot.activities.some((activity) => activity.id === activityId)) {
+        return { targetType: "activity", targetId: activityId };
+    }
+    return null;
+};
 const withFallbackValue = (value) => {
     const trimmed = typeof value === "string" ? value.trim() : "";
     return trimmed || OTHER_STRUCTURE_VALUE;
@@ -1449,10 +1472,18 @@ export const useDesktopStore = create((set, get) => {
                 ...normalizedTask,
                 updatedAt,
             }));
+            const completingTodo = Boolean(nextTodo.isDone && !existingTodo?.isDone);
+            const nextTimeLogs = completingTodo
+                ? stopOpenTodoTimeLogs(snapshot.timelogs, nextTodo.id)
+                : snapshot.timelogs;
             const nextSnapshot = {
                 ...snapshot,
                 deletedEntities: clearDeletedEntity(snapshot.deletedEntities, "todo", nextTodo.id),
                 todos: upsertTodo(snapshot.todos, nextTodo),
+                timelogs: nextTimeLogs,
+                activities: completingTodo
+                    ? recalculateActivitiesWithTimeLogs(snapshot.activities, nextTimeLogs)
+                    : snapshot.activities,
             };
             const calendarSyncedSnapshot = syncCalendarItemForTodo(nextSnapshot, nextTodo);
             const syncedSnapshot = syncLinkedSessionForTodo(calendarSyncedSnapshot, nextTodo);
@@ -2341,6 +2372,59 @@ export const useDesktopStore = create((set, get) => {
             set({ snapshot: nextSnapshot, activeSessionId: linkedSession.id });
             await flushSnapshotPersist(get().repository, nextSnapshot, set);
             return linkedSession.id;
+        },
+        ensureTimeTargetForSession: async (sessionId) => {
+            const snapshot = get().snapshot;
+            if (!snapshot)
+                return null;
+            const session = snapshot.sessions.find((entry) => entry.id === sessionId && !entry.deletedAt);
+            if (!session)
+                return null;
+            const existingTarget = findSessionTimeTrackingTarget(snapshot, sessionId);
+            if (existingTarget) {
+                return existingTarget;
+            }
+            const createdAt = new Date().toISOString();
+            const activity = normalizeActivityStructure({
+                id: crypto.randomUUID(),
+                type: "task",
+                parentActivityId: "",
+                description: session.title.trim() || "Notebook page",
+                participantText: session.participantText,
+                isDone: false,
+                isPrivate: session.isPrivate,
+                comments: "",
+                domain: session.domain,
+                project: session.project,
+                activity: session.activity,
+                doOn: session.date,
+                dueDate: "",
+                startTime: "",
+                endTime: "",
+                detailsHtml: "",
+                timeRequiredMinutes: 0,
+                actualTimeSpentMinutes: 0,
+                createdAt,
+                updatedAt: createdAt,
+                sessionIds: [session.id],
+            });
+            const nextSnapshot = {
+                ...snapshot,
+                activities: [activity, ...snapshot.activities],
+                entityLinks: upsertEntityLink(snapshot.entityLinks, {
+                    id: crypto.randomUUID(),
+                    fromType: "activity",
+                    fromId: activity.id,
+                    toType: "session",
+                    toId: session.id,
+                    relation: "has_session",
+                    createdAt,
+                    updatedAt: createdAt,
+                }),
+            };
+            set({ snapshot: nextSnapshot });
+            await flushSnapshotPersist(get().repository, nextSnapshot, set);
+            return { targetType: "activity", targetId: activity.id };
         },
         saveSettings: async (settings) => {
             const snapshot = get().snapshot;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getTodoPriority, migrateTodoCommentsToDetails, normalizeTaskRecord } from "./model";
+import { DEFAULT_TODO_STRUCTURE, getTodoPriority, migrateTodoCommentsToDetails, normalizeTaskRecord } from "./model";
 const task = (overrides = {}) => ({
     id: "task-1",
     description: "Planning",
@@ -16,6 +16,15 @@ const task = (overrides = {}) => ({
     createdAt: "2026-08-10T08:00:00Z",
     sessionIds: [],
     ...overrides,
+});
+describe("todo structure defaults", () => {
+    it("uses Other for every unassigned structure field", () => {
+        expect(DEFAULT_TODO_STRUCTURE).toEqual({
+            domain: "Other",
+            project: "Other",
+            activity: "Other",
+        });
+    });
 });
 describe("todo priority normalization", () => {
     it("migrates the legacy Prio flag to High", () => {

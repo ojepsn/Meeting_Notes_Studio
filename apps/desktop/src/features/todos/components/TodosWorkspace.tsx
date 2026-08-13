@@ -6,7 +6,7 @@ import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { calculateLiveDurationMinutes, formatTrackedMinutes, getRunningTimeLog, isTimeLogRunning } from "../../../lib/time/tracking";
-import { getTodoPriority } from "../../../lib/tasks/model";
+import { DEFAULT_TODO_STRUCTURE, getTodoPriority } from "../../../lib/tasks/model";
 import { TodoDetailsEditor } from "./TodoDetailsEditor";
 
 type TodoSortKey = "createdAt" | "description" | "domain" | "project" | "activity" | "doOn" | "dueDate" | "details";
@@ -68,9 +68,7 @@ const createBlankTodoDraft = (description = ""): TaskRecord => ({
   isUrgent: false,
   comments: "",
   activityId: "",
-  domain: "",
-  project: "",
-  activity: "",
+  ...DEFAULT_TODO_STRUCTURE,
   doOn: "",
   dueDate: "",
   detailsHtml: "",
@@ -1143,6 +1141,13 @@ export const TodosWorkspace = ({
                   </div>
                 </div>
                 <div className="page-actions">
+                  <button
+                    className={hasOpenTimer ? "primary-button" : "small-button"}
+                    type="button"
+                    onClick={() => (hasOpenTimer ? onStopTracking("todo", editingDraft.id) : onStartTracking("todo", editingDraft.id))}
+                  >
+                    {hasOpenTimer ? "Stop time" : "Start time"}
+                  </button>
                   <button className="small-button" type="button" onClick={clearSelection}>
                     Close
                   </button>
@@ -1168,6 +1173,7 @@ export const TodosWorkspace = ({
                 <div className="field">
                   <label htmlFor="todo-edit-domain">Domain</label>
                   <TokenPicker
+                    id="todo-edit-domain"
                     value={editingDraft.domain}
                     savedOptions={structureOptions.domains}
                     suggestedOptions={structureOptions.domains}
@@ -1182,6 +1188,7 @@ export const TodosWorkspace = ({
                 <div className="field">
                   <label htmlFor="todo-edit-project">Project</label>
                   <TokenPicker
+                    id="todo-edit-project"
                     value={editingDraft.project}
                     savedOptions={editorProjectOptions}
                     suggestedOptions={editorProjectOptions}
@@ -1194,8 +1201,9 @@ export const TodosWorkspace = ({
                 </div>
 
                 <div className="field">
-                  <label htmlFor="todo-edit-activity-label">Activity</label>
+                  <label htmlFor="todo-edit-activity">Activity</label>
                   <TokenPicker
+                    id="todo-edit-activity"
                     value={editingDraft.activity}
                     savedOptions={editorActivityOptions}
                     suggestedOptions={editorActivityOptions}

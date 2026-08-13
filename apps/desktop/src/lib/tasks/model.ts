@@ -1,5 +1,11 @@
 import type { TaskRecord, TodoPriority, TodoRecord } from "@notesmith/domain";
 
+export const DEFAULT_TODO_STRUCTURE = {
+  domain: "Other",
+  project: "Other",
+  activity: "Other",
+} as const;
+
 const normalizeText = (value: string | undefined) => value?.trim?.() ?? "";
 
 const escapeHtml = (value: string) => value

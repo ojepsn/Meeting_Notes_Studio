@@ -936,6 +936,52 @@ select {
   white-space: nowrap;
 }
 
+.notebook-context-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(105px, 1fr)) auto;
+  align-items: end;
+  gap: 0.35rem;
+  padding: 0.38rem 0 0.12rem;
+}
+
+.notebook-context-bar label {
+  display: grid;
+  min-width: 0;
+  gap: 0.08rem;
+  color: var(--app-muted);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.notebook-context-bar .single-value-combobox > input {
+  min-height: 28px;
+  padding: 0.24rem 1.7rem 0.24rem 0.45rem;
+  border-radius: 8px;
+  font-size: 0.66rem;
+}
+
+.notebook-context-bar .single-value-combobox-toggle {
+  right: 0.35rem;
+}
+
+.notebook-context-bar .single-value-combobox-results {
+  min-width: 180px;
+  font-size: 0.7rem;
+}
+
+.notebook-context-bar .single-value-combobox-option {
+  padding: 0.4rem 0.5rem;
+}
+
+.notebook-time-button {
+  min-height: 28px;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
 .notebook-rich-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1222,11 +1268,18 @@ select {
 }
 
 .notebook-todos-section {
+  container-type: inline-size;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
   background: color-mix(in srgb, var(--app-surface-soft) 78%, transparent 22%);
+}
+
+@container (max-width: 680px) {
+  .notebook-todo-context-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .detached-todos-window {
@@ -1329,19 +1382,39 @@ select {
 
 .notebook-todo-add-row input,
 .notebook-todo-add-row button,
-.notebook-todo-search input {
+.notebook-todo-context-filters input,
+.notebook-todo-context-filters select {
   min-height: 34px;
   padding: 0.36rem 0.52rem;
   font-size: 0.75rem;
 }
 
-.notebook-todo-search {
+.notebook-todo-context-filters {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  align-items: center;
-  gap: 0.5rem;
+  grid-template-columns: minmax(150px, 1.5fr) repeat(3, minmax(110px, 1fr));
+  gap: 0.35rem;
+}
+
+.notebook-todo-context-filters label {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
   color: var(--app-muted);
-  font-size: 0.72rem;
+  font-size: 0.59rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.notebook-todo-context-filters input,
+.notebook-todo-context-filters select {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding-block: 0.25rem;
+  border-radius: 9px;
+  font-size: 0.68rem;
+  text-transform: none;
 }
 
 .notebook-todo-control-row,
@@ -6908,6 +6981,77 @@ select {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+}
+
+.single-value-combobox {
+  position: relative;
+  min-width: 0;
+}
+
+.single-value-combobox > input {
+  width: 100%;
+  padding-right: 2.25rem;
+}
+
+.single-value-combobox-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.65rem;
+  z-index: 2;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--app-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.35rem;
+}
+
+.single-value-combobox-results {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  right: 0;
+  z-index: 120;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 14px;
+  background: var(--app-surface);
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--app-text) 16%, transparent 84%);
+  padding: 0.35rem;
+}
+
+.single-value-combobox-option {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--app-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+}
+
+.single-value-combobox-option small {
+  color: var(--app-muted);
+  white-space: nowrap;
+}
+
+.single-value-combobox-option[data-active="true"] {
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
+}
+
+.single-value-combobox-empty {
+  margin: 0;
+  padding: 0.65rem;
+  color: var(--app-muted);
+  font-size: 0.82rem;
 }
 
 .people-field-shell {

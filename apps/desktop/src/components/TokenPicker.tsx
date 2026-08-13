@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import { filterComboboxOptions } from "./comboboxUtils";
 import { buildVisibleQuickSuggestions, parseTokenList } from "./peoplePickerUtils";
 
 interface TokenPickerProps {
+  id?: string;
   value: string;
   savedOptions: string[];
   suggestedOptions: string[];
@@ -13,7 +15,135 @@ interface TokenPickerProps {
   onChange: (value: string) => void;
 }
 
-export const TokenPicker = ({
+const SingleValueCombobox = ({
+  id,
+  value,
+  savedOptions,
+  suggestedOptions,
+  placeholder,
+  suggestionBadgeText,
+  onChange,
+}: TokenPickerProps) => {
+  const generatedId = useId();
+  const inputId = id ?? `single-value-${generatedId}`;
+  const listboxId = `${inputId}-choices`;
+  const [isOpen, setIsOpen] = useState(false);
+  const [isFiltering, setIsFiltering] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const filteredOptions = useMemo(
+    () => filterComboboxOptions([...savedOptions, ...suggestedOptions], isFiltering ? value : ""),
+    [isFiltering, savedOptions, suggestedOptions, value],
+  );
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [value]);
+
+  const selectOption = (option: string) => {
+    onChange(option);
+    setIsFiltering(false);
+    setIsOpen(false);
+  };
+
+  return (
+    <div
+      className="single-value-combobox"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setIsOpen(false);
+      }}
+    >
+      <input
+        id={inputId}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={isOpen}
+        aria-controls={listboxId}
+        aria-activedescendant={isOpen && filteredOptions.length ? `${listboxId}-${activeIndex}` : undefined}
+        value={value}
+        placeholder={placeholder}
+        autoComplete="off"
+        onFocus={(event) => {
+          event.currentTarget.select();
+          setIsFiltering(false);
+          setIsOpen(true);
+        }}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setIsFiltering(true);
+          setIsOpen(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            const wasOpen = isOpen;
+            setIsOpen(true);
+            if (filteredOptions.length) setActiveIndex((current) => (wasOpen ? (current + 1) % filteredOptions.length : 0));
+            return;
+          }
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            const wasOpen = isOpen;
+            setIsOpen(true);
+            if (filteredOptions.length) {
+              setActiveIndex((current) => (wasOpen ? (current - 1 + filteredOptions.length) % filteredOptions.length : filteredOptions.length - 1));
+            }
+            return;
+          }
+          if (event.key === "Enter" && isOpen && filteredOptions[activeIndex]) {
+            event.preventDefault();
+            selectOption(filteredOptions[activeIndex]);
+            return;
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            setIsOpen(false);
+          }
+        }}
+      />
+      <button
+        className="single-value-combobox-toggle"
+        type="button"
+        tabIndex={-1}
+        aria-label={isOpen ? "Close choices" : "Show choices"}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          setIsFiltering(false);
+          setIsOpen((current) => !current);
+        }}
+      >
+        v
+      </button>
+
+      {isOpen ? (
+        <div id={listboxId} className="single-value-combobox-results" role="listbox" aria-label="Available values">
+          {filteredOptions.length ? (
+            filteredOptions.map((option, index) => (
+              <button
+                id={`${listboxId}-${index}`}
+                key={option}
+                type="button"
+                role="option"
+                aria-selected={option.toLocaleLowerCase() === value.trim().toLocaleLowerCase()}
+                className="single-value-combobox-option"
+                data-active={index === activeIndex}
+                onMouseEnter={() => setActiveIndex(index)}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectOption(option)}
+              >
+                <span>{option}</span>
+                <small>{suggestionBadgeText}</small>
+              </button>
+            ))
+          ) : (
+            <p className="single-value-combobox-empty">No saved match. Your typed value will be kept.</p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const MultiValueTokenPicker = ({
   value,
   savedOptions,
   suggestedOptions,
@@ -202,3 +332,6 @@ export const TokenPicker = ({
     </div>
   );
 };
+
+export const TokenPicker = (props: TokenPickerProps) =>
+  props.mode === "single" ? <SingleValueCombobox {...props} /> : <MultiValueTokenPicker {...props} />;

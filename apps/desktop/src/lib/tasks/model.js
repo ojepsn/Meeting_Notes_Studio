@@ -1,3 +1,8 @@
+export const DEFAULT_TODO_STRUCTURE = {
+    domain: "Other",
+    project: "Other",
+    activity: "Other",
+};
 const normalizeText = (value) => value?.trim?.() ?? "";
 const escapeHtml = (value) => value
     .replace(/&/g, "&amp;")

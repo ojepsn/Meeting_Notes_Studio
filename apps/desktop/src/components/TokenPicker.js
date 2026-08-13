@@ -1,7 +1,67 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import { filterComboboxOptions } from "./comboboxUtils";
 import { buildVisibleQuickSuggestions, parseTokenList } from "./peoplePickerUtils";
-export const TokenPicker = ({ value, savedOptions, suggestedOptions, placeholder, helperText, suggestionSummary = "Suggestions", suggestionBadgeText = "Saved", mode = "multi", onChange, }) => {
+const SingleValueCombobox = ({ id, value, savedOptions, suggestedOptions, placeholder, suggestionBadgeText, onChange, }) => {
+    const generatedId = useId();
+    const inputId = id ?? `single-value-${generatedId}`;
+    const listboxId = `${inputId}-choices`;
+    const [isOpen, setIsOpen] = useState(false);
+    const [isFiltering, setIsFiltering] = useState(false);
+    const [activeIndex, setActiveIndex] = useState(0);
+    const filteredOptions = useMemo(() => filterComboboxOptions([...savedOptions, ...suggestedOptions], isFiltering ? value : ""), [isFiltering, savedOptions, suggestedOptions, value]);
+    useEffect(() => {
+        setActiveIndex(0);
+    }, [value]);
+    const selectOption = (option) => {
+        onChange(option);
+        setIsFiltering(false);
+        setIsOpen(false);
+    };
+    return (_jsxs("div", { className: "single-value-combobox", onBlur: (event) => {
+            if (!event.currentTarget.contains(event.relatedTarget))
+                setIsOpen(false);
+        }, children: [_jsx("input", { id: inputId, role: "combobox", "aria-autocomplete": "list", "aria-expanded": isOpen, "aria-controls": listboxId, "aria-activedescendant": isOpen && filteredOptions.length ? `${listboxId}-${activeIndex}` : undefined, value: value, placeholder: placeholder, autoComplete: "off", onFocus: (event) => {
+                    event.currentTarget.select();
+                    setIsFiltering(false);
+                    setIsOpen(true);
+                }, onChange: (event) => {
+                    onChange(event.target.value);
+                    setIsFiltering(true);
+                    setIsOpen(true);
+                }, onKeyDown: (event) => {
+                    if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        const wasOpen = isOpen;
+                        setIsOpen(true);
+                        if (filteredOptions.length)
+                            setActiveIndex((current) => (wasOpen ? (current + 1) % filteredOptions.length : 0));
+                        return;
+                    }
+                    if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        const wasOpen = isOpen;
+                        setIsOpen(true);
+                        if (filteredOptions.length) {
+                            setActiveIndex((current) => (wasOpen ? (current - 1 + filteredOptions.length) % filteredOptions.length : filteredOptions.length - 1));
+                        }
+                        return;
+                    }
+                    if (event.key === "Enter" && isOpen && filteredOptions[activeIndex]) {
+                        event.preventDefault();
+                        selectOption(filteredOptions[activeIndex]);
+                        return;
+                    }
+                    if (event.key === "Escape") {
+                        event.preventDefault();
+                        setIsOpen(false);
+                    }
+                } }), _jsx("button", { className: "single-value-combobox-toggle", type: "button", tabIndex: -1, "aria-label": isOpen ? "Close choices" : "Show choices", onMouseDown: (event) => event.preventDefault(), onClick: () => {
+                    setIsFiltering(false);
+                    setIsOpen((current) => !current);
+                }, children: "v" }), isOpen ? (_jsx("div", { id: listboxId, className: "single-value-combobox-results", role: "listbox", "aria-label": "Available values", children: filteredOptions.length ? (filteredOptions.map((option, index) => (_jsxs("button", { id: `${listboxId}-${index}`, type: "button", role: "option", "aria-selected": option.toLocaleLowerCase() === value.trim().toLocaleLowerCase(), className: "single-value-combobox-option", "data-active": index === activeIndex, onMouseEnter: () => setActiveIndex(index), onMouseDown: (event) => event.preventDefault(), onClick: () => selectOption(option), children: [_jsx("span", { children: option }), _jsx("small", { children: suggestionBadgeText })] }, option)))) : (_jsx("p", { className: "single-value-combobox-empty", children: "No saved match. Your typed value will be kept." })) })) : null] }));
+};
+const MultiValueTokenPicker = ({ value, savedOptions, suggestedOptions, placeholder, helperText, suggestionSummary = "Suggestions", suggestionBadgeText = "Saved", mode = "multi", onChange, }) => {
     const [draft, setDraft] = useState("");
     const [activeIndex, setActiveIndex] = useState(0);
     const selectedTokens = useMemo(() => parseTokenList(value), [value]);
@@ -104,3 +164,4 @@ export const TokenPicker = ({ value, savedOptions, suggestedOptions, placeholder
                             }
                         }, placeholder: selectedTokens.length ? "" : placeholder })] }), draft.trim() && filteredSuggestions.length ? (_jsx("div", { className: "people-results-panel", role: "listbox", "aria-label": "Matching values", children: filteredSuggestions.map((token, index) => (_jsxs("button", { type: "button", className: "people-result-item", "data-active": index === activeIndex, onMouseEnter: () => setActiveIndex(index), onMouseDown: (event) => event.preventDefault(), onClick: () => replaceDraftWithSuggestion(token), children: [_jsx("strong", { children: token }), _jsx("span", { children: suggestionBadgeText })] }, token))) })) : null, quickSuggestions.length ? (_jsxs("details", { className: "workspace-disclosure people-suggestion-disclosure", children: [_jsx("summary", { children: suggestionSummary }), _jsx("div", { className: "workspace-disclosure-body", children: _jsx("div", { className: "people-suggestion-row", children: quickSuggestions.map((token) => (_jsx("button", { type: "button", className: "people-suggestion-chip", onClick: () => addTokens(token), children: token }, token))) }) })] })) : null, helperText ? _jsx("p", { className: "people-helper-text", children: helperText }) : null] }));
 };
+export const TokenPicker = (props) => props.mode === "single" ? _jsx(SingleValueCombobox, { ...props }) : _jsx(MultiValueTokenPicker, { ...props });
