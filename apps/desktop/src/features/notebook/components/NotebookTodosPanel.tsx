@@ -389,7 +389,7 @@ export const NotebookTodosPanel = ({
                   />
                   <button className="notebook-todo-select" type="button" onClick={() => setSelectedTodoId(todo.id)}>
                     <strong>{todo.description}</strong>
-                    <span className="notebook-todo-priority">{getTodoPriority(todo)}</span>
+                    <span className="notebook-todo-priority" data-priority={getTodoPriority(todo)}>{getTodoPriority(todo)}</span>
                     {todo.isUrgent ? <span className="notebook-todo-urgent">Urgent</span> : null}
                   </button>
                   <button

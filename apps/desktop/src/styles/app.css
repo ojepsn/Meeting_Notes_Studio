@@ -1537,6 +1537,7 @@ select {
   flex: 1 1 auto;
   min-width: 0;
   font-size: 0.71rem;
+  font-weight: 400;
 }
 
 .notebook-todo-row span {
@@ -1554,6 +1555,24 @@ select {
   font-size: 0.55rem !important;
   font-weight: 800;
   line-height: 1.15;
+}
+
+.notebook-todo-priority[data-priority="high"] {
+  border-color: color-mix(in srgb, var(--app-danger) 48%, var(--app-border) 52%);
+  background: color-mix(in srgb, var(--app-danger) 15%, transparent 85%);
+  color: var(--app-danger);
+}
+
+.notebook-todo-priority[data-priority="normal"] {
+  border-color: var(--app-accent-border);
+  background: color-mix(in srgb, var(--app-accent-soft) 72%, transparent 28%);
+  color: var(--app-accent);
+}
+
+.notebook-todo-priority[data-priority="low"] {
+  border-color: color-mix(in srgb, #4f9664 46%, var(--app-border) 54%);
+  background: color-mix(in srgb, #4f9664 14%, transparent 86%);
+  color: color-mix(in srgb, #4f9664 72%, var(--app-text) 28%);
 }
 
 .notebook-todo-urgent {
@@ -3431,6 +3450,7 @@ select {
 
 .todo-sidebar-item-copy strong {
   font-size: 0.88rem;
+  font-weight: 400;
   line-height: 1.35;
 }
 
@@ -3491,6 +3511,7 @@ select {
 
 .todos-workspace-copy strong {
   font-size: 1rem;
+  font-weight: 400;
   line-height: 1.35;
 }
 
@@ -3546,7 +3567,7 @@ select {
 }
 
 .todos-cell-strong {
-  font-weight: 700;
+  font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4066,6 +4087,7 @@ select {
 }
 
 .todos-compact-item-head strong {
+  font-weight: 400;
   line-height: 1.35;
 }
 
