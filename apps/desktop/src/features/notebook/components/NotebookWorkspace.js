@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DateInput } from "../../../components/DateInput";
+import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain } from "../../../lib/structure/options";
 import { NotebookTodosPanel } from "./NotebookTodosPanel";
@@ -69,6 +70,41 @@ export const getNotebookListTitle = (session) => {
     }
     return titleText ? `${session.date} ${titleText}` : `${session.date} Untitled note`;
 };
+const normalizeFilterValue = (value) => value.trim().toLocaleLowerCase();
+export const filterNotebookSessions = (sessions, filters) => {
+    const query = normalizeFilterValue(filters.query);
+    const domain = normalizeFilterValue(filters.domain);
+    const project = normalizeFilterValue(filters.project);
+    const activity = normalizeFilterValue(filters.activity);
+    return sessions.filter((session) => {
+        if (domain !== "all" && normalizeFilterValue(session.domain) !== domain)
+            return false;
+        if (project !== "all" && normalizeFilterValue(session.project) !== project)
+            return false;
+        if (activity !== "all" && normalizeFilterValue(session.activity) !== activity)
+            return false;
+        if (!query)
+            return true;
+        const searchableText = [
+            session.date,
+            session.startTime,
+            session.title,
+            session.domain,
+            session.project,
+            session.activity,
+            session.manualNotes.replace(/<[^>]*>/g, " "),
+        ].join(" ").toLocaleLowerCase();
+        return searchableText.includes(query);
+    });
+};
+export const compareNotebookSessionsNewestFirst = (left, right) => right.date.localeCompare(left.date) ||
+    right.startTime.localeCompare(left.startTime) ||
+    right.updatedAt.localeCompare(left.updatedAt) ||
+    right.createdAt.localeCompare(left.createdAt);
+const collectNotebookStructureValues = (sessions, field) => Array.from(new Map(sessions
+    .map((session) => session[field].trim())
+    .filter(Boolean)
+    .map((value) => [value.toLocaleLowerCase(), value])).values()).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
 export const NotebookWorkspace = ({ sessions, todos, runningTodoIds, activeSession, structureOptions, isTimeTracking, isRecordingAudio, isTranscribingAudio, isGenerating, recordingStatusNote, outputContent, onSelect, onCreate, onDelete, onAddTodo, onSaveTodo, onDeleteTodo, onAddNoteForTodo, onToggleTodoTime, onChange, onToggleRecording, onUploadAudio, onTranscribeAudio, onGenerateOutput, onOpenInNotes, onToggleTimeTracking, }) => {
     const workspaceRef = useRef(null);
     const editorRef = useRef(null);
@@ -86,6 +122,10 @@ export const NotebookWorkspace = ({ sessions, todos, runningTodoIds, activeSessi
     const [todosMode, setTodosMode] = useState(readNotebookTodosMode);
     const [lastExpandedTodosMode, setLastExpandedTodosMode] = useState(todosMode === "maximized" ? "maximized" : "standard");
     const [toolsTab, setToolsTab] = useState("capture");
+    const [pageQuery, setPageQuery] = useState("");
+    const [pageDomain, setPageDomain] = useState("all");
+    const [pageProject, setPageProject] = useState("all");
+    const [pageActivity, setPageActivity] = useState("all");
     const isDatedNotebookPage = activeSession.captureMode === "quick-note";
     const titleText = isDatedNotebookPage ? getNotebookTitleText(activeSession) : activeSession.title;
     const projectOptions = getProjectsForDomain(structureOptions, activeSession.domain);
@@ -102,9 +142,16 @@ export const NotebookWorkspace = ({ sessions, todos, runningTodoIds, activeSessi
         const activity = nextActivities.includes(activeSession.activity) ? activeSession.activity : "Other";
         onChange({ ...activeSession, project, activity });
     };
-    const sortedSessions = useMemo(() => [...sessions].sort((left, right) => right.date.localeCompare(left.date) ||
-        right.updatedAt.localeCompare(left.updatedAt) ||
-        right.createdAt.localeCompare(left.createdAt)), [sessions]);
+    const domainFilterOptions = useMemo(() => collectNotebookStructureValues(sessions, "domain"), [sessions]);
+    const projectFilterOptions = useMemo(() => collectNotebookStructureValues(sessions, "project"), [sessions]);
+    const activityFilterOptions = useMemo(() => collectNotebookStructureValues(sessions, "activity"), [sessions]);
+    const filteredSessions = useMemo(() => filterNotebookSessions(sessions, {
+        query: pageQuery,
+        domain: pageDomain,
+        project: pageProject,
+        activity: pageActivity,
+    }), [pageActivity, pageDomain, pageProject, pageQuery, sessions]);
+    const sortedSessions = useMemo(() => [...filteredSessions].sort(compareNotebookSessionsNewestFirst), [filteredSessions]);
     useEffect(() => {
         const editor = editorRef.current;
         if (!editor || document.activeElement === editor)
@@ -360,13 +407,13 @@ export const NotebookWorkspace = ({ sessions, todos, runningTodoIds, activeSessi
         };
     }, [todosMode]);
     const activeTodosSize = todosMode === "standard" || todosMode === "maximized" ? todosSizes[todosMode] : null;
-    return (_jsxs("div", { ref: workspaceRef, className: "notebook-workspace", "data-side-panel-open": isToolsOpen, onPointerDownCapture: handleWorkspacePointerDownCapture, onPointerMove: moveTodosResize, onPointerUp: endTodosResize, onPointerCancel: endTodosResize, children: [_jsxs("aside", { className: "notebook-list-pane", "aria-label": "Notebook pages", children: [_jsxs("div", { className: "notebook-list-header", children: [_jsxs("div", { children: [_jsx("span", { className: "section-label", children: "Notebook" }), _jsxs("strong", { children: [sessions.length, " pages"] })] }), _jsx("button", { className: "primary-button notebook-new-button", type: "button", onClick: onCreate, children: "New page" })] }), _jsx("div", { className: "notebook-page-list", children: sortedSessions.map((session) => (_jsxs("div", { className: "notebook-page-item", "data-active": session.id === activeSession.id, children: [_jsx("button", { className: "notebook-page-select", type: "button", onClick: () => onSelect(session.id), children: _jsx("strong", { children: getNotebookListTitle(session) }) }), _jsx("button", { className: "notebook-page-delete", type: "button", "aria-label": `Delete ${getNotebookListTitle(session)}`, title: "Move to deleted sessions", onClick: () => onDelete(session.id), children: "x" })] }, session.id))) })] }), _jsxs("section", { className: "notebook-editor-pane", children: [_jsxs("header", { className: "notebook-title-row", children: [_jsx(DateInput, { id: "notebook-date", className: "notebook-date-input", value: activeSession.date, onChange: (event) => onChange({
+    return (_jsxs("div", { ref: workspaceRef, className: "notebook-workspace", "data-side-panel-open": isToolsOpen, onPointerDownCapture: handleWorkspacePointerDownCapture, onPointerMove: moveTodosResize, onPointerUp: endTodosResize, onPointerCancel: endTodosResize, children: [_jsxs("aside", { className: "notebook-list-pane", "aria-label": "Notebook pages", children: [_jsxs("div", { className: "notebook-list-header", children: [_jsxs("div", { children: [_jsx("span", { className: "section-label", children: "Notebook" }), _jsxs("strong", { children: [filteredSessions.length === sessions.length ? sessions.length : `${filteredSessions.length}/${sessions.length}`, " pages"] })] }), _jsx("button", { className: "primary-button notebook-new-button", type: "button", onClick: onCreate, children: "New page" })] }), _jsxs("div", { className: "notebook-page-filters", "aria-label": "Filter notebook pages", children: [_jsx("input", { className: "notebook-page-filter-query", type: "search", value: pageQuery, "aria-label": "Filter notebook pages by text", placeholder: "Filter pages", onChange: (event) => setPageQuery(event.target.value) }), _jsxs("select", { value: pageDomain, "aria-label": "Filter notebook pages by domain", onChange: (event) => setPageDomain(event.target.value), children: [_jsx("option", { value: "all", children: "All domains" }), domainFilterOptions.map((value) => _jsx("option", { value: value, children: value }, value))] }), _jsxs("select", { value: pageProject, "aria-label": "Filter notebook pages by project", onChange: (event) => setPageProject(event.target.value), children: [_jsx("option", { value: "all", children: "All projects" }), projectFilterOptions.map((value) => _jsx("option", { value: value, children: value }, value))] }), _jsxs("select", { value: pageActivity, "aria-label": "Filter notebook pages by activity", onChange: (event) => setPageActivity(event.target.value), children: [_jsx("option", { value: "all", children: "All activities" }), activityFilterOptions.map((value) => _jsx("option", { value: value, children: value }, value))] })] }), _jsxs("div", { className: "notebook-page-list", children: [sortedSessions.map((session) => (_jsxs("div", { className: "notebook-page-item", "data-active": session.id === activeSession.id, children: [_jsx("button", { className: "notebook-page-select", type: "button", onClick: () => onSelect(session.id), children: _jsx("strong", { children: getNotebookListTitle(session) }) }), _jsx("button", { className: "notebook-page-delete", type: "button", "aria-label": `Delete ${getNotebookListTitle(session)}`, title: "Move to deleted sessions", onClick: () => onDelete(session.id), children: "x" })] }, session.id))), !sortedSessions.length ? _jsx("p", { className: "notebook-page-filter-empty", children: "No pages match these filters." }) : null] })] }), _jsxs("section", { className: "notebook-editor-pane", children: [_jsxs("header", { className: "notebook-title-row", children: [_jsx(DateInput, { id: "notebook-date", className: "notebook-date-input", value: activeSession.date, onChange: (event) => onChange({
                                     ...activeSession,
                                     date: event.target.value,
                                     title: isDatedNotebookPage
                                         ? buildNotebookSessionTitle(event.target.value, titleText)
                                         : activeSession.title,
-                                }) }), _jsx("input", { className: "notebook-title-input", value: titleText, "aria-label": "Notebook page title", placeholder: "Page title", onChange: (event) => onChange({
+                                }) }), _jsx(DeferredTimeInput, { id: "notebook-time", className: "notebook-time-input", value: activeSession.startTime, "aria-label": "Notebook page time", onCommit: (startTime) => onChange({ ...activeSession, startTime }) }), _jsx("input", { className: "notebook-title-input", value: titleText, "aria-label": "Notebook page title", placeholder: "Page title", onChange: (event) => onChange({
                                     ...activeSession,
                                     title: isDatedNotebookPage
                                         ? buildNotebookSessionTitle(activeSession.date, event.target.value)

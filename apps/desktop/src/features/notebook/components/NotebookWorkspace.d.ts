@@ -5,6 +5,14 @@ export declare const preserveNotebookRowBreaks: (value: string) => string;
 export declare const getNotebookTitleText: (session: Pick<SessionRecord, "date" | "title">) => string;
 export declare const buildNotebookSessionTitle: (date: string, titleText: string) => string;
 export declare const getNotebookListTitle: (session: Pick<SessionRecord, "captureMode" | "date" | "title">) => string;
+export interface NotebookPageFilters {
+    query: string;
+    domain: string;
+    project: string;
+    activity: string;
+}
+export declare const filterNotebookSessions: (sessions: SessionRecord[], filters: NotebookPageFilters) => SessionRecord[];
+export declare const compareNotebookSessionsNewestFirst: (left: SessionRecord, right: SessionRecord) => number;
 interface NotebookWorkspaceProps {
     sessions: SessionRecord[];
     todos: TodoRecord[];

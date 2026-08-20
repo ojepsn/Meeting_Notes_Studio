@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { SessionRecord, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
+import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { NotebookTodosPanel } from "./NotebookTodosPanel";
@@ -114,6 +115,53 @@ export const getNotebookListTitle = (session: Pick<SessionRecord, "captureMode" 
   return titleText ? `${session.date} ${titleText}` : `${session.date} Untitled note`;
 };
 
+export interface NotebookPageFilters {
+  query: string;
+  domain: string;
+  project: string;
+  activity: string;
+}
+
+const normalizeFilterValue = (value: string) => value.trim().toLocaleLowerCase();
+
+export const filterNotebookSessions = (sessions: SessionRecord[], filters: NotebookPageFilters) => {
+  const query = normalizeFilterValue(filters.query);
+  const domain = normalizeFilterValue(filters.domain);
+  const project = normalizeFilterValue(filters.project);
+  const activity = normalizeFilterValue(filters.activity);
+
+  return sessions.filter((session) => {
+    if (domain !== "all" && normalizeFilterValue(session.domain) !== domain) return false;
+    if (project !== "all" && normalizeFilterValue(session.project) !== project) return false;
+    if (activity !== "all" && normalizeFilterValue(session.activity) !== activity) return false;
+    if (!query) return true;
+    const searchableText = [
+      session.date,
+      session.startTime,
+      session.title,
+      session.domain,
+      session.project,
+      session.activity,
+      session.manualNotes.replace(/<[^>]*>/g, " "),
+    ].join(" ").toLocaleLowerCase();
+    return searchableText.includes(query);
+  });
+};
+
+export const compareNotebookSessionsNewestFirst = (left: SessionRecord, right: SessionRecord) =>
+  right.date.localeCompare(left.date) ||
+  right.startTime.localeCompare(left.startTime) ||
+  right.updatedAt.localeCompare(left.updatedAt) ||
+  right.createdAt.localeCompare(left.createdAt);
+
+const collectNotebookStructureValues = (sessions: SessionRecord[], field: "domain" | "project" | "activity") =>
+  Array.from(new Map(
+    sessions
+      .map((session) => session[field].trim())
+      .filter(Boolean)
+      .map((value) => [value.toLocaleLowerCase(), value]),
+  ).values()).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+
 interface NotebookWorkspaceProps {
   sessions: SessionRecord[];
   todos: TodoRecord[];
@@ -189,6 +237,10 @@ export const NotebookWorkspace = ({
     todosMode === "maximized" ? "maximized" : "standard",
   );
   const [toolsTab, setToolsTab] = useState<"capture" | "output">("capture");
+  const [pageQuery, setPageQuery] = useState("");
+  const [pageDomain, setPageDomain] = useState("all");
+  const [pageProject, setPageProject] = useState("all");
+  const [pageActivity, setPageActivity] = useState("all");
   const isDatedNotebookPage = activeSession.captureMode === "quick-note";
   const titleText = isDatedNotebookPage ? getNotebookTitleText(activeSession) : activeSession.title;
   const projectOptions = getProjectsForDomain(structureOptions, activeSession.domain);
@@ -208,15 +260,21 @@ export const NotebookWorkspace = ({
     onChange({ ...activeSession, project, activity });
   };
 
+  const domainFilterOptions = useMemo(() => collectNotebookStructureValues(sessions, "domain"), [sessions]);
+  const projectFilterOptions = useMemo(() => collectNotebookStructureValues(sessions, "project"), [sessions]);
+  const activityFilterOptions = useMemo(() => collectNotebookStructureValues(sessions, "activity"), [sessions]);
+  const filteredSessions = useMemo(
+    () => filterNotebookSessions(sessions, {
+      query: pageQuery,
+      domain: pageDomain,
+      project: pageProject,
+      activity: pageActivity,
+    }),
+    [pageActivity, pageDomain, pageProject, pageQuery, sessions],
+  );
   const sortedSessions = useMemo(
-    () =>
-      [...sessions].sort(
-        (left, right) =>
-          right.date.localeCompare(left.date) ||
-          right.updatedAt.localeCompare(left.updatedAt) ||
-          right.createdAt.localeCompare(left.createdAt),
-      ),
-    [sessions],
+    () => [...filteredSessions].sort(compareNotebookSessionsNewestFirst),
+    [filteredSessions],
   );
 
   useEffect(() => {
@@ -491,11 +549,33 @@ export const NotebookWorkspace = ({
         <div className="notebook-list-header">
           <div>
             <span className="section-label">Notebook</span>
-            <strong>{sessions.length} pages</strong>
+            <strong>{filteredSessions.length === sessions.length ? sessions.length : `${filteredSessions.length}/${sessions.length}`} pages</strong>
           </div>
           <button className="primary-button notebook-new-button" type="button" onClick={onCreate}>
             New page
           </button>
+        </div>
+        <div className="notebook-page-filters" aria-label="Filter notebook pages">
+          <input
+            className="notebook-page-filter-query"
+            type="search"
+            value={pageQuery}
+            aria-label="Filter notebook pages by text"
+            placeholder="Filter pages"
+            onChange={(event) => setPageQuery(event.target.value)}
+          />
+          <select value={pageDomain} aria-label="Filter notebook pages by domain" onChange={(event) => setPageDomain(event.target.value)}>
+            <option value="all">All domains</option>
+            {domainFilterOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <select value={pageProject} aria-label="Filter notebook pages by project" onChange={(event) => setPageProject(event.target.value)}>
+            <option value="all">All projects</option>
+            {projectFilterOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <select value={pageActivity} aria-label="Filter notebook pages by activity" onChange={(event) => setPageActivity(event.target.value)}>
+            <option value="all">All activities</option>
+            {activityFilterOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
         </div>
         <div className="notebook-page-list">
           {sortedSessions.map((session) => (
@@ -514,6 +594,7 @@ export const NotebookWorkspace = ({
               </button>
             </div>
           ))}
+          {!sortedSessions.length ? <p className="notebook-page-filter-empty">No pages match these filters.</p> : null}
         </div>
       </aside>
 
@@ -532,6 +613,13 @@ export const NotebookWorkspace = ({
                   : activeSession.title,
               })
             }
+          />
+          <DeferredTimeInput
+            id="notebook-time"
+            className="notebook-time-input"
+            value={activeSession.startTime}
+            aria-label="Notebook page time"
+            onCommit={(startTime) => onChange({ ...activeSession, startTime })}
           />
           <input
             className="notebook-title-input"
