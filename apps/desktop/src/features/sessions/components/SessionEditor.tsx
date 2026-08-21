@@ -8,7 +8,7 @@ import { parseTokenList } from "../../../components/peoplePickerUtils";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import type { RecordingMode } from "../../../lib/files/recording";
 import { createAttachmentPreviewUrl } from "../../../lib/files/attachmentStore";
-import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type AttachmentRecord, type CaptureWorkspaceDensity, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
+import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type AttachmentRecord, type CaptureMode, type CaptureWorkspaceDensity, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
 
@@ -207,6 +207,7 @@ interface GenerationLogEntry {
 interface SessionEditorProps {
   session: SessionRecord;
   templates: TemplateDefinition[];
+  allowedTemplateCaptureModes?: CaptureMode[];
   attachments: AttachmentRecord[];
   presentation?: CaptureWorkspaceDensity;
   showPresentationActions?: boolean;
@@ -297,8 +298,20 @@ const CAPTURE_MODE_META = {
   "voice-note": { label: "Voice note", subtitle: "Best for audio-first capture and spoken reflections.", primaryFieldLabel: "Manual notes", primaryFieldPlaceholder: "Add any written notes you want included alongside the recording and transcript." },
 } as const;
 
+export const getSessionEditorTemplateOptions = (
+  templates: TemplateDefinition[],
+  captureMode: CaptureMode,
+  allowedCaptureModes?: CaptureMode[],
+) => allowedCaptureModes?.length
+  ? templates.filter(
+      (template) =>
+        !template.captureModes?.length ||
+        template.captureModes.some((mode) => allowedCaptureModes.includes(mode)),
+    )
+  : getTemplatesForCaptureMode(templates, captureMode);
+
 export const SessionEditor = ({
-  session, templates, attachments, presentation = "full", showPresentationActions = true, showPanelHeading = true, showQuickStartTemplates = true,
+  session, templates, allowedTemplateCaptureModes, attachments, presentation = "full", showPresentationActions = true, showPanelHeading = true, showQuickStartTemplates = true,
   savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities,
   suggestedActivities, structureOptions, savedTags, suggestedTags, isTranscribingAudio, recordingMode,
   isRecordingAudio, recordingStatusNote, generationLog = [], onClearGenerationLog, onChange, onImportTranscript, onImportAudio, onImportImage,
@@ -334,7 +347,11 @@ export const SessionEditor = ({
     setUploadedTranscriptOpen(Boolean(session.uploadedTranscript.trim()));
   }, [session.id, session.captureMode, session.participantText, session.liveTranscript, session.uploadedTranscript]);
 
-  const availableTemplates = getTemplatesForCaptureMode(templates, session.captureMode);
+  const availableTemplates = getSessionEditorTemplateOptions(
+    templates,
+    session.captureMode,
+    allowedTemplateCaptureModes,
+  );
   const activeTemplate = availableTemplates.find((template) => template.id === session.templateId) ?? availableTemplates[0] ?? templates[0];
   const quickStartTemplates = useMemo(() => {
     const preferredOrder = ["meeting", "personal-note", "one-on-one"];

@@ -4804,6 +4804,7 @@ export const App = () => {
                       <SessionEditor
                         session={activeSession}
                         templates={snapshot.templates}
+                        allowedTemplateCaptureModes={linkedDetailReturnWorkspace === "notebook" ? ["quick-note", "meeting-note"] : undefined}
                         attachments={activeAttachments}
                         presentation="minimal"
                         showPresentationActions={false}

@@ -210,7 +210,11 @@ const CAPTURE_MODE_META = {
     "quick-note": { label: "Quick note", subtitle: "Best for fast typed notes with minimal setup.", primaryFieldLabel: "Manual notes", primaryFieldPlaceholder: "Write your own notes here. They will be included in the Output." },
     "voice-note": { label: "Voice note", subtitle: "Best for audio-first capture and spoken reflections.", primaryFieldLabel: "Manual notes", primaryFieldPlaceholder: "Add any written notes you want included alongside the recording and transcript." },
 };
-export const SessionEditor = ({ session, templates, attachments, presentation = "full", showPresentationActions = true, showPanelHeading = true, showQuickStartTemplates = true, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isTranscribingAudio, recordingMode, isRecordingAudio, recordingStatusNote, generationLog = [], onClearGenerationLog, onChange, onImportTranscript, onImportAudio, onImportImage, onCreateInlineImageAttachment, onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment, onUpdateAttachment, onOpenDetails, onCreateSessionFromTemplate, onOpenInstructions, }) => {
+export const getSessionEditorTemplateOptions = (templates, captureMode, allowedCaptureModes) => allowedCaptureModes?.length
+    ? templates.filter((template) => !template.captureModes?.length ||
+        template.captureModes.some((mode) => allowedCaptureModes.includes(mode)))
+    : getTemplatesForCaptureMode(templates, captureMode);
+export const SessionEditor = ({ session, templates, allowedTemplateCaptureModes, attachments, presentation = "full", showPresentationActions = true, showPanelHeading = true, showQuickStartTemplates = true, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isTranscribingAudio, recordingMode, isRecordingAudio, recordingStatusNote, generationLog = [], onClearGenerationLog, onChange, onImportTranscript, onImportAudio, onImportImage, onCreateInlineImageAttachment, onTranscribeAudio, onChangeRecordingMode, onStartRecording, onStopRecording, onRemoveAttachment, onUpdateAttachment, onOpenDetails, onCreateSessionFromTemplate, onOpenInstructions, }) => {
     const update = (key, value) => onChange({ ...session, [key]: value });
     const agendaEditorRef = useRef(null);
     const manualNotesEditorRef = useRef(null);
@@ -237,7 +241,7 @@ export const SessionEditor = ({ session, templates, attachments, presentation = 
         setTranscriptOpen(session.captureMode === "voice-note" || Boolean(session.liveTranscript.trim()));
         setUploadedTranscriptOpen(Boolean(session.uploadedTranscript.trim()));
     }, [session.id, session.captureMode, session.participantText, session.liveTranscript, session.uploadedTranscript]);
-    const availableTemplates = getTemplatesForCaptureMode(templates, session.captureMode);
+    const availableTemplates = getSessionEditorTemplateOptions(templates, session.captureMode, allowedTemplateCaptureModes);
     const activeTemplate = availableTemplates.find((template) => template.id === session.templateId) ?? availableTemplates[0] ?? templates[0];
     const quickStartTemplates = useMemo(() => {
         const preferredOrder = ["meeting", "personal-note", "one-on-one"];
