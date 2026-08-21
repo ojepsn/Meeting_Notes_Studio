@@ -206,6 +206,7 @@ export const OutputWorkspace = ({
     selectedExcerpt.length > 180 ? `${selectedExcerpt.slice(0, 177).trimEnd()}...` : selectedExcerpt;
   const selectedOutputVersion = outputVersions.find((version) => version.id === selectedOutputVersionId) ?? null;
   const outputEditorRef = useRef<HTMLDivElement | null>(null);
+  const excludedSectionIdsRef = useRef(session.excludedSectionIds);
   const layout = useMemo(() => getOutputLayoutPreset(layoutPresetId), [layoutPresetId]);
   const renderedOutputHtml = useMemo(
     () => buildHtmlMarkup(buildStructuredOutput(displayedOutput)),
@@ -465,11 +466,17 @@ export const OutputWorkspace = ({
     ) : null;
 
   const handleSectionToggle = (sectionId: string, checked: boolean) => {
+    const currentExcludedSectionIds = excludedSectionIdsRef.current;
     const nextExcludedSectionIds = checked
-      ? session.excludedSectionIds.filter((id) => id !== sectionId)
-      : [...new Set([...session.excludedSectionIds, sectionId])];
+      ? currentExcludedSectionIds.filter((id) => id !== sectionId)
+      : [...new Set([...currentExcludedSectionIds, sectionId])];
+    excludedSectionIdsRef.current = nextExcludedSectionIds;
     onChange({ ...session, excludedSectionIds: nextExcludedSectionIds });
   };
+
+  useEffect(() => {
+    excludedSectionIdsRef.current = session.excludedSectionIds;
+  }, [session.id, session.excludedSectionIds]);
 
   const applyReviewSeed = (value: string, kind: FollowUpKind = "todo") => {
     const parsed = parseFollowUpCandidate(value);

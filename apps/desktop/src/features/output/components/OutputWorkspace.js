@@ -86,6 +86,7 @@ export const OutputWorkspace = ({ session, template, displayedOutput = session.o
     const excerptPreview = selectedExcerpt.length > 180 ? `${selectedExcerpt.slice(0, 177).trimEnd()}...` : selectedExcerpt;
     const selectedOutputVersion = outputVersions.find((version) => version.id === selectedOutputVersionId) ?? null;
     const outputEditorRef = useRef(null);
+    const excludedSectionIdsRef = useRef(session.excludedSectionIds);
     const layout = useMemo(() => getOutputLayoutPreset(layoutPresetId), [layoutPresetId]);
     const renderedOutputHtml = useMemo(() => buildHtmlMarkup(buildStructuredOutput(displayedOutput)), [displayedOutput]);
     const outputRichTextToPlainText = (value) => {
@@ -234,11 +235,16 @@ export const OutputWorkspace = ({ session, template, displayedOutput = session.o
     const renderVersionHistory = () => outputVersions.length ? (_jsxs("details", { className: `workspace-disclosure pwa-disclosure-card${isMinimal ? "" : ""}`, children: [_jsx("summary", { children: "Version history" }), _jsxs("div", { className: "workspace-disclosure-body stack", children: [_jsx("p", { className: "muted", children: "Each generated output version is saved here with the time it was created." }), _jsx("div", { className: "section-list", children: outputVersions.map((version, index) => (_jsxs("div", { className: "list-item output-version-row", children: [_jsxs("span", { className: "list-item-copy", children: [_jsx("strong", { children: index === 0 ? "Current version" : `Version ${outputVersions.length - index}` }), _jsx("span", { className: "muted", children: formatOutputVersionLabel(version.generatedAt) })] }), index === 0 ? (_jsx("button", { className: "small-button", type: "button", onClick: onOpenLatestOutputVersion, disabled: !selectedOutputVersionId, children: selectedOutputVersionId ? "Open latest" : "Viewing latest" })) : (_jsx("button", { className: "small-button", type: "button", onClick: () => onOpenOutputVersion?.(version.id), disabled: selectedOutputVersionId === version.id, children: selectedOutputVersionId === version.id ? "Viewing" : "Open" }))] }, version.id))) })] })] })) : null;
     const renderRuleSuggestions = () => ruleSuggestions.length ? (_jsxs("section", { className: "config-card workflow-card suggestion-workflow-card", "aria-label": "Suggested rules", children: [_jsxs("div", { className: "config-card-copy", children: [_jsx("p", { className: "section-label", children: "Suggested rules" }), _jsx("h3", { children: "Save repeated patterns" })] }), _jsx("p", { className: "support-text", children: "The app noticed repeated shorthand or participant-name patterns in recent sessions. Add any you want to reuse." }), _jsx("div", { className: "rule-suggestion-list", children: ruleSuggestions.map((suggestion) => (_jsxs("div", { className: "rule-suggestion-card", children: [_jsxs("div", { className: "rule-suggestion-copy", children: [_jsx("p", { className: "section-label", children: suggestion.type === "abbreviation" ? "Suggested abbreviation" : "Preferred participant name" }), _jsx("h4", { children: `${suggestion.sourceValue} -> ${suggestion.suggestedValue}` }), _jsxs("p", { className: "muted", children: ["Seen ", suggestion.evidenceCount, " times in recent sessions."] })] }), _jsxs("div", { className: "list-item-actions", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => onAcceptRuleSuggestion?.(suggestion.id), children: "Add" }), _jsx("button", { className: "small-button", type: "button", onClick: () => onDismissRuleSuggestion?.(suggestion.id), children: "Not now" }), _jsx("button", { className: "small-button danger-button", type: "button", onClick: () => onIgnoreRuleSuggestion?.(suggestion.id), children: "Never suggest" })] })] }, suggestion.id))) })] })) : null;
     const handleSectionToggle = (sectionId, checked) => {
+        const currentExcludedSectionIds = excludedSectionIdsRef.current;
         const nextExcludedSectionIds = checked
-            ? session.excludedSectionIds.filter((id) => id !== sectionId)
-            : [...new Set([...session.excludedSectionIds, sectionId])];
+            ? currentExcludedSectionIds.filter((id) => id !== sectionId)
+            : [...new Set([...currentExcludedSectionIds, sectionId])];
+        excludedSectionIdsRef.current = nextExcludedSectionIds;
         onChange({ ...session, excludedSectionIds: nextExcludedSectionIds });
     };
+    useEffect(() => {
+        excludedSectionIdsRef.current = session.excludedSectionIds;
+    }, [session.id, session.excludedSectionIds]);
     const applyReviewSeed = (value, kind = "todo") => {
         const parsed = parseFollowUpCandidate(value);
         setReviewKind(kind);

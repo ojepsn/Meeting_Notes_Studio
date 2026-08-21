@@ -3,6 +3,60 @@ import { executeAITextOperation } from "../runtime";
 const buildTemplateSectionPrompt = (template) => template.sections
     .map((section) => `- ${section.title}: ${section.instructions}`)
     .join("\n");
+const SECTION_HEADING_ALIASES = {
+    agenda: ["agenda", "dagordning"],
+    summary: ["summary", "meeting summary", "executive summary", "sammanfattning"],
+    discussion: ["key discussion points", "discussion points", "discussion", "viktiga diskussionspunkter", "diskussionspunkter"],
+    decisions: ["decision", "decisions", "decisions made", "key decisions", "beslut", "fattade beslut", "decisions and actions"],
+    actions: ["action", "actions", "action items", "next steps", "follow-up actions", "åtgärder", "åtgärdspunkter", "nästa steg", "uppföljning", "decisions and actions"],
+};
+const normalizeSectionHeading = (value) => value
+    .trim()
+    .replace(/^#{1,6}\s*/, "")
+    .replace(/^(\*\*|__)(.*?)\1:?$/, "$2")
+    .replace(/^\d+[.)]\s+/, "")
+    .replace(/:$/, "")
+    .trim()
+    .toLocaleLowerCase();
+const getSectionHeadingAliases = (section) => new Set([
+    normalizeSectionHeading(section.title),
+    ...(SECTION_HEADING_ALIASES[section.id] ?? []).map(normalizeSectionHeading),
+]);
+export const removeExcludedTemplateSections = (output, template, excludedSectionIds) => {
+    if (!excludedSectionIds.length || !output.trim())
+        return output;
+    const excludedIds = new Set(excludedSectionIds);
+    const sectionsWithAliases = template.sections.map((section) => ({
+        section,
+        aliases: getSectionHeadingAliases(section),
+    }));
+    const lines = output.replace(/\r\n/g, "\n").split("\n");
+    const keptLines = [];
+    let skipCurrentSection = false;
+    lines.forEach((line) => {
+        const normalizedLine = normalizeSectionHeading(line);
+        const matchingSection = sectionsWithAliases.find(({ aliases }) => aliases.has(normalizedLine))?.section;
+        if (matchingSection) {
+            skipCurrentSection = excludedIds.has(matchingSection.id);
+        }
+        if (!skipCurrentSection) {
+            keptLines.push(line);
+        }
+    });
+    return keptLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+};
+export const buildSectionSelectionContract = (template, selectedSections) => {
+    const selectedIds = new Set(selectedSections.map((section) => section.id));
+    const excludedSections = template.sections.filter((section) => !selectedIds.has(section.id));
+    return [
+        "STRICT OUTPUT SECTION CONTRACT (takes precedence over all general meeting-minute guidance):",
+        `Required body sections, in this exact order: ${selectedSections.map((section) => section.title).join("; ") || "none"}.`,
+        `Forbidden body sections: ${excludedSections.map((section) => section.title).join("; ") || "none"}.`,
+        "After the required meeting metadata lines, create exactly the required body sections and no others.",
+        "Never create a heading, standalone block, appendix, or renamed equivalent for a forbidden section.",
+        "General guidance about decisions, actions, risks, or follow-up does not authorize adding an unchecked section.",
+    ].join("\n");
+};
 const FALLBACK_SECTION = {
     id: "generated-notes",
     title: "Generated notes",
@@ -146,6 +200,7 @@ export const generateNotes = async ({ session, settings, template, attachments =
     const sortedParticipants = sortParticipantsAlphabetically(session.participantText);
     const selectedSections = template.sections.filter((section) => !session.excludedSectionIds.includes(section.id));
     const activeSections = selectedSections.length ? selectedSections : [FALLBACK_SECTION];
+    const sectionSelectionContract = buildSectionSelectionContract(template, activeSections);
     const manualNotes = richTextToPlainText(session.manualNotes);
     const agendaText = template.fields
         .filter((field) => field.enabled && field.key === "agenda")
@@ -199,10 +254,11 @@ export const generateNotes = async ({ session, settings, template, attachments =
         session.additionalInstructions.trim()
             ? `Additional generation instructions from the user:\n${session.additionalInstructions.trim()}`
             : "",
+        sectionSelectionContract,
     ];
     const buildUserText = (sourceMaterial, sourceLabel = "Source material") => `Template: ${template.name}\nSections:\n${buildTemplateSectionPrompt({ ...template, sections: activeSections })}${template.promptInstructions?.trim() ? `\nTemplate-specific instructions:\n${template.promptInstructions.trim()}` : ""}\nTemplate-specific field values:\n${buildTemplateFieldPrompt({ template, session })}\n\nContext:\nTitle: ${session.title}\nParticipants: ${sortedParticipants}\nDomain: ${session.domain}\nProject: ${session.project}\nActivity: ${session.activity}\nTags: ${session.tagsText}\nDate: ${session.date}\nTime: ${session.startTime}-${session.endTime}\nHighlights: ${session.quickHighlights}${includedImagesPrompt
         ? `\nIncluded images for polished output:\n${includedImagesPrompt}\nReference these images where appropriate and preserve their captions.`
-        : ""}\n\n${sourceLabel}:\n${sourceMaterial}${extraPromptBlocks ? `\n\nAdditional prompt blocks:\n${extraPromptBlocks}` : ""}`;
+        : ""}\n\n${sourceLabel}:\n${sourceMaterial}${extraPromptBlocks ? `\n\nAdditional prompt blocks:\n${extraPromptBlocks}` : ""}\n\n${sectionSelectionContract}`;
     let sourceForFinalGeneration = sourceText;
     if (sourceText.length > LONG_SOURCE_CHAR_LIMIT) {
         const chunks = splitSourceIntoChunks(sourceText);
@@ -258,5 +314,12 @@ export const generateNotes = async ({ session, settings, template, attachments =
         retryUserText: `${finalUserText}\n\nThe previous attempt did not produce a usable output. Try again and return complete, synthesized notes. Do not return a single character, partial word, or copied transcript.`,
     });
     onDiagnostic?.("Final output generated.", `output characters: ${output.trim().length}`, "success");
-    return output;
+    const constrainedOutput = removeExcludedTemplateSections(output, template, session.excludedSectionIds);
+    if (constrainedOutput !== output.trim()) {
+        onDiagnostic?.("Removed output sections that were unchecked for this session.", `excluded sections: ${template.sections
+            .filter((section) => session.excludedSectionIds.includes(section.id))
+            .map((section) => section.title)
+            .join(", ")}`, "warning");
+    }
+    return constrainedOutput;
 };

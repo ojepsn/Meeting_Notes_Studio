@@ -322,6 +322,7 @@ export const SessionEditor = ({
   const update = <K extends keyof SessionRecord>(key: K, value: SessionRecord[K]) => onChange({ ...session, [key]: value });
   const agendaEditorRef = useRef<HTMLDivElement | null>(null);
   const manualNotesEditorRef = useRef<HTMLDivElement | null>(null);
+  const excludedSectionIdsRef = useRef(session.excludedSectionIds);
   const [highlightDraft, setHighlightDraft] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(session.captureMode === "meeting-note");
   const [peopleOpen, setPeopleOpen] = useState(Boolean(session.participantText.trim()));
@@ -346,6 +347,19 @@ export const SessionEditor = ({
     setTranscriptOpen(session.captureMode === "voice-note" || Boolean(session.liveTranscript.trim()));
     setUploadedTranscriptOpen(Boolean(session.uploadedTranscript.trim()));
   }, [session.id, session.captureMode, session.participantText, session.liveTranscript, session.uploadedTranscript]);
+
+  useEffect(() => {
+    excludedSectionIdsRef.current = session.excludedSectionIds;
+  }, [session.id, session.excludedSectionIds]);
+
+  const updateSectionSelection = (sectionId: string, checked: boolean) => {
+    const currentExcludedSectionIds = excludedSectionIdsRef.current;
+    const nextExcludedSectionIds = checked
+      ? currentExcludedSectionIds.filter((id) => id !== sectionId)
+      : Array.from(new Set([...currentExcludedSectionIds, sectionId]));
+    excludedSectionIdsRef.current = nextExcludedSectionIds;
+    update("excludedSectionIds", nextExcludedSectionIds);
+  };
 
   const availableTemplates = getSessionEditorTemplateOptions(
     templates,
@@ -1371,7 +1385,7 @@ export const SessionEditor = ({
                 <div className="section-list">
                   {enabledSections.map((section) => (
                     <label key={section.id} className="list-item checkbox-label">
-                      <input type="checkbox" checked={section.checked} onChange={(event) => update("excludedSectionIds", event.target.checked ? session.excludedSectionIds.filter((id) => id !== section.id) : Array.from(new Set([...session.excludedSectionIds, section.id])))} />
+                      <input type="checkbox" checked={section.checked} onChange={(event) => updateSectionSelection(section.id, event.target.checked)} />
                       <span><strong>{section.title}</strong><span className="muted">{section.instructions}</span></span>
                     </label>
                   ))}

@@ -2321,6 +2321,7 @@ export const App = () => {
       ...nextSession,
       output: ensureMeetingOutputHeader(nextSession, nextSession.output),
     };
+    activeSessionDraftRef.current = normalizedNextSession;
 
     if (!activeSession) {
       await saveSession(normalizedNextSession);

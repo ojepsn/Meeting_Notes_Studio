@@ -1,5 +1,7 @@
 import type { AttachmentRecord, LocalAppSettings, SessionRecord, TemplateDefinition } from "@notesmith/domain";
 import type { AIRuntimeEvent } from "../runtime";
+export declare const removeExcludedTemplateSections: (output: string, template: TemplateDefinition, excludedSectionIds: string[]) => string;
+export declare const buildSectionSelectionContract: (template: TemplateDefinition, selectedSections: TemplateDefinition["sections"]) => string;
 type GenerationDiagnosticLevel = "info" | "success" | "warning" | "error";
 type GenerationDiagnosticHandler = (message: string, details?: string, level?: GenerationDiagnosticLevel) => void;
 export declare const generateNotes: ({ session, settings, template, attachments, onEvent, onDiagnostic, }: {

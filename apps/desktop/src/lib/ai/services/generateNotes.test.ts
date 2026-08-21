@@ -1,7 +1,7 @@
 import type { LocalAppSettings, SessionRecord, TemplateDefinition } from "@notesmith/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { executeAITextOperation } from "../runtime";
-import { generateNotes } from "./generateNotes";
+import { generateNotes, removeExcludedTemplateSections } from "./generateNotes";
 
 vi.mock("../runtime", () => ({
   executeAITextOperation: vi.fn(),
@@ -63,6 +63,16 @@ const template: TemplateDefinition = {
       enabledByDefault: true,
       position: 1,
     },
+  ],
+};
+
+const fullMeetingTemplate: TemplateDefinition = {
+  ...template,
+  sections: [
+    { id: "summary", title: "Summary", instructions: "Summarize the meeting.", enabledByDefault: true, position: 1 },
+    { id: "discussion", title: "Key discussion points", instructions: "Summarize discussion.", enabledByDefault: true, position: 2 },
+    { id: "decisions", title: "Decisions", instructions: "List decisions.", enabledByDefault: true, position: 3 },
+    { id: "actions", title: "Action items", instructions: "List actions.", enabledByDefault: true, position: 4 },
   ],
 };
 
@@ -153,5 +163,55 @@ describe("generateNotes", () => {
 
     const finalCall = executeAITextOperationMock.mock.calls.at(-1)?.[0];
     expect(finalCall?.userText).toContain("Participants: anna, Marcus, Ola");
+  });
+
+  it("strictly excludes unchecked meeting-minute sections", async () => {
+    executeAITextOperationMock.mockResolvedValue([
+      "Meeting title: Structure review",
+      "Date: 2026-04-21",
+      "Start time: 09:00",
+      "End time: 10:00",
+      "Participants: Anna, Marcus",
+      "",
+      "## Summary",
+      "The team reviewed the structure.",
+      "",
+      "## Key discussion points",
+      "The selected discussion belongs here.",
+      "",
+      "## Decisions",
+      "A decision that must not appear.",
+      "",
+      "## Action items",
+      "An action that must not appear.",
+    ].join("\n"));
+
+    const output = await generateNotes({
+      session: createSession({
+        title: "Structure review",
+        excludedSectionIds: ["decisions", "actions"],
+      }),
+      settings,
+      template: fullMeetingTemplate,
+    });
+
+    expect(output).toContain("## Summary");
+    expect(output).toContain("## Key discussion points");
+    expect(output).not.toContain("## Decisions");
+    expect(output).not.toContain("decision that must not appear");
+    expect(output).not.toContain("## Action items");
+    expect(output).not.toContain("action that must not appear");
+
+    const finalCall = executeAITextOperationMock.mock.calls.at(-1)?.[0];
+    expect(finalCall?.systemTexts.join("\n")).toContain("Required body sections, in this exact order: Summary; Key discussion points.");
+    expect(finalCall?.systemTexts.join("\n")).toContain("Forbidden body sections: Decisions; Action items.");
+  });
+
+  it("recognizes common renamed headings for excluded sections", () => {
+    expect(removeExcludedTemplateSections(
+      "## Summary\nKeep this.\n\n## Decisions made\nRemove this.\n\n## Key discussion points\nKeep this too.\n\n## Next steps\nRemove this too.",
+      fullMeetingTemplate,
+      ["decisions", "actions"],
+    )).toBe("## Summary\nKeep this.\n\n## Key discussion points\nKeep this too.");
   });
 });
