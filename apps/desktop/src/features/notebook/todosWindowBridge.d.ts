@@ -1,4 +1,4 @@
-import type { TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import type { TimeLogRecord, TodoPriority, TodoRecord } from "@notesmith/domain";
 export declare const DETACHED_TODOS_WINDOW_LABEL = "notesmith-todos";
 export declare const TODOS_COMMAND_EVENT = "notesmith:todos-command";
 export declare const TODOS_SNAPSHOT_EVENT = "notesmith:todos-snapshot";
@@ -7,6 +7,8 @@ export type TodosWindowCommand = {
 } | {
     type: "add";
     description: string;
+    isPrivate: boolean;
+    priority: TodoPriority;
 } | {
     type: "save";
     todo: TodoRecord;

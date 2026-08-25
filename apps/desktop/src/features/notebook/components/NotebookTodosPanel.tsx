@@ -19,7 +19,7 @@ export type NotebookTodoSort =
 interface NotebookTodosPanelProps {
   todos: TodoRecord[];
   runningTodoIds: string[];
-  onAddTodo: (description: string) => void;
+  onAddTodo: (description: string, options: { isPrivate: boolean; priority: TodoPriority }) => void;
   onSaveTodo: (todo: TodoRecord) => void;
   onDeleteTodo: (todoId: string) => void;
   onAddNote: (todoId: string) => void;
@@ -187,6 +187,8 @@ export const NotebookTodosPanel = ({
 }: NotebookTodosPanelProps) => {
   const [initialViewSettings] = useState(readNotebookTodoViewSettings);
   const [draft, setDraft] = useState("");
+  const [newTodoIsPrivate, setNewTodoIsPrivate] = useState(false);
+  const [newTodoPriority, setNewTodoPriority] = useState<TodoPriority>("normal");
   const [query, setQuery] = useState("");
   const [sortField, setSortField] = useState<NotebookTodoSortField>(initialViewSettings.sortField);
   const [sortDirection, setSortDirection] = useState<NotebookTodoSortDirection>(initialViewSettings.sortDirection);
@@ -261,8 +263,10 @@ export const NotebookTodosPanel = ({
   const submitTodo = () => {
     const description = draft.trim();
     if (!description) return;
-    onAddTodo(description);
+    onAddTodo(description, { isPrivate: newTodoIsPrivate, priority: newTodoPriority });
     setDraft("");
+    setNewTodoIsPrivate(false);
+    setNewTodoPriority("normal");
   };
 
   const saveSelected = (updates: Partial<TodoRecord>) => {
@@ -318,10 +322,41 @@ export const NotebookTodosPanel = ({
                 }
               }}
             />
+            <fieldset className="notebook-todo-choice-group notebook-todo-create-choice">
+              <legend>Type</legend>
+              <label><input type="radio" name="notebook-new-todo-type" checked={!newTodoIsPrivate} onChange={() => setNewTodoIsPrivate(false)} /> Business</label>
+              <label><input type="radio" name="notebook-new-todo-type" checked={newTodoIsPrivate} onChange={() => setNewTodoIsPrivate(true)} /> Private</label>
+            </fieldset>
+            <fieldset className="notebook-todo-choice-group notebook-todo-create-choice">
+              <legend>Priority</legend>
+              {(["low", "normal", "high"] as const).map((priority) => (
+                <label key={priority}>
+                  <input
+                    type="radio"
+                    name="notebook-new-todo-priority"
+                    checked={newTodoPriority === priority}
+                    onChange={() => setNewTodoPriority(priority)}
+                  />
+                  {priority[0].toUpperCase() + priority.slice(1)}
+                </label>
+              ))}
+            </fieldset>
             <button className="primary-button" type="button" onClick={submitTodo}>Add</button>
           </div>
 
-          <div className="notebook-todo-context-filters" aria-label="Todo context filters">
+          <section className="notebook-todo-filter-panel" aria-label="Filter existing todos">
+            <div className="notebook-todo-filter-heading">
+              <span>Filter existing todos</span>
+              <button
+                className="primary-button notebook-todo-add-note-button"
+                type="button"
+                disabled={!selectedTodo}
+                onClick={() => selectedTodo && onAddNote(selectedTodo.id)}
+              >
+                Add note
+              </button>
+            </div>
+            <div className="notebook-todo-context-filters" aria-label="Todo context filters">
             <label>
               <span>Text</span>
               <input
@@ -352,9 +387,9 @@ export const NotebookTodosPanel = ({
                 {activityOptions.map((value) => <option key={value} value={value}>{value}</option>)}
               </select>
             </label>
-          </div>
+            </div>
 
-          <div className="notebook-todo-control-row">
+            <div className="notebook-todo-control-row">
             <fieldset className="notebook-todo-choice-group">
               <legend>Show</legend>
               <label><input type="checkbox" checked={showBusiness} onChange={(event) => setShowBusiness(event.target.checked)} /> Business</label>
@@ -377,17 +412,9 @@ export const NotebookTodosPanel = ({
                 </label>
               ))}
             </fieldset>
-            <button
-              className="primary-button notebook-todo-add-note-button"
-              type="button"
-              disabled={!selectedTodo}
-              onClick={() => selectedTodo && onAddNote(selectedTodo.id)}
-            >
-              Add note
-            </button>
-          </div>
+            </div>
 
-          <div className="notebook-todo-sort-controls">
+            <div className="notebook-todo-sort-controls">
             <fieldset className="notebook-todo-choice-group">
               <legend>Sort by</legend>
               {([
@@ -413,7 +440,8 @@ export const NotebookTodosPanel = ({
               <label><input type="radio" name="notebook-todo-sort-direction" checked={sortDirection === "asc"} onChange={() => setSortDirection("asc")} /> Ascending</label>
               <label><input type="radio" name="notebook-todo-sort-direction" checked={sortDirection === "desc"} onChange={() => setSortDirection("desc")} /> Descending</label>
             </fieldset>
-          </div>
+            </div>
+          </section>
         </div>
 
         <div className="notebook-todos-work-area">

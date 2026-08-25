@@ -1410,12 +1410,64 @@ select {
 
 .notebook-todo-add-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(180px, 1fr) auto auto auto;
+  align-items: center;
   gap: 0.4rem;
 }
 
-.notebook-todo-add-row input,
-.notebook-todo-add-row button,
+.notebook-todo-create-choice {
+  flex: 0 0 auto;
+  padding-block: 0.18rem 0.28rem;
+  background: color-mix(in srgb, var(--app-surface) 75%, transparent 25%);
+}
+
+.notebook-todo-filter-panel {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.38rem 0.42rem 0.42rem;
+  border: 1px solid color-mix(in srgb, var(--app-accent-border) 72%, var(--app-border) 28%);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--app-accent-soft) 18%, var(--app-surface-soft) 82%);
+}
+
+.notebook-todo-filter-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 24px;
+}
+
+.notebook-todo-filter-heading > span {
+  color: var(--app-accent);
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.notebook-todo-filter-heading .notebook-todo-add-note-button {
+  min-height: 26px;
+  padding: 0.22rem 0.58rem;
+  font-size: 0.66rem;
+}
+
+@container (max-width: 820px) {
+  .notebook-todo-add-row {
+    grid-template-columns: auto auto minmax(54px, 1fr);
+  }
+
+  .notebook-todo-add-row > input {
+    grid-column: 1 / -1;
+  }
+
+  .notebook-todo-add-row > button {
+    justify-self: end;
+  }
+}
+
+.notebook-todo-add-row > input,
+.notebook-todo-add-row > button,
 .notebook-todo-context-filters input,
 .notebook-todo-context-filters select {
   min-height: 34px;

@@ -4,7 +4,10 @@ export type NotebookTodoSort = "priority-desc" | "priority-asc" | "title-asc" | 
 interface NotebookTodosPanelProps {
     todos: TodoRecord[];
     runningTodoIds: string[];
-    onAddTodo: (description: string) => void;
+    onAddTodo: (description: string, options: {
+        isPrivate: boolean;
+        priority: TodoPriority;
+    }) => void;
     onSaveTodo: (todo: TodoRecord) => void;
     onDeleteTodo: (todoId: string) => void;
     onAddNote: (todoId: string) => void;

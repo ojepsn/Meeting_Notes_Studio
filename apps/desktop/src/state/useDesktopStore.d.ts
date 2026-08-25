@@ -1,4 +1,4 @@
-import type { ActivityRecord, CaptureMode, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistTemplateRecord, DesktopAppSnapshot, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, CaptureMode, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistTemplateRecord, DesktopAppSnapshot, TimeLogRecord, TodoPriority, TodoRecord } from "@notesmith/domain";
 import { createAppRepository } from "../lib/db/repository";
 type DesktopView = "capture" | "output";
 type SaveState = "saved" | "saving" | "error";
@@ -66,6 +66,8 @@ interface DesktopState {
         activityLabel?: string;
         doOn?: string;
         comments?: string;
+        isPrivate?: boolean;
+        priority?: TodoPriority;
     }) => Promise<void>;
     deleteTodo: (id: string) => Promise<void>;
     saveActivity: (activity: DesktopAppSnapshot["activities"][number]) => Promise<void>;

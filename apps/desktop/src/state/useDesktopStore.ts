@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ActivityRecord, ArchivedTaskRecord, CaptureMode, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, DeletedEntityRecord, DesktopAppSnapshot, StructureInferenceRuleKind, TaskRecord, TimeLogRecord, TodoRecord } from "@notesmith/domain";
+import type { ActivityRecord, ArchivedTaskRecord, CaptureMode, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, DeletedEntityRecord, DesktopAppSnapshot, StructureInferenceRuleKind, TaskRecord, TimeLogRecord, TodoPriority, TodoRecord } from "@notesmith/domain";
 import { BUILTIN_TEMPLATES, DEFAULT_TEMPLATE_BY_CAPTURE_MODE, getTemplatesForCaptureMode } from "@notesmith/domain";
 import { configureAITextCachePersistence, hydrateAITextCache } from "../lib/ai/cache";
 import { configureAIRequestHistoryPersistence, hydrateAIRequestHistory } from "../lib/ai/history";
@@ -1626,7 +1626,7 @@ interface DesktopState {
   saveTodo: (todo: DesktopAppSnapshot["todos"][number]) => Promise<void>;
   addTodo: (
     description: string,
-    options?: { activityId?: string; domain?: string; project?: string; activityLabel?: string; doOn?: string; comments?: string },
+    options?: { activityId?: string; domain?: string; project?: string; activityLabel?: string; doOn?: string; comments?: string; isPrivate?: boolean; priority?: TodoPriority },
   ) => Promise<void>;
   deleteTodo: (id: string) => Promise<void>;
   saveActivity: (activity: DesktopAppSnapshot["activities"][number]) => Promise<void>;
@@ -2017,9 +2017,9 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       participantText: "",
       isDone: false,
       completedAt: null,
-      isPrivate: false,
-      isPriority: false,
-      priority: "normal",
+      isPrivate: options?.isPrivate ?? false,
+      isPriority: options?.priority === "high",
+      priority: options?.priority ?? "normal",
       isUrgent: false,
       comments: options?.comments || "",
       activityId: inferredStructure.activityId,

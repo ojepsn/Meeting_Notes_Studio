@@ -43,7 +43,7 @@ export const DetachedTodosWindow = () => {
         <NotebookTodosPanel
         todos={todos}
         runningTodoIds={runningTodoIds}
-        onAddTodo={(description) => void sendTodosCommand({ type: "add", description })}
+        onAddTodo={(description, options) => void sendTodosCommand({ type: "add", description, ...options })}
         onSaveTodo={(todo) => void sendTodosCommand({ type: "save", todo })}
         onDeleteTodo={(todoId) => void sendTodosCommand({ type: "delete", todoId })}
         onAddNote={(todoId) => void sendTodosCommand({ type: "add-note", todoId })}

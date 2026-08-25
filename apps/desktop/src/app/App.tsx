@@ -469,7 +469,7 @@ export const App = () => {
         if (command.type === "request-snapshot") {
           void sendTodosSnapshot(todosSnapshotRef.current, themeSnapshotRef.current, runningTodoIdsSnapshotRef.current);
         } else if (command.type === "add") {
-          void addTodo(command.description);
+          void addTodo(command.description, { isPrivate: command.isPrivate, priority: command.priority });
         } else if (command.type === "save") {
           void saveTodo(command.todo);
         } else if (command.type === "delete") {
@@ -4386,7 +4386,7 @@ export const App = () => {
                 }}
                 onCreate={() => void handleCreateNotebookPage()}
                 onDelete={(sessionId) => void deleteSession(sessionId)}
-                onAddTodo={(description) => void addTodo(description)}
+                onAddTodo={(description, options) => void addTodo(description, options)}
                 onSaveTodo={(todo) => void saveTodo(todo)}
                 onDeleteTodo={(todoId) => void deleteTodo(todoId)}
                 onAddNoteForTodo={(todoId) => {

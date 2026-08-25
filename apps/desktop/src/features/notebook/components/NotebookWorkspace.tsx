@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import type { SessionRecord, TodoRecord } from "@notesmith/domain";
+import type { SessionRecord, TodoPriority, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
 import { TokenPicker } from "../../../components/TokenPicker";
@@ -177,7 +177,7 @@ interface NotebookWorkspaceProps {
   onSelect: (sessionId: string) => void;
   onCreate: () => void;
   onDelete: (sessionId: string) => void;
-  onAddTodo: (description: string) => void;
+  onAddTodo: (description: string, options: { isPrivate: boolean; priority: TodoPriority }) => void;
   onSaveTodo: (todo: TodoRecord) => void;
   onDeleteTodo: (todoId: string) => void;
   onAddNoteForTodo: (todoId: string) => void;

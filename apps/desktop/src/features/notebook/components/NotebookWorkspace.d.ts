@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import type { SessionRecord, TodoRecord } from "@notesmith/domain";
+import type { SessionRecord, TodoPriority, TodoRecord } from "@notesmith/domain";
 import { type StructureOptions } from "../../../lib/structure/options";
 export declare const preserveNotebookRowBreaks: (value: string) => string;
 export declare const getNotebookTitleText: (session: Pick<SessionRecord, "date" | "title">) => string;
@@ -28,7 +28,10 @@ interface NotebookWorkspaceProps {
     onSelect: (sessionId: string) => void;
     onCreate: () => void;
     onDelete: (sessionId: string) => void;
-    onAddTodo: (description: string) => void;
+    onAddTodo: (description: string, options: {
+        isPrivate: boolean;
+        priority: TodoPriority;
+    }) => void;
     onSaveTodo: (todo: TodoRecord) => void;
     onDeleteTodo: (todoId: string) => void;
     onAddNoteForTodo: (todoId: string) => void;
