@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { TodoPriority, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
+import { DeferredTextInput } from "../../../components/DeferredTextInput";
 import { getTodoPriority } from "../../../lib/tasks/model";
 import { TodoDetailsEditor } from "../../todos/components/TodoDetailsEditor";
 
@@ -515,7 +516,7 @@ export const NotebookTodosPanel = ({
             <div className="notebook-todo-title-row">
               <div className="field notebook-todo-title-field">
                 <label htmlFor="notebook-todo-title">Todo</label>
-                <input id="notebook-todo-title" value={selectedTodo.description} onChange={(event) => saveSelected({ description: event.target.value })} />
+                <DeferredTextInput key={`${selectedTodo.id}-title`} id="notebook-todo-title" value={selectedTodo.description} onCommit={(description) => saveSelected({ description })} />
               </div>
               <button
                 className={isSelectedTodoRunning ? "primary-button notebook-todo-time-button" : "small-button notebook-todo-time-button"}
@@ -565,23 +566,24 @@ export const NotebookTodosPanel = ({
             <div className="notebook-todo-context-grid">
               <label className="notebook-todo-context-wide">
                 <span>Participants</span>
-                <input
+                <DeferredTextInput
+                  key={`${selectedTodo.id}-participants`}
                   value={selectedTodo.participantText || ""}
                   placeholder="People involved"
-                  onChange={(event) => saveSelected({ participantText: event.target.value })}
+                  onCommit={(participantText) => saveSelected({ participantText })}
                 />
               </label>
               <label>
                 <span>Domain</span>
-                <input value={selectedTodo.domain} onChange={(event) => saveSelected({ domain: event.target.value })} />
+                <DeferredTextInput key={`${selectedTodo.id}-domain`} value={selectedTodo.domain} onCommit={(domain) => saveSelected({ domain })} />
               </label>
               <label>
                 <span>Project</span>
-                <input value={selectedTodo.project} onChange={(event) => saveSelected({ project: event.target.value })} />
+                <DeferredTextInput key={`${selectedTodo.id}-project`} value={selectedTodo.project} onCommit={(project) => saveSelected({ project })} />
               </label>
               <label>
                 <span>Activity</span>
-                <input value={selectedTodo.activity} onChange={(event) => saveSelected({ activity: event.target.value })} />
+                <DeferredTextInput key={`${selectedTodo.id}-activity`} value={selectedTodo.activity} onCommit={(activity) => saveSelected({ activity })} />
               </label>
             </div>
 

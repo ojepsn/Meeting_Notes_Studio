@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { DeferredTextInput } from "../../../components/DeferredTextInput";
 import type { LocalAppSettings, PromptBlock, TemplateDefinition } from "@notesmith/domain";
 import { getTemplatesForCaptureMode } from "@notesmith/domain";
 import type { DesktopStorageInfo, LocalBackupInfo } from "../../../lib/storage/desktopStorage";
@@ -515,11 +516,11 @@ export const SettingsCard = ({
             </div>
             <div className="field">
               <label htmlFor="api-key">API key</label>
-              <input
+              <DeferredTextInput
                 id="api-key"
                 type="password"
                 value={settings.apiKey}
-                onChange={(event) => onChange({ ...settings, apiKey: event.target.value })}
+                onCommit={(apiKey) => onChange({ ...settings, apiKey })}
                 placeholder="Stored locally on this machine only"
               />
             </div>

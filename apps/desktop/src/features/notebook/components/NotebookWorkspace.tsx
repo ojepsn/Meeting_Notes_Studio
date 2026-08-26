@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import type { SessionRecord, TodoPriority, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
 import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
+import { DeferredTextInput } from "../../../components/DeferredTextInput";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { NotebookTodosPanel } from "./NotebookTodosPanel";
@@ -621,17 +622,18 @@ export const NotebookWorkspace = ({
             aria-label="Notebook page time"
             onCommit={(startTime) => onChange({ ...activeSession, startTime })}
           />
-          <input
+          <DeferredTextInput
+            key={`${activeSession.id}-title`}
             className="notebook-title-input"
             value={titleText}
             aria-label="Notebook page title"
             placeholder="Page title"
-            onChange={(event) =>
+            onCommit={(nextTitle) =>
               onChange({
                 ...activeSession,
                 title: isDatedNotebookPage
-                  ? buildNotebookSessionTitle(activeSession.date, event.target.value)
-                  : event.target.value,
+                  ? buildNotebookSessionTitle(activeSession.date, nextTitle)
+                  : nextTitle,
               })
             }
           />

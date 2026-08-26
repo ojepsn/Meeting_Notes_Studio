@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from "react";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
 import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
+import { DeferredTextArea, DeferredTextInput } from "../../../components/DeferredTextInput";
 import { DateInput } from "../../../components/DateInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
@@ -891,11 +892,12 @@ export const SessionEditor = ({
                 <div className="workspace-disclosure-body form-grid">
                   <div className="field field-wide">
                     <label htmlFor="session-title">{titleLabel}</label>
-                    <input
+                    <DeferredTextInput
+                      key={`${session.id}-title-expanded`}
                       className="minimal-title-input"
                       id="session-title"
                       value={session.title}
-                      onChange={(event) => update("title", event.target.value)}
+                      onCommit={(title) => update("title", title)}
                       placeholder={session.captureMode === "meeting-note" ? "Weekly project meeting" : session.captureMode === "voice-note" ? "Voice memo" : "Quick note title"}
                     />
                   </div>
@@ -971,9 +973,9 @@ export const SessionEditor = ({
                       <div key={field.id} className={field.type === "textarea" ? "field field-wide" : "field"}>
                         <label htmlFor={`custom-field-${field.id}`}>{field.label}</label>
                         {field.type === "textarea" ? (
-                          <textarea id={`custom-field-${field.id}`} value={session.customFieldValues[field.id] ?? ""} onChange={(event) => update("customFieldValues", { ...session.customFieldValues, [field.id]: event.target.value })} />
+                          <DeferredTextArea key={`${session.id}-${field.id}`} id={`custom-field-${field.id}`} value={session.customFieldValues[field.id] ?? ""} onCommit={(value) => update("customFieldValues", { ...session.customFieldValues, [field.id]: value })} />
                         ) : (
-                          <input id={`custom-field-${field.id}`} type={field.type === "number" ? "number" : field.type} value={session.customFieldValues[field.id] ?? ""} onChange={(event) => update("customFieldValues", { ...session.customFieldValues, [field.id]: event.target.value })} />
+                          <DeferredTextInput key={`${session.id}-${field.id}`} id={`custom-field-${field.id}`} type={field.type === "number" ? "number" : field.type} value={session.customFieldValues[field.id] ?? ""} onCommit={(value) => update("customFieldValues", { ...session.customFieldValues, [field.id]: value })} />
                         )}
                       </div>
                     ))}
@@ -993,9 +995,9 @@ export const SessionEditor = ({
                       <div key={field.id} className={field.type === "textarea" ? "field field-wide" : "field"}>
                         <label htmlFor={`custom-field-${field.id}`}>{field.label}</label>
                         {field.type === "textarea" ? (
-                          <textarea id={`custom-field-${field.id}`} value={session.customFieldValues[field.id] ?? ""} onChange={(event) => update("customFieldValues", { ...session.customFieldValues, [field.id]: event.target.value })} />
+                          <DeferredTextArea key={`${session.id}-${field.id}`} id={`custom-field-${field.id}`} value={session.customFieldValues[field.id] ?? ""} onCommit={(value) => update("customFieldValues", { ...session.customFieldValues, [field.id]: value })} />
                         ) : (
-                          <input id={`custom-field-${field.id}`} type={field.type === "number" ? "number" : field.type} value={session.customFieldValues[field.id] ?? ""} onChange={(event) => update("customFieldValues", { ...session.customFieldValues, [field.id]: event.target.value })} />
+                          <DeferredTextInput key={`${session.id}-${field.id}`} id={`custom-field-${field.id}`} type={field.type === "number" ? "number" : field.type} value={session.customFieldValues[field.id] ?? ""} onCommit={(value) => update("customFieldValues", { ...session.customFieldValues, [field.id]: value })} />
                         )}
                       </div>
                     ))}
@@ -1083,11 +1085,12 @@ export const SessionEditor = ({
               <summary>{session.captureMode === "voice-note" ? "Live transcript" : "Transcript"}</summary>
               <div className="workspace-disclosure-body">
                 <div className="field field-wide">
-                  <textarea
+                  <DeferredTextArea
+                    key={`${session.id}-live-transcript-expanded`}
                     className="editor-textarea editor-textarea-secondary"
                     id="session-transcript"
                     value={session.liveTranscript}
-                    onChange={(event) => update("liveTranscript", event.target.value)}
+                    onCommit={(liveTranscript) => update("liveTranscript", liveTranscript)}
                     placeholder={session.captureMode === "voice-note" ? "Dictation appears here while recording..." : "Transcript text will appear here."}
                   />
                 </div>
@@ -1099,11 +1102,12 @@ export const SessionEditor = ({
             <summary>Transcript</summary>
             <div className="workspace-disclosure-body">
               <div className="field field-wide">
-                <textarea
+                <DeferredTextArea
+                  key={`${session.id}-uploaded-transcript-expanded`}
                   className="editor-textarea editor-textarea-secondary"
                   id="session-uploaded-transcript"
                   value={session.uploadedTranscript}
-                  onChange={(event) => update("uploadedTranscript", event.target.value)}
+                  onCommit={(uploadedTranscript) => update("uploadedTranscript", uploadedTranscript)}
                   placeholder="Paste a transcript here, or upload one from a file."
                 />
               </div>
@@ -1146,7 +1150,7 @@ export const SessionEditor = ({
           <div className="workspace-disclosure-body form-grid">
             <div className="field field-wide">
               <label htmlFor="session-title">{titleField?.label || "Title"}</label>
-              <input className={isMinimal ? "minimal-title-input" : undefined} id="session-title" value={session.title} onChange={(event) => update("title", event.target.value)} placeholder={session.captureMode === "meeting-note" ? "Weekly project meeting" : session.captureMode === "voice-note" ? "Voice memo" : "Quick note title"} />
+              <DeferredTextInput key={`${session.id}-title`} className={isMinimal ? "minimal-title-input" : undefined} id="session-title" value={session.title} onCommit={(title) => update("title", title)} placeholder={session.captureMode === "meeting-note" ? "Weekly project meeting" : session.captureMode === "voice-note" ? "Voice memo" : "Quick note title"} />
             </div>
             <div className={`field${isMinimal ? " capture-meta-field" : ""}`}>
               <label htmlFor="template-select">Template</label>
@@ -1300,14 +1304,14 @@ export const SessionEditor = ({
           <details className="field field-wide workspace-disclosure">
             <summary>Highlights and custom fields</summary>
             <div className="workspace-disclosure-body form-grid">
-              {showQuickHighlights ? <div className="field field-wide"><label htmlFor="quick-highlights">Highlights</label><textarea id="quick-highlights" value={session.quickHighlights} onChange={(event) => update("quickHighlights", event.target.value)} placeholder="Short key points, names, or topics to emphasize in the final output." /></div> : null}
+              {showQuickHighlights ? <div className="field field-wide"><label htmlFor="quick-highlights">Highlights</label><DeferredTextArea key={`${session.id}-highlights`} id="quick-highlights" value={session.quickHighlights} onCommit={(quickHighlights) => update("quickHighlights", quickHighlights)} placeholder="Short key points, names, or topics to emphasize in the final output." /></div> : null}
               {customFields.map((field) => (
                 <div key={field.id} className={field.type === "textarea" ? "field field-wide" : "field"}>
                   <label htmlFor={`custom-field-${field.id}`}>{field.label}</label>
                   {field.type === "textarea" ? (
-                    <textarea id={`custom-field-${field.id}`} value={session.customFieldValues[field.id] ?? ""} onChange={(event) => update("customFieldValues", { ...session.customFieldValues, [field.id]: event.target.value })} />
+                    <DeferredTextArea key={`${session.id}-${field.id}`} id={`custom-field-${field.id}`} value={session.customFieldValues[field.id] ?? ""} onCommit={(value) => update("customFieldValues", { ...session.customFieldValues, [field.id]: value })} />
                   ) : (
-                    <input id={`custom-field-${field.id}`} type={field.type === "number" ? "number" : field.type} value={session.customFieldValues[field.id] ?? ""} onChange={(event) => update("customFieldValues", { ...session.customFieldValues, [field.id]: event.target.value })} />
+                    <DeferredTextInput key={`${session.id}-${field.id}`} id={`custom-field-${field.id}`} type={field.type === "number" ? "number" : field.type} value={session.customFieldValues[field.id] ?? ""} onCommit={(value) => update("customFieldValues", { ...session.customFieldValues, [field.id]: value })} />
                   )}
                 </div>
               ))}
@@ -1320,7 +1324,7 @@ export const SessionEditor = ({
             <summary>{session.captureMode === "voice-note" ? "Live transcript" : "Transcript"}</summary>
             <div className="workspace-disclosure-body">
               <div className="field field-wide">
-                <textarea className={`editor-textarea${isMinimal ? " editor-textarea-secondary" : ""}`} id="session-transcript" value={session.liveTranscript} onChange={(event) => update("liveTranscript", event.target.value)} placeholder={session.captureMode === "meeting-note" ? "Meeting transcript text will land here." : "Dictation and transcript text will land here."} />
+                <DeferredTextArea key={`${session.id}-live-transcript`} className={`editor-textarea${isMinimal ? " editor-textarea-secondary" : ""}`} id="session-transcript" value={session.liveTranscript} onCommit={(liveTranscript) => update("liveTranscript", liveTranscript)} placeholder={session.captureMode === "meeting-note" ? "Meeting transcript text will land here." : "Dictation and transcript text will land here."} />
               </div>
             </div>
           </details>
@@ -1331,7 +1335,7 @@ export const SessionEditor = ({
             <summary>Uploaded transcript</summary>
             <div className="workspace-disclosure-body">
               <div className="field field-wide">
-                <textarea className={`editor-textarea${isMinimal ? " editor-textarea-secondary" : ""}`} id="session-uploaded-transcript" value={session.uploadedTranscript} onChange={(event) => update("uploadedTranscript", event.target.value)} placeholder="Imported transcript text will appear here." />
+                <DeferredTextArea key={`${session.id}-uploaded-transcript`} className={`editor-textarea${isMinimal ? " editor-textarea-secondary" : ""}`} id="session-uploaded-transcript" value={session.uploadedTranscript} onCommit={(uploadedTranscript) => update("uploadedTranscript", uploadedTranscript)} placeholder="Imported transcript text will appear here." />
               </div>
             </div>
           </details>

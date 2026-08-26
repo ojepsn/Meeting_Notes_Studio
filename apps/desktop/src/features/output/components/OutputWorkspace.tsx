@@ -2,6 +2,7 @@ import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { AttachmentImagePreview } from "../../../components/AttachmentImagePreview";
 import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
+import { DeferredTextArea, DeferredTextInput } from "../../../components/DeferredTextInput";
 import { DateInput } from "../../../components/DateInput";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { buildHtmlMarkup, buildStructuredOutput } from "../../../lib/export/exportService";
@@ -656,11 +657,12 @@ export const OutputWorkspace = ({
 
                   <label className={`field config-field${session.transcribeOnly ? " is-disabled" : ""}`}>
                     <span className="field-label">Additional LLM instructions</span>
-                    <textarea
+                    <DeferredTextArea
+                      key={`${session.id}-additional-instructions`}
                       rows={4}
                       value={session.additionalInstructions}
                       disabled={session.transcribeOnly}
-                      onChange={(event) => onChange({ ...session, additionalInstructions: event.target.value })}
+                      onCommit={(additionalInstructions) => onChange({ ...session, additionalInstructions })}
                       placeholder="Example: Focus more on risks and decisions, and exclude implementation details."
                     />
                   </label>
@@ -737,11 +739,12 @@ export const OutputWorkspace = ({
                 <div className="workspace-disclosure-body form-grid">
                   <div className="field field-wide">
                     <label htmlFor="output-title">Title</label>
-                    <input
+                    <DeferredTextInput
+                      key={`${session.id}-output-title`}
                       className="minimal-title-input"
                       id="output-title"
                       value={session.title}
-                      onChange={(event) => onChange({ ...session, title: event.target.value })}
+                      onCommit={(title) => onChange({ ...session, title })}
                       placeholder={isMeetingNote ? "Weekly project meeting" : "Note title"}
                     />
                   </div>
@@ -1211,11 +1214,12 @@ export const OutputWorkspace = ({
           <div className="workspace-disclosure-body form-grid">
           <div className={`field field-wide${isMinimal ? " capture-title-field-minimal" : ""}`}>
             <label htmlFor="output-title">Title</label>
-            <input
+            <DeferredTextInput
+              key={`${session.id}-output-title-standard`}
               className={isMinimal ? "minimal-title-input" : undefined}
               id="output-title"
               value={session.title}
-              onChange={(event) => onChange({ ...session, title: event.target.value })}
+              onCommit={(title) => onChange({ ...session, title })}
               placeholder={isMeetingNote ? "Weekly project meeting" : "Note title"}
             />
           </div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, SyntheticEvent } from "react";
 import type { ActivityRecord, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistRecurrenceRecord, ChecklistTemplateRecord, LocalAppSettings, TaskRecord, TimeLogRecord, TodoPriority } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
+import { DeferredTextInput } from "../../../components/DeferredTextInput";
 import { PeoplePicker } from "../../../components/PeoplePicker";
 import { TokenPicker } from "../../../components/TokenPicker";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
@@ -913,14 +914,15 @@ export const TodosWorkspace = ({
                               }}
                             />
                             <div className="todos-dense-title-copy">
-                              <input
+                              <DeferredTextInput
+                                key={`${todo.id}-description`}
                                 className="todos-inline-title-input"
                                 aria-label="Task title"
                                 value={todo.description}
                                 onClick={stopTableEditPropagation}
                                 onDoubleClick={stopTableEditPropagation}
                                 onKeyDown={stopTableEditPropagation}
-                                onChange={(event) => saveTodoPatch(todo, { description: event.target.value })}
+                                onCommit={(description) => saveTodoPatch(todo, { description })}
                                 placeholder="Untitled task"
                               />
                               <span>{running ? `Running • ${elapsedLabel}` : totalMinutes ? formatTrackedMinutes(totalMinutes) : "No time logged"}</span>
@@ -928,38 +930,41 @@ export const TodosWorkspace = ({
                           </div>
                         </td>
                         <td>
-                          <input
+                          <DeferredTextInput
+                            key={`${todo.id}-domain`}
                             className="todos-inline-cell-input"
                             aria-label="Task domain"
                             value={todo.domain}
                             onClick={stopTableEditPropagation}
                             onDoubleClick={stopTableEditPropagation}
                             onKeyDown={stopTableEditPropagation}
-                            onChange={(event) => saveTodoPatch(todo, { domain: event.target.value })}
+                            onCommit={(domain) => saveTodoPatch(todo, { domain })}
                             placeholder="Domain"
                           />
                         </td>
                         <td>
-                          <input
+                          <DeferredTextInput
+                            key={`${todo.id}-project`}
                             className="todos-inline-cell-input"
                             aria-label="Task project"
                             value={todo.project}
                             onClick={stopTableEditPropagation}
                             onDoubleClick={stopTableEditPropagation}
                             onKeyDown={stopTableEditPropagation}
-                            onChange={(event) => saveTodoPatch(todo, { project: event.target.value })}
+                            onCommit={(project) => saveTodoPatch(todo, { project })}
                             placeholder="Project"
                           />
                         </td>
                         <td>
-                          <input
+                          <DeferredTextInput
+                            key={`${todo.id}-activity`}
                             className="todos-inline-cell-input"
                             aria-label="Task activity"
                             value={activityLabel}
                             onClick={stopTableEditPropagation}
                             onDoubleClick={stopTableEditPropagation}
                             onKeyDown={stopTableEditPropagation}
-                            onChange={(event) => saveTodoPatch(todo, { activity: event.target.value, activityId: "" })}
+                            onCommit={(activity) => saveTodoPatch(todo, { activity, activityId: "" })}
                             placeholder="Activity"
                           />
                         </td>
@@ -989,14 +994,15 @@ export const TodosWorkspace = ({
                         </td>
                         <td>
                           <div className="todos-dense-details-cell">
-                            <input
+                            <DeferredTextInput
+                              key={`${todo.id}-details`}
                               className="todos-inline-cell-input"
                               aria-label="Task details"
                               value={detailsText}
                               onClick={stopTableEditPropagation}
                               onDoubleClick={stopTableEditPropagation}
                               onKeyDown={stopTableEditPropagation}
-                              onChange={(event) => saveTodoPatch(todo, { detailsHtml: textToDetailsHtml(event.target.value) })}
+                              onCommit={(details) => saveTodoPatch(todo, { detailsHtml: textToDetailsHtml(details) })}
                               placeholder="No details"
                             />
                           </div>
