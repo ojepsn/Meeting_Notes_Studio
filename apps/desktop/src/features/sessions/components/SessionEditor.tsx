@@ -12,6 +12,7 @@ import { createAttachmentPreviewUrl } from "../../../lib/files/attachmentStore";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type AttachmentRecord, type CaptureMode, type CaptureWorkspaceDensity, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
+import { applyRichTextFontSize, resolveSafeRichTextHref, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
 
 const richTextToPlainText = (value: string) => {
   if (!value) return "";
@@ -37,6 +38,7 @@ const normalizeFontFamily = (value: string) => value.replace(/["']/g, "").replac
 const ALLOWED_RICH_TEXT_FONTS = new Set(
   RICH_TEXT_FONT_OPTIONS.map((option) => normalizeFontFamily(option.value)).filter(Boolean),
 );
+const ALLOWED_RICH_TEXT_FONT_SIZES = new Set<string>(RICH_TEXT_FONT_SIZE_OPTIONS.map((option) => option.cssValue));
 
 const resolveAllowedRichTextFont = (value: string) => {
   const normalized = normalizeFontFamily(value);
@@ -70,17 +72,21 @@ const normalizeRichTextHtml = (value: string) => {
   wrapper.innerHTML = value || "";
   wrapper.querySelectorAll("font").forEach((fontElement) => {
     const face = fontElement.getAttribute("face") ?? "";
+    const fontSize = RICH_TEXT_FONT_SIZE_OPTIONS.find((option) => option.commandValue === fontElement.getAttribute("size"))?.cssValue;
     const span = document.createElement("span");
     const allowedFont = resolveAllowedRichTextFont(face);
     if (allowedFont) {
       span.style.fontFamily = allowedFont;
+    }
+    if (fontSize) {
+      span.style.fontSize = fontSize;
     }
     while (fontElement.firstChild) {
       span.appendChild(fontElement.firstChild);
     }
     fontElement.replaceWith(span);
   });
-  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "FIGURE", "FIGCAPTION"]);
+  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A", "FIGURE", "FIGCAPTION"]);
   wrapper.querySelectorAll("*").forEach((element) => {
     const inlineAttachmentId = element.getAttribute("data-notesmith-attachment-id");
     if (!allowedTags.has(element.tagName)) {
@@ -92,6 +98,8 @@ const normalizeRichTextHtml = (value: string) => {
       return;
     }
     const fontFamily = element instanceof HTMLElement ? element.style.fontFamily : "";
+    const fontSize = element instanceof HTMLElement ? element.style.fontSize : "";
+    const href = element.tagName === "A" ? resolveSafeRichTextHref(element.getAttribute("href") ?? "") : "";
     [...element.attributes].forEach((attribute) => element.removeAttribute(attribute.name));
     if (element.tagName === "FIGURE" && inlineAttachmentId) {
       element.setAttribute("data-notesmith-attachment-id", inlineAttachmentId);
@@ -103,6 +111,14 @@ const normalizeRichTextHtml = (value: string) => {
     const allowedFont = resolveAllowedRichTextFont(fontFamily);
     if (element instanceof HTMLElement && allowedFont) {
       element.style.fontFamily = allowedFont;
+    }
+    if (element instanceof HTMLElement && ALLOWED_RICH_TEXT_FONT_SIZES.has(fontSize)) {
+      element.style.fontSize = fontSize;
+    }
+    if (element.tagName === "A" && href) {
+      element.setAttribute("href", href);
+      element.setAttribute("target", "_blank");
+      element.setAttribute("rel", "noopener noreferrer");
     }
   });
   const normalized = wrapper.innerHTML.replace(/<div>/gi, "<p>").replace(/<\/div>/gi, "</p>").trim();
@@ -646,6 +662,16 @@ export const SessionEditor = ({
     updater(editorRef.current.innerHTML);
   };
 
+  const applyRichTextSize = (
+    editorRef: { current: HTMLDivElement | null },
+    updater: (html: string) => void,
+    commandValue: string,
+  ) => {
+    if (!editorRef.current || !commandValue) return;
+    applyRichTextFontSize(editorRef.current, commandValue);
+    updater(editorRef.current.innerHTML);
+  };
+
   const applyAgendaCommand = (action: (typeof RICH_TEXT_COMMANDS)[number]) => {
     applyRichTextCommand(agendaEditorRef, updateAgenda, action);
   };
@@ -654,12 +680,20 @@ export const SessionEditor = ({
     applyRichTextFont(agendaEditorRef, updateAgenda, fontFamily);
   };
 
+  const applyAgendaFontSize = (commandValue: string) => {
+    applyRichTextSize(agendaEditorRef, updateAgenda, commandValue);
+  };
+
   const applyManualNotesCommand = (action: (typeof RICH_TEXT_COMMANDS)[number]) => {
     applyRichTextCommand(manualNotesEditorRef, updateManualNotes, action);
   };
 
   const applyManualNotesFont = (fontFamily: string) => {
     applyRichTextFont(manualNotesEditorRef, updateManualNotes, fontFamily);
+  };
+
+  const applyManualNotesFontSize = (commandValue: string) => {
+    applyRichTextSize(manualNotesEditorRef, updateManualNotes, commandValue);
   };
 
   useEffect(() => {
@@ -686,6 +720,7 @@ export const SessionEditor = ({
     buttonClassName: string,
     onCommand: (action: (typeof RICH_TEXT_COMMANDS)[number]) => void,
     onFontChange: (fontFamily: string) => void,
+    onFontSizeChange: (commandValue: string) => void,
     toolbarState: RichTextToolbarState,
   ) => (
     <div className="rich-text-toolbar">
@@ -700,6 +735,18 @@ export const SessionEditor = ({
             >
               {option.label}
             </option>
+          ))}
+        </select>
+      </label>
+      <label className="rich-text-font-control" htmlFor={`${idPrefix}-font-size`}>
+        <span>Size</span>
+        <select id={`${idPrefix}-font-size`} defaultValue="" onChange={(event) => {
+          onFontSizeChange(event.target.value);
+          event.target.value = "";
+        }}>
+          <option value="">Choose</option>
+          {RICH_TEXT_FONT_SIZE_OPTIONS.map((option) => (
+            <option key={option.commandValue} value={option.commandValue}>{option.label}</option>
           ))}
         </select>
       </label>
@@ -933,7 +980,7 @@ export const SessionEditor = ({
                     <details className="field field-wide workspace-disclosure">
                       <summary>{agendaField.label}</summary>
                       <div className="workspace-disclosure-body">
-                        {renderRichTextToolbar("session-agenda-pwa", "shell-button", applyAgendaCommand, applyAgendaFont, agendaToolbarState)}
+                        {renderRichTextToolbar("session-agenda-pwa", "shell-button", applyAgendaCommand, applyAgendaFont, applyAgendaFontSize, agendaToolbarState)}
                         <div
                           id="session-agenda"
                           ref={agendaEditorRef}
@@ -1059,7 +1106,7 @@ export const SessionEditor = ({
             <summary>Manual notes</summary>
             <div className="workspace-disclosure-body">
               <div className="field field-wide">
-                {renderRichTextToolbar("manual-notes-pwa", "shell-button", applyManualNotesCommand, applyManualNotesFont, manualNotesToolbarState)}
+                {renderRichTextToolbar("manual-notes-pwa", "shell-button", applyManualNotesCommand, applyManualNotesFont, applyManualNotesFontSize, manualNotesToolbarState)}
                 <div
                   className="rich-text-surface manual-notes-rich-text-surface editor-textarea-primary"
                   id="manual-notes"
@@ -1165,7 +1212,7 @@ export const SessionEditor = ({
               <details className="field field-wide workspace-disclosure">
                 <summary>{agendaField.label}</summary>
                 <div className="workspace-disclosure-body">
-                  {renderRichTextToolbar("session-agenda", "small-button", applyAgendaCommand, applyAgendaFont, agendaToolbarState)}
+                  {renderRichTextToolbar("session-agenda", "small-button", applyAgendaCommand, applyAgendaFont, applyAgendaFontSize, agendaToolbarState)}
                   <div
                     id="session-agenda"
                     ref={agendaEditorRef}
@@ -1281,7 +1328,7 @@ export const SessionEditor = ({
 
         <div className="field field-wide">
           <label htmlFor="manual-notes">{modeMeta.primaryFieldLabel}</label>
-          {renderRichTextToolbar("manual-notes", "small-button", applyManualNotesCommand, applyManualNotesFont, manualNotesToolbarState)}
+          {renderRichTextToolbar("manual-notes", "small-button", applyManualNotesCommand, applyManualNotesFont, applyManualNotesFontSize, manualNotesToolbarState)}
           <div
             className={`rich-text-surface manual-notes-rich-text-surface${isMinimal ? " editor-textarea-primary" : ""}`}
             id="manual-notes"

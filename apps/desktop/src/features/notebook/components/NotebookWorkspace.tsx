@@ -10,11 +10,16 @@ import { openDetachedTodosWindow } from "../todosWindowBridge";
 import { isTauriRuntime } from "../../../lib/storage/environment";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
+import { applyRichTextFont, applyRichTextFontSize, normalizeRichTextInlineFormatting, preserveAllowedRichTextStyles, RICH_TEXT_FONT_OPTIONS, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
 
 const NOTEBOOK_BLOCK_COMMANDS = [
   { id: "body", label: "Body", value: "P" },
   { id: "h1", label: "H1", value: "H1" },
   { id: "h2", label: "H2", value: "H2" },
+  { id: "h3", label: "H3", value: "H3" },
+  { id: "h4", label: "H4", value: "H4" },
+  { id: "h5", label: "H5", value: "H5" },
+  { id: "h6", label: "H6", value: "H6" },
 ] as const;
 
 type NotebookTodosMode = "closed" | "minimized" | "standard" | "maximized";
@@ -86,7 +91,8 @@ export const preserveNotebookRowBreaks = (value: string) =>
 const normalizeNotebookHtml = (value: string) => {
   const wrapper = document.createElement("div");
   wrapper.innerHTML = preserveNotebookRowBreaks(value || "");
-  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2"]);
+  normalizeRichTextInlineFormatting(wrapper);
+  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A"]);
   wrapper.querySelectorAll("*").forEach((element) => {
     if (!allowedTags.has(element.tagName)) {
       const fragment = document.createDocumentFragment();
@@ -94,7 +100,7 @@ const normalizeNotebookHtml = (value: string) => {
       element.replaceWith(fragment);
       return;
     }
-    Array.from(element.attributes).forEach((attribute) => element.removeAttribute(attribute.name));
+    preserveAllowedRichTextStyles(element);
   });
   return wrapper.innerHTML.trim();
 };
@@ -689,6 +695,30 @@ export const NotebookWorkspace = ({
         </div>
 
         <div className="notebook-rich-toolbar" aria-label="Notebook formatting">
+          <select
+            aria-label="Font"
+            defaultValue=""
+            onChange={(event) => {
+              if (editorRef.current && event.target.value) applyRichTextFont(editorRef.current, event.target.value);
+              if (editorRef.current) deferredManualNotes.commitNow(editorRef.current.innerHTML);
+              event.target.value = "";
+            }}
+          >
+            <option value="">Font</option>
+            {RICH_TEXT_FONT_OPTIONS.map((option) => <option key={option.label} value={option.value}>{option.label}</option>)}
+          </select>
+          <select
+            aria-label="Font size"
+            defaultValue=""
+            onChange={(event) => {
+              if (editorRef.current && event.target.value) applyRichTextFontSize(editorRef.current, event.target.value);
+              if (editorRef.current) deferredManualNotes.commitNow(editorRef.current.innerHTML);
+              event.target.value = "";
+            }}
+          >
+            <option value="">Size</option>
+            {RICH_TEXT_FONT_SIZE_OPTIONS.map((option) => <option key={option.commandValue} value={option.commandValue}>{option.label}</option>)}
+          </select>
           <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("bold")}>
             Bold
           </button>

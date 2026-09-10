@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { RichTextCommandRecord, RichTextSpellCheckMode } from "@notesmith/domain";
+import { normalizePastedRichTextHtml, resolveSafeRichTextHref } from "./richTextFormatting";
+import { openDesktopUrl } from "../../lib/storage/desktopStorage";
 
 export interface RichTextCommand {
   trigger: string;
@@ -111,6 +113,30 @@ export const getRichTextSpellCheckAttributes = (mode: RichTextSpellCheckMode | u
   lang: mode === "en" || mode === "sv" ? mode : "",
 });
 
+export const resolveRichTextListTabCommand = ({
+  key,
+  shiftKey,
+  isInsideListItem,
+  hasCommandQuery,
+}: {
+  key: string;
+  shiftKey: boolean;
+  isInsideListItem: boolean;
+  hasCommandQuery: boolean;
+}) => {
+  if (key !== "Tab" || !isInsideListItem || hasCommandQuery) return null;
+  return shiftKey ? "outdent" : "indent";
+};
+
+const isSelectionInsideListItem = (editor: HTMLDivElement) => {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return false;
+  const node = selection.getRangeAt(0).startContainer;
+  const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
+  const listItem = element?.closest("li");
+  return Boolean(listItem && editor.contains(listItem));
+};
+
 const getCommandQuery = (editor: HTMLDivElement) => {
   const selection = window.getSelection();
   if (!selection?.rangeCount || !selection.isCollapsed) return null;
@@ -214,6 +240,19 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextComm
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const match = getCommandQuery(editor);
+      const listCommand = resolveRichTextListTabCommand({
+        key: event.key,
+        shiftKey: event.shiftKey,
+        isInsideListItem: isSelectionInsideListItem(editor),
+        hasCommandQuery: Boolean(match),
+      });
+      if (listCommand) {
+        event.preventDefault();
+        document.execCommand(listCommand);
+        setActiveQuery(null);
+        onContentChangeRef.current(editor.innerHTML);
+        return;
+      }
       if (!match) return;
       const matching = commands
         .filter((command) => richTextCommandMatchesQuery(command, match.query))
@@ -249,6 +288,39 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextComm
     };
 
     const handleInput = () => refreshQuery();
+    const handlePaste = (event: ClipboardEvent) => {
+      if (Array.from(event.clipboardData?.items ?? []).some((item) => item.type.startsWith("image/"))) return;
+      const html = event.clipboardData?.getData("text/html") ?? "";
+      const plainText = event.clipboardData?.getData("text/plain") ?? "";
+      if (!html && !plainText) return;
+      event.preventDefault();
+      if (html) {
+        document.execCommand("insertHTML", false, normalizePastedRichTextHtml(html));
+      } else {
+        const normalizedText = plainText.replace(/\r\n?/g, "\n");
+        const href = resolveSafeRichTextHref(normalizedText);
+        if (href && normalizedText.trim() === normalizedText) {
+          const link = document.createElement("a");
+          link.href = href;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = normalizedText;
+          document.execCommand("insertHTML", false, link.outerHTML);
+        } else {
+          document.execCommand("insertText", false, normalizedText);
+        }
+      }
+      setActiveQuery(null);
+      onContentChangeRef.current(editor.innerHTML);
+    };
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (!target || !editor.contains(target)) return;
+      const href = resolveSafeRichTextHref(target.getAttribute("href") ?? "");
+      if (!href) return;
+      event.preventDefault();
+      void openDesktopUrl(href);
+    };
     const handleBlur = () => window.setTimeout(() => setActiveQuery(null), 120);
     const handleMenuCommand = (event: Event) => {
       const trigger = (event as CustomEvent<string>).detail;
@@ -257,11 +329,15 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextComm
     };
     editor.addEventListener("input", handleInput);
     editor.addEventListener("keydown", handleKeyDown);
+    editor.addEventListener("paste", handlePaste);
+    editor.addEventListener("click", handleClick);
     editor.addEventListener("blur", handleBlur);
     editor.addEventListener("notesmith-rich-text-command", handleMenuCommand);
     return () => {
       editor.removeEventListener("input", handleInput);
       editor.removeEventListener("keydown", handleKeyDown);
+      editor.removeEventListener("paste", handlePaste);
+      editor.removeEventListener("click", handleClick);
       editor.removeEventListener("blur", handleBlur);
       editor.removeEventListener("notesmith-rich-text-command", handleMenuCommand);
     };

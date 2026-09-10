@@ -1062,9 +1062,26 @@ select {
 
 .notebook-rich-editor h1,
 .notebook-rich-editor h2,
+.notebook-rich-editor h3,
+.notebook-rich-editor h4,
+.notebook-rich-editor h5,
+.notebook-rich-editor h6,
 .notebook-rich-editor p {
   margin-top: 0;
 }
+
+.notebook-rich-editor p,
+.todo-details-rich-text p {
+  min-height: 1lh;
+  margin-bottom: 0;
+}
+
+.notebook-rich-editor h1 { font-size: 1.7rem; }
+.notebook-rich-editor h2 { font-size: 1.5rem; }
+.notebook-rich-editor h3 { font-size: 1.3rem; }
+.notebook-rich-editor h4 { font-size: 1.15rem; }
+.notebook-rich-editor h5 { font-size: 1.05rem; }
+.notebook-rich-editor h6 { font-size: 0.95rem; }
 
 .notebook-tools-pane {
   display: flex;
@@ -1928,6 +1945,18 @@ select {
   cursor: pointer;
 }
 
+.notebook-rich-toolbar select,
+.todo-details-toolbar select {
+  min-height: 30px;
+  padding: 0.28rem 0.4rem;
+  border: 1px solid var(--app-border);
+  border-radius: 9px;
+  background: var(--app-surface-soft);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 0.72rem;
+}
+
 .todo-details-rich-text {
   min-height: 150px;
   padding: 0.65rem;
@@ -1942,6 +1971,13 @@ select {
   color: var(--app-muted);
   pointer-events: none;
 }
+
+.todo-details-rich-text h1 { font-size: 1.45rem; }
+.todo-details-rich-text h2 { font-size: 1.3rem; }
+.todo-details-rich-text h3 { font-size: 1.18rem; }
+.todo-details-rich-text h4 { font-size: 1.08rem; }
+.todo-details-rich-text h5 { font-size: 1rem; }
+.todo-details-rich-text h6 { font-size: 0.92rem; }
 
 .todo-details-editor-compact .todo-details-rich-text {
   min-height: 92px;
@@ -4420,6 +4456,50 @@ select {
 
 .output-rich-text-surface li + li {
   margin-top: 0.22rem;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface,
+  .output-rich-text-surface
+) ol {
+  counter-reset: notesmith-ordered-item;
+  padding-inline-start: 1.8rem;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface,
+  .output-rich-text-surface
+) ol > li {
+  counter-increment: notesmith-ordered-item;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface,
+  .output-rich-text-surface
+) ol > li::marker {
+  content: counters(notesmith-ordered-item, ".") ". ";
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface,
+  .output-rich-text-surface
+) a {
+  color: var(--app-accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.14em;
+  cursor: pointer;
 }
 
 .output-rich-text-surface h1,

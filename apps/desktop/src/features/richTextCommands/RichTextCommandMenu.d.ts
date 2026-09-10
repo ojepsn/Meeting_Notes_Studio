@@ -27,6 +27,12 @@ export declare const getRichTextSpellCheckAttributes: (mode: RichTextSpellCheckM
     spellCheck: boolean;
     lang: string;
 };
+export declare const resolveRichTextListTabCommand: ({ key, shiftKey, isInsideListItem, hasCommandQuery, }: {
+    key: string;
+    shiftKey: boolean;
+    isInsideListItem: boolean;
+    hasCommandQuery: boolean;
+}) => "outdent" | "indent" | null;
 export declare const RichTextCommandProvider: ({ customCommands, spellCheckMode, children }: RichTextCommandProviderProps) => import("react/jsx-runtime").JSX.Element;
 export declare const RichTextCommandMenu: ({ editorRef, onContentChange }: RichTextCommandMenuProps) => import("react/jsx-runtime").JSX.Element | null;
 export {};

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildRichTextCommands, findRichTextCommandQuery, getRichTextSpellCheckAttributes, resolveRichTextCommandValue, richTextCommandMatchesQuery } from "./RichTextCommandMenu";
+import { buildRichTextCommands, findRichTextCommandQuery, getRichTextSpellCheckAttributes, resolveRichTextCommandValue, resolveRichTextListTabCommand, richTextCommandMatchesQuery } from "./RichTextCommandMenu";
+import { resolveSafeRichTextHref } from "./richTextFormatting";
 describe("rich-text commands", () => {
     const now = new Date(2026, 7, 10, 9, 5);
     it("resolves system-local date and 24-hour time placeholders", () => {
@@ -36,5 +37,19 @@ describe("rich-text commands", () => {
         expect(getRichTextSpellCheckAttributes("auto")).toEqual({ spellCheck: true, lang: "" });
         expect(getRichTextSpellCheckAttributes("en")).toEqual({ spellCheck: true, lang: "en" });
         expect(getRichTextSpellCheckAttributes("sv")).toEqual({ spellCheck: true, lang: "sv" });
+    });
+    it("uses Tab for list nesting without taking over normal focus or command-menu Tab", () => {
+        expect(resolveRichTextListTabCommand({ key: "Tab", shiftKey: false, isInsideListItem: true, hasCommandQuery: false })).toBe("indent");
+        expect(resolveRichTextListTabCommand({ key: "Tab", shiftKey: true, isInsideListItem: true, hasCommandQuery: false })).toBe("outdent");
+        expect(resolveRichTextListTabCommand({ key: "Tab", shiftKey: false, isInsideListItem: false, hasCommandQuery: false })).toBeNull();
+        expect(resolveRichTextListTabCommand({ key: "Tab", shiftKey: false, isInsideListItem: true, hasCommandQuery: true })).toBeNull();
+        expect(resolveRichTextListTabCommand({ key: "Enter", shiftKey: false, isInsideListItem: true, hasCommandQuery: false })).toBeNull();
+    });
+    it("allows normal web and email links while rejecting executable URL schemes", () => {
+        expect(resolveSafeRichTextHref("https://example.com/path")).toBe("https://example.com/path");
+        expect(resolveSafeRichTextHref("www.example.com")).toBe("https://www.example.com/");
+        expect(resolveSafeRichTextHref("mailto:person@example.com")).toBe("mailto:person@example.com");
+        expect(resolveSafeRichTextHref("javascript:alert(1)")).toBe("");
+        expect(resolveSafeRichTextHref("file:///C:/private.txt")).toBe("");
     });
 });
