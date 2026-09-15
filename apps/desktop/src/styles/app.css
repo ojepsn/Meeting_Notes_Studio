@@ -4534,6 +4534,27 @@ select {
   font-size: calc(var(--output-preview-heading-size, 13pt) * 0.84);
 }
 
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface,
+  .output-rich-text-surface
+) {
+  line-height: 1;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface,
+  .output-rich-text-surface
+) :is(p, div, ul, ol, h1, h2, h3, h4, h5, h6) {
+  margin-block: 0;
+  line-height: 1;
+}
+
 .output-rich-text-surface-minimal {
   min-height: 520px;
 }
