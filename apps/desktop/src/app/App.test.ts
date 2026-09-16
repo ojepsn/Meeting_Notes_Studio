@@ -10,4 +10,11 @@ describe("desktop notes suggestion flow", () => {
     expect(appSource).toContain("Manual notes were transferred to Output without AI generation.");
     expect(appSource).toContain("const ruleObservations = session && snapshot");
   });
+
+  it("keeps the Todos edge launcher available outside Notebook", () => {
+    expect(appSource).toContain('activeWorkspace !== "notebook"');
+    expect(appSource).toContain('className="workspace-todos-edge-tab"');
+    expect(appSource).toContain("openDetachedTodosWindow()");
+    expect(appSource).toContain('setActiveWorkspace("todos")');
+  });
 });

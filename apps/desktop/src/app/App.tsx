@@ -19,6 +19,7 @@ import { AssistantWorkspace } from "../features/assistant/components/AssistantWo
 import { NotebookWorkspace } from "../features/notebook/components/NotebookWorkspace";
 import {
   getRunningTodoIds,
+  openDetachedTodosWindow,
   TODOS_COMMAND_EVENT,
   sendTodosSnapshot,
   type TodosWindowCommand,
@@ -2763,6 +2764,19 @@ export const App = () => {
       setStatusNote(`${WORKSPACE_ITEMS.find((item) => item.id === workspaceId)?.label ?? "Workspace"} is planned next. The shell already keeps its place so the app can grow without changing navigation patterns.`);
     }
   };
+
+  const handleOpenWorkspaceTodos = () => {
+    if (!isTauriRuntime()) {
+      setActiveWorkspace("todos");
+      return;
+    }
+
+    void openDetachedTodosWindow().catch((error) => {
+      console.error("Could not open detached Todos window", error);
+      setStatusNote("The Todos window could not be opened. Please try again.");
+    });
+  };
+
   const clearRequestedFilters = () => {
     setRequestedTodoId(null);
     setRequestedTodoDomain(null);
@@ -4235,6 +4249,19 @@ export const App = () => {
       </aside>
 
       <div className="workspace-shell">
+        {activeWorkspace !== "notebook" ? (
+          <button
+            className="workspace-todos-edge-tab"
+            type="button"
+            data-active={activeWorkspace === "todos"}
+            aria-label="Open Todos"
+            title="Open Todos"
+            onClick={handleOpenWorkspaceTodos}
+          >
+            <span>&lt;</span>
+            <strong>Todos</strong>
+          </button>
+        ) : null}
         <header className={`topbar app-header${activeWorkspace === "notes" ? " app-header-notes-pwa" : ""}${activeWorkspace === "notebook" ? " app-header-compact" : ""}${activeWorkspace === "calendar" ? " app-header-compact app-header-calendar-home" : ""}${activeWorkspace === "calendar" && isCalendarWorkspaceFullScreen ? " app-header-compact" : ""}`}>
           <div className="topbar-copy">
             {activeWorkspace === "notes" ? (
