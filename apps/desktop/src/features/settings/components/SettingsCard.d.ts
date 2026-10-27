@@ -36,18 +36,15 @@ interface SettingsCardProps {
     transcriptionModelOptions: SelectModelOption[];
     modelPricingStatus: string;
     isRefreshingModelPricing: boolean;
-    outlookConnected: boolean | null;
-    outlookDeviceLogin?: {
-        userCode: string;
-        verificationUri: string;
-        message: string;
+    calendarImportMcpReady: {
+        endpointUrl: string;
+        toolName: string;
     } | null;
-    outlookStatusNote: string;
-    isOutlookBusy: boolean;
-    onConnectOutlook: () => Promise<void>;
-    onCompleteOutlookConnection: () => Promise<void>;
-    onDisconnectOutlook: () => Promise<void>;
-    onSyncOutlook: () => Promise<void>;
+    calendarImportMcpStatusNote: string;
+    isCalendarImportMcpBusy: boolean;
+    onStartCalendarImportMcp: () => Promise<void>;
+    onStopCalendarImportMcp: () => Promise<void>;
+    onCopyCalendarImportMcpUrl: () => Promise<void>;
 }
-export declare const SettingsCard: ({ settings, templates, initialSection, onChange, onSaveTemplate, onResetTemplates, onImportLegacy, onImportBackup, onCheckForUpdates, onInstallUpdate, onOpenManualUpdate, onOpenDataFolder, onOpenDatabaseFolder, onExportBackup, onSaveBackupAs, onRefreshModelPricing, updateStatusNote, desktopVersion, desktopBundleType, availableUpdateVersion, manualUpdateUrl, isCheckingForUpdates, isInstallingUpdate, storageInfo, latestLocalBackupInfo, aiDiagnostics, aiRequestHistory, textModelOptions, transcriptionModelOptions, modelPricingStatus, isRefreshingModelPricing, outlookConnected, outlookDeviceLogin, outlookStatusNote, isOutlookBusy, onConnectOutlook, onCompleteOutlookConnection, onDisconnectOutlook, onSyncOutlook, }: SettingsCardProps) => import("react/jsx-runtime").JSX.Element;
+export declare const SettingsCard: ({ settings, templates, initialSection, onChange, onSaveTemplate, onResetTemplates, onImportLegacy, onImportBackup, onCheckForUpdates, onInstallUpdate, onOpenManualUpdate, onOpenDataFolder, onOpenDatabaseFolder, onExportBackup, onSaveBackupAs, onRefreshModelPricing, updateStatusNote, desktopVersion, desktopBundleType, availableUpdateVersion, manualUpdateUrl, isCheckingForUpdates, isInstallingUpdate, storageInfo, latestLocalBackupInfo, aiDiagnostics, aiRequestHistory, textModelOptions, transcriptionModelOptions, modelPricingStatus, isRefreshingModelPricing, calendarImportMcpReady, calendarImportMcpStatusNote, isCalendarImportMcpBusy, onStartCalendarImportMcp, onStopCalendarImportMcp, onCopyCalendarImportMcpUrl, }: SettingsCardProps) => import("react/jsx-runtime").JSX.Element;
 export {};

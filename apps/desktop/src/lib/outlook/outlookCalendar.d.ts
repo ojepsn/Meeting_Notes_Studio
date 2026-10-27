@@ -1,23 +1,4 @@
 import type { DesktopAppSnapshot } from "@notesmith/domain";
-export interface OutlookConnectionConfig {
-    tenantId: string;
-    clientId: string;
-}
-export interface OutlookDeviceLoginChallenge {
-    deviceCode: string;
-    userCode: string;
-    verificationUri: string;
-    expiresIn: number;
-    interval: number;
-    message: string;
-}
-export interface OutlookDeviceLoginResult {
-    status: "pending" | "connected" | "expired" | "declined";
-    message: string;
-}
-export interface OutlookConnectionStatus {
-    connected: boolean;
-}
 export interface OutlookCalendarDateTime {
     dateTime: string;
     timeZone?: string;
@@ -90,21 +71,8 @@ interface ReconcileOptions {
     now?: string;
     idFactory?: () => string;
 }
-export declare const beginOutlookDeviceLogin: (config: OutlookConnectionConfig) => Promise<OutlookDeviceLoginChallenge>;
-export declare const pollOutlookDeviceLogin: (config: OutlookConnectionConfig, deviceCode: string) => Promise<OutlookDeviceLoginResult>;
-export declare const getOutlookConnectionStatus: (config: OutlookConnectionConfig) => Promise<OutlookConnectionStatus>;
-export declare const disconnectOutlookCalendar: (config: OutlookConnectionConfig) => Promise<void>;
-export declare const syncOutlookCalendar: (config: OutlookConnectionConfig, startDateTime: string, endDateTime: string, rangeKey: string) => Promise<OutlookCalendarSyncResult>;
 export declare const reconcileOutlookCalendar: (snapshot: DesktopAppSnapshot, batch: OutlookCalendarImportBatch, options?: ReconcileOptions) => {
     snapshot: DesktopAppSnapshot;
     summary: OutlookCalendarImportSummary;
 };
-export declare const buildOutlookSyncWindow: (today: Date, pastDays: number, futureDays: number) => {
-    fromDate: string;
-    toDate: string;
-    startDateTime: string;
-    endDateTime: string;
-    rangeKey: string;
-};
-export declare const buildOutlookAccountKey: (config: OutlookConnectionConfig) => string;
 export {};

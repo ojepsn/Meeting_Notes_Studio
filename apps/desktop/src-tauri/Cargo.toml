@@ -1,6 +1,6 @@
 [package]
 name = "notesmith_desktop"
-version = "0.1.192"
+version = "0.1.193"
 description = "NoteSmith local-first desktop app"
 authors = ["Ola Jeppsson"]
 edition = "2021"
@@ -15,7 +15,6 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 crc32fast = "1.5"
 flate2 = "1.1"
-keyring = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
@@ -23,3 +22,4 @@ tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-updater = "2"
+uuid = { version = "1", features = ["v4"] }

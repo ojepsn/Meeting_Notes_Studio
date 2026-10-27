@@ -14,7 +14,7 @@ use std::thread;
 use std::time::Duration;
 use tauri::Manager;
 
-mod outlook;
+mod calendar_import_mcp;
 
 fn sanitize_filename(filename: &str) -> String {
     filename
@@ -1247,6 +1247,7 @@ mod tests {
 pub fn run() {
     tauri::Builder::default()
         .manage(AgentSidecarState::default())
+        .manage(calendar_import_mcp::CalendarImportMcpState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -1273,11 +1274,10 @@ pub fn run() {
             download_url_to_path,
             load_openai_model_document,
             openai_http_request,
-            outlook::outlook_begin_device_login,
-            outlook::outlook_poll_device_login,
-            outlook::outlook_connection_status,
-            outlook::outlook_disconnect,
-            outlook::outlook_sync_calendar,
+            calendar_import_mcp::start_calendar_import_mcp,
+            calendar_import_mcp::stop_calendar_import_mcp,
+            calendar_import_mcp::get_calendar_import_mcp_status,
+            calendar_import_mcp::complete_calendar_import_mcp,
             start_agent_sidecar,
             stop_agent_sidecar,
             get_agent_sidecar_status

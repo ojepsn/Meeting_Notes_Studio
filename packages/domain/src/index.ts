@@ -369,6 +369,7 @@ export interface LocalAppSettings {
   outlookSyncPastDays?: number;
   outlookSyncFutureDays?: number;
   outlookSyncIntervalMinutes?: number;
+  chatgptCalendarImportEnabled?: boolean;
   todosShowPrivate?: boolean;
   todosShowBusiness?: boolean;
   todosShowPriorityOnly?: boolean;

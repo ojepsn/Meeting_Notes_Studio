@@ -5181,6 +5181,26 @@ select {
   color: var(--app-muted);
 }
 
+.calendar-import-endpoint {
+  display: block;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface-soft);
+  color: var(--app-ink);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.settings-instruction-list {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--app-muted);
+}
+
 .settings-compact-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

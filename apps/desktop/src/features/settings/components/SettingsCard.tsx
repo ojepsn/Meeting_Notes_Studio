@@ -62,23 +62,20 @@ interface SettingsCardProps {
   transcriptionModelOptions: SelectModelOption[];
   modelPricingStatus: string;
   isRefreshingModelPricing: boolean;
-  outlookConnected: boolean | null;
-  outlookDeviceLogin?: {
-    userCode: string;
-    verificationUri: string;
-    message: string;
+  calendarImportMcpReady: {
+    endpointUrl: string;
+    toolName: string;
   } | null;
-  outlookStatusNote: string;
-  isOutlookBusy: boolean;
-  onConnectOutlook: () => Promise<void>;
-  onCompleteOutlookConnection: () => Promise<void>;
-  onDisconnectOutlook: () => Promise<void>;
-  onSyncOutlook: () => Promise<void>;
+  calendarImportMcpStatusNote: string;
+  isCalendarImportMcpBusy: boolean;
+  onStartCalendarImportMcp: () => Promise<void>;
+  onStopCalendarImportMcp: () => Promise<void>;
+  onCopyCalendarImportMcpUrl: () => Promise<void>;
 }
 
 const SETTINGS_SECTIONS: Array<{ id: SettingsSection; label: string; description: string }> = [
   { id: "ai", label: "AI Settings", description: "Models, API key, transcription" },
-  { id: "calendar", label: "Outlook Calendar", description: "Read-only calendar synchronization" },
+  { id: "calendar", label: "ChatGPT Calendar Import", description: "One-way Outlook import for the next seven days" },
   { id: "diagnostics", label: "AI Diagnostics", description: "Metrics, cache, and recent AI history" },
   { id: "themes", label: "Themes", description: "Look and feel" },
   { id: "output", label: "Output formatting", description: "Language and output defaults" },
@@ -272,14 +269,12 @@ export const SettingsCard = ({
   transcriptionModelOptions,
   modelPricingStatus,
   isRefreshingModelPricing,
-  outlookConnected,
-  outlookDeviceLogin,
-  outlookStatusNote,
-  isOutlookBusy,
-  onConnectOutlook,
-  onCompleteOutlookConnection,
-  onDisconnectOutlook,
-  onSyncOutlook,
+  calendarImportMcpReady,
+  calendarImportMcpStatusNote,
+  isCalendarImportMcpBusy,
+  onStartCalendarImportMcp,
+  onStopCalendarImportMcp,
+  onCopyCalendarImportMcpUrl,
 }: SettingsCardProps) => {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
   const [showAdvancedTextModels, setShowAdvancedTextModels] = useState(false);
@@ -616,135 +611,82 @@ export const SettingsCard = ({
         {activeSection === "calendar" ? (
           <div className="sidebar-card outlook-settings-card">
             <div>
-              <h3>Outlook Calendar</h3>
-              <p>Import meetings from your Outlook calendar into NoteSmith using Microsoft Graph.</p>
+              <h3>ChatGPT Calendar Import</h3>
+              <p>Let ChatGPT read Outlook and send a complete seven-day calendar snapshot into NoteSmith.</p>
             </div>
             <div className="outlook-readonly-banner">
-              <strong>Strictly one-way: Outlook to NoteSmith</strong>
+              <strong>Strictly one-way: Outlook via ChatGPT to NoteSmith</strong>
               <span>
-                NoteSmith requests read-only calendar access. This integration contains no command for creating,
-                changing, or deleting Outlook events.
+                NoteSmith has no Outlook credentials and cannot contact or change Outlook. The local connection exposes
+                one import action and cannot read NoteSmith data.
               </span>
             </div>
             <div className="ai-settings-summary-grid">
               <div className="diagnostics-card">
-                <span className="model-option-label">Connection</span>
-                <strong>{outlookConnected === null ? "Checking" : outlookConnected ? "Connected" : "Not connected"}</strong>
-                <span className="tiny-text">The refresh credential is stored in the operating-system credential vault.</span>
+                <span className="model-option-label">Local importer</span>
+                <strong>{calendarImportMcpReady ? "Running" : "Stopped"}</strong>
+                <span className="tiny-text">Available only while the installed NoteSmith app is running.</span>
               </div>
               <div className="diagnostics-card">
-                <span className="model-option-label">Permission</span>
-                <strong>Calendars.Read</strong>
-                <span className="tiny-text">No Outlook write permission is requested.</span>
+                <span className="model-option-label">Import window</span>
+                <strong>Today + 6 days</strong>
+                <span className="tiny-text">Past events and later events are rejected by NoteSmith.</span>
               </div>
               <div className="diagnostics-card">
-                <span className="model-option-label">Imported data</span>
-                <strong>Meetings only</strong>
-                <span className="tiny-text">NoteSmith notes, sessions, classifications, and timelogs remain locally owned.</span>
-              </div>
-            </div>
-            <div className="field">
-              <label htmlFor="outlook-client-id">Microsoft application client ID</label>
-              <DeferredTextInput
-                id="outlook-client-id"
-                value={settings.outlookClientId || ""}
-                onCommit={(outlookClientId) => onChange({ ...settings, outlookClientId })}
-                placeholder="Azure / Microsoft Entra application client ID"
-              />
-              <span className="tiny-text">Register NoteSmith as a public desktop client with delegated Calendars.Read permission.</span>
-            </div>
-            <div className="field">
-              <label htmlFor="outlook-tenant-id">Microsoft tenant</label>
-              <DeferredTextInput
-                id="outlook-tenant-id"
-                value={settings.outlookTenantId || "organizations"}
-                onCommit={(outlookTenantId) => onChange({ ...settings, outlookTenantId })}
-                placeholder="organizations, common, tenant ID, or verified domain"
-              />
-            </div>
-            <div className="settings-compact-grid">
-              <div className="field">
-                <label htmlFor="outlook-past-days">Import previous days</label>
-                <input
-                  id="outlook-past-days"
-                  type="number"
-                  min="0"
-                  max="365"
-                  value={settings.outlookSyncPastDays ?? 30}
-                  onChange={(event) => onChange({ ...settings, outlookSyncPastDays: Number(event.target.value) })}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="outlook-future-days">Import future days</label>
-                <input
-                  id="outlook-future-days"
-                  type="number"
-                  min="1"
-                  max="1095"
-                  value={settings.outlookSyncFutureDays ?? 365}
-                  onChange={(event) => onChange({ ...settings, outlookSyncFutureDays: Number(event.target.value) })}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="outlook-sync-interval">Automatic interval</label>
-                <select
-                  id="outlook-sync-interval"
-                  value={settings.outlookSyncIntervalMinutes ?? 30}
-                  onChange={(event) => onChange({ ...settings, outlookSyncIntervalMinutes: Number(event.target.value) })}
-                >
-                  <option value="15">Every 15 minutes</option>
-                  <option value="30">Every 30 minutes</option>
-                  <option value="60">Every hour</option>
-                  <option value="240">Every 4 hours</option>
-                  <option value="1440">Daily</option>
-                </select>
+                <span className="model-option-label">Available action</span>
+                <strong>One calendar import</strong>
+                <span className="tiny-text">Additions, updates, cancellations, and removals are reconciled.</span>
               </div>
             </div>
             <label className="checkbox-label">
               <input
                 type="checkbox"
-                checked={Boolean(settings.outlookSyncEnabled)}
-                onChange={(event) => onChange({ ...settings, outlookSyncEnabled: event.target.checked })}
+                checked={settings.chatgptCalendarImportEnabled !== false}
+                onChange={(event) => onChange({ ...settings, chatgptCalendarImportEnabled: event.target.checked })}
               />
-              Synchronize at app startup and while NoteSmith is running
+              Keep the local ChatGPT import connection available while NoteSmith is running
             </label>
-            {outlookDeviceLogin ? (
+            {calendarImportMcpReady ? (
               <div className="outlook-device-login-card">
-                <strong>Microsoft sign-in code: {outlookDeviceLogin.userCode}</strong>
-                <span>{outlookDeviceLogin.message}</span>
-                <span className="tiny-text">Sign-in page: {outlookDeviceLogin.verificationUri}</span>
+                <strong>Local NoteSmith import address</strong>
+                <code className="calendar-import-endpoint">{calendarImportMcpReady.endpointUrl}</code>
+                <div className="inline-row">
+                  <button className="small-button" type="button" onClick={() => void onCopyCalendarImportMcpUrl()}>
+                    Copy address
+                  </button>
+                  <button
+                    className="small-button danger-button"
+                    type="button"
+                    onClick={() => void onStopCalendarImportMcp()}
+                    disabled={isCalendarImportMcpBusy}
+                  >
+                    Stop local importer
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="inline-row">
                 <button
                   className="primary-button"
                   type="button"
-                  onClick={() => void onCompleteOutlookConnection()}
-                  disabled={isOutlookBusy}
+                  onClick={() => void onStartCalendarImportMcp()}
+                  disabled={isCalendarImportMcpBusy || settings.chatgptCalendarImportEnabled === false}
                 >
-                  I completed sign-in
+                  Start local importer
                 </button>
               </div>
-            ) : null}
-            <div className="inline-row">
-              {!outlookConnected ? (
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => void onConnectOutlook()}
-                  disabled={isOutlookBusy || !(settings.outlookClientId || "").trim()}
-                >
-                  Connect Outlook read-only
-                </button>
-              ) : (
-                <>
-                  <button className="primary-button" type="button" onClick={() => void onSyncOutlook()} disabled={isOutlookBusy}>
-                    Sync now
-                  </button>
-                  <button className="small-button danger-button" type="button" onClick={() => void onDisconnectOutlook()} disabled={isOutlookBusy}>
-                    Disconnect Outlook
-                  </button>
-                </>
-              )}
+            )}
+            <div className="sidebar-card compact-card">
+              <strong>Set up in ChatGPT</strong>
+              <ol className="settings-instruction-list">
+                <li>Keep NoteSmith open and copy the local import address above.</li>
+                <li>Add it to ChatGPT as a custom MCP server using Secure MCP Tunnel.</li>
+                <li>Enable both Outlook Calendar and the NoteSmith import server in the same ChatGPT chat.</li>
+                <li>Ask ChatGPT to read all Outlook events from today through six days later, then call <code>{calendarImportMcpReady?.toolName || "notesmith_reconcile_outlook_calendar"}</code> once with a complete snapshot.</li>
+              </ol>
+              <span className="tiny-text">ChatGPT will ask for confirmation before writing the calendar snapshot into NoteSmith.</span>
             </div>
-            {outlookStatusNote ? <p className="tiny-text">{outlookStatusNote}</p> : null}
+            {calendarImportMcpStatusNote ? <p className="tiny-text">{calendarImportMcpStatusNote}</p> : null}
           </div>
         ) : null}
 

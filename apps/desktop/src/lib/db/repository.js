@@ -277,6 +277,7 @@ export const createDefaultSettings = () => ({
     outlookSyncPastDays: 30,
     outlookSyncFutureDays: 365,
     outlookSyncIntervalMinutes: 30,
+    chatgptCalendarImportEnabled: true,
     todosShowPrivate: true,
     todosShowBusiness: true,
     todosShowPriorityOnly: false,
@@ -392,6 +393,7 @@ const normalizeSettings = (settings) => ({
     outlookSyncIntervalMinutes: Number.isFinite(Number(settings.outlookSyncIntervalMinutes))
         ? Math.min(1440, Math.max(5, Math.round(Number(settings.outlookSyncIntervalMinutes))))
         : 30,
+    chatgptCalendarImportEnabled: settings.chatgptCalendarImportEnabled !== false,
     todosShowPrivate: typeof settings.todosShowPrivate === "boolean" ? settings.todosShowPrivate : true,
     todosShowBusiness: typeof settings.todosShowBusiness === "boolean" ? settings.todosShowBusiness : true,
     todosShowPriorityOnly: Boolean(settings.todosShowPriorityOnly),

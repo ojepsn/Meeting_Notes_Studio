@@ -1,28 +1,4 @@
 import type { DesktopAppSnapshot } from "@notesmith/domain";
-import { isTauriRuntime } from "../storage/environment";
-
-export interface OutlookConnectionConfig {
-  tenantId: string;
-  clientId: string;
-}
-
-export interface OutlookDeviceLoginChallenge {
-  deviceCode: string;
-  userCode: string;
-  verificationUri: string;
-  expiresIn: number;
-  interval: number;
-  message: string;
-}
-
-export interface OutlookDeviceLoginResult {
-  status: "pending" | "connected" | "expired" | "declined";
-  message: string;
-}
-
-export interface OutlookConnectionStatus {
-  connected: boolean;
-}
 
 export interface OutlookCalendarDateTime {
   dateTime: string;
@@ -83,39 +59,6 @@ interface ReconcileOptions {
   idFactory?: () => string;
 }
 
-const invokeTauri = async <T>(command: string, args: Record<string, unknown>) => {
-  if (!isTauriRuntime()) {
-    throw new Error("Outlook calendar synchronization is available in the installed desktop app.");
-  }
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<T>(command, args);
-};
-
-export const beginOutlookDeviceLogin = (config: OutlookConnectionConfig) =>
-  invokeTauri<OutlookDeviceLoginChallenge>("outlook_begin_device_login", { config });
-
-export const pollOutlookDeviceLogin = (config: OutlookConnectionConfig, deviceCode: string) =>
-  invokeTauri<OutlookDeviceLoginResult>("outlook_poll_device_login", { config, deviceCode });
-
-export const getOutlookConnectionStatus = (config: OutlookConnectionConfig) =>
-  invokeTauri<OutlookConnectionStatus>("outlook_connection_status", { config });
-
-export const disconnectOutlookCalendar = (config: OutlookConnectionConfig) =>
-  invokeTauri<void>("outlook_disconnect", { config });
-
-export const syncOutlookCalendar = (
-  config: OutlookConnectionConfig,
-  startDateTime: string,
-  endDateTime: string,
-  rangeKey: string,
-) =>
-  invokeTauri<OutlookCalendarSyncResult>("outlook_sync_calendar", {
-    config,
-    startDateTime,
-    endDateTime,
-    rangeKey,
-  });
-
 const parseGraphDateTime = (value?: string) => {
   const match = value?.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
   if (!match) return null;
@@ -162,8 +105,7 @@ const findExistingActivity = (
   snapshot.activities.find(
     (activity) =>
       activity.externalSource === "outlook" &&
-      activity.externalAccountKey === accountKey &&
-      (activity.externalEventId === event.id ||
+      ((activity.externalAccountKey === accountKey && activity.externalEventId === event.id) ||
         (Boolean(event.iCalUId) &&
           activity.externalICalUId === event.iCalUId &&
           activity.doOn === date &&
@@ -312,7 +254,6 @@ export const reconcileOutlookCalendar = (
       .filter(
         (activity) =>
           activity.externalSource === "outlook" &&
-          activity.externalAccountKey === batch.accountKey &&
           !activity.externalDeletedAt &&
           isEventInRange(activity.doOn, batch.fromDate, batch.toDate) &&
           Boolean(activity.externalEventId) &&
@@ -326,24 +267,3 @@ export const reconcileOutlookCalendar = (
     summary,
   };
 };
-
-export const buildOutlookSyncWindow = (today: Date, pastDays: number, futureDays: number) => {
-  const start = new Date(today);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - pastDays);
-  const end = new Date(today);
-  end.setHours(23, 59, 59, 999);
-  end.setDate(end.getDate() + futureDays);
-  const fromDate = start.toLocaleDateString("sv-SE");
-  const toDate = end.toLocaleDateString("sv-SE");
-  return {
-    fromDate,
-    toDate,
-    startDateTime: start.toISOString(),
-    endDateTime: end.toISOString(),
-    rangeKey: `${fromDate}:${toDate}:Europe/Stockholm`,
-  };
-};
-
-export const buildOutlookAccountKey = (config: OutlookConnectionConfig) =>
-  `${config.tenantId.trim().toLowerCase()}:${config.clientId.trim().toLowerCase()}`;

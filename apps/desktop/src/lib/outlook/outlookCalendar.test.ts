@@ -128,4 +128,29 @@ describe("reconcileOutlookCalendar", () => {
     expect(result.summary.removed).toBe(1);
     expect(result.snapshot.calendarItems).toHaveLength(0);
   });
+
+  it("adopts an existing direct-Outlook meeting instead of duplicating it", () => {
+    const created = reconcileOutlookCalendar(createDefaultSnapshot(), batch([event]), {
+      now: "2026-10-27T08:00:00Z",
+      idFactory: (() => {
+        const ids = ["activity-1", "calendar-1"];
+        return () => ids.shift()!;
+      })(),
+    }).snapshot;
+    const chatGptBatch = {
+      ...batch([{ ...event, id: "connector-event-1" }], true),
+      accountKey: "chatgpt-outlook-calendar",
+    };
+
+    const result = reconcileOutlookCalendar(created, chatGptBatch, { now: "2026-10-27T12:00:00Z" });
+
+    expect(result.snapshot.activities).toHaveLength(1);
+    expect(result.snapshot.activities[0]).toMatchObject({
+      id: "activity-1",
+      externalAccountKey: "chatgpt-outlook-calendar",
+      externalEventId: "connector-event-1",
+      externalICalUId: "ical-1",
+    });
+    expect(result.snapshot.calendarItems).toHaveLength(1);
+  });
 });
