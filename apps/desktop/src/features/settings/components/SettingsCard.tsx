@@ -20,6 +20,7 @@ import { buildRichTextCommands } from "../../richTextCommands/RichTextCommandMen
 
 export type SettingsSection =
   | "ai"
+  | "calendar"
   | "diagnostics"
   | "themes"
   | "output"
@@ -61,10 +62,23 @@ interface SettingsCardProps {
   transcriptionModelOptions: SelectModelOption[];
   modelPricingStatus: string;
   isRefreshingModelPricing: boolean;
+  outlookConnected: boolean | null;
+  outlookDeviceLogin?: {
+    userCode: string;
+    verificationUri: string;
+    message: string;
+  } | null;
+  outlookStatusNote: string;
+  isOutlookBusy: boolean;
+  onConnectOutlook: () => Promise<void>;
+  onCompleteOutlookConnection: () => Promise<void>;
+  onDisconnectOutlook: () => Promise<void>;
+  onSyncOutlook: () => Promise<void>;
 }
 
 const SETTINGS_SECTIONS: Array<{ id: SettingsSection; label: string; description: string }> = [
   { id: "ai", label: "AI Settings", description: "Models, API key, transcription" },
+  { id: "calendar", label: "Outlook Calendar", description: "Read-only calendar synchronization" },
   { id: "diagnostics", label: "AI Diagnostics", description: "Metrics, cache, and recent AI history" },
   { id: "themes", label: "Themes", description: "Look and feel" },
   { id: "output", label: "Output formatting", description: "Language and output defaults" },
@@ -258,6 +272,14 @@ export const SettingsCard = ({
   transcriptionModelOptions,
   modelPricingStatus,
   isRefreshingModelPricing,
+  outlookConnected,
+  outlookDeviceLogin,
+  outlookStatusNote,
+  isOutlookBusy,
+  onConnectOutlook,
+  onCompleteOutlookConnection,
+  onDisconnectOutlook,
+  onSyncOutlook,
 }: SettingsCardProps) => {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
   const [showAdvancedTextModels, setShowAdvancedTextModels] = useState(false);
@@ -588,6 +610,141 @@ export const SettingsCard = ({
               </button>
             </div>
             <p className="tiny-text model-pricing-status-copy">{modelPricingStatus}</p>
+          </div>
+        ) : null}
+
+        {activeSection === "calendar" ? (
+          <div className="sidebar-card outlook-settings-card">
+            <div>
+              <h3>Outlook Calendar</h3>
+              <p>Import meetings from your Outlook calendar into NoteSmith using Microsoft Graph.</p>
+            </div>
+            <div className="outlook-readonly-banner">
+              <strong>Strictly one-way: Outlook to NoteSmith</strong>
+              <span>
+                NoteSmith requests read-only calendar access. This integration contains no command for creating,
+                changing, or deleting Outlook events.
+              </span>
+            </div>
+            <div className="ai-settings-summary-grid">
+              <div className="diagnostics-card">
+                <span className="model-option-label">Connection</span>
+                <strong>{outlookConnected === null ? "Checking" : outlookConnected ? "Connected" : "Not connected"}</strong>
+                <span className="tiny-text">The refresh credential is stored in the operating-system credential vault.</span>
+              </div>
+              <div className="diagnostics-card">
+                <span className="model-option-label">Permission</span>
+                <strong>Calendars.Read</strong>
+                <span className="tiny-text">No Outlook write permission is requested.</span>
+              </div>
+              <div className="diagnostics-card">
+                <span className="model-option-label">Imported data</span>
+                <strong>Meetings only</strong>
+                <span className="tiny-text">NoteSmith notes, sessions, classifications, and timelogs remain locally owned.</span>
+              </div>
+            </div>
+            <div className="field">
+              <label htmlFor="outlook-client-id">Microsoft application client ID</label>
+              <DeferredTextInput
+                id="outlook-client-id"
+                value={settings.outlookClientId || ""}
+                onCommit={(outlookClientId) => onChange({ ...settings, outlookClientId })}
+                placeholder="Azure / Microsoft Entra application client ID"
+              />
+              <span className="tiny-text">Register NoteSmith as a public desktop client with delegated Calendars.Read permission.</span>
+            </div>
+            <div className="field">
+              <label htmlFor="outlook-tenant-id">Microsoft tenant</label>
+              <DeferredTextInput
+                id="outlook-tenant-id"
+                value={settings.outlookTenantId || "organizations"}
+                onCommit={(outlookTenantId) => onChange({ ...settings, outlookTenantId })}
+                placeholder="organizations, common, tenant ID, or verified domain"
+              />
+            </div>
+            <div className="settings-compact-grid">
+              <div className="field">
+                <label htmlFor="outlook-past-days">Import previous days</label>
+                <input
+                  id="outlook-past-days"
+                  type="number"
+                  min="0"
+                  max="365"
+                  value={settings.outlookSyncPastDays ?? 30}
+                  onChange={(event) => onChange({ ...settings, outlookSyncPastDays: Number(event.target.value) })}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="outlook-future-days">Import future days</label>
+                <input
+                  id="outlook-future-days"
+                  type="number"
+                  min="1"
+                  max="1095"
+                  value={settings.outlookSyncFutureDays ?? 365}
+                  onChange={(event) => onChange({ ...settings, outlookSyncFutureDays: Number(event.target.value) })}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="outlook-sync-interval">Automatic interval</label>
+                <select
+                  id="outlook-sync-interval"
+                  value={settings.outlookSyncIntervalMinutes ?? 30}
+                  onChange={(event) => onChange({ ...settings, outlookSyncIntervalMinutes: Number(event.target.value) })}
+                >
+                  <option value="15">Every 15 minutes</option>
+                  <option value="30">Every 30 minutes</option>
+                  <option value="60">Every hour</option>
+                  <option value="240">Every 4 hours</option>
+                  <option value="1440">Daily</option>
+                </select>
+              </div>
+            </div>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.outlookSyncEnabled)}
+                onChange={(event) => onChange({ ...settings, outlookSyncEnabled: event.target.checked })}
+              />
+              Synchronize at app startup and while NoteSmith is running
+            </label>
+            {outlookDeviceLogin ? (
+              <div className="outlook-device-login-card">
+                <strong>Microsoft sign-in code: {outlookDeviceLogin.userCode}</strong>
+                <span>{outlookDeviceLogin.message}</span>
+                <span className="tiny-text">Sign-in page: {outlookDeviceLogin.verificationUri}</span>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => void onCompleteOutlookConnection()}
+                  disabled={isOutlookBusy}
+                >
+                  I completed sign-in
+                </button>
+              </div>
+            ) : null}
+            <div className="inline-row">
+              {!outlookConnected ? (
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => void onConnectOutlook()}
+                  disabled={isOutlookBusy || !(settings.outlookClientId || "").trim()}
+                >
+                  Connect Outlook read-only
+                </button>
+              ) : (
+                <>
+                  <button className="primary-button" type="button" onClick={() => void onSyncOutlook()} disabled={isOutlookBusy}>
+                    Sync now
+                  </button>
+                  <button className="small-button danger-button" type="button" onClick={() => void onDisconnectOutlook()} disabled={isOutlookBusy}>
+                    Disconnect Outlook
+                  </button>
+                </>
+              )}
+            </div>
+            {outlookStatusNote ? <p className="tiny-text">{outlookStatusNote}</p> : null}
           </div>
         ) : null}
 

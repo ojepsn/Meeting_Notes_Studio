@@ -1,5 +1,6 @@
 import type { ActivityRecord, CaptureMode, ChecklistRecord, ChecklistRecurrenceCadence, ChecklistTemplateRecord, DesktopAppSnapshot, TimeLogRecord, TodoPriority, TodoRecord } from "@notesmith/domain";
 import { createAppRepository } from "../lib/db/repository";
+import { type OutlookCalendarImportBatch, type OutlookCalendarImportSummary } from "../lib/outlook/outlookCalendar";
 type DesktopView = "capture" | "output";
 type SaveState = "saved" | "saving" | "error";
 export type SessionTimeTrackingTarget = {
@@ -115,6 +116,7 @@ interface DesktopState {
         startSlot: number;
         durationSlots: number;
     }) => Promise<void>;
+    importOutlookCalendarBatch: (batch: OutlookCalendarImportBatch) => Promise<OutlookCalendarImportSummary>;
     convertTodoToActivity: (todo: DesktopAppSnapshot["todos"][number], options?: {
         type?: DesktopAppSnapshot["activities"][number]["type"];
         date?: string;

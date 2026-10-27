@@ -128,6 +128,18 @@ export interface ActivityRecord {
   createdAt: string;
   updatedAt?: string;
   sessionIds: string[];
+  externalSource?: "outlook";
+  externalAccountKey?: string;
+  externalEventId?: string;
+  externalICalUId?: string;
+  externalSeriesMasterId?: string;
+  externalChangeKey?: string;
+  externalLastModifiedAt?: string;
+  externalLocation?: string;
+  externalWebLink?: string;
+  externalOnlineMeetingUrl?: string;
+  externalBodyPreview?: string;
+  externalDeletedAt?: string | null;
 }
 
 export interface TimeLogRecord {
@@ -351,6 +363,12 @@ export interface LocalAppSettings {
   calendarShowBusiness?: boolean;
   calendarShowPriorityOnly?: boolean;
   calendarQuickStartTodoIds?: string[];
+  outlookSyncEnabled?: boolean;
+  outlookTenantId?: string;
+  outlookClientId?: string;
+  outlookSyncPastDays?: number;
+  outlookSyncFutureDays?: number;
+  outlookSyncIntervalMinutes?: number;
   todosShowPrivate?: boolean;
   todosShowBusiness?: boolean;
   todosShowPriorityOnly?: boolean;

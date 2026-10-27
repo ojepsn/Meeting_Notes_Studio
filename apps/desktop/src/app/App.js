@@ -49,6 +49,7 @@ import { parseActivityShortcut, parseMeetingShortcut, parseTodoShortcut } from "
 import { parseTokenList } from "../components/peoplePickerUtils";
 import { formatStockholmDate as getStockholmDateKey } from "../lib/time/stockholm";
 import { createSessionRecord } from "../lib/db/repository";
+import { beginOutlookDeviceLogin, buildOutlookAccountKey, buildOutlookSyncWindow, disconnectOutlookCalendar, getOutlookConnectionStatus, pollOutlookDeviceLogin, syncOutlookCalendar, } from "../lib/outlook/outlookCalendar";
 const richTextToPlainText = (value) => {
     if (!value)
         return "";
@@ -181,7 +182,7 @@ const buildOutputVersionPatch = (session, nextOutput) => {
     };
 };
 export const App = () => {
-    const { snapshot, activeSessionId, saveState, lastSavedAt, isLoaded, loadError, load, setActiveSessionId, activeView, setActiveView, repository, saveSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, saveTodo, addTodo, deleteTodo, saveActivity, addActivity, deleteActivity, saveChecklist, createChecklist, deleteChecklist, saveChecklistTemplate, createChecklistTemplate, deleteChecklistTemplate, createChecklistFromTemplate, createChecklistRecurrence, deleteChecklistRecurrence, saveTimeLog, deleteTimeLog, startTimeTracking, stopTimeTracking, startWorkBaseline, stopWorkBaseline, startAdhocTimeLog, createCalendarEntryFromText, rollForwardOverdueTodos, moveCalendarItem, updateCalendarItem, convertTodoToActivity, ensureSessionForActivity, ensureSessionForTodo, ensureTimeTargetForSession, saveSettings, renameDomainValue, renameProjectValue, saveTemplate, resetTemplates, importLegacyBrowserData, importBackupSnapshot: restoreBackupSnapshot, saveAttachments, } = useDesktopStore();
+    const { snapshot, activeSessionId, saveState, lastSavedAt, isLoaded, loadError, load, setActiveSessionId, activeView, setActiveView, repository, saveSession, createNewSession, deleteSession, restoreSession, permanentlyDeleteSession, saveTodo, addTodo, deleteTodo, saveActivity, addActivity, deleteActivity, saveChecklist, createChecklist, deleteChecklist, saveChecklistTemplate, createChecklistTemplate, deleteChecklistTemplate, createChecklistFromTemplate, createChecklistRecurrence, deleteChecklistRecurrence, saveTimeLog, deleteTimeLog, startTimeTracking, stopTimeTracking, startWorkBaseline, stopWorkBaseline, startAdhocTimeLog, createCalendarEntryFromText, rollForwardOverdueTodos, moveCalendarItem, updateCalendarItem, importOutlookCalendarBatch, convertTodoToActivity, ensureSessionForActivity, ensureSessionForTodo, ensureTimeTargetForSession, saveSettings, renameDomainValue, renameProjectValue, saveTemplate, resetTemplates, importLegacyBrowserData, importBackupSnapshot: restoreBackupSnapshot, saveAttachments, } = useDesktopStore();
     const [activeWorkspace, setActiveWorkspace] = useState("notebook");
     const [openPanel, setOpenPanel] = useState(null);
     const [isNotesSessionsOpen, setIsNotesSessionsOpen] = useState(false);
@@ -226,6 +227,10 @@ export const App = () => {
     const [modelPricingSnapshot, setModelPricingSnapshot] = useState(createDefaultModelPricingSnapshot);
     const [modelPricingStatus, setModelPricingStatus] = useState(buildModelPricingStatus(createDefaultModelPricingSnapshot()));
     const [isRefreshingModelPricing, setIsRefreshingModelPricing] = useState(false);
+    const [outlookConnected, setOutlookConnected] = useState(null);
+    const [outlookDeviceLogin, setOutlookDeviceLogin] = useState(null);
+    const [outlookStatusNote, setOutlookStatusNote] = useState("");
+    const [isOutlookBusy, setIsOutlookBusy] = useState(false);
     const [isWorkspaceRailCollapsed, setIsWorkspaceRailCollapsed] = useState(() => {
         try {
             return window.localStorage.getItem(WORKSPACE_RAIL_COLLAPSED_KEY) === "true";
@@ -253,6 +258,7 @@ export const App = () => {
     const todosSnapshotRef = useRef(snapshot?.todos ?? []);
     const themeSnapshotRef = useRef(snapshot?.settings.theme ?? "fluent-slate-light");
     const runningTodoIdsSnapshotRef = useRef(getRunningTodoIds(snapshot?.timelogs ?? []));
+    const outlookSyncInFlightRef = useRef(false);
     const buildDesktopBackupBundle = () => {
         if (!snapshot) {
             return null;
@@ -274,9 +280,158 @@ export const App = () => {
         }
         return withDesktopBackupAttachmentFiles(baseBundle);
     };
+    const getOutlookConfig = () => ({
+        tenantId: snapshot?.settings.outlookTenantId?.trim() || "organizations",
+        clientId: snapshot?.settings.outlookClientId?.trim() || "",
+    });
+    const runOutlookSync = async (silent = false) => {
+        if (!snapshot || outlookSyncInFlightRef.current)
+            return;
+        const config = getOutlookConfig();
+        if (!config.clientId) {
+            if (!silent)
+                setOutlookStatusNote("Add the Microsoft application client ID before synchronizing.");
+            return;
+        }
+        outlookSyncInFlightRef.current = true;
+        setIsOutlookBusy(true);
+        if (!silent)
+            setOutlookStatusNote("Reading changes from Outlook...");
+        try {
+            const window = buildOutlookSyncWindow(new Date(), snapshot.settings.outlookSyncPastDays ?? 30, snapshot.settings.outlookSyncFutureDays ?? 365);
+            const result = await syncOutlookCalendar(config, window.startDateTime, window.endDateTime, window.rangeKey);
+            const summary = await importOutlookCalendarBatch({
+                ...result,
+                accountKey: buildOutlookAccountKey(config),
+                fromDate: window.fromDate,
+                toDate: window.toDate,
+            });
+            setOutlookConnected(true);
+            setOutlookStatusNote(`Last synchronized ${new Date().toLocaleString()}. ${summary.created} added, ${summary.updated} updated, ${summary.removed} removed, ${summary.unchanged} unchanged.`);
+        }
+        catch (error) {
+            setOutlookStatusNote(error instanceof Error ? error.message : "Outlook calendar synchronization failed.");
+        }
+        finally {
+            outlookSyncInFlightRef.current = false;
+            setIsOutlookBusy(false);
+        }
+    };
+    const handleConnectOutlook = async () => {
+        const config = getOutlookConfig();
+        if (!config.clientId) {
+            setOutlookStatusNote("Add the Microsoft application client ID before connecting.");
+            return;
+        }
+        setIsOutlookBusy(true);
+        try {
+            const challenge = await beginOutlookDeviceLogin(config);
+            setOutlookDeviceLogin(challenge);
+            setOutlookStatusNote("Complete the Microsoft sign-in, then return here and confirm it.");
+            await openDesktopUrl(challenge.verificationUri);
+        }
+        catch (error) {
+            setOutlookStatusNote(error instanceof Error ? error.message : "Could not start Microsoft sign-in.");
+        }
+        finally {
+            setIsOutlookBusy(false);
+        }
+    };
+    const handleCompleteOutlookConnection = async () => {
+        if (!outlookDeviceLogin)
+            return;
+        setIsOutlookBusy(true);
+        try {
+            const result = await pollOutlookDeviceLogin(getOutlookConfig(), outlookDeviceLogin.deviceCode);
+            setOutlookStatusNote(result.message);
+            if (result.status === "connected") {
+                setOutlookConnected(true);
+                setOutlookDeviceLogin(null);
+            }
+            else if (result.status === "expired" || result.status === "declined") {
+                setOutlookConnected(false);
+                setOutlookDeviceLogin(null);
+            }
+        }
+        catch (error) {
+            setOutlookStatusNote(error instanceof Error ? error.message : "Could not complete Microsoft sign-in.");
+        }
+        finally {
+            setIsOutlookBusy(false);
+        }
+    };
+    const handleDisconnectOutlook = async () => {
+        setIsOutlookBusy(true);
+        try {
+            await disconnectOutlookCalendar(getOutlookConfig());
+            setOutlookConnected(false);
+            setOutlookDeviceLogin(null);
+            setOutlookStatusNote("Outlook disconnected. Previously imported NoteSmith data remains available.");
+        }
+        catch (error) {
+            setOutlookStatusNote(error instanceof Error ? error.message : "Could not disconnect Outlook.");
+        }
+        finally {
+            setIsOutlookBusy(false);
+        }
+    };
     useEffect(() => {
         void load();
     }, [load]);
+    useEffect(() => {
+        if (!isLoaded || loadError || !snapshot)
+            return;
+        if (!isTauriRuntime()) {
+            setOutlookConnected(false);
+            setOutlookStatusNote("Outlook synchronization is available in the installed NoteSmith desktop app.");
+            return;
+        }
+        const clientId = snapshot.settings.outlookClientId?.trim() || "";
+        if (!clientId) {
+            setOutlookConnected(false);
+            return;
+        }
+        let cancelled = false;
+        const config = {
+            tenantId: snapshot.settings.outlookTenantId?.trim() || "organizations",
+            clientId,
+        };
+        const checkAndSync = async (shouldSync) => {
+            try {
+                const status = await getOutlookConnectionStatus(config);
+                if (cancelled)
+                    return;
+                setOutlookConnected(status.connected);
+                if (status.connected && shouldSync)
+                    await runOutlookSync(true);
+            }
+            catch (error) {
+                if (!cancelled) {
+                    setOutlookConnected(false);
+                    setOutlookStatusNote(error instanceof Error ? error.message : "Could not check the Outlook connection.");
+                }
+            }
+        };
+        void checkAndSync(Boolean(snapshot.settings.outlookSyncEnabled));
+        if (!snapshot.settings.outlookSyncEnabled)
+            return () => { cancelled = true; };
+        const intervalId = setInterval(() => void checkAndSync(true), Math.max(5, snapshot.settings.outlookSyncIntervalMinutes ?? 30) * 60 * 1000);
+        return () => {
+            cancelled = true;
+            clearInterval(intervalId);
+        };
+        // Re-run only when the Outlook connection or schedule settings change.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+        isLoaded,
+        loadError,
+        snapshot?.settings.outlookClientId,
+        snapshot?.settings.outlookTenantId,
+        snapshot?.settings.outlookSyncEnabled,
+        snapshot?.settings.outlookSyncPastDays,
+        snapshot?.settings.outlookSyncFutureDays,
+        snapshot?.settings.outlookSyncIntervalMinutes,
+    ]);
     useEffect(() => {
         todosSnapshotRef.current = snapshot?.todos ?? [];
         themeSnapshotRef.current = snapshot?.settings.theme ?? "fluent-slate-light";
@@ -2727,7 +2882,7 @@ export const App = () => {
                                         closeOverlay();
                                     }, children: "Not now" })] })] }));
             case "settings":
-                return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onResetTemplates: handleResetTemplates, onImportLegacy: handleImportLegacy, onImportBackup: handleImportBackup, onCheckForUpdates: handleCheckForUpdates, onInstallUpdate: handleInstallUpdate, onOpenManualUpdate: handleOpenManualUpdate, onOpenDataFolder: handleOpenDataFolder, onOpenDatabaseFolder: handleOpenDatabaseFolder, onExportBackup: handleExportSnapshot, onSaveBackupAs: handleSaveSnapshotAs, updateStatusNote: updateStatusNote, desktopVersion: desktopVersion, desktopBundleType: desktopBundleType, availableUpdateVersion: availableUpdateVersion, manualUpdateUrl: manualUpdateUrl, isCheckingForUpdates: isCheckingForUpdates, isInstallingUpdate: isInstallingUpdate, storageInfo: storageInfo, latestLocalBackupInfo: latestLocalBackupInfo, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing }));
+                return (_jsx(SettingsCard, { initialSection: settingsSection, settings: snapshot.settings, templates: snapshot.templates, onChange: (settings) => void saveSettings(settings), onSaveTemplate: (template) => void saveTemplate(template), onResetTemplates: handleResetTemplates, onImportLegacy: handleImportLegacy, onImportBackup: handleImportBackup, onCheckForUpdates: handleCheckForUpdates, onInstallUpdate: handleInstallUpdate, onOpenManualUpdate: handleOpenManualUpdate, onOpenDataFolder: handleOpenDataFolder, onOpenDatabaseFolder: handleOpenDatabaseFolder, onExportBackup: handleExportSnapshot, onSaveBackupAs: handleSaveSnapshotAs, updateStatusNote: updateStatusNote, desktopVersion: desktopVersion, desktopBundleType: desktopBundleType, availableUpdateVersion: availableUpdateVersion, manualUpdateUrl: manualUpdateUrl, isCheckingForUpdates: isCheckingForUpdates, isInstallingUpdate: isInstallingUpdate, storageInfo: storageInfo, latestLocalBackupInfo: latestLocalBackupInfo, aiDiagnostics: aiDiagnostics, aiRequestHistory: aiRequestHistory, textModelOptions: modelPricingSnapshot.textModels.map(buildTextModelOption), transcriptionModelOptions: modelPricingSnapshot.transcriptionModels.map(buildTranscriptionModelOption), modelPricingStatus: modelPricingStatus, onRefreshModelPricing: () => void handleRefreshModelPricing(), isRefreshingModelPricing: isRefreshingModelPricing, outlookConnected: outlookConnected, outlookDeviceLogin: outlookDeviceLogin, outlookStatusNote: outlookStatusNote, isOutlookBusy: isOutlookBusy, onConnectOutlook: handleConnectOutlook, onCompleteOutlookConnection: handleCompleteOutlookConnection, onDisconnectOutlook: handleDisconnectOutlook, onSyncOutlook: () => runOutlookSync(false) }));
             case "more":
                 return (_jsxs("div", { className: "sidebar-card overlay-card", children: [_jsxs("div", { children: [_jsx("h3", { children: "More tools" }), _jsx("p", { children: "Secondary utilities stay grouped here so the main workspace remains calm and obvious." })] }), _jsxs("div", { className: "stack", children: [_jsx("button", { className: "small-button", type: "button", onClick: () => setActiveWorkspace("todos"), children: "Open Tasks workspace" }), _jsx("button", { className: "small-button", type: "button", onClick: () => setOpenPanel("backup"), children: "Open Back-up" }), _jsx("button", { className: "small-button", type: "button", onClick: () => openSettingsSection("other"), children: "Open Other settings" })] })] }));
             case "backup":

@@ -9,6 +9,7 @@ import { findActivityIdForSession, findSessionIdForActivity, findSessionIdForTod
 import { loadRecentLocalSnapshotBackups } from "../lib/storage/desktopStorage";
 import { inferStructureFromTitle, normalizeStructureInferenceRules, upsertStructureInferenceRule } from "../lib/structure/inferStructure";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
+import { reconcileOutlookCalendar, } from "../lib/outlook/outlookCalendar";
 import { formatStockholmDate as formatLocalDate, formatStockholmIsoWeek as formatLocalIsoWeek, formatStockholmMonth as formatLocalMonth, formatStockholmTime as formatLocalTime, } from "../lib/time/stockholm";
 const PERSIST_DEBOUNCE_MS = 300;
 const TRASH_RETENTION_DAYS = 7;
@@ -2247,6 +2248,18 @@ export const useDesktopStore = create((set, get) => {
             }
             set({ snapshot: nextSnapshot });
             await flushSnapshotPersist(get().repository, nextSnapshot, set);
+        },
+        importOutlookCalendarBatch: async (batch) => {
+            const snapshot = get().snapshot;
+            if (!snapshot) {
+                return { created: 0, updated: 0, removed: 0, unchanged: 0, skipped: batch.events.length };
+            }
+            const result = reconcileOutlookCalendar(snapshot, batch, {
+                inferStructure: (title) => inferActivityStructureAssignment(snapshot, title, "meeting", {}),
+            });
+            set({ snapshot: result.snapshot });
+            await flushSnapshotPersist(get().repository, result.snapshot, set);
+            return result.summary;
         },
         convertTodoToActivity: async (todo, options) => {
             const snapshot = get().snapshot;

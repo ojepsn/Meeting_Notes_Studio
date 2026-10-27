@@ -14,6 +14,8 @@ use std::thread;
 use std::time::Duration;
 use tauri::Manager;
 
+mod outlook;
+
 fn sanitize_filename(filename: &str) -> String {
     filename
         .chars()
@@ -1271,6 +1273,11 @@ pub fn run() {
             download_url_to_path,
             load_openai_model_document,
             openai_http_request,
+            outlook::outlook_begin_device_login,
+            outlook::outlook_poll_device_login,
+            outlook::outlook_connection_status,
+            outlook::outlook_disconnect,
+            outlook::outlook_sync_calendar,
             start_agent_sidecar,
             stop_agent_sidecar,
             get_agent_sidecar_status

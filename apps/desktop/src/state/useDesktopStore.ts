@@ -20,6 +20,11 @@ import { loadRecentLocalSnapshotBackups } from "../lib/storage/desktopStorage";
 import { inferStructureFromTitle, normalizeStructureInferenceRules, upsertStructureInferenceRule } from "../lib/structure/inferStructure";
 import { loadLegacyBrowserSnapshot } from "../lib/storage/migrateLegacy";
 import {
+  reconcileOutlookCalendar,
+  type OutlookCalendarImportBatch,
+  type OutlookCalendarImportSummary,
+} from "../lib/outlook/outlookCalendar";
+import {
   formatStockholmDate as formatLocalDate,
   formatStockholmIsoWeek as formatLocalIsoWeek,
   formatStockholmMonth as formatLocalMonth,
@@ -1661,6 +1666,7 @@ interface DesktopState {
   rollForwardOverdueTodos: () => Promise<void>;
   moveCalendarItem: (id: string, date: string, startSlot: number) => Promise<void>;
   updateCalendarItem: (id: string, updates: { date: string; startSlot: number; durationSlots: number }) => Promise<void>;
+  importOutlookCalendarBatch: (batch: OutlookCalendarImportBatch) => Promise<OutlookCalendarImportSummary>;
   convertTodoToActivity: (
     todo: DesktopAppSnapshot["todos"][number],
     options?: {
@@ -2783,6 +2789,18 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
 
     set({ snapshot: nextSnapshot });
     await flushSnapshotPersist(get().repository, nextSnapshot, set);
+  },
+  importOutlookCalendarBatch: async (batch) => {
+    const snapshot = get().snapshot;
+    if (!snapshot) {
+      return { created: 0, updated: 0, removed: 0, unchanged: 0, skipped: batch.events.length };
+    }
+    const result = reconcileOutlookCalendar(snapshot, batch, {
+      inferStructure: (title) => inferActivityStructureAssignment(snapshot, title, "meeting", {}),
+    });
+    set({ snapshot: result.snapshot });
+    await flushSnapshotPersist(get().repository, result.snapshot, set);
+    return result.summary;
   },
   convertTodoToActivity: async (todo, options) => {
     const snapshot = get().snapshot;

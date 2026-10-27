@@ -322,6 +322,12 @@ export const createDefaultSettings = (): LocalAppSettings => ({
   calendarShowBusiness: true,
   calendarShowPriorityOnly: false,
   calendarQuickStartTodoIds: [],
+  outlookSyncEnabled: false,
+  outlookTenantId: "organizations",
+  outlookClientId: "",
+  outlookSyncPastDays: 30,
+  outlookSyncFutureDays: 365,
+  outlookSyncIntervalMinutes: 30,
   todosShowPrivate: true,
   todosShowBusiness: true,
   todosShowPriorityOnly: false,
@@ -477,6 +483,21 @@ const normalizeSettings = (settings: Partial<LocalAppSettings>): LocalAppSetting
         ),
       )
     : [],
+  outlookSyncEnabled: Boolean(settings.outlookSyncEnabled),
+  outlookTenantId:
+    typeof settings.outlookTenantId === "string" && settings.outlookTenantId.trim()
+      ? settings.outlookTenantId.trim()
+      : "organizations",
+  outlookClientId: typeof settings.outlookClientId === "string" ? settings.outlookClientId.trim() : "",
+  outlookSyncPastDays: Number.isFinite(Number(settings.outlookSyncPastDays))
+    ? Math.min(365, Math.max(0, Math.round(Number(settings.outlookSyncPastDays))))
+    : 30,
+  outlookSyncFutureDays: Number.isFinite(Number(settings.outlookSyncFutureDays))
+    ? Math.min(1095, Math.max(1, Math.round(Number(settings.outlookSyncFutureDays))))
+    : 365,
+  outlookSyncIntervalMinutes: Number.isFinite(Number(settings.outlookSyncIntervalMinutes))
+    ? Math.min(1440, Math.max(5, Math.round(Number(settings.outlookSyncIntervalMinutes))))
+    : 30,
   todosShowPrivate: typeof settings.todosShowPrivate === "boolean" ? settings.todosShowPrivate : true,
   todosShowBusiness: typeof settings.todosShowBusiness === "boolean" ? settings.todosShowBusiness : true,
   todosShowPriorityOnly: Boolean(settings.todosShowPriorityOnly),
