@@ -1150,13 +1150,28 @@ select {
   content: "";
   position: absolute;
   left: 0.12rem;
-  top: 0.2em;
-  width: 0.9rem;
-  height: 0.9rem;
-  border: 1.5px solid var(--app-border-strong);
-  border-radius: 3px;
-  background: var(--app-input-bg);
+  top: 0.16em;
+  width: 0.98rem;
+  height: 0.98rem;
+  border: 2px solid color-mix(in srgb, var(--app-text) 78%, var(--app-border-strong) 22%);
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--app-surface-strong) 88%, transparent 12%),
+    0 1px 3px rgba(0, 0, 0, 0.28);
   cursor: pointer;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface
+) ul[data-notesmith-checklist="true"] > li:hover::before {
+  border-color: var(--app-accent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--app-accent-soft) 72%, transparent 28%),
+    0 1px 4px rgba(0, 0, 0, 0.32);
 }
 
 :is(
@@ -1180,6 +1195,9 @@ select {
   place-items: center;
   border-color: var(--app-accent);
   background: var(--app-accent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--app-accent-soft) 72%, transparent 28%),
+    0 1px 3px rgba(0, 0, 0, 0.25);
   color: white;
   font-size: 0.68rem;
   font-weight: 800;
