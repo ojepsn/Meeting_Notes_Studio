@@ -49,11 +49,17 @@ export declare const RICH_TEXT_FONT_SIZE_OPTIONS: readonly [{
     readonly commandValue: "7";
     readonly cssValue: "48px";
 }];
+export declare const RICH_TEXT_CHECKLIST_ATTRIBUTE = "data-notesmith-checklist";
+export declare const RICH_TEXT_CHECKED_ATTRIBUTE = "data-checked";
+export declare const isRichTextChecklist: (element: Element | null) => boolean;
+export declare const isRichTextChecklistItem: (element: Element | null) => boolean;
 export declare const resolveSafeRichTextHref: (value: string) => string;
 export declare const resolveAllowedRichTextFont: (value: string) => "Aptos, Calibri, sans-serif" | "Georgia, serif" | "Garamond, Georgia, serif" | "Calibri, Arial, sans-serif" | "Arial, sans-serif" | "Verdana, Geneva, sans-serif" | "Consolas, 'Courier New', monospace" | "";
 export declare const resolveToolbarFontFamily: (value: string) => "Aptos, Calibri, sans-serif" | "Georgia, serif" | "Garamond, Georgia, serif" | "Calibri, Arial, sans-serif" | "Arial, sans-serif" | "Verdana, Geneva, sans-serif" | "Consolas, 'Courier New', monospace" | "";
 export declare const normalizeRichTextInlineFormatting: (wrapper: HTMLElement) => void;
 export declare const preserveAllowedRichTextStyles: (element: Element) => void;
+export declare const insertRichTextChecklist: (editor: HTMLDivElement) => boolean;
+export declare const toggleRichTextChecklistItem: (editor: HTMLDivElement, target: EventTarget | null, clientX: number) => boolean;
 export declare const normalizePastedRichTextHtml: (value: string) => string;
 export declare const applyRichTextFont: (editor: HTMLDivElement, fontFamily: string) => void;
 export declare const applyRichTextFontSize: (editor: HTMLDivElement, commandValue: string) => void;

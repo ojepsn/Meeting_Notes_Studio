@@ -12,7 +12,7 @@ import { createAttachmentPreviewUrl } from "../../../lib/files/attachmentStore";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode } from "@notesmith/domain";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
-import { applyRichTextFontSize, resolveSafeRichTextHref, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
+import { applyRichTextFontSize, insertRichTextChecklist, isRichTextChecklist, preserveAllowedRichTextStyles, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
 const richTextToPlainText = (value) => {
     if (!value)
         return "";
@@ -33,7 +33,6 @@ const RICH_TEXT_FONT_OPTIONS = [
 ];
 const normalizeFontFamily = (value) => value.replace(/["']/g, "").replace(/\s*,\s*/g, ", ").trim();
 const ALLOWED_RICH_TEXT_FONTS = new Set(RICH_TEXT_FONT_OPTIONS.map((option) => normalizeFontFamily(option.value)).filter(Boolean));
-const ALLOWED_RICH_TEXT_FONT_SIZES = new Set(RICH_TEXT_FONT_SIZE_OPTIONS.map((option) => option.cssValue));
 const resolveAllowedRichTextFont = (value) => {
     const normalized = normalizeFontFamily(value);
     if (!ALLOWED_RICH_TEXT_FONTS.has(normalized)) {
@@ -87,28 +86,13 @@ const normalizeRichTextHtml = (value) => {
             element.replaceWith(fragment);
             return;
         }
-        const fontFamily = element instanceof HTMLElement ? element.style.fontFamily : "";
-        const fontSize = element instanceof HTMLElement ? element.style.fontSize : "";
-        const href = element.tagName === "A" ? resolveSafeRichTextHref(element.getAttribute("href") ?? "") : "";
-        [...element.attributes].forEach((attribute) => element.removeAttribute(attribute.name));
+        preserveAllowedRichTextStyles(element);
         if (element.tagName === "FIGURE" && inlineAttachmentId) {
             element.setAttribute("data-notesmith-attachment-id", inlineAttachmentId);
             element.setAttribute("contenteditable", "false");
             if (element instanceof HTMLElement) {
                 element.classList.add("notes-inline-attachment");
             }
-        }
-        const allowedFont = resolveAllowedRichTextFont(fontFamily);
-        if (element instanceof HTMLElement && allowedFont) {
-            element.style.fontFamily = allowedFont;
-        }
-        if (element instanceof HTMLElement && ALLOWED_RICH_TEXT_FONT_SIZES.has(fontSize)) {
-            element.style.fontSize = fontSize;
-        }
-        if (element.tagName === "A" && href) {
-            element.setAttribute("href", href);
-            element.setAttribute("target", "_blank");
-            element.setAttribute("rel", "noopener noreferrer");
         }
     });
     const normalized = wrapper.innerHTML.replace(/<div>/gi, "<p>").replace(/<\/div>/gi, "</p>").trim();
@@ -124,6 +108,7 @@ const RICH_TEXT_COMMANDS = [
     { id: "italic", label: "Italic", type: "command", command: "italic" },
     { id: "unordered", label: "Bullets", type: "command", command: "insertUnorderedList" },
     { id: "ordered", label: "Numbered", type: "command", command: "insertOrderedList" },
+    { id: "checklist", label: "Checklist", type: "checklist" },
     { id: "body", label: "Body", type: "block", value: "P" },
     { id: "h1", label: "H1", type: "block", value: "H1" },
     { id: "h2", label: "H2", type: "block", value: "H2" },
@@ -139,13 +124,15 @@ const DEFAULT_RICH_TEXT_TOOLBAR_STATE = {
     italic: false,
     unordered: false,
     ordered: false,
+    checklist: false,
 };
 const toolbarStatesMatch = (left, right) => left.fontFamily === right.fontFamily &&
     left.block === right.block &&
     left.bold === right.bold &&
     left.italic === right.italic &&
     left.unordered === right.unordered &&
-    left.ordered === right.ordered;
+    left.ordered === right.ordered &&
+    left.checklist === right.checklist;
 const isSelectionInsideEditor = (editor, selection) => {
     if (!editor || !selection?.rangeCount) {
         return false;
@@ -181,6 +168,7 @@ const getToolbarStateFromEditor = (editorRef) => {
         italic: document.queryCommandState("italic"),
         unordered: document.queryCommandState("insertUnorderedList"),
         ordered: document.queryCommandState("insertOrderedList"),
+        checklist: isRichTextChecklist(selectionContainer?.closest("ul") ?? null),
     };
 };
 const RECORDING_MODE_META = {
@@ -483,6 +471,9 @@ export const SessionEditor = ({ session, templates, allowedTemplateCaptureModes,
         if (action.type === "block") {
             document.execCommand("formatBlock", false, action.value);
         }
+        else if (action.type === "checklist") {
+            insertRichTextChecklist(editorRef.current);
+        }
         else {
             document.execCommand(action.command);
         }
@@ -545,15 +536,17 @@ export const SessionEditor = ({ session, templates, allowedTemplateCaptureModes,
     const renderRichTextToolbar = (idPrefix, buttonClassName, onCommand, onFontChange, onFontSizeChange, toolbarState) => (_jsxs("div", { className: "rich-text-toolbar", children: [_jsxs("label", { className: "rich-text-font-control", htmlFor: `${idPrefix}-font`, children: [_jsx("span", { children: "Font" }), _jsx("select", { id: `${idPrefix}-font`, value: toolbarState.fontFamily, onChange: (event) => onFontChange(event.target.value), children: RICH_TEXT_FONT_OPTIONS.map((option) => (_jsx("option", { value: option.value, style: option.value ? { fontFamily: option.value } : undefined, children: option.label }, option.label))) })] }), _jsxs("label", { className: "rich-text-font-control", htmlFor: `${idPrefix}-font-size`, children: [_jsx("span", { children: "Size" }), _jsxs("select", { id: `${idPrefix}-font-size`, defaultValue: "", onChange: (event) => {
                             onFontSizeChange(event.target.value);
                             event.target.value = "";
-                        }, children: [_jsx("option", { value: "", children: "Choose" }), RICH_TEXT_FONT_SIZE_OPTIONS.map((option) => (_jsx("option", { value: option.commandValue, children: option.label }, option.commandValue)))] })] }), RICH_TEXT_COMMANDS.map((action) => (_jsx("button", { className: `${buttonClassName} rich-text-command`, type: "button", "data-active": action.type === "command"
-                    ? action.command === "bold"
-                        ? toolbarState.bold
-                        : action.command === "italic"
-                            ? toolbarState.italic
-                            : action.command === "insertUnorderedList"
-                                ? toolbarState.unordered
-                                : toolbarState.ordered
-                    : toolbarState.block === action.value, onMouseDown: (event) => event.preventDefault(), onClick: () => onCommand(action), children: action.label }, action.id)))] }));
+                        }, children: [_jsx("option", { value: "", children: "Choose" }), RICH_TEXT_FONT_SIZE_OPTIONS.map((option) => (_jsx("option", { value: option.commandValue, children: option.label }, option.commandValue)))] })] }), RICH_TEXT_COMMANDS.map((action) => (_jsx("button", { className: `${buttonClassName} rich-text-command`, type: "button", "data-active": action.type === "checklist"
+                    ? toolbarState.checklist
+                    : action.type === "command"
+                        ? action.command === "bold"
+                            ? toolbarState.bold
+                            : action.command === "italic"
+                                ? toolbarState.italic
+                                : action.command === "insertUnorderedList"
+                                    ? toolbarState.unordered
+                                    : toolbarState.ordered
+                        : toolbarState.block === action.value, onMouseDown: (event) => event.preventDefault(), onClick: () => onCommand(action), children: action.label }, action.id)))] }));
     const handleDomainChange = (domain) => {
         const nextProjects = getProjectsForDomain(structureOptions, domain);
         const nextProject = nextProjects.includes(session.project) ? session.project : "";

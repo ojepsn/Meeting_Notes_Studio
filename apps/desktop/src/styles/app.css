@@ -1120,6 +1120,73 @@ select {
 .notebook-rich-editor h5 { font-size: 1.05rem; }
 .notebook-rich-editor h6 { font-size: 0.95rem; }
 
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface
+) ul[data-notesmith-checklist="true"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface
+) ul[data-notesmith-checklist="true"] > li {
+  position: relative;
+  min-height: 1.45em;
+  padding-left: 1.65rem;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface
+) ul[data-notesmith-checklist="true"] > li::before {
+  content: "";
+  position: absolute;
+  left: 0.12rem;
+  top: 0.2em;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 1.5px solid var(--app-border-strong);
+  border-radius: 3px;
+  background: var(--app-input-bg);
+  cursor: pointer;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface
+) ul[data-notesmith-checklist="true"] > li[data-checked="true"] {
+  color: var(--app-muted);
+  text-decoration: line-through;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface
+) ul[data-notesmith-checklist="true"] > li[data-checked="true"]::before {
+  content: "✓";
+  display: grid;
+  place-items: center;
+  border-color: var(--app-accent);
+  background: var(--app-accent);
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+}
+
 .notebook-tools-pane {
   display: flex;
   border-left: 1px solid var(--app-border);

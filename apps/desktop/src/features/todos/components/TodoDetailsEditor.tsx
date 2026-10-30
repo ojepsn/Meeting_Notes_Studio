@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
-import { applyRichTextFont, applyRichTextFontSize, normalizeRichTextInlineFormatting, preserveAllowedRichTextStyles, RICH_TEXT_FONT_OPTIONS, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
+import { applyRichTextFont, applyRichTextFontSize, insertRichTextChecklist, normalizeRichTextInlineFormatting, preserveAllowedRichTextStyles, RICH_TEXT_FONT_OPTIONS, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
 
 interface TodoDetailsEditorProps {
   value: string;
@@ -69,6 +69,11 @@ export const TodoDetailsEditor = ({
     commit(true);
   };
 
+  const applyChecklist = () => {
+    if (!editorRef.current || !insertRichTextChecklist(editorRef.current)) return;
+    commit(true);
+  };
+
   return (
     <div className={`todo-details-editor${compact ? " todo-details-editor-compact" : ""}`}>
       <div className="todo-details-toolbar" aria-label="Task details formatting">
@@ -100,6 +105,7 @@ export const TodoDetailsEditor = ({
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("italic")}>Italic</button>
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("insertUnorderedList")}>Bullets</button>
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("insertOrderedList")}>Numbered</button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={applyChecklist}>Checklist</button>
         {TASK_DETAIL_BLOCKS.map((block) => (
           <button key={block.value} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("formatBlock", block.value)}>
             {block.label}

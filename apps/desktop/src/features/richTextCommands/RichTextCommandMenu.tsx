@@ -1,6 +1,13 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { RichTextCommandRecord, RichTextSpellCheckMode } from "@notesmith/domain";
-import { normalizePastedRichTextHtml, resolveSafeRichTextHref } from "./richTextFormatting";
+import {
+  isRichTextChecklistItem,
+  normalizePastedRichTextHtml,
+  resolveSafeRichTextHref,
+  RICH_TEXT_CHECKED_ATTRIBUTE,
+  RICH_TEXT_CHECKLIST_ATTRIBUTE,
+  toggleRichTextChecklistItem,
+} from "./richTextFormatting";
 import { openDesktopUrl } from "../../lib/storage/desktopStorage";
 
 export interface RichTextCommand {
@@ -240,6 +247,23 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextComm
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const match = getCommandQuery(editor);
+      const selection = window.getSelection();
+      const selectionNode = selection?.rangeCount ? selection.getRangeAt(0).startContainer : null;
+      const selectionElement = selectionNode?.nodeType === Node.ELEMENT_NODE
+        ? selectionNode as Element
+        : selectionNode?.parentElement ?? null;
+      const checklistItem = selectionElement?.closest("li") ?? null;
+      const isInChecklist = isRichTextChecklistItem(checklistItem);
+      if (event.key === "Enter" && checklistItem && isInChecklist) {
+        const checklist = checklistItem.parentElement;
+        const existingItems = new Set(checklist ? Array.from(checklist.children) : []);
+        window.setTimeout(() => {
+          checklist?.querySelectorAll(":scope > li").forEach((item) => {
+            if (!existingItems.has(item)) item.setAttribute(RICH_TEXT_CHECKED_ATTRIBUTE, "false");
+          });
+          onContentChangeRef.current(editor.innerHTML);
+        });
+      }
       const listCommand = resolveRichTextListTabCommand({
         key: event.key,
         shiftKey: event.shiftKey,
@@ -249,6 +273,21 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextComm
       if (listCommand) {
         event.preventDefault();
         document.execCommand(listCommand);
+        if (isInChecklist) {
+          const movedSelection = window.getSelection();
+          const movedNode = movedSelection?.rangeCount ? movedSelection.getRangeAt(0).startContainer : null;
+          const movedElement = movedNode?.nodeType === Node.ELEMENT_NODE
+            ? movedNode as Element
+            : movedNode?.parentElement ?? null;
+          const movedItem = movedElement?.closest("li") ?? null;
+          const movedList = movedItem?.parentElement;
+          if (movedItem && movedList?.tagName === "UL") {
+            movedList.setAttribute(RICH_TEXT_CHECKLIST_ATTRIBUTE, "true");
+            if (!movedItem.hasAttribute(RICH_TEXT_CHECKED_ATTRIBUTE)) {
+              movedItem.setAttribute(RICH_TEXT_CHECKED_ATTRIBUTE, "false");
+            }
+          }
+        }
         setActiveQuery(null);
         onContentChangeRef.current(editor.innerHTML);
         return;
@@ -314,6 +353,11 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextComm
       onContentChangeRef.current(editor.innerHTML);
     };
     const handleClick = (event: MouseEvent) => {
+      if (toggleRichTextChecklistItem(editor, event.target, event.clientX)) {
+        event.preventDefault();
+        onContentChangeRef.current(editor.innerHTML);
+        return;
+      }
       const target = event.target instanceof Element ? event.target.closest("a[href]") : null;
       if (!target || !editor.contains(target)) return;
       const href = resolveSafeRichTextHref(target.getAttribute("href") ?? "");

@@ -21,6 +21,15 @@ export const RICH_TEXT_FONT_SIZE_OPTIONS = [
 const normalizeFontFamily = (value: string) => value.replace(/["']/g, "").replace(/\s*,\s*/g, ", ").trim();
 const allowedFontSizes = new Set<string>(RICH_TEXT_FONT_SIZE_OPTIONS.map((option) => option.cssValue));
 
+export const RICH_TEXT_CHECKLIST_ATTRIBUTE = "data-notesmith-checklist";
+export const RICH_TEXT_CHECKED_ATTRIBUTE = "data-checked";
+
+export const isRichTextChecklist = (element: Element | null) =>
+  element?.tagName === "UL" && element.getAttribute(RICH_TEXT_CHECKLIST_ATTRIBUTE) === "true";
+
+export const isRichTextChecklistItem = (element: Element | null) =>
+  element?.tagName === "LI" && isRichTextChecklist(element.parentElement);
+
 export const resolveSafeRichTextHref = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -62,8 +71,13 @@ export const preserveAllowedRichTextStyles = (element: Element) => {
   const fontFamily = element instanceof HTMLElement ? resolveAllowedRichTextFont(element.style.fontFamily) : "";
   const fontSize = element instanceof HTMLElement && allowedFontSizes.has(element.style.fontSize) ? element.style.fontSize : "";
   const href = element.tagName === "A" ? resolveSafeRichTextHref(element.getAttribute("href") ?? "") : "";
+  const isChecklist = isRichTextChecklist(element);
+  const isChecklistItem = isRichTextChecklistItem(element);
+  const isChecked = isChecklistItem && element.getAttribute(RICH_TEXT_CHECKED_ATTRIBUTE) === "true";
   Array.from(element.attributes).forEach((attribute) => element.removeAttribute(attribute.name));
   if (!(element instanceof HTMLElement)) return;
+  if (isChecklist) element.setAttribute(RICH_TEXT_CHECKLIST_ATTRIBUTE, "true");
+  if (isChecklistItem) element.setAttribute(RICH_TEXT_CHECKED_ATTRIBUTE, isChecked ? "true" : "false");
   if (fontFamily) element.style.fontFamily = fontFamily;
   if (fontSize) element.style.fontSize = fontSize;
   if (element.tagName === "A" && href) {
@@ -71,6 +85,42 @@ export const preserveAllowedRichTextStyles = (element: Element) => {
     element.setAttribute("target", "_blank");
     element.setAttribute("rel", "noopener noreferrer");
   }
+};
+
+const selectionElementInsideEditor = (editor: HTMLDivElement) => {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return null;
+  const node = selection.getRangeAt(0).startContainer;
+  const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
+  return element && editor.contains(element) ? element : null;
+};
+
+export const insertRichTextChecklist = (editor: HTMLDivElement) => {
+  editor.focus();
+  let list = selectionElementInsideEditor(editor)?.closest("ul, ol") ?? null;
+  if (!list || list.tagName !== "UL") {
+    document.execCommand("insertUnorderedList");
+    list = selectionElementInsideEditor(editor)?.closest("ul") ?? null;
+  }
+  if (!list || !editor.contains(list)) return false;
+  list.setAttribute(RICH_TEXT_CHECKLIST_ATTRIBUTE, "true");
+  list.querySelectorAll(":scope > li").forEach((item) => {
+    if (!item.hasAttribute(RICH_TEXT_CHECKED_ATTRIBUTE)) {
+      item.setAttribute(RICH_TEXT_CHECKED_ATTRIBUTE, "false");
+    }
+  });
+  return true;
+};
+
+export const toggleRichTextChecklistItem = (editor: HTMLDivElement, target: EventTarget | null, clientX: number) => {
+  const element = target instanceof Element ? target : null;
+  const item = element?.closest("li") ?? null;
+  if (!item || !editor.contains(item) || !isRichTextChecklistItem(item)) return false;
+  const itemRect = item.getBoundingClientRect();
+  if (clientX > itemRect.left + 28) return false;
+  const isChecked = item.getAttribute(RICH_TEXT_CHECKED_ATTRIBUTE) === "true";
+  item.setAttribute(RICH_TEXT_CHECKED_ATTRIBUTE, isChecked ? "false" : "true");
+  return true;
 };
 
 export const normalizePastedRichTextHtml = (value: string) => {

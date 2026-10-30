@@ -10,7 +10,7 @@ import { openDetachedTodosWindow } from "../todosWindowBridge";
 import { isTauriRuntime } from "../../../lib/storage/environment";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
-import { applyRichTextFont, applyRichTextFontSize, normalizeRichTextInlineFormatting, preserveAllowedRichTextStyles, RICH_TEXT_FONT_OPTIONS, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
+import { applyRichTextFont, applyRichTextFontSize, insertRichTextChecklist, normalizeRichTextInlineFormatting, preserveAllowedRichTextStyles, RICH_TEXT_FONT_OPTIONS, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
 
 const NOTEBOOK_BLOCK_COMMANDS = [
   { id: "body", label: "Body", value: "P" },
@@ -329,6 +329,11 @@ export const NotebookWorkspace = ({
     if (!editorRef.current) return;
     editorRef.current.focus();
     document.execCommand(command, false, value);
+    deferredManualNotes.commitNow(editorRef.current.innerHTML);
+  };
+
+  const applyChecklist = () => {
+    if (!editorRef.current || !insertRichTextChecklist(editorRef.current)) return;
     deferredManualNotes.commitNow(editorRef.current.innerHTML);
   };
 
@@ -730,6 +735,9 @@ export const NotebookWorkspace = ({
           </button>
           <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("insertOrderedList")}>
             Numbered
+          </button>
+          <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={applyChecklist}>
+            Checklist
           </button>
           {NOTEBOOK_BLOCK_COMMANDS.map((option) => (
             <button

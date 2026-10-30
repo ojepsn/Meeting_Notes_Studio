@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildRichTextCommands, findRichTextCommandQuery, getRichTextSpellCheckAttributes, resolveRichTextCommandValue, resolveRichTextListTabCommand, richTextCommandMatchesQuery } from "./RichTextCommandMenu";
-import { resolveSafeRichTextHref } from "./richTextFormatting";
+import { isRichTextChecklist, isRichTextChecklistItem, resolveSafeRichTextHref } from "./richTextFormatting";
 
 describe("rich-text commands", () => {
   const now = new Date(2026, 7, 10, 9, 5);
@@ -59,5 +59,23 @@ describe("rich-text commands", () => {
     expect(resolveSafeRichTextHref("mailto:person@example.com")).toBe("mailto:person@example.com");
     expect(resolveSafeRichTextHref("javascript:alert(1)")).toBe("");
     expect(resolveSafeRichTextHref("file:///C:/private.txt")).toBe("");
+  });
+
+  it("recognizes only explicitly marked checklist lists and their direct items", () => {
+    const checklist = {
+      tagName: "UL",
+      getAttribute: (name: string) => name === "data-notesmith-checklist" ? "true" : null,
+    } as unknown as Element;
+    const ordinaryList = {
+      tagName: "UL",
+      getAttribute: () => null,
+    } as unknown as Element;
+    const checklistItem = { tagName: "LI", parentElement: checklist } as unknown as Element;
+    const ordinaryItem = { tagName: "LI", parentElement: ordinaryList } as unknown as Element;
+
+    expect(isRichTextChecklist(checklist)).toBe(true);
+    expect(isRichTextChecklist(ordinaryList)).toBe(false);
+    expect(isRichTextChecklistItem(checklistItem)).toBe(true);
+    expect(isRichTextChecklistItem(ordinaryItem)).toBe(false);
   });
 });

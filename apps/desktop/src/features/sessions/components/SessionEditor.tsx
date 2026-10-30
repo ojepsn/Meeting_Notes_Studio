@@ -12,7 +12,7 @@ import { createAttachmentPreviewUrl } from "../../../lib/files/attachmentStore";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type AttachmentRecord, type CaptureMode, type CaptureWorkspaceDensity, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
-import { applyRichTextFontSize, resolveSafeRichTextHref, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
+import { applyRichTextFontSize, insertRichTextChecklist, isRichTextChecklist, preserveAllowedRichTextStyles, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
 
 const richTextToPlainText = (value: string) => {
   if (!value) return "";
@@ -38,8 +38,6 @@ const normalizeFontFamily = (value: string) => value.replace(/["']/g, "").replac
 const ALLOWED_RICH_TEXT_FONTS = new Set(
   RICH_TEXT_FONT_OPTIONS.map((option) => normalizeFontFamily(option.value)).filter(Boolean),
 );
-const ALLOWED_RICH_TEXT_FONT_SIZES = new Set<string>(RICH_TEXT_FONT_SIZE_OPTIONS.map((option) => option.cssValue));
-
 const resolveAllowedRichTextFont = (value: string) => {
   const normalized = normalizeFontFamily(value);
   if (!ALLOWED_RICH_TEXT_FONTS.has(normalized)) {
@@ -97,28 +95,13 @@ const normalizeRichTextHtml = (value: string) => {
       element.replaceWith(fragment);
       return;
     }
-    const fontFamily = element instanceof HTMLElement ? element.style.fontFamily : "";
-    const fontSize = element instanceof HTMLElement ? element.style.fontSize : "";
-    const href = element.tagName === "A" ? resolveSafeRichTextHref(element.getAttribute("href") ?? "") : "";
-    [...element.attributes].forEach((attribute) => element.removeAttribute(attribute.name));
+    preserveAllowedRichTextStyles(element);
     if (element.tagName === "FIGURE" && inlineAttachmentId) {
       element.setAttribute("data-notesmith-attachment-id", inlineAttachmentId);
       element.setAttribute("contenteditable", "false");
       if (element instanceof HTMLElement) {
         element.classList.add("notes-inline-attachment");
       }
-    }
-    const allowedFont = resolveAllowedRichTextFont(fontFamily);
-    if (element instanceof HTMLElement && allowedFont) {
-      element.style.fontFamily = allowedFont;
-    }
-    if (element instanceof HTMLElement && ALLOWED_RICH_TEXT_FONT_SIZES.has(fontSize)) {
-      element.style.fontSize = fontSize;
-    }
-    if (element.tagName === "A" && href) {
-      element.setAttribute("href", href);
-      element.setAttribute("target", "_blank");
-      element.setAttribute("rel", "noopener noreferrer");
     }
   });
   const normalized = wrapper.innerHTML.replace(/<div>/gi, "<p>").replace(/<\/div>/gi, "</p>").trim();
@@ -134,6 +117,7 @@ const RICH_TEXT_COMMANDS = [
   { id: "italic", label: "Italic", type: "command", command: "italic" },
   { id: "unordered", label: "Bullets", type: "command", command: "insertUnorderedList" },
   { id: "ordered", label: "Numbered", type: "command", command: "insertOrderedList" },
+  { id: "checklist", label: "Checklist", type: "checklist" },
   { id: "body", label: "Body", type: "block", value: "P" },
   { id: "h1", label: "H1", type: "block", value: "H1" },
   { id: "h2", label: "H2", type: "block", value: "H2" },
@@ -150,6 +134,7 @@ type RichTextToolbarState = {
   italic: boolean;
   unordered: boolean;
   ordered: boolean;
+  checklist: boolean;
 };
 
 const DEFAULT_RICH_TEXT_TOOLBAR_STATE: RichTextToolbarState = {
@@ -159,6 +144,7 @@ const DEFAULT_RICH_TEXT_TOOLBAR_STATE: RichTextToolbarState = {
   italic: false,
   unordered: false,
   ordered: false,
+  checklist: false,
 };
 
 const toolbarStatesMatch = (left: RichTextToolbarState, right: RichTextToolbarState) =>
@@ -167,7 +153,8 @@ const toolbarStatesMatch = (left: RichTextToolbarState, right: RichTextToolbarSt
   left.bold === right.bold &&
   left.italic === right.italic &&
   left.unordered === right.unordered &&
-  left.ordered === right.ordered;
+  left.ordered === right.ordered &&
+  left.checklist === right.checklist;
 
 const isSelectionInsideEditor = (editor: HTMLDivElement | null, selection: Selection | null) => {
   if (!editor || !selection?.rangeCount) {
@@ -210,6 +197,7 @@ const getToolbarStateFromEditor = (editorRef: { current: HTMLDivElement | null }
     italic: document.queryCommandState("italic"),
     unordered: document.queryCommandState("insertUnorderedList"),
     ordered: document.queryCommandState("insertOrderedList"),
+    checklist: isRichTextChecklist(selectionContainer?.closest("ul") ?? null),
   };
 };
 
@@ -644,6 +632,8 @@ export const SessionEditor = ({
     editorRef.current.focus();
     if (action.type === "block") {
       document.execCommand("formatBlock", false, action.value);
+    } else if (action.type === "checklist") {
+      insertRichTextChecklist(editorRef.current);
     } else {
       document.execCommand(action.command);
     }
@@ -756,7 +746,9 @@ export const SessionEditor = ({
           className={`${buttonClassName} rich-text-command`}
           type="button"
           data-active={
-            action.type === "command"
+            action.type === "checklist"
+              ? toolbarState.checklist
+              : action.type === "command"
               ? action.command === "bold"
                 ? toolbarState.bold
                 : action.command === "italic"
