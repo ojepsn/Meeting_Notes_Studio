@@ -1135,6 +1135,15 @@ select {
   .todo-details-rich-text,
   .agenda-rich-text-surface,
   .manual-notes-rich-text-surface
+) ul[data-notesmith-checklist="true"] ul[data-notesmith-checklist="true"] {
+  padding-left: 1.65rem;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface
 ) ul[data-notesmith-checklist="true"] > li {
   position: relative;
   min-height: 1.45em;
@@ -1150,7 +1159,8 @@ select {
   content: "";
   position: absolute;
   left: 0.12rem;
-  top: 0.16em;
+  top: 0.02em;
+  box-sizing: border-box;
   width: 0.98rem;
   height: 0.98rem;
   border: 2px solid color-mix(in srgb, var(--app-text) 78%, var(--app-border-strong) 22%);
