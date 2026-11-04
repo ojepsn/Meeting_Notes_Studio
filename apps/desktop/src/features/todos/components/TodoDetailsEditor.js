@@ -2,7 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEffect, useRef } from "react";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
-import { applyRichTextFont, applyRichTextFontSize, insertRichTextChecklist, normalizeRichTextInlineFormatting, preserveAllowedRichTextStyles, RICH_TEXT_FONT_OPTIONS, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
+import { applyRichTextFont, applyRichTextFontSize, insertRichTextChecklist, insertRichTextTable, normalizeRichTextInlineFormatting, preserveAllowedRichTextStyles, RICH_TEXT_FONT_OPTIONS, RICH_TEXT_FONT_SIZE_OPTIONS, RICH_TEXT_TABLE_TAGS } from "../../richTextCommands/richTextFormatting";
 const TASK_DETAIL_BLOCKS = [
     { label: "Body", value: "P" },
     { label: "H1", value: "H1" },
@@ -16,7 +16,7 @@ const normalizeTaskDetailsHtml = (value) => {
     const wrapper = document.createElement("div");
     wrapper.innerHTML = value || "";
     normalizeRichTextInlineFormatting(wrapper);
-    const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A"]);
+    const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A", ...RICH_TEXT_TABLE_TAGS]);
     wrapper.querySelectorAll("*").forEach((element) => {
         if (!allowedTags.has(element.tagName)) {
             const fragment = document.createDocumentFragment();
@@ -59,6 +59,11 @@ export const TodoDetailsEditor = ({ value, onChange, id, compact = false, placeh
             return;
         commit(true);
     };
+    const applyTable = () => {
+        if (!editorRef.current || !insertRichTextTable(editorRef.current))
+            return;
+        commit(true);
+    };
     return (_jsxs("div", { className: `todo-details-editor${compact ? " todo-details-editor-compact" : ""}`, children: [_jsxs("div", { className: "todo-details-toolbar", "aria-label": "Task details formatting", children: [_jsxs("select", { "aria-label": "Font", defaultValue: "", onChange: (event) => {
                             if (editorRef.current && event.target.value)
                                 applyRichTextFont(editorRef.current, event.target.value);
@@ -69,5 +74,5 @@ export const TodoDetailsEditor = ({ value, onChange, id, compact = false, placeh
                                 applyRichTextFontSize(editorRef.current, event.target.value);
                             commit(true);
                             event.target.value = "";
-                        }, children: [_jsx("option", { value: "", children: "Size" }), RICH_TEXT_FONT_SIZE_OPTIONS.map((option) => _jsx("option", { value: option.commandValue, children: option.label }, option.commandValue))] }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("bold"), children: "Bold" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("italic"), children: "Italic" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("insertUnorderedList"), children: "Bullets" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("insertOrderedList"), children: "Numbered" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: applyChecklist, children: "Checklist" }), TASK_DETAIL_BLOCKS.map((block) => (_jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("formatBlock", block.value), children: block.label }, block.value)))] }), _jsx("div", { id: id, ref: editorRef, className: "todo-details-rich-text", contentEditable: true, suppressContentEditableWarning: true, "data-placeholder": placeholder, onInput: () => commit(), onBlur: deferredChange.flush }), _jsx(RichTextCommandMenu, { editorRef: editorRef, onContentChange: deferredChange.commitNow })] }));
+                        }, children: [_jsx("option", { value: "", children: "Size" }), RICH_TEXT_FONT_SIZE_OPTIONS.map((option) => _jsx("option", { value: option.commandValue, children: option.label }, option.commandValue))] }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("bold"), children: "Bold" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("italic"), children: "Italic" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("insertUnorderedList"), children: "Bullets" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("insertOrderedList"), children: "Numbered" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: applyChecklist, children: "Checklist" }), _jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: applyTable, children: "Table" }), TASK_DETAIL_BLOCKS.map((block) => (_jsx("button", { type: "button", onMouseDown: (event) => event.preventDefault(), onClick: () => applyCommand("formatBlock", block.value), children: block.label }, block.value)))] }), _jsx("div", { id: id, ref: editorRef, className: "todo-details-rich-text", contentEditable: true, suppressContentEditableWarning: true, "data-placeholder": placeholder, onInput: () => commit(), onBlur: deferredChange.flush }), _jsx(RichTextCommandMenu, { editorRef: editorRef, onContentChange: deferredChange.commitNow })] }));
 };

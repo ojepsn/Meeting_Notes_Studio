@@ -12,7 +12,7 @@ import { createAttachmentPreviewUrl } from "../../../lib/files/attachmentStore";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode, type AttachmentRecord, type CaptureMode, type CaptureWorkspaceDensity, type SessionRecord, type TemplateDefinition } from "@notesmith/domain";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
-import { applyRichTextFontSize, insertRichTextChecklist, isRichTextChecklist, preserveAllowedRichTextStyles, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
+import { applyRichTextFontSize, insertRichTextChecklist, insertRichTextTable, isRichTextChecklist, preserveAllowedRichTextStyles, RICH_TEXT_FONT_SIZE_OPTIONS, RICH_TEXT_TABLE_TAGS } from "../../richTextCommands/richTextFormatting";
 
 const richTextToPlainText = (value: string) => {
   if (!value) return "";
@@ -84,7 +84,7 @@ const normalizeRichTextHtml = (value: string) => {
     }
     fontElement.replaceWith(span);
   });
-  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A", "FIGURE", "FIGCAPTION"]);
+  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A", "FIGURE", "FIGCAPTION", ...RICH_TEXT_TABLE_TAGS]);
   wrapper.querySelectorAll("*").forEach((element) => {
     const inlineAttachmentId = element.getAttribute("data-notesmith-attachment-id");
     if (!allowedTags.has(element.tagName)) {
@@ -106,7 +106,7 @@ const normalizeRichTextHtml = (value: string) => {
   });
   const normalized = wrapper.innerHTML.replace(/<div>/gi, "<p>").replace(/<\/div>/gi, "</p>").trim();
   if (!normalized) return "";
-  if (!/<(p|ul|ol|li|br|h[1-6]|span)\b/i.test(normalized)) {
+  if (!/<(p|ul|ol|li|br|h[1-6]|span|table)\b/i.test(normalized)) {
     return `<p>${normalized}</p>`;
   }
   return normalized;
@@ -118,6 +118,7 @@ const RICH_TEXT_COMMANDS = [
   { id: "unordered", label: "Bullets", type: "command", command: "insertUnorderedList" },
   { id: "ordered", label: "Numbered", type: "command", command: "insertOrderedList" },
   { id: "checklist", label: "Checklist", type: "checklist" },
+  { id: "table", label: "Table", type: "table" },
   { id: "body", label: "Body", type: "block", value: "P" },
   { id: "h1", label: "H1", type: "block", value: "H1" },
   { id: "h2", label: "H2", type: "block", value: "H2" },
@@ -634,6 +635,8 @@ export const SessionEditor = ({
       document.execCommand("formatBlock", false, action.value);
     } else if (action.type === "checklist") {
       insertRichTextChecklist(editorRef.current);
+    } else if (action.type === "table") {
+      insertRichTextTable(editorRef.current);
     } else {
       document.execCommand(action.command);
     }
@@ -748,6 +751,8 @@ export const SessionEditor = ({
           data-active={
             action.type === "checklist"
               ? toolbarState.checklist
+              : action.type === "table"
+                ? false
               : action.type === "command"
               ? action.command === "bold"
                 ? toolbarState.bold

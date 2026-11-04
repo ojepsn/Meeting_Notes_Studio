@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildRichTextCommands, findRichTextCommandQuery, getRichTextSpellCheckAttributes, resolveRichTextCommandValue, resolveRichTextListTabCommand, richTextCommandMatchesQuery } from "./RichTextCommandMenu";
-import { isRichTextChecklist, isRichTextChecklistItem, resolveSafeRichTextHref } from "./richTextFormatting";
+import { isRichTextChecklist, isRichTextChecklistItem, isRichTextTableTag, normalizeRichTextTableSpan, resolveSafeRichTextHref, shouldUnwrapPastedRichTextDiv } from "./richTextFormatting";
 
 describe("rich-text commands", () => {
   const now = new Date(2026, 7, 10, 9, 5);
@@ -77,5 +77,24 @@ describe("rich-text commands", () => {
     expect(isRichTextChecklist(ordinaryList)).toBe(false);
     expect(isRichTextChecklistItem(checklistItem)).toBe(true);
     expect(isRichTextChecklistItem(ordinaryItem)).toBe(false);
+  });
+
+  it("unwraps pasted structural divs without flattening line-level divs", () => {
+    expect(shouldUnwrapPastedRichTextDiv(["P", "P"])).toBe(true);
+    expect(shouldUnwrapPastedRichTextDiv(["UL"])).toBe(true);
+    expect(shouldUnwrapPastedRichTextDiv(["H2", "P"])).toBe(true);
+    expect(shouldUnwrapPastedRichTextDiv(["SPAN", "BR"])).toBe(false);
+    expect(shouldUnwrapPastedRichTextDiv([])).toBe(false);
+  });
+
+  it("preserves semantic table tags and only safe cell spans", () => {
+    expect(isRichTextTableTag("table")).toBe(true);
+    expect(isRichTextTableTag("TH")).toBe(true);
+    expect(isRichTextTableTag("script")).toBe(false);
+    expect(normalizeRichTextTableSpan("2")).toBe("2");
+    expect(normalizeRichTextTableSpan("20")).toBe("20");
+    expect(normalizeRichTextTableSpan("1")).toBe("");
+    expect(normalizeRichTextTableSpan("200")).toBe("");
+    expect(normalizeRichTextTableSpan("not-a-number")).toBe("");
   });
 });

@@ -18,6 +18,9 @@ export const RICH_TEXT_FONT_SIZE_OPTIONS = [
 ];
 const normalizeFontFamily = (value) => value.replace(/["']/g, "").replace(/\s*,\s*/g, ", ").trim();
 const allowedFontSizes = new Set(RICH_TEXT_FONT_SIZE_OPTIONS.map((option) => option.cssValue));
+const PASTED_RICH_TEXT_BLOCK_TAGS = new Set(["P", "UL", "OL", "H1", "H2", "H3", "H4", "H5", "H6", "TABLE"]);
+export const RICH_TEXT_TABLE_TAGS = ["TABLE", "CAPTION", "THEAD", "TBODY", "TFOOT", "TR", "TH", "TD"];
+const richTextTableTagSet = new Set(RICH_TEXT_TABLE_TAGS);
 export const RICH_TEXT_CHECKLIST_ATTRIBUTE = "data-notesmith-checklist";
 export const RICH_TEXT_CHECKED_ATTRIBUTE = "data-checked";
 export const isRichTextChecklist = (element) => element?.tagName === "UL" && element.getAttribute(RICH_TEXT_CHECKLIST_ATTRIBUTE) === "true";
@@ -68,6 +71,12 @@ export const preserveAllowedRichTextStyles = (element) => {
     const isChecklist = isRichTextChecklist(element);
     const isChecklistItem = isRichTextChecklistItem(element);
     const isChecked = isChecklistItem && element.getAttribute(RICH_TEXT_CHECKED_ATTRIBUTE) === "true";
+    const isTableCell = element.tagName === "TH" || element.tagName === "TD";
+    const columnSpan = isTableCell ? normalizeRichTextTableSpan(element.getAttribute("colspan")) : "";
+    const rowSpan = isTableCell ? normalizeRichTextTableSpan(element.getAttribute("rowspan")) : "";
+    const headerScope = element.tagName === "TH" && ["col", "row"].includes(element.getAttribute("scope") ?? "")
+        ? element.getAttribute("scope") ?? ""
+        : "";
     Array.from(element.attributes).forEach((attribute) => element.removeAttribute(attribute.name));
     if (!(element instanceof HTMLElement))
         return;
@@ -75,6 +84,12 @@ export const preserveAllowedRichTextStyles = (element) => {
         element.setAttribute(RICH_TEXT_CHECKLIST_ATTRIBUTE, "true");
     if (isChecklistItem)
         element.setAttribute(RICH_TEXT_CHECKED_ATTRIBUTE, isChecked ? "true" : "false");
+    if (columnSpan)
+        element.setAttribute("colspan", columnSpan);
+    if (rowSpan)
+        element.setAttribute("rowspan", rowSpan);
+    if (headerScope)
+        element.setAttribute("scope", headerScope);
     if (fontFamily)
         element.style.fontFamily = fontFamily;
     if (fontSize)
@@ -84,6 +99,11 @@ export const preserveAllowedRichTextStyles = (element) => {
         element.setAttribute("target", "_blank");
         element.setAttribute("rel", "noopener noreferrer");
     }
+};
+export const isRichTextTableTag = (tagName) => richTextTableTagSet.has(tagName.toUpperCase());
+export const normalizeRichTextTableSpan = (value) => {
+    const parsed = Number.parseInt(value ?? "", 10);
+    return Number.isInteger(parsed) && parsed >= 2 && parsed <= 20 ? String(parsed) : "";
 };
 const selectionElementInsideEditor = (editor) => {
     const selection = window.getSelection();
@@ -110,6 +130,48 @@ export const insertRichTextChecklist = (editor) => {
     });
     return true;
 };
+export const insertRichTextTable = (editor, rowCount = 3, columnCount = 3) => {
+    editor.focus();
+    const rows = Math.max(2, Math.min(10, Math.round(rowCount)));
+    const columns = Math.max(2, Math.min(10, Math.round(columnCount)));
+    const table = document.createElement("table");
+    const head = table.createTHead();
+    const headerRow = head.insertRow();
+    for (let column = 0; column < columns; column += 1) {
+        const header = document.createElement("th");
+        header.scope = "col";
+        header.textContent = `Column ${column + 1}`;
+        headerRow.appendChild(header);
+    }
+    const body = table.createTBody();
+    for (let row = 1; row < rows; row += 1) {
+        const tableRow = body.insertRow();
+        for (let column = 0; column < columns; column += 1) {
+            tableRow.insertCell().appendChild(document.createElement("br"));
+        }
+    }
+    const trailingParagraph = document.createElement("p");
+    trailingParagraph.appendChild(document.createElement("br"));
+    const selection = window.getSelection();
+    const selectedRange = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    if (selectedRange && editor.contains(selectedRange.commonAncestorContainer)) {
+        selectedRange.deleteContents();
+        const fragment = document.createDocumentFragment();
+        fragment.append(table, trailingParagraph);
+        selectedRange.insertNode(fragment);
+    }
+    else {
+        editor.append(table, trailingParagraph);
+    }
+    const firstHeader = table.querySelector("th");
+    if (firstHeader && selection) {
+        const nextRange = document.createRange();
+        nextRange.selectNodeContents(firstHeader);
+        selection.removeAllRanges();
+        selection.addRange(nextRange);
+    }
+    return true;
+};
 export const toggleRichTextChecklistItem = (editor, target, clientX) => {
     const element = target instanceof Element ? target : null;
     const item = element?.closest("li") ?? null;
@@ -122,17 +184,23 @@ export const toggleRichTextChecklistItem = (editor, target, clientX) => {
     item.setAttribute(RICH_TEXT_CHECKED_ATTRIBUTE, isChecked ? "false" : "true");
     return true;
 };
+export const shouldUnwrapPastedRichTextDiv = (directChildTags) => directChildTags.some((tagName) => PASTED_RICH_TEXT_BLOCK_TAGS.has(tagName.toUpperCase()));
 export const normalizePastedRichTextHtml = (value) => {
     const wrapper = document.createElement("div");
     wrapper.innerHTML = value;
-    wrapper.querySelectorAll("div").forEach((div) => {
+    Array.from(wrapper.querySelectorAll("div")).reverse().forEach((div) => {
+        const directChildTags = Array.from(div.children).map((child) => child.tagName);
+        if (shouldUnwrapPastedRichTextDiv(directChildTags)) {
+            div.replaceWith(...Array.from(div.childNodes));
+            return;
+        }
         const paragraph = document.createElement("p");
         while (div.firstChild)
             paragraph.appendChild(div.firstChild);
         div.replaceWith(paragraph);
     });
     normalizeRichTextInlineFormatting(wrapper);
-    const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A"]);
+    const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A", ...RICH_TEXT_TABLE_TAGS]);
     wrapper.querySelectorAll("*").forEach((element) => {
         if (!allowedTags.has(element.tagName)) {
             const fragment = document.createDocumentFragment();

@@ -12,7 +12,7 @@ import { createAttachmentPreviewUrl } from "../../../lib/files/attachmentStore";
 import { getPrimaryCaptureMode, getTemplatesForCaptureMode } from "@notesmith/domain";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
-import { applyRichTextFontSize, insertRichTextChecklist, isRichTextChecklist, preserveAllowedRichTextStyles, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
+import { applyRichTextFontSize, insertRichTextChecklist, insertRichTextTable, isRichTextChecklist, preserveAllowedRichTextStyles, RICH_TEXT_FONT_SIZE_OPTIONS, RICH_TEXT_TABLE_TAGS } from "../../richTextCommands/richTextFormatting";
 const richTextToPlainText = (value) => {
     if (!value)
         return "";
@@ -75,7 +75,7 @@ const normalizeRichTextHtml = (value) => {
         }
         fontElement.replaceWith(span);
     });
-    const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A", "FIGURE", "FIGCAPTION"]);
+    const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A", "FIGURE", "FIGCAPTION", ...RICH_TEXT_TABLE_TAGS]);
     wrapper.querySelectorAll("*").forEach((element) => {
         const inlineAttachmentId = element.getAttribute("data-notesmith-attachment-id");
         if (!allowedTags.has(element.tagName)) {
@@ -98,7 +98,7 @@ const normalizeRichTextHtml = (value) => {
     const normalized = wrapper.innerHTML.replace(/<div>/gi, "<p>").replace(/<\/div>/gi, "</p>").trim();
     if (!normalized)
         return "";
-    if (!/<(p|ul|ol|li|br|h[1-6]|span)\b/i.test(normalized)) {
+    if (!/<(p|ul|ol|li|br|h[1-6]|span|table)\b/i.test(normalized)) {
         return `<p>${normalized}</p>`;
     }
     return normalized;
@@ -109,6 +109,7 @@ const RICH_TEXT_COMMANDS = [
     { id: "unordered", label: "Bullets", type: "command", command: "insertUnorderedList" },
     { id: "ordered", label: "Numbered", type: "command", command: "insertOrderedList" },
     { id: "checklist", label: "Checklist", type: "checklist" },
+    { id: "table", label: "Table", type: "table" },
     { id: "body", label: "Body", type: "block", value: "P" },
     { id: "h1", label: "H1", type: "block", value: "H1" },
     { id: "h2", label: "H2", type: "block", value: "H2" },
@@ -474,6 +475,9 @@ export const SessionEditor = ({ session, templates, allowedTemplateCaptureModes,
         else if (action.type === "checklist") {
             insertRichTextChecklist(editorRef.current);
         }
+        else if (action.type === "table") {
+            insertRichTextTable(editorRef.current);
+        }
         else {
             document.execCommand(action.command);
         }
@@ -538,15 +542,17 @@ export const SessionEditor = ({ session, templates, allowedTemplateCaptureModes,
                             event.target.value = "";
                         }, children: [_jsx("option", { value: "", children: "Choose" }), RICH_TEXT_FONT_SIZE_OPTIONS.map((option) => (_jsx("option", { value: option.commandValue, children: option.label }, option.commandValue)))] })] }), RICH_TEXT_COMMANDS.map((action) => (_jsx("button", { className: `${buttonClassName} rich-text-command`, type: "button", "data-active": action.type === "checklist"
                     ? toolbarState.checklist
-                    : action.type === "command"
-                        ? action.command === "bold"
-                            ? toolbarState.bold
-                            : action.command === "italic"
-                                ? toolbarState.italic
-                                : action.command === "insertUnorderedList"
-                                    ? toolbarState.unordered
-                                    : toolbarState.ordered
-                        : toolbarState.block === action.value, onMouseDown: (event) => event.preventDefault(), onClick: () => onCommand(action), children: action.label }, action.id)))] }));
+                    : action.type === "table"
+                        ? false
+                        : action.type === "command"
+                            ? action.command === "bold"
+                                ? toolbarState.bold
+                                : action.command === "italic"
+                                    ? toolbarState.italic
+                                    : action.command === "insertUnorderedList"
+                                        ? toolbarState.unordered
+                                        : toolbarState.ordered
+                            : toolbarState.block === action.value, onMouseDown: (event) => event.preventDefault(), onClick: () => onCommand(action), children: action.label }, action.id)))] }));
     const handleDomainChange = (domain) => {
         const nextProjects = getProjectsForDomain(structureOptions, domain);
         const nextProject = nextProjects.includes(session.project) ? session.project : "";

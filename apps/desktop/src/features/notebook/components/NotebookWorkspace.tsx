@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { SessionRecord, TodoPriority, TodoRecord } from "@notesmith/domain";
 import { DateInput } from "../../../components/DateInput";
+import { GenerationProgress, type GenerationProgressValue } from "../../../components/GenerationProgress";
 import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
 import { DeferredTextInput } from "../../../components/DeferredTextInput";
 import { TokenPicker } from "../../../components/TokenPicker";
@@ -10,7 +11,7 @@ import { openDetachedTodosWindow } from "../todosWindowBridge";
 import { isTauriRuntime } from "../../../lib/storage/environment";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
-import { applyRichTextFont, applyRichTextFontSize, insertRichTextChecklist, normalizeRichTextInlineFormatting, preserveAllowedRichTextStyles, RICH_TEXT_FONT_OPTIONS, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
+import { applyRichTextFont, applyRichTextFontSize, insertRichTextChecklist, insertRichTextTable, normalizeRichTextInlineFormatting, preserveAllowedRichTextStyles, RICH_TEXT_FONT_OPTIONS, RICH_TEXT_FONT_SIZE_OPTIONS, RICH_TEXT_TABLE_TAGS } from "../../richTextCommands/richTextFormatting";
 
 const NOTEBOOK_BLOCK_COMMANDS = [
   { id: "body", label: "Body", value: "P" },
@@ -92,7 +93,7 @@ const normalizeNotebookHtml = (value: string) => {
   const wrapper = document.createElement("div");
   wrapper.innerHTML = preserveNotebookRowBreaks(value || "");
   normalizeRichTextInlineFormatting(wrapper);
-  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A"]);
+  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A", ...RICH_TEXT_TABLE_TAGS]);
   wrapper.querySelectorAll("*").forEach((element) => {
     if (!allowedTags.has(element.tagName)) {
       const fragment = document.createDocumentFragment();
@@ -179,6 +180,7 @@ interface NotebookWorkspaceProps {
   isRecordingAudio: boolean;
   isTranscribingAudio: boolean;
   isGenerating: boolean;
+  generationProgress: GenerationProgressValue;
   recordingStatusNote?: string | null;
   outputContent: ReactNode;
   onSelect: (sessionId: string) => void;
@@ -208,6 +210,7 @@ export const NotebookWorkspace = ({
   isRecordingAudio,
   isTranscribingAudio,
   isGenerating,
+  generationProgress,
   recordingStatusNote,
   outputContent,
   onSelect,
@@ -334,6 +337,11 @@ export const NotebookWorkspace = ({
 
   const applyChecklist = () => {
     if (!editorRef.current || !insertRichTextChecklist(editorRef.current)) return;
+    deferredManualNotes.commitNow(editorRef.current.innerHTML);
+  };
+
+  const applyTable = () => {
+    if (!editorRef.current || !insertRichTextTable(editorRef.current)) return;
     deferredManualNotes.commitNow(editorRef.current.innerHTML);
   };
 
@@ -739,6 +747,9 @@ export const NotebookWorkspace = ({
           <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={applyChecklist}>
             Checklist
           </button>
+          <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={applyTable}>
+            Table
+          </button>
           {NOTEBOOK_BLOCK_COMMANDS.map((option) => (
             <button
               key={option.id}
@@ -822,6 +833,7 @@ export const NotebookWorkspace = ({
                 <button className="primary-button" type="button" disabled={isGenerating} onClick={generateOutput}>
                   {isGenerating ? "Generating..." : "Generate output"}
                 </button>
+                {isGenerating ? <GenerationProgress progress={generationProgress} /> : null}
                 <p className="tiny-text">{recordingStatusNote || "Microphone recording is saved with this notebook session."}</p>
                 <button className="small-button" type="button" onClick={() => onOpenInNotes("capture")}>
                   Open full session in Notes

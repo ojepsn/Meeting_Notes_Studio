@@ -387,6 +387,7 @@ export const App = () => {
   const [statusNote, setStatusNote] = useState("Ready.");
   const [generationLog, setGenerationLog] = useState<GenerationLogEntry[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState({ value: 0, label: "Preparing output" });
   const [isRevising, setIsRevising] = useState(false);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [pendingAudioBySession, setPendingAudioBySession] = useState<Record<string, File | undefined>>({});
@@ -2070,12 +2071,14 @@ export const App = () => {
       "info",
       `session: ${visibleSession.title || "Untitled session"}\ntemplate: ${template.name}`,
     );
+    setGenerationProgress({ value: 5, label: "Preparing session" });
     setIsGenerating(true);
     let usedCache = false;
     try {
       let sessionForGeneration = visibleSession;
       activeSessionDraftRef.current = visibleSession;
       await saveSession(visibleSession);
+      setGenerationProgress({ value: 15, label: "Reading source material" });
       const shouldUseManualMode = sessionForGeneration.transcribeOnly === true;
       const sessionAttachments = (latestSnapshot?.attachments ?? activeAttachments).filter(
         (attachment) => attachment.sessionId === sessionForGeneration.id,
@@ -2102,6 +2105,7 @@ export const App = () => {
           `has text: ${hasManualOrTranscriptText ? "yes" : "no"}`,
         ].join("\n"),
       );
+      setGenerationProgress({ value: 28, label: "Source material checked" });
 
       if (shouldUseManualMode && !hasManualOrTranscriptText) {
         appendGenerationLog("Manual polish stopped because no source text was found.", "warning");
@@ -2115,6 +2119,7 @@ export const App = () => {
         !sessionHasTranscriptText &&
         (sessionAudioAttachment || pendingAudioBySession[sessionForGeneration.id])
       ) {
+        setGenerationProgress({ value: 35, label: "Transcribing audio" });
         const audioFile = await getAudioFileForActiveSession();
         if (!audioFile) {
           appendGenerationLog("Generation stopped because no audio file was available for transcription.", "error");
@@ -2134,6 +2139,7 @@ export const App = () => {
             liveTranscript: [sessionForGeneration.liveTranscript.trim(), transcriptText.trim()].filter(Boolean).join("\n\n"),
           };
           await saveSession(sessionForGeneration);
+          setGenerationProgress({ value: 50, label: "Audio transcribed" });
         } finally {
           setIsTranscribingAudio(false);
         }
@@ -2145,6 +2151,10 @@ export const App = () => {
         return;
       }
 
+      setGenerationProgress({
+        value: shouldUseManualMode ? 65 : 55,
+        label: shouldUseManualMode ? "Formatting manual notes" : "Generating with AI",
+      });
       const output = shouldUseManualMode
         ? buildManualNotesOnlyOutput(sessionForGeneration, template)
         : await generateNotes({
@@ -2160,6 +2170,7 @@ export const App = () => {
             }),
           });
 
+      setGenerationProgress({ value: 82, label: "Validating generated output" });
       setSelectedOutputVersionId(null);
       if (!output.trim()) {
         appendGenerationLog("Generation completed but returned empty output.", "error");
@@ -2173,7 +2184,9 @@ export const App = () => {
         );
       }
 
+      setGenerationProgress({ value: 92, label: "Saving output" });
       await saveSession({ ...sessionForGeneration, ...buildOutputVersionPatch(sessionForGeneration, output) });
+      setGenerationProgress({ value: 100, label: "Output ready" });
       appendGenerationLog(
         "Output saved to the session.",
         "success",
@@ -2243,6 +2256,7 @@ export const App = () => {
     }
 
     setIsGenerating(true);
+    setGenerationProgress({ value: 20, label: "Preparing manual notes" });
     setGenerationLog([]);
     appendGenerationLog(
       "Direct Manual-notes copy started.",
@@ -2252,7 +2266,9 @@ export const App = () => {
 
     try {
       setSelectedOutputVersionId(null);
+      setGenerationProgress({ value: 75, label: "Saving output" });
       await saveSession({ ...visibleSession, ...buildOutputVersionPatch(visibleSession, directOutput) });
+      setGenerationProgress({ value: 100, label: "Output ready" });
       appendGenerationLog(
         "Manual notes copied directly to Output.",
         "success",
@@ -3498,6 +3514,8 @@ export const App = () => {
                 savedTags={snapshot.settings.savedTags}
                 suggestedTags={suggestedTags}
                 isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
+                isGeneratingOutput={isGenerating}
+                generationProgress={generationProgress}
                 isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
                 isRevising={isRevising}
                 onPrimaryAction={outputActionConfig.onPrimary}
@@ -3849,6 +3867,8 @@ export const App = () => {
             savedTags={snapshot.settings.savedTags}
             suggestedTags={suggestedTags}
             isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
+            isGeneratingOutput={isGenerating}
+            generationProgress={generationProgress}
             isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
             isRevising={isRevising}
             onPrimaryAction={outputActionConfig.onPrimary}
@@ -4521,6 +4541,7 @@ export const App = () => {
                 isRecordingAudio={isRecordingAudio}
                 isTranscribingAudio={isTranscribingAudio}
                 isGenerating={isGenerating}
+                generationProgress={generationProgress}
                 recordingStatusNote={recordingStatusNote}
                 onSelect={(sessionId) => {
                   setSelectedOutputVersionId(null);
@@ -4583,6 +4604,8 @@ export const App = () => {
                     savedTags={snapshot.settings.savedTags}
                     suggestedTags={suggestedTags}
                     isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
+                    isGeneratingOutput={isGenerating}
+                    generationProgress={generationProgress}
                     isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
                     isRevising={isRevising}
                     onPrimaryAction={outputActionConfig.onPrimary}
@@ -5010,6 +5033,8 @@ export const App = () => {
                         savedTags={snapshot.settings.savedTags}
                         suggestedTags={suggestedTags}
                         isPrimaryActionRunning={outputActionConfig.isPrimaryRunning}
+                        isGeneratingOutput={isGenerating}
+                        generationProgress={generationProgress}
                         isSecondaryActionRunning={outputActionConfig.isSecondaryRunning}
                         isRevising={isRevising}
                         onPrimaryAction={outputActionConfig.onPrimary}

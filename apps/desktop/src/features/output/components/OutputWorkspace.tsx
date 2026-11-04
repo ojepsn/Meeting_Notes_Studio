@@ -4,6 +4,7 @@ import { AttachmentImagePreview } from "../../../components/AttachmentImagePrevi
 import { DeferredTimeInput } from "../../../components/DeferredTimeInput";
 import { DeferredTextArea, DeferredTextInput } from "../../../components/DeferredTextInput";
 import { DateInput } from "../../../components/DateInput";
+import { GenerationProgress, type GenerationProgressValue } from "../../../components/GenerationProgress";
 import { getActivitiesForSelection, getProjectsForDomain, type StructureOptions } from "../../../lib/structure/options";
 import { buildHtmlMarkup, buildStructuredOutput } from "../../../lib/export/exportService";
 import { getOutputLayoutPreset } from "../../../lib/export/outputLayouts";
@@ -89,6 +90,8 @@ interface OutputWorkspaceProps {
   savedTags: string[];
   suggestedTags: string[];
   isPrimaryActionRunning: boolean;
+  isGeneratingOutput: boolean;
+  generationProgress: GenerationProgressValue;
   isSecondaryActionRunning: boolean;
   isRevising: boolean;
   onPrimaryAction: () => void;
@@ -143,6 +146,8 @@ export const OutputWorkspace = ({
   savedTags,
   suggestedTags,
   isPrimaryActionRunning,
+  isGeneratingOutput,
+  generationProgress,
   isSecondaryActionRunning,
   isRevising,
   onPrimaryAction,
@@ -555,6 +560,7 @@ export const OutputWorkspace = ({
                 >
                   {primaryActionButtonLabel}
                 </button>
+                {isGeneratingOutput ? <GenerationProgress progress={generationProgress} /> : null}
                 {secondaryActionLabel && onSecondaryAction ? (
                   <button className="secondary-button" type="button" onClick={onSecondaryAction}>
                     {isSecondaryActionRunning ? `${secondaryActionLabel}...` : secondaryActionLabel}
@@ -926,6 +932,7 @@ export const OutputWorkspace = ({
             Export PDF
           </button>
         </div>
+        {isGeneratingOutput ? <GenerationProgress progress={generationProgress} /> : null}
       </div>
       {!hasOutput ? (
         <div className={`empty-state-card compact-empty-state${isMinimal ? " output-empty-state-minimal" : ""}`}>

@@ -1,3 +1,4 @@
+import { type GenerationProgressValue } from "../../../components/GenerationProgress";
 import { type StructureOptions } from "../../../lib/structure/options";
 import type { ActivityRecord, AttachmentRecord, CaptureWorkspaceDensity, RuleSuggestionRecord, SessionRecord, TemplateDefinition } from "@notesmith/domain";
 interface OutputWorkspaceProps {
@@ -25,6 +26,8 @@ interface OutputWorkspaceProps {
     savedTags: string[];
     suggestedTags: string[];
     isPrimaryActionRunning: boolean;
+    isGeneratingOutput: boolean;
+    generationProgress: GenerationProgressValue;
     isSecondaryActionRunning: boolean;
     isRevising: boolean;
     onPrimaryAction: () => void;
@@ -61,5 +64,5 @@ interface OutputWorkspaceProps {
         comments?: string;
     }) => void;
 }
-export declare const OutputWorkspace: ({ session, template, displayedOutput, layoutPresetId, outputVersions, selectedOutputVersionId, attachments, presentation, showPresentationActions, showPanelHeading, showDetailsSection, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isPrimaryActionRunning, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onCopyOutput, onTranslate, onRevise, onRevertOutputVersion, onOpenOutputVersion, onOpenLatestOutputVersion, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, ruleSuggestions, onAcceptRuleSuggestion, onDismissRuleSuggestion, onIgnoreRuleSuggestion, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, linkedActivity, onOpenLinkedActivity, onAddFollowUpTodo, onAddFollowUpMeeting, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
+export declare const OutputWorkspace: ({ session, template, displayedOutput, layoutPresetId, outputVersions, selectedOutputVersionId, attachments, presentation, showPresentationActions, showPanelHeading, showDetailsSection, onChange, savedPeople, suggestedPeople, savedProjects, suggestedProjects, savedDomains, suggestedDomains, savedActivities, suggestedActivities, structureOptions, savedTags, suggestedTags, isPrimaryActionRunning, isGeneratingOutput, generationProgress, isSecondaryActionRunning, isRevising, onPrimaryAction, onSecondaryAction, onCopyOutput, onTranslate, onRevise, onRevertOutputVersion, onOpenOutputVersion, onOpenLatestOutputVersion, onExportText, onExportMarkdown, onExportHtml, onExportDocx, onExportPdf, ruleSuggestions, onAcceptRuleSuggestion, onDismissRuleSuggestion, onIgnoreRuleSuggestion, primaryActionLabel, secondaryActionLabel, emptyStatePrimaryLabel, emptyStateSecondaryLabel, linkedActivity, onOpenLinkedActivity, onAddFollowUpTodo, onAddFollowUpMeeting, }: OutputWorkspaceProps) => import("react/jsx-runtime").JSX.Element;
 export {};

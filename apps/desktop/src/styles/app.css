@@ -1135,6 +1135,56 @@ select {
   .todo-details-rich-text,
   .agenda-rich-text-surface,
   .manual-notes-rich-text-surface
+) table {
+  width: 100%;
+  margin: 0.45rem 0;
+  border-collapse: collapse;
+  table-layout: auto;
+  color: var(--app-text);
+  font: inherit;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface
+) :is(th, td) {
+  min-width: 5rem;
+  padding: 0.38rem 0.5rem;
+  border: 1px solid var(--app-border-strong);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface
+) th {
+  background: color-mix(in srgb, var(--app-accent-soft) 58%, var(--app-surface) 42%);
+  font-weight: 700;
+  text-align: left;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface
+) caption {
+  padding: 0.25rem 0;
+  color: var(--app-muted);
+  font-size: 0.85em;
+  text-align: left;
+}
+
+:is(
+  .notebook-rich-editor,
+  .todo-details-rich-text,
+  .agenda-rich-text-surface,
+  .manual-notes-rich-text-surface
 ) ul[data-notesmith-checklist="true"] ul[data-notesmith-checklist="true"] {
   padding-left: 1.65rem;
 }
@@ -2574,6 +2624,68 @@ select {
     0 0 0 3px color-mix(in srgb, var(--app-accent-soft) 58%, transparent 42%),
     0 18px 34px color-mix(in srgb, var(--app-accent) 36%, transparent 64%);
   transform: translateY(-1px);
+}
+
+.generation-progress {
+  display: grid;
+  width: min(100%, 28rem);
+  gap: 0.3rem;
+}
+
+.generation-progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--app-muted);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.generation-progress-copy strong {
+  color: var(--app-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.generation-progress-track {
+  height: 0.48rem;
+  overflow: hidden;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-input-bg) 82%, var(--app-border) 18%);
+}
+
+.generation-progress-fill {
+  position: relative;
+  display: block;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--app-accent), var(--app-accent-strong));
+  transition: width 320ms ease;
+}
+
+.generation-progress-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.55) 48%, transparent 76%);
+  transform: translateX(-100%);
+  animation: generation-progress-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes generation-progress-shimmer {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .generation-progress-fill {
+    transition: none;
+  }
+
+  .generation-progress-fill::after {
+    animation: none;
+  }
 }
 
 .shell-button:focus-visible,

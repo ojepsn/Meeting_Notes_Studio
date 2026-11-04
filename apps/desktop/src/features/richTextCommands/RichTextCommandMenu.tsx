@@ -144,6 +144,16 @@ const isSelectionInsideListItem = (editor: HTMLDivElement) => {
   return Boolean(listItem && editor.contains(listItem));
 };
 
+const placeCaretInRichTextTableCell = (cell: Element) => {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  range.selectNodeContents(cell);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+
 const getCommandQuery = (editor: HTMLDivElement) => {
   const selection = window.getSelection();
   if (!selection?.rangeCount || !selection.isCollapsed) return null;
@@ -254,6 +264,28 @@ export const RichTextCommandMenu = ({ editorRef, onContentChange }: RichTextComm
         : selectionNode?.parentElement ?? null;
       const checklistItem = selectionElement?.closest("li") ?? null;
       const isInChecklist = isRichTextChecklistItem(checklistItem);
+      const tableCell = selectionElement?.closest("th, td") ?? null;
+      if (event.key === "Tab" && tableCell && editor.contains(tableCell) && !match) {
+        event.preventDefault();
+        const table = tableCell.closest("table");
+        const cells = table ? Array.from(table.querySelectorAll("th, td")) : [];
+        const currentIndex = cells.indexOf(tableCell as HTMLTableCellElement);
+        let targetCell = cells[currentIndex + (event.shiftKey ? -1 : 1)] ?? null;
+        if (!event.shiftKey && table && currentIndex === cells.length - 1) {
+          const firstRow = table.querySelector("tr");
+          const columnCount = Math.max(1, firstRow?.querySelectorAll("th, td").length ?? 1);
+          const body = table.tBodies[0] ?? table.createTBody();
+          const row = body.insertRow();
+          for (let column = 0; column < columnCount; column += 1) {
+            row.insertCell().appendChild(document.createElement("br"));
+          }
+          targetCell = row.cells[0] ?? null;
+          onContentChangeRef.current(editor.innerHTML);
+        }
+        placeCaretInRichTextTableCell(targetCell ?? tableCell);
+        setActiveQuery(null);
+        return;
+      }
       if (event.key === "Enter" && checklistItem && isInChecklist) {
         const checklist = checklistItem.parentElement;
         const existingItems = new Set(checklist ? Array.from(checklist.children) : []);

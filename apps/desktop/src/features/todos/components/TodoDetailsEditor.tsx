@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { RichTextCommandMenu } from "../../richTextCommands/RichTextCommandMenu";
 import { useDeferredRichTextChange } from "../../richTextCommands/useDeferredRichTextChange";
-import { applyRichTextFont, applyRichTextFontSize, insertRichTextChecklist, normalizeRichTextInlineFormatting, preserveAllowedRichTextStyles, RICH_TEXT_FONT_OPTIONS, RICH_TEXT_FONT_SIZE_OPTIONS } from "../../richTextCommands/richTextFormatting";
+import { applyRichTextFont, applyRichTextFontSize, insertRichTextChecklist, insertRichTextTable, normalizeRichTextInlineFormatting, preserveAllowedRichTextStyles, RICH_TEXT_FONT_OPTIONS, RICH_TEXT_FONT_SIZE_OPTIONS, RICH_TEXT_TABLE_TAGS } from "../../richTextCommands/richTextFormatting";
 
 interface TodoDetailsEditorProps {
   value: string;
@@ -25,7 +25,7 @@ const normalizeTaskDetailsHtml = (value: string) => {
   const wrapper = document.createElement("div");
   wrapper.innerHTML = value || "";
   normalizeRichTextInlineFormatting(wrapper);
-  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A"]);
+  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "SPAN", "A", ...RICH_TEXT_TABLE_TAGS]);
   wrapper.querySelectorAll("*").forEach((element) => {
     if (!allowedTags.has(element.tagName)) {
       const fragment = document.createDocumentFragment();
@@ -74,6 +74,11 @@ export const TodoDetailsEditor = ({
     commit(true);
   };
 
+  const applyTable = () => {
+    if (!editorRef.current || !insertRichTextTable(editorRef.current)) return;
+    commit(true);
+  };
+
   return (
     <div className={`todo-details-editor${compact ? " todo-details-editor-compact" : ""}`}>
       <div className="todo-details-toolbar" aria-label="Task details formatting">
@@ -106,6 +111,7 @@ export const TodoDetailsEditor = ({
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("insertUnorderedList")}>Bullets</button>
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("insertOrderedList")}>Numbered</button>
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={applyChecklist}>Checklist</button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={applyTable}>Table</button>
         {TASK_DETAIL_BLOCKS.map((block) => (
           <button key={block.value} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("formatBlock", block.value)}>
             {block.label}
