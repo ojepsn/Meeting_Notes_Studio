@@ -1,5 +1,6 @@
 import type { OutlookCalendarImportBatch, OutlookCalendarImportSummary } from "../outlook/outlookCalendar";
 export declare const CALENDAR_IMPORT_MCP_EVENT = "notesmith-calendar-import-request";
+export declare const NOTESMITH_SEARCH_MCP_EVENT = "notesmith-search-request";
 export declare const CHATGPT_OUTLOOK_ACCOUNT_KEY = "chatgpt-outlook-calendar";
 export declare const CHATGPT_CALENDAR_WINDOW_DAYS = 7;
 export interface CalendarImportMcpReady {
@@ -27,10 +28,16 @@ export interface CalendarImportMcpRequest {
     events: ChatGptCalendarEvent[];
     completeSnapshot: true;
 }
+export interface NoteSmithSearchMcpRequest {
+    requestId: string;
+    toolName: string;
+    arguments: Record<string, unknown>;
+}
 export declare const startCalendarImportMcp: () => Promise<CalendarImportMcpReady>;
 export declare const stopCalendarImportMcp: () => Promise<void>;
 export declare const getCalendarImportMcpStatus: () => Promise<CalendarImportMcpReady | null>;
 export declare const completeCalendarImportMcp: (requestId: string, result: OutlookCalendarImportSummary | null, error?: string) => Promise<void>;
+export declare const completeNoteSmithSearchMcp: (requestId: string, result: unknown | null, error?: string) => Promise<void>;
 export declare const getChatGptCalendarImportWindow: (now?: Date) => {
     fromDate: string;
     toDate: string;

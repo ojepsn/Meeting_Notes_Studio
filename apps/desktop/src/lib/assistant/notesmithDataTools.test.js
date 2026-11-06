@@ -191,6 +191,35 @@ describe("notesmithDataTools", () => {
         const privateResults = searchNoteSmithData(buildSnapshot(), { query: "Aurora", includePrivate: true, limit: 10 });
         expect(privateResults[0]?.id).toBe("session-private");
     });
+    it("excludes calendar items and timelogs linked to private work", () => {
+        const snapshot = buildSnapshot();
+        snapshot.activities.push({
+            ...snapshot.activities[0],
+            id: "activity-private",
+            description: "Aurora confidential review",
+            isPrivate: true,
+        });
+        snapshot.calendarItems.push({
+            ...snapshot.calendarItems[0],
+            id: "calendar-private",
+            targetId: "activity-private",
+        });
+        snapshot.timelogs.push({
+            id: "timelog-private",
+            targetType: "activity",
+            targetId: "activity-private",
+            date: "2026-04-18",
+            startTime: "11:00",
+            endTime: "12:00",
+            durationMinutes: 60,
+            notes: "Aurora analysis",
+            createdAt: "2026-04-18T11:00:00.000Z",
+            updatedAt: "2026-04-18T12:00:00.000Z",
+        });
+        expect(searchNoteSmithData(snapshot, { query: "Aurora", sourceTypes: ["calendar", "timelog"] })).toHaveLength(0);
+        expect(searchNoteSmithData(snapshot, { query: "Aurora", includePrivate: true, sourceTypes: ["calendar", "timelog"] })
+            .map((result) => result.id)).toEqual(expect.arrayContaining(["calendar-private", "timelog-private"]));
+    });
     it("builds linked meeting context without direct database access", () => {
         const context = getNoteSmithLinkedContext(buildSnapshot(), "session-public");
         expect(context.activity?.id).toBe("activity-1");

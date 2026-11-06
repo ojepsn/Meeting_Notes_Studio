@@ -3,6 +3,7 @@ import { isTauriRuntime } from "../storage/environment";
 import type { OutlookCalendarImportBatch, OutlookCalendarImportSummary } from "../outlook/outlookCalendar";
 
 export const CALENDAR_IMPORT_MCP_EVENT = "notesmith-calendar-import-request";
+export const NOTESMITH_SEARCH_MCP_EVENT = "notesmith-search-request";
 export const CHATGPT_OUTLOOK_ACCOUNT_KEY = "chatgpt-outlook-calendar";
 export const CHATGPT_CALENDAR_WINDOW_DAYS = 7;
 
@@ -34,6 +35,12 @@ export interface CalendarImportMcpRequest {
   completeSnapshot: true;
 }
 
+export interface NoteSmithSearchMcpRequest {
+  requestId: string;
+  toolName: string;
+  arguments: Record<string, unknown>;
+}
+
 const invokeTauri = async <T>(command: string, args: Record<string, unknown> = {}) => {
   if (!isTauriRuntime()) throw new Error("The NoteSmith MCP importer is available in the installed desktop app.");
   const { invoke } = await import("@tauri-apps/api/core");
@@ -54,6 +61,17 @@ export const completeCalendarImportMcp = (
   error?: string,
 ) =>
   invokeTauri<void>("complete_calendar_import_mcp", {
+    requestId,
+    result,
+    error: error || null,
+  });
+
+export const completeNoteSmithSearchMcp = (
+  requestId: string,
+  result: unknown | null,
+  error?: string,
+) =>
+  invokeTauri<void>("complete_notesmith_search_mcp", {
     requestId,
     result,
     error: error || null,

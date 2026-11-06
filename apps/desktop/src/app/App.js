@@ -33,8 +33,8 @@ import { createAIRuntimeStatusHandler } from "../lib/ai/status";
 import { transcribeAudio } from "../lib/ai/services/transcribeAudio";
 import { translateOutput } from "../lib/ai/services/translateOutput";
 import { checkForDesktopUpdates } from "../lib/ai/updater";
-import { stopAgentSidecar } from "../lib/assistant/agentSidecar";
-import { buildChatGptOutlookImportBatch, CALENDAR_IMPORT_MCP_EVENT, completeCalendarImportMcp, startCalendarImportMcp, stopCalendarImportMcp, } from "../lib/assistant/calendarImportMcp";
+import { buildChatGptOutlookImportBatch, CALENDAR_IMPORT_MCP_EVENT, NOTESMITH_SEARCH_MCP_EVENT, completeCalendarImportMcp, completeNoteSmithSearchMcp, startCalendarImportMcp, stopCalendarImportMcp, } from "../lib/assistant/calendarImportMcp";
+import { invokeNoteSmithMcpTool } from "../lib/assistant/notesmithMcpBridge";
 import { exportOutputAsDocx, exportOutputAsHtml, exportOutputAsMarkdown, exportOutputAsPdf, exportOutputAsText } from "../lib/export/exportService";
 import { fileToAttachmentRecord, loadPersistedAttachmentFile, pickAudioFile, pickImageFile, pickTranscriptFile, persistGeneratedAttachment, persistSelectedAttachment, readTranscriptFile, removePersistedAttachment, restoreImportedAttachmentFiles, } from "../lib/files/attachmentStore";
 import { buildRecordingFilename, getSupportedRecordingMimeType, getSystemAudioDisplayOptions, RECORDING_MODE_LABELS, } from "../lib/files/recording";
@@ -258,6 +258,7 @@ export const App = () => {
     const todosSnapshotRef = useRef(snapshot?.todos ?? []);
     const themeSnapshotRef = useRef(snapshot?.settings.theme ?? "fluent-slate-light");
     const runningTodoIdsSnapshotRef = useRef(getRunningTodoIds(snapshot?.timelogs ?? []));
+    const mcpSnapshotRef = useRef(snapshot);
     const buildDesktopBackupBundle = () => {
         if (!snapshot) {
             return null;
@@ -285,7 +286,7 @@ export const App = () => {
         try {
             const ready = await startCalendarImportMcp();
             setCalendarImportMcpReady(ready);
-            setCalendarImportMcpStatusNote("Ready for a seven-day calendar import from ChatGPT.");
+            setCalendarImportMcpStatusNote("Ready for read-only NoteSmith search and seven-day calendar import from ChatGPT.");
         }
         catch (error) {
             setCalendarImportMcpStatusNote(formatCalendarImportError(error, "Could not start the local calendar importer."));
@@ -299,7 +300,7 @@ export const App = () => {
         try {
             await stopCalendarImportMcp();
             setCalendarImportMcpReady(null);
-            setCalendarImportMcpStatusNote("The local calendar importer is stopped.");
+            setCalendarImportMcpStatusNote("The local ChatGPT connection is stopped.");
         }
         catch (error) {
             setCalendarImportMcpStatusNote(formatCalendarImportError(error, "Could not stop the local calendar importer."));
@@ -313,7 +314,7 @@ export const App = () => {
             return;
         try {
             await navigator.clipboard.writeText(calendarImportMcpReady.endpointUrl);
-            setCalendarImportMcpStatusNote("Local NoteSmith import address copied.");
+            setCalendarImportMcpStatusNote("Local NoteSmith connection address copied.");
         }
         catch (error) {
             setCalendarImportMcpStatusNote(formatCalendarImportError(error, "Could not copy the local import address."));
@@ -382,7 +383,41 @@ export const App = () => {
         todosSnapshotRef.current = snapshot?.todos ?? [];
         themeSnapshotRef.current = snapshot?.settings.theme ?? "fluent-slate-light";
         runningTodoIdsSnapshotRef.current = getRunningTodoIds(snapshot?.timelogs ?? []);
+        mcpSnapshotRef.current = snapshot;
     }, [snapshot?.settings.theme, snapshot?.timelogs, snapshot?.todos]);
+    useEffect(() => {
+        mcpSnapshotRef.current = snapshot;
+    }, [snapshot]);
+    useEffect(() => {
+        if (!isTauriRuntime())
+            return;
+        let disposed = false;
+        let unlisten;
+        void import("@tauri-apps/api/event").then(({ listen }) => listen(NOTESMITH_SEARCH_MCP_EVENT, (event) => {
+            void (async () => {
+                try {
+                    const currentSnapshot = mcpSnapshotRef.current;
+                    if (!currentSnapshot)
+                        throw new Error("NoteSmith data is not ready yet.");
+                    const result = invokeNoteSmithMcpTool(currentSnapshot, event.payload.toolName, event.payload.arguments);
+                    await completeNoteSmithSearchMcp(event.payload.requestId, result);
+                }
+                catch (error) {
+                    const message = formatCalendarImportError(error, "The NoteSmith search could not be completed.");
+                    await completeNoteSmithSearchMcp(event.payload.requestId, null, message).catch(() => undefined);
+                }
+            })();
+        })).then((dispose) => {
+            if (disposed)
+                dispose();
+            else
+                unlisten = dispose;
+        });
+        return () => {
+            disposed = true;
+            unlisten?.();
+        };
+    }, []);
     useEffect(() => {
         if (!isTauriRuntime())
             return;
@@ -1515,7 +1550,6 @@ export const App = () => {
                 setAvailableUpdateVersion(null);
                 return;
             }
-            await stopAgentSidecar().catch(() => { });
             setUpdateStatusNote(`Downloading the signed ${availableUpdateVersion} installer to Downloads...`);
             const installer = await downloadInstallerToDownloadsAndOpen(manualUpdateUrl, availableUpdateVersion);
             setUpdateStatusNote(`Downloaded and opened the ${availableUpdateVersion} installer from ${installer.path}. Close NoteSmith if Windows asks before continuing.`);
@@ -1541,7 +1575,6 @@ export const App = () => {
                 const backupPath = await exportSnapshotBackupToDownloads(backupBundle);
                 setStatusNote(`Created a Downloads backup at ${backupPath.path} before opening the installer download.`);
             }
-            await stopAgentSidecar().catch(() => { });
             setUpdateStatusNote(`Downloading installer for ${availableUpdateVersion ?? "the latest version"} to Downloads...`);
             if (manualUpdateUrl.toLocaleLowerCase().includes(".exe")) {
                 const installer = await downloadInstallerToDownloads(manualUpdateUrl, availableUpdateVersion ?? "latest");

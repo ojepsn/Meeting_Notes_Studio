@@ -257,6 +257,13 @@ const formatDurationLabel = (minutes: number) => {
 const sourceTypeAllowed = (type: NoteSmithAssistantSourceType, sourceTypes?: NoteSmithAssistantSourceType[]) =>
   !sourceTypes?.length || sourceTypes.includes(type);
 
+const isPrivateCalendarTarget = (item: CalendarItemRecord, snapshot: DesktopAppSnapshot) => {
+  if (item.targetType === "todo") {
+    return Boolean(snapshot.todos.find((todo) => todo.id === item.targetId)?.isPrivate);
+  }
+  return Boolean(snapshot.activities.find((activity) => activity.id === item.targetId)?.isPrivate);
+};
+
 export const searchNoteSmithData = (
   snapshot: DesktopAppSnapshot,
   { query, includePrivate = false, limit = DEFAULT_LIMIT, sourceTypes }: NoteSmithAssistantSearchOptions,
@@ -285,10 +292,18 @@ export const searchNoteSmithData = (
     );
   }
   if (sourceTypeAllowed("calendar", sourceTypes)) {
-    sources.push(...snapshot.calendarItems.map((item) => calendarItemToSource(item, query, snapshot)));
+    sources.push(
+      ...snapshot.calendarItems
+        .filter((item) => includePrivate || !isPrivateCalendarTarget(item, snapshot))
+        .map((item) => calendarItemToSource(item, query, snapshot)),
+    );
   }
   if (sourceTypeAllowed("timelog", sourceTypes)) {
-    sources.push(...snapshot.timelogs.map((entry) => timelogToSource(entry, query, snapshot)));
+    sources.push(
+      ...snapshot.timelogs
+        .filter((entry) => includePrivate || !isPrivateTimelogTarget(entry, snapshot))
+        .map((entry) => timelogToSource(entry, query, snapshot)),
+    );
   }
   return sortSources(sources, limit);
 };

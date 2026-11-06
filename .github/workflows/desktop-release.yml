@@ -56,9 +56,6 @@ jobs:
       - name: Verify desktop release version
         run: node ./scripts/verify-desktop-release-version.mjs
 
-      - name: Build bundled agent sidecar
-        run: node ./scripts/prepare-agent-sidecar.mjs
-
       - name: Build signed desktop release
         shell: pwsh
         run: |

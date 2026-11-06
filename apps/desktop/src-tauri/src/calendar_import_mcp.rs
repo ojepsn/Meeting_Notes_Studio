@@ -15,6 +15,7 @@ const MCP_PORT: u16 = 47832;
 const MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
 const MAX_EVENTS: usize = 500;
 pub const CALENDAR_IMPORT_EVENT: &str = "notesmith-calendar-import-request";
+pub const SEARCH_EVENT: &str = "notesmith-search-request";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,6 +66,14 @@ struct CalendarImportRequest {
     complete_snapshot: bool,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SearchRequest {
+    request_id: String,
+    tool_name: String,
+    arguments: Value,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalendarImportResult {
@@ -84,6 +93,7 @@ struct CalendarImportServer {
 pub struct CalendarImportMcpState {
     server: Mutex<Option<CalendarImportServer>>,
     pending: Arc<Mutex<HashMap<String, mpsc::Sender<Result<CalendarImportResult, String>>>>>,
+    search_pending: Arc<Mutex<HashMap<String, mpsc::Sender<Result<Value, String>>>>>,
 }
 
 impl CalendarImportMcpState {
@@ -185,6 +195,85 @@ fn tool_descriptor() -> Value {
     })
 }
 
+fn search_schema(description: &str) -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "query": { "type": "string", "description": description, "maxLength": 500 },
+            "includePrivate": { "type": "boolean", "default": false, "description": "Set to true only when the user explicitly asks to search private NoteSmith records." },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 30, "default": 8 }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+    })
+}
+
+fn id_schema(description: &str) -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "id": { "type": "string", "description": description, "maxLength": 200 },
+            "includePrivate": { "type": "boolean", "default": false, "description": "Set to true only when the user explicitly asks to retrieve private NoteSmith records." }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+    })
+}
+
+fn date_range_schema(description: &str) -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "fromDate": { "type": "string", "description": format!("{description} Start date in YYYY-MM-DD format.") },
+            "toDate": { "type": "string", "description": format!("{description} End date in YYYY-MM-DD format.") },
+            "includePrivate": { "type": "boolean", "default": false, "description": "Set to true only when the user explicitly asks to include private NoteSmith records." },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 30, "default": 12 }
+        },
+        "required": ["fromDate", "toDate"],
+        "additionalProperties": false
+    })
+}
+
+fn read_tool(name: &str, description: &str, input_schema: Value) -> Value {
+    json!({
+        "name": name,
+        "description": format!("{description} Private records are excluded by default and may be included only when the user explicitly requests them."),
+        "inputSchema": input_schema,
+        "annotations": {
+            "title": description,
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+        }
+    })
+}
+
+fn read_tool_descriptors() -> Vec<Value> {
+    vec![
+        read_tool("notesmith_search_sessions", "Search NoteSmith sessions, meeting notes, transcripts, outputs, participants, domains, and projects.", search_schema("Search text for sessions and meeting notes.")),
+        read_tool("notesmith_get_session", "Retrieve one NoteSmith session and its linked context by id.", id_schema("The NoteSmith session id.")),
+        read_tool("notesmith_search_calendar", "Search NoteSmith calendar items and linked titles.", search_schema("Search text for calendar items.")),
+        read_tool("notesmith_search_todos", "Search NoteSmith todos and their details, classification, and dates.", search_schema("Search text for todos.")),
+        read_tool("notesmith_search_activities", "Search NoteSmith activities and meetings.", search_schema("Search text for activities and meetings.")),
+        read_tool("notesmith_search_timelogs", "Search NoteSmith timelogs and linked work items.", search_schema("Search text for timelogs.")),
+        read_tool("notesmith_get_calendar_by_date_range", "Retrieve NoteSmith calendar items for a date range.", date_range_schema("Calendar lookup.")),
+        read_tool("notesmith_get_timelogs_by_date_range", "Retrieve NoteSmith timelogs and grouped totals for a date range.", date_range_schema("Timelog lookup.")),
+        read_tool("notesmith_get_linked_context", "Retrieve linked context for a NoteSmith session or activity.", id_schema("A NoteSmith session or activity id.")),
+        read_tool("notesmith_summarize_workspace", "Summarize visible NoteSmith workspace record counts.", json!({
+            "type": "object",
+            "properties": {
+                "includePrivate": { "type": "boolean", "default": false, "description": "Set to true only when the user explicitly asks to include private NoteSmith records." }
+            },
+            "additionalProperties": false
+        })),
+    ]
+}
+
+fn is_read_tool(name: &str) -> bool {
+    read_tool_descriptors().iter().any(|tool| tool["name"] == name)
+}
+
 fn validate_args(args: CalendarImportToolArgs) -> Result<CalendarImportToolArgs, String> {
     if !args.complete_snapshot {
         return Err("completeSnapshot must be true so NoteSmith can safely reconcile removals.".to_string());
@@ -209,6 +298,7 @@ fn validate_args(args: CalendarImportToolArgs) -> Result<CalendarImportToolArgs,
 fn handle_rpc(
     app: &tauri::AppHandle,
     pending: &Arc<Mutex<HashMap<String, mpsc::Sender<Result<CalendarImportResult, String>>>>>,
+    search_pending: &Arc<Mutex<HashMap<String, mpsc::Sender<Result<Value, String>>>>>,
     request: Value,
 ) -> Option<Value> {
     let id = request.get("id").cloned().unwrap_or(Value::Null);
@@ -223,19 +313,53 @@ fn handle_rpc(
             "result": {
                 "protocolVersion": "2025-03-26",
                 "capabilities": { "tools": {} },
-                "serverInfo": { "name": "notesmith-calendar-import", "version": "1.0.0" },
-                "instructions": "This server only imports a complete seven-day Outlook calendar snapshot into the locally running NoteSmith app. It cannot read NoteSmith data or communicate with Outlook."
+                "serverInfo": { "name": "notesmith-local", "version": "1.1.0" },
+                "instructions": "This local server exposes read-only NoteSmith search tools that always exclude private records, plus one separate Outlook calendar import action. It cannot communicate with Outlook itself and never exposes raw SQL."
             }
         })),
         "ping" => Some(json!({ "jsonrpc": "2.0", "id": id, "result": {} })),
-        "tools/list" => Some(json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "result": { "tools": [tool_descriptor()] }
-        })),
+        "tools/list" => {
+            let mut tools = read_tool_descriptors();
+            tools.push(tool_descriptor());
+            Some(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": { "tools": tools }
+            }))
+        }
         "tools/call" => {
             let params = request.get("params").cloned().unwrap_or_else(|| json!({}));
-            if params.get("name").and_then(Value::as_str) != Some("notesmith_reconcile_outlook_calendar") {
+            let tool_name = params.get("name").and_then(Value::as_str).unwrap_or_default();
+            if is_read_tool(tool_name) {
+                let arguments = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+                let request_id = Uuid::new_v4().to_string();
+                let (sender, receiver) = mpsc::channel();
+                if let Ok(mut guard) = search_pending.lock() {
+                    guard.insert(request_id.clone(), sender);
+                } else {
+                    return Some(rpc_error(id, -32603, "The NoteSmith search queue is unavailable."));
+                }
+                let payload = SearchRequest { request_id: request_id.clone(), tool_name: tool_name.to_string(), arguments };
+                if let Err(error) = app.emit(SEARCH_EVENT, payload) {
+                    if let Ok(mut guard) = search_pending.lock() { guard.remove(&request_id); }
+                    return Some(rpc_error(id, -32603, format!("Could not reach the NoteSmith window: {error}")));
+                }
+                return match receiver.recv_timeout(Duration::from_secs(30)) {
+                    Ok(Ok(result)) => Some(json!({
+                        "jsonrpc": "2.0", "id": id,
+                        "result": { "content": [{ "type": "text", "text": result.to_string() }], "structuredContent": result, "isError": false }
+                    })),
+                    Ok(Err(error)) => Some(json!({
+                        "jsonrpc": "2.0", "id": id,
+                        "result": { "content": [{ "type": "text", "text": error }], "isError": true }
+                    })),
+                    Err(_) => {
+                        if let Ok(mut guard) = search_pending.lock() { guard.remove(&request_id); }
+                        Some(rpc_error(id, -32603, "NoteSmith did not complete the search within 30 seconds."))
+                    }
+                };
+            }
+            if tool_name != "notesmith_reconcile_outlook_calendar" {
                 return Some(rpc_error(id, -32602, "Unknown NoteSmith MCP tool."));
             }
             let raw_args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
@@ -302,6 +426,7 @@ fn handle_connection(
     mut stream: TcpStream,
     app: tauri::AppHandle,
     pending: Arc<Mutex<HashMap<String, mpsc::Sender<Result<CalendarImportResult, String>>>>>,
+    search_pending: Arc<Mutex<HashMap<String, mpsc::Sender<Result<Value, String>>>>>,
     expected_path: String,
 ) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
@@ -351,7 +476,7 @@ fn handle_connection(
             return;
         }
     };
-    match handle_rpc(&app, &pending, request) {
+    match handle_rpc(&app, &pending, &search_pending, request) {
         Some(response) => write_response(&mut stream, "200 OK", "application/json", &response.to_string()),
         None => write_response(&mut stream, "202 Accepted", "text/plain", ""),
     }
@@ -381,14 +506,16 @@ pub fn start_calendar_import_mcp(
     let shutdown = Arc::new(AtomicBool::new(false));
     let thread_shutdown = Arc::clone(&shutdown);
     let pending = Arc::clone(&state.pending);
+    let search_pending = Arc::clone(&state.search_pending);
     thread::spawn(move || {
         while !thread_shutdown.load(Ordering::SeqCst) {
             match listener.accept() {
                 Ok((stream, _)) => {
                     let request_app = app.clone();
                     let request_pending = Arc::clone(&pending);
+                    let request_search_pending = Arc::clone(&search_pending);
                     let request_path = expected_path.clone();
-                    thread::spawn(move || handle_connection(stream, request_app, request_pending, request_path));
+                    thread::spawn(move || handle_connection(stream, request_app, request_pending, request_search_pending, request_path));
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                     thread::sleep(Duration::from_millis(50));
@@ -435,9 +562,29 @@ pub fn complete_calendar_import_mcp(
     sender.send(response).map_err(|_| "The MCP caller is no longer waiting.".to_string())
 }
 
+#[tauri::command]
+pub fn complete_notesmith_search_mcp(
+    state: tauri::State<CalendarImportMcpState>,
+    request_id: String,
+    result: Option<Value>,
+    error: Option<String>,
+) -> Result<(), String> {
+    let sender = state
+        .search_pending
+        .lock()
+        .map_err(|_| "The NoteSmith search queue is unavailable.".to_string())?
+        .remove(&request_id)
+        .ok_or_else(|| "The MCP search request is no longer pending.".to_string())?;
+    let response = match result {
+        Some(value) => Ok(value),
+        None => Err(error.unwrap_or_else(|| "The NoteSmith search failed.".to_string())),
+    };
+    sender.send(response).map_err(|_| "The MCP caller is no longer waiting.".to_string())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{tool_descriptor, validate_args, CalendarImportEvent, CalendarImportToolArgs, MAX_EVENTS};
+    use super::{read_tool_descriptors, tool_descriptor, validate_args, CalendarImportEvent, CalendarImportToolArgs, MAX_EVENTS};
 
     #[test]
     fn exposes_only_the_narrow_calendar_import_contract() {
@@ -474,5 +621,15 @@ mod tests {
             }],
         });
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn exposes_search_tools_as_read_only() {
+        let tools = read_tool_descriptors();
+        assert_eq!(tools.len(), 10);
+        assert!(tools.iter().all(|tool| tool["annotations"]["readOnlyHint"] == true));
+        assert!(tools.iter().all(|tool| tool["annotations"]["destructiveHint"] == false));
+        let session_search = tools.iter().find(|tool| tool["name"] == "notesmith_search_sessions").unwrap();
+        assert_eq!(session_search["inputSchema"]["properties"]["includePrivate"]["default"], false);
     }
 }

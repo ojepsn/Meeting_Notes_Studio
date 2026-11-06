@@ -75,7 +75,7 @@ interface SettingsCardProps {
 
 const SETTINGS_SECTIONS: Array<{ id: SettingsSection; label: string; description: string }> = [
   { id: "ai", label: "AI Settings", description: "Models, API key, transcription" },
-  { id: "calendar", label: "ChatGPT Calendar Import", description: "One-way Outlook import for the next seven days" },
+  { id: "calendar", label: "ChatGPT Connection", description: "Read-only NoteSmith search and one-way Outlook import" },
   { id: "diagnostics", label: "AI Diagnostics", description: "Metrics, cache, and recent AI history" },
   { id: "themes", label: "Themes", description: "Look and feel" },
   { id: "output", label: "Output formatting", description: "Language and output defaults" },
@@ -611,31 +611,31 @@ export const SettingsCard = ({
         {activeSection === "calendar" ? (
           <div className="sidebar-card outlook-settings-card">
             <div>
-              <h3>ChatGPT Calendar Import</h3>
-              <p>Let ChatGPT read Outlook and send a complete seven-day calendar snapshot into NoteSmith.</p>
+              <h3>ChatGPT Connection</h3>
+              <p>Let ChatGPT search your NoteSmith data while the desktop app is open.</p>
             </div>
             <div className="outlook-readonly-banner">
-              <strong>Strictly one-way: Outlook via ChatGPT to NoteSmith</strong>
+              <strong>Read-only NoteSmith search</strong>
               <span>
-                NoteSmith has no Outlook credentials and cannot contact or change Outlook. The local connection exposes
-                one import action and cannot read NoteSmith data.
+                Search tools cannot change NoteSmith, cannot run raw database queries, and return at most 30 matches.
+                Private records are excluded unless you explicitly ask ChatGPT to include them.
               </span>
             </div>
             <div className="ai-settings-summary-grid">
               <div className="diagnostics-card">
-                <span className="model-option-label">Local importer</span>
+                <span className="model-option-label">Local connection</span>
                 <strong>{calendarImportMcpReady ? "Running" : "Stopped"}</strong>
                 <span className="tiny-text">Available only while the installed NoteSmith app is running.</span>
               </div>
               <div className="diagnostics-card">
-                <span className="model-option-label">Import window</span>
-                <strong>Today + 6 days</strong>
-                <span className="tiny-text">Past events and later events are rejected by NoteSmith.</span>
+                <span className="model-option-label">Search access</span>
+                <strong>Notes, work and time</strong>
+                <span className="tiny-text">Sessions, meetings, todos, calendar items, activities, and timelogs.</span>
               </div>
               <div className="diagnostics-card">
-                <span className="model-option-label">Available action</span>
-                <strong>One calendar import</strong>
-                <span className="tiny-text">Additions, updates, cancellations, and removals are reconciled.</span>
+                <span className="model-option-label">Write access</span>
+                <strong>Calendar import only</strong>
+                <span className="tiny-text">The existing seven-day Outlook reconciliation remains the only write action.</span>
               </div>
             </div>
             <label className="checkbox-label">
@@ -644,11 +644,11 @@ export const SettingsCard = ({
                 checked={settings.chatgptCalendarImportEnabled !== false}
                 onChange={(event) => onChange({ ...settings, chatgptCalendarImportEnabled: event.target.checked })}
               />
-              Keep the local ChatGPT import connection available while NoteSmith is running
+              Keep the local ChatGPT connection available while NoteSmith is running
             </label>
             {calendarImportMcpReady ? (
               <div className="outlook-device-login-card">
-                <strong>Local NoteSmith import address</strong>
+                <strong>Local NoteSmith connection address</strong>
                 <code className="calendar-import-endpoint">{calendarImportMcpReady.endpointUrl}</code>
                 <div className="inline-row">
                   <button className="small-button" type="button" onClick={() => void onCopyCalendarImportMcpUrl()}>
@@ -660,7 +660,7 @@ export const SettingsCard = ({
                     onClick={() => void onStopCalendarImportMcp()}
                     disabled={isCalendarImportMcpBusy}
                   >
-                    Stop local importer
+                    Stop local connection
                   </button>
                 </div>
               </div>
@@ -672,19 +672,19 @@ export const SettingsCard = ({
                   onClick={() => void onStartCalendarImportMcp()}
                   disabled={isCalendarImportMcpBusy || settings.chatgptCalendarImportEnabled === false}
                 >
-                  Start local importer
+                  Start local connection
                 </button>
               </div>
             )}
             <div className="sidebar-card compact-card">
               <strong>Set up in ChatGPT</strong>
               <ol className="settings-instruction-list">
-                <li>Keep NoteSmith open and copy the local import address above.</li>
-                <li>Add it to ChatGPT as a custom MCP server using Secure MCP Tunnel.</li>
-                <li>Enable both Outlook Calendar and the NoteSmith import server in the same ChatGPT chat.</li>
-                <li>Ask ChatGPT to read all Outlook events from today through six days later, then call <code>{calendarImportMcpReady?.toolName || "notesmith_reconcile_outlook_calendar"}</code> once with a complete snapshot.</li>
+                <li>Keep NoteSmith open and copy the local connection address above.</li>
+                <li>Add it in ChatGPT Desktop under Settings, MCP servers as a Streamable HTTP server.</li>
+                <li>Use the copied address as the server URL, then restart ChatGPT if requested.</li>
+                <li>Ask ChatGPT to search NoteSmith, for example: “Find my latest Regnora meeting notes.”</li>
               </ol>
-              <span className="tiny-text">ChatGPT will ask for confirmation before writing the calendar snapshot into NoteSmith.</span>
+              <span className="tiny-text">For Outlook import, also enable Outlook Calendar and call <code>{calendarImportMcpReady?.toolName || "notesmith_reconcile_outlook_calendar"}</code> with a complete seven-day snapshot.</span>
             </div>
             {calendarImportMcpStatusNote ? <p className="tiny-text">{calendarImportMcpStatusNote}</p> : null}
           </div>

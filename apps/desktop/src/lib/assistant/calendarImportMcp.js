@@ -1,6 +1,7 @@
 import { addDaysIso, formatStockholmDate } from "../time/stockholm";
 import { isTauriRuntime } from "../storage/environment";
 export const CALENDAR_IMPORT_MCP_EVENT = "notesmith-calendar-import-request";
+export const NOTESMITH_SEARCH_MCP_EVENT = "notesmith-search-request";
 export const CHATGPT_OUTLOOK_ACCOUNT_KEY = "chatgpt-outlook-calendar";
 export const CHATGPT_CALENDAR_WINDOW_DAYS = 7;
 const invokeTauri = async (command, args = {}) => {
@@ -13,6 +14,11 @@ export const startCalendarImportMcp = () => invokeTauri("start_calendar_import_m
 export const stopCalendarImportMcp = () => invokeTauri("stop_calendar_import_mcp");
 export const getCalendarImportMcpStatus = () => invokeTauri("get_calendar_import_mcp_status");
 export const completeCalendarImportMcp = (requestId, result, error) => invokeTauri("complete_calendar_import_mcp", {
+    requestId,
+    result,
+    error: error || null,
+});
+export const completeNoteSmithSearchMcp = (requestId, result, error) => invokeTauri("complete_notesmith_search_mcp", {
     requestId,
     result,
     error: error || null,

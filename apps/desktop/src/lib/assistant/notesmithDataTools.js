@@ -170,6 +170,12 @@ const formatDurationLabel = (minutes) => {
     return `${hours}h ${remaining}m`;
 };
 const sourceTypeAllowed = (type, sourceTypes) => !sourceTypes?.length || sourceTypes.includes(type);
+const isPrivateCalendarTarget = (item, snapshot) => {
+    if (item.targetType === "todo") {
+        return Boolean(snapshot.todos.find((todo) => todo.id === item.targetId)?.isPrivate);
+    }
+    return Boolean(snapshot.activities.find((activity) => activity.id === item.targetId)?.isPrivate);
+};
 export const searchNoteSmithData = (snapshot, { query, includePrivate = false, limit = DEFAULT_LIMIT, sourceTypes }) => {
     const sources = [];
     if (sourceTypeAllowed("session", sourceTypes)) {
@@ -189,10 +195,14 @@ export const searchNoteSmithData = (snapshot, { query, includePrivate = false, l
             .map((activity) => activityToSource(activity, query)));
     }
     if (sourceTypeAllowed("calendar", sourceTypes)) {
-        sources.push(...snapshot.calendarItems.map((item) => calendarItemToSource(item, query, snapshot)));
+        sources.push(...snapshot.calendarItems
+            .filter((item) => includePrivate || !isPrivateCalendarTarget(item, snapshot))
+            .map((item) => calendarItemToSource(item, query, snapshot)));
     }
     if (sourceTypeAllowed("timelog", sourceTypes)) {
-        sources.push(...snapshot.timelogs.map((entry) => timelogToSource(entry, query, snapshot)));
+        sources.push(...snapshot.timelogs
+            .filter((entry) => includePrivate || !isPrivateTimelogTarget(entry, snapshot))
+            .map((entry) => timelogToSource(entry, query, snapshot)));
     }
     return sortSources(sources, limit);
 };
