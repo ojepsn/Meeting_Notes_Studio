@@ -107,28 +107,75 @@ export const normalizeRichTextTableSpan = (value: string | null) => {
   return Number.isInteger(parsed) && parsed >= 2 && parsed <= 20 ? String(parsed) : "";
 };
 
-const selectionElementInsideEditor = (editor: HTMLDivElement) => {
+const selectedListInsideEditor = (editor: HTMLDivElement) => {
   const selection = window.getSelection();
   if (!selection?.rangeCount) return null;
   const node = selection.getRangeAt(0).startContainer;
   const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
-  return element && editor.contains(element) ? element : null;
+  if (!element || !editor.contains(element)) return null;
+  const list = element.closest("ul, ol");
+  return list && editor.contains(list) ? list : null;
 };
 
 export const insertRichTextChecklist = (editor: HTMLDivElement) => {
   editor.focus();
-  let list = selectionElementInsideEditor(editor)?.closest("ul, ol") ?? null;
-  if (!list || list.tagName !== "UL") {
+  const selectedList = selectedListInsideEditor(editor);
+  let lists: Element[] = selectedList?.tagName === "UL" ? [selectedList] : [];
+  if (!lists.length) {
+    const previousLists = new Map<Element, Set<Element>>(Array.from(editor.querySelectorAll("ul"), (list) => [
+      list,
+      new Set(list.querySelectorAll(":scope > li")),
+    ]));
     document.execCommand("insertUnorderedList");
-    list = selectionElementInsideEditor(editor)?.closest("ul") ?? null;
-  }
-  if (!list || !editor.contains(list)) return false;
-  list.setAttribute(RICH_TEXT_CHECKLIST_ATTRIBUTE, "true");
-  list.querySelectorAll(":scope > li").forEach((item) => {
-    if (!item.hasAttribute(RICH_TEXT_CHECKED_ATTRIBUTE)) {
-      item.setAttribute(RICH_TEXT_CHECKED_ATTRIBUTE, "false");
+    // execCommand may leave the selection on the editor or paragraph boundary.
+    // It can also merge the new item into an adjacent, pre-existing bullet list.
+    lists = Array.from(editor.querySelectorAll("ul")).filter((list) => !previousLists.has(list));
+    previousLists.forEach((oldItems, oldList) => {
+      if (!editor.contains(oldList)) return;
+      const currentItems = Array.from(oldList.querySelectorAll(":scope > li"));
+      const newItems = currentItems.filter((item) => !oldItems.has(item));
+      if (!newItems.length) return;
+      if (!oldItems.size) {
+        lists.push(oldList);
+        return;
+      }
+      const firstOldIndex = currentItems.findIndex((item) => oldItems.has(item));
+      const lastOldIndex = currentItems.reduce((last, item, index) => oldItems.has(item) ? index : last, -1);
+      const beforeOldItems = newItems.every((item) => currentItems.indexOf(item) < firstOldIndex);
+      const afterOldItems = newItems.every((item) => currentItems.indexOf(item) > lastOldIndex);
+      if (!beforeOldItems && !afterOldItems) return;
+      const newList = document.createElement("ul");
+      newList.append(...newItems);
+      if (beforeOldItems) oldList.before(newList);
+      else oldList.after(newList);
+      lists.push(newList);
+    });
+    if (!lists.length) {
+      const listAtSelection = selectedListInsideEditor(editor);
+      if (listAtSelection?.tagName === "UL" && !previousLists.has(listAtSelection)) lists = [listAtSelection];
     }
+  }
+  if (!lists.length) return false;
+  lists.forEach((list) => {
+    list.setAttribute(RICH_TEXT_CHECKLIST_ATTRIBUTE, "true");
+    list.querySelectorAll(":scope > li").forEach((item) => {
+      if (!item.hasAttribute(RICH_TEXT_CHECKED_ATTRIBUTE)) {
+        item.setAttribute(RICH_TEXT_CHECKED_ATTRIBUTE, "false");
+      }
+    });
   });
+  const selection = window.getSelection();
+  const startContainer = selection?.rangeCount ? selection.getRangeAt(0).startContainer : null;
+  if (selection && !lists.some((list) => startContainer && list.contains(startContainer))) {
+    const firstItem = lists[0].querySelectorAll(":scope > li")[0];
+    if (firstItem) {
+      const range = document.createRange();
+      range.selectNodeContents(firstItem);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  }
   return true;
 };
 
